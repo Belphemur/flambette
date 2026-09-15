@@ -41,12 +41,30 @@ npm run build   # type-check + production build into dist/
 npm run preview # serve the production build locally
 ```
 
+## Docker
+
+No volume is needed — the full offline catalog, images and app bundle are
+baked into the image.
+
+```bash
+docker build -t mealime-planner .
+docker run -d -p 8080:80 mealime-planner
+# open http://localhost:8080
+```
+
+Build is multi-stage (`node:22-alpine` → `nginx:alpine`) with gzip, an SPA
+fallback and cache headers (immutable 1y for `/assets/` and `/img/`, no-cache
+for `index.html`).
+
 ## Stack
 
 - Vue 3 (`<script setup>`) + Vite + TypeScript
 - Tailwind CSS v4 (via `@tailwindcss/vite`)
-- No router, no state library — plain reactive singletons in `src/stores/`
-- No runtime dependencies besides Vue
+- No router; state via Pinia stores in `src/stores/`, persisted to
+  localStorage under the `mealime-planner:v1:*` keys
+  (`mealime-planner:v1:favourites`, `mealime-planner:v1:plan`,
+  `mealime-planner:v1:checked`)
+- No runtime dependencies besides Vue, Pinia and MiniSearch (search)
 
 ## Data provenance
 
