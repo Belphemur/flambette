@@ -1,0 +1,1 @@
+{"root":["./src/main.ts","./src/vite-env.d.ts","./src/lib/catalog.ts","./src/lib/types.ts","./src/stores/ui.ts","./src/App.vue","./src/components/GroceryTab.vue","./src/components/PlanTab.vue","./src/components/RecipesTab.vue"],"version":"5.9.3"}
