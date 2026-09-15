@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { catalog, getRecipe } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
 import { scaleQuantity } from '../lib/quantity'
+import { scaleSteps, type ScaledStep } from '../lib/recipe'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
 import { useFavouritesStore } from '../stores/favourites'
@@ -33,21 +34,9 @@ const scaledIngredients = computed(() => {
   }))
 })
 
-interface ScaledStep {
-  primary: string
-  details: string[]
-}
-
-const scaledSteps = computed<ScaledStep[]>(() => {
-  if (!doc.value) return []
-  return doc.value.instructions.map((step) => ({
-    primary: step.primary_message,
-    details: (step.secondary_message ?? '')
-      .split('\n')
-      .map((line) => scaleQuantity(line, factor.value))
-      .filter((line) => line.trim().length > 0),
-  }))
-})
+const scaledSteps = computed<ScaledStep[]>(() =>
+  doc.value ? scaleSteps(doc.value, factor.value) : [],
+)
 
 const macroBars = computed(() => {
   const m = meta.value?.macros
@@ -88,7 +77,8 @@ function close() {
 }
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape' && ui.openRecipeId !== null) close()
+  // Don't close the detail sheet while the cooking overlay handles Escape.
+  if (e.key === 'Escape' && ui.openRecipeId !== null && ui.cookingRecipeId === null) close()
 }
 onMounted(() => window.addEventListener('keydown', onKey))
 onUnmounted(() => window.removeEventListener('keydown', onKey))
@@ -97,6 +87,11 @@ function addAndClose() {
   if (!meta.value) return
   plan.addToPlan(meta.value, servings.value)
   close()
+}
+
+function startCooking() {
+  if (!meta.value) return
+  ui.openCooking(meta.value.id)
 }
 </script>
 
@@ -182,6 +177,12 @@ function addAndClose() {
             {{ inPlan ? 'Update in plan' : 'Add to plan' }}
           </button>
         </div>
+        <button
+          class="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-4 text-sm font-semibold text-amber-300 shadow-sm active:bg-stone-800"
+          @click="startCooking"
+        >
+          🍳 Start cooking
+        </button>
       </div>
 
       <!-- Macros -->

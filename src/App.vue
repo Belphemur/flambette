@@ -5,6 +5,7 @@ import RecipesTab from './components/RecipesTab.vue'
 import PlanTab from './components/PlanTab.vue'
 import GroceryTab from './components/GroceryTab.vue'
 import RecipeDetail from './components/RecipeDetail.vue'
+import CookingView from './components/CookingView.vue'
 import { getCatalog } from './lib/catalog'
 import { initFavourites } from './stores/favourites'
 
@@ -60,6 +61,17 @@ onMounted(async () => {
     </main>
 
     <RecipeDetail />
+    <CookingView />
+
+    <Transition name="toast">
+      <div
+        v-if="ui.toast"
+        class="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow-lg"
+        role="status"
+      >
+        {{ ui.toast }}
+      </div>
+    </Transition>
 
     <nav
       class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-stone-200 bg-white"
