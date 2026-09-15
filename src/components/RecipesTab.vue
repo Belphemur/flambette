@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { catalog } from '../lib/catalog'
 import { popularityScore } from '../lib/quantity'
 import type { VariantMeta } from '../lib/types'
-import { favourites } from '../stores/favourites'
+import { useFavouritesStore } from '../stores/favourites'
 import RecipeCard from './RecipeCard.vue'
 
 const query = ref('')
@@ -12,6 +12,8 @@ const favOnly = ref(false)
 const proOnly = ref(false)
 const maxTime = ref<number | null>(null)
 const sortBy = ref<'rating' | 'time' | 'calories' | 'popularity'>('rating')
+
+const favourites = useFavouritesStore()
 
 const categories = computed(() => catalog.value?.categories ?? [])
 

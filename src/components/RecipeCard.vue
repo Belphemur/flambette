@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { imageSrc, onImgError } from '../lib/images'
 import type { VariantMeta } from '../lib/types'
-import { isFavourite, toggleFavourite } from '../stores/favourites'
-import { ui } from '../stores/ui'
+import { useFavouritesStore } from '../stores/favourites'
+import { useUiStore } from '../stores/ui'
 
 const props = defineProps<{ meta: VariantMeta }>()
+
+const favourites = useFavouritesStore()
+const ui = useUiStore()
 
 function openDetail() {
   ui.openRecipeId = props.meta.id
@@ -32,11 +35,11 @@ function openDetail() {
       </span>
       <button
         class="absolute top-1.5 right-1.5 flex size-11 items-center justify-center text-xl drop-shadow transition-transform active:scale-90"
-        :aria-label="isFavourite(meta.id) ? 'Remove from favourites' : 'Add to favourites'"
-        @click.stop="toggleFavourite(meta.id)"
+        :aria-label="favourites.isFavourite(meta.id) ? 'Remove from favourites' : 'Add to favourites'"
+        @click.stop="favourites.toggleFavourite(meta.id)"
       >
-        <span :class="isFavourite(meta.id) ? 'text-amber-400' : 'text-white/80'">
-          {{ isFavourite(meta.id) ? '★' : '☆' }}
+        <span :class="favourites.isFavourite(meta.id) ? 'text-amber-400' : 'text-white/80'">
+          {{ favourites.isFavourite(meta.id) ? '★' : '☆' }}
         </span>
       </button>
     </div>

@@ -4,10 +4,14 @@ import { catalog, getRecipe } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
 import { scaleQuantity } from '../lib/quantity'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
-import { addToPlan, planContains } from '../stores/plan'
-import { isFavourite, toggleFavourite } from '../stores/favourites'
+import { usePlanStore } from '../stores/plan'
+import { useFavouritesStore } from '../stores/favourites'
 import { onMounted, onUnmounted } from 'vue'
-import { ui } from '../stores/ui'
+import { useUiStore } from '../stores/ui'
+
+const plan = usePlanStore()
+const favourites = useFavouritesStore()
+const ui = useUiStore()
 
 const doc = ref<RecipeDoc | null>(null)
 const loading = ref(false)
@@ -55,7 +59,7 @@ const macroBars = computed(() => {
   ]
 })
 
-const inPlan = computed(() => (meta.value ? planContains(meta.value.id) : false))
+const inPlan = computed(() => (meta.value ? plan.planContains(meta.value.id) : false))
 
 async function loadDoc() {
   if (!meta.value) return
@@ -91,7 +95,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
 function addAndClose() {
   if (!meta.value) return
-  addToPlan(meta.value, servings.value)
+  plan.addToPlan(meta.value, servings.value)
   close()
 }
 </script>
@@ -123,11 +127,11 @@ function addAndClose() {
       </button>
       <button
         class="absolute top-3 right-3 flex size-11 items-center justify-center rounded-full bg-white/90 text-xl shadow"
-        :aria-label="isFavourite(meta.id) ? 'Remove from favourites' : 'Add to favourites'"
-        @click="toggleFavourite(meta.id)"
+        :aria-label="favourites.isFavourite(meta.id) ? 'Remove from favourites' : 'Add to favourites'"
+        @click="favourites.toggleFavourite(meta.id)"
       >
-        <span :class="isFavourite(meta.id) ? 'text-amber-400' : 'text-stone-400'">
-          {{ isFavourite(meta.id) ? '★' : '☆' }}
+        <span :class="favourites.isFavourite(meta.id) ? 'text-amber-400' : 'text-stone-400'">
+          {{ favourites.isFavourite(meta.id) ? '★' : '☆' }}
         </span>
       </button>
     </div>

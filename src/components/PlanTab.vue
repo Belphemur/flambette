@@ -3,13 +3,11 @@ import { computed } from 'vue'
 import { catalog } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
 import type { VariantMeta } from '../lib/types'
-import {
-  plan,
-  removeFromPlan,
-  setServings,
-  clearPlan,
-} from '../stores/plan'
-import { ui } from '../stores/ui'
+import { usePlanStore } from '../stores/plan'
+import { useUiStore } from '../stores/ui'
+
+const plan = usePlanStore()
+const ui = useUiStore()
 
 interface PlannedMeal {
   meta: VariantMeta
@@ -93,7 +91,7 @@ function openRecipe(id: number) {
               class="flex size-9 items-center justify-center text-stone-600"
               :disabled="meal.servings <= 1"
               :aria-label="`Fewer servings of ${meal.meta.name}`"
-              @click="setServings(meal.meta.id, meal.servings - 1)"
+              @click="plan.setServings(meal.meta.id, meal.servings - 1)"
             >
               −
             </button>
@@ -101,7 +99,7 @@ function openRecipe(id: number) {
             <button
               class="flex size-9 items-center justify-center text-stone-600"
               :aria-label="`More servings of ${meal.meta.name}`"
-              @click="setServings(meal.meta.id, meal.servings + 1)"
+              @click="plan.setServings(meal.meta.id, meal.servings + 1)"
             >
               +
             </button>
@@ -109,7 +107,7 @@ function openRecipe(id: number) {
           <button
             class="flex size-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:text-rose-600"
             :aria-label="`Remove ${meal.meta.name} from plan`"
-            @click="removeFromPlan(meal.meta.id)"
+            @click="plan.removeFromPlan(meal.meta.id)"
           >
             ✕
           </button>
@@ -118,7 +116,7 @@ function openRecipe(id: number) {
 
       <button
         class="w-full rounded-xl border border-stone-200 bg-white py-3 text-sm font-medium text-stone-600 hover:bg-stone-100"
-        @click="clearPlan"
+        @click="plan.clearPlan"
       >
         Clear plan
       </button>

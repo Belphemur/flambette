@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ui, TABS, setTab } from './stores/ui'
+import { TABS, useUiStore } from './stores/ui'
 import RecipesTab from './components/RecipesTab.vue'
 import PlanTab from './components/PlanTab.vue'
 import GroceryTab from './components/GroceryTab.vue'
@@ -9,6 +9,8 @@ import { getCatalog } from './lib/catalog'
 import { initFavourites } from './stores/favourites'
 
 const reload = () => location.reload()
+
+const ui = useUiStore()
 
 const loading = ref(true)
 const loadError = ref<string | null>(null)
@@ -70,7 +72,7 @@ onMounted(async () => {
           class="flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors"
           :class="ui.tab === tab.id ? 'text-primary-dark' : 'text-stone-400'"
           :aria-current="ui.tab === tab.id ? 'page' : undefined"
-          @click="setTab(tab.id)"
+          @click="ui.setTab(tab.id)"
         >
           <span class="text-xl leading-none">{{ tab.icon }}</span>
           {{ tab.label }}

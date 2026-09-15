@@ -1,4 +1,5 @@
-import { reactive } from 'vue'
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
 
 export type Tab = 'recipes' | 'plan' | 'grocery'
 
@@ -8,13 +9,19 @@ export const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'grocery', label: 'Grocery', icon: '🛒' },
 ]
 
-export const ui = reactive({
-  tab: 'recipes' as Tab,
-  /** Variant id of the recipe currently open in the detail sheet, if any. */
-  openRecipeId: null as number | null,
-})
+/** UI state (active tab + open detail sheet). Not persisted. */
+export const useUiStore = defineStore(
+  'ui',
+  () => {
+    const tab = ref<Tab>('recipes')
+    /** Variant id of the recipe currently open in the detail sheet, if any. */
+    const openRecipeId = ref<number | null>(null)
 
-export function setTab(tab: Tab) {
-  ui.tab = tab
-  window.scrollTo({ top: 0 })
-}
+    function setTab(t: Tab) {
+      tab.value = t
+      window.scrollTo({ top: 0 })
+    }
+
+    return { tab, openRecipeId, setTab }
+  },
+)

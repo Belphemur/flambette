@@ -1,29 +1,31 @@
-import { reactive, watch } from 'vue'
-import { load, save } from '../lib/storage'
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
 
 /**
- * Grocery checkbox state, keyed by grocery line key. Persisted to
- * localStorage under the app namespace.
+ * Grocery checkbox state, keyed by grocery line key. Persisted to localStorage
+ * under the `mealime-planner:v1:checked` key by pinia-plugin-persistedstate.
  */
-export const checked = reactive({
-  map: load<Record<string, boolean>>('checked', {}),
-})
+export const useGroceryStore = defineStore(
+  'grocery',
+  () => {
+    const map = ref<Record<string, boolean>>({})
 
-watch(
-  () => checked.map,
-  (m) => save('checked', m),
-  { deep: true },
+    function isChecked(key: string): boolean {
+      return map.value[key] === true
+    }
+
+    function toggleChecked(key: string): void {
+      if (map.value[key]) delete map.value[key]
+      else map.value[key] = true
+    }
+
+    function clearChecked(): void {
+      map.value = {}
+    }
+
+    return { map, isChecked, toggleChecked, clearChecked }
+  },
+  {
+    persist: { key: 'mealime-planner:v1:checked', pick: ['map'] },
+  },
 )
-
-export function isChecked(key: string): boolean {
-  return checked.map[key] === true
-}
-
-export function toggleChecked(key: string): void {
-  if (checked.map[key]) delete checked.map[key]
-  else checked.map[key] = true
-}
-
-export function clearChecked(): void {
-  checked.map = {}
-}

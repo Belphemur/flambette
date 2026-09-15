@@ -4,9 +4,13 @@ import { catalog, getRecipe } from '../lib/catalog'
 import { aggregateGroceries, type GroceryItem } from '../lib/grocery'
 import { STORE_SECTIONS } from '../lib/sections'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
-import { plan } from '../stores/plan'
-import { checked, clearChecked, toggleChecked } from '../stores/grocery'
-import { ui } from '../stores/ui'
+import { usePlanStore } from '../stores/plan'
+import { useGroceryStore } from '../stores/grocery'
+import { useUiStore } from '../stores/ui'
+
+const plan = usePlanStore()
+const checked = useGroceryStore()
+const ui = useUiStore()
 
 const docs = ref(new Map<number, RecipeDoc>())
 const loading = ref(false)
@@ -124,7 +128,7 @@ watch(plannedMetas, ensureDocs, { immediate: true })
         <button
           v-if="checkedCount > 0"
           class="rounded-lg px-2 py-1 text-xs font-medium text-stone-500 hover:bg-stone-200"
-          @click="clearChecked"
+          @click="checked.clearChecked"
         >
           Clear checked
         </button>
@@ -146,7 +150,7 @@ watch(plannedMetas, ensureDocs, { immediate: true })
                   type="checkbox"
                   class="size-5 shrink-0 accent-primary"
                   :checked="!!checked.map[line.key]"
-                  @change="toggleChecked(line.key)"
+                  @change="checked.toggleChecked(line.key)"
                 />
                 <span
                   class="min-w-0 truncate text-sm"
