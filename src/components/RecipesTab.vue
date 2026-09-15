@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { catalog } from '../lib/catalog'
 import { popularityScore } from '../lib/quantity'
+import { searchVariantIds } from '../lib/search'
 import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
 import RecipeCard from './RecipeCard.vue'
@@ -20,21 +21,28 @@ const categories = computed(() => catalog.value?.categories ?? [])
 const results = computed<VariantMeta[]>(() => {
   const c = catalog.value
   if (!c) return []
-  const q = query.value.trim().toLowerCase()
   const maxT = maxTime.value
-  let list = c.data.variant_meta.filter((meta) => {
+  const q = query.value.trim()
+
+  const facets = (meta: VariantMeta): boolean => {
     if (favOnly.value && !favourites.ids.has(meta.id)) return false
     if (proOnly.value && !meta.is_pro) return false
     if (category.value !== 'all' && c.dataById.get(meta.id)?.category_name !== category.value)
       return false
     if (maxT !== null && meta.cooking_minutes > maxT) return false
-    if (q) {
-      const inName = meta.name.toLowerCase().includes(q)
-      const inIngredients = meta.ingredient_names.some((ing) => ing.toLowerCase().includes(q))
-      if (!inName && !inIngredients) return false
-    }
     return true
-  })
+  }
+
+  let list: VariantMeta[]
+  if (q) {
+    // Indexed fuzzy/prefix search over name + ingredients, intersected with
+    // the active facet filters.
+    const matched = new Set(searchVariantIds(q))
+    list = c.data.variant_meta.filter((meta) => matched.has(meta.id) && facets(meta))
+  } else {
+    list = c.data.variant_meta.filter(facets)
+  }
+
   list = [...list]
   switch (sortBy.value) {
     case 'rating':
