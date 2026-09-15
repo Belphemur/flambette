@@ -95,6 +95,12 @@ export interface Nutrition {
   [key: string]: number
 }
 
+export interface Cookware {
+  id: number
+  name: string
+  slug: string
+}
+
 export interface RecipeDoc {
   id: number
   recipe_id: number
@@ -105,7 +111,7 @@ export interface RecipeDoc {
   units: 'Metric' | 'Imperial'
   thumbnail_image_url: string
   presentation_image_url: string
-  cookwares: string[]
+  cookwares: Cookware[]
   instructions: RecipeInstruction[]
   line_items: LineItem[]
   nutrition: Nutrition

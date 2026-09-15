@@ -81,7 +81,7 @@ function openRecipe(id: number) {
           <div class="min-w-0 flex-1 cursor-pointer" @click="openRecipe(meal.meta.id)">
             <h3 class="line-clamp-2 text-sm font-semibold">{{ meal.meta.name }}</h3>
             <p class="mt-0.5 text-xs text-stone-500">
-              {{ Math.round(meal.meta.calories * meal.servings) }} kcal ·
+              {{ Math.round(meal.meta.calories * meal.servings).toLocaleString() }} kcal ·
               {{ meal.meta.cooking_minutes }} min
               <span v-if="meal.meta.is_pro" class="ml-1 rounded bg-stone-900 px-1 py-px text-[10px] font-bold text-amber-300">PRO</span>
             </p>

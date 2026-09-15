@@ -152,7 +152,12 @@ watch(plannedMetas, ensureDocs, { immediate: true })
                   class="min-w-0 truncate text-sm"
                   :class="checked.map[line.key] ? 'text-stone-400 line-through' : ''"
                 >
-                  <template v-if="line.display">{{ line.display }} </template><span class="font-medium">{{ item.name }}</span>
+                  <span
+                    v-if="line.display"
+                    class="mr-1.5 font-medium text-primary-dark"
+                    :class="checked.map[line.key] ? 'text-stone-400 line-through' : ''"
+                  >{{ line.display }}</span>
+                  <span :class="checked.map[line.key] ? 'text-stone-400 line-through' : ''">{{ item.name }}</span>
                 </span>
               </label>
             </div>

@@ -208,8 +208,8 @@ function addAndClose() {
         <section v-if="doc.cookwares.length">
           <h3 class="mb-2 text-sm font-semibold tracking-wide text-stone-500 uppercase">Cookware</h3>
           <ul class="flex flex-wrap gap-2">
-            <li v-for="cw in doc.cookwares" :key="cw" class="rounded-full bg-white px-3 py-1 text-xs ring-1 ring-stone-200">
-              {{ cw }}
+            <li v-for="cw in doc.cookwares" :key="cw.id" class="rounded-full bg-white px-3 py-1 text-xs ring-1 ring-stone-200">
+              {{ cw.name }}
             </li>
           </ul>
         </section>
