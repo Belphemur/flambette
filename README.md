@@ -3,10 +3,16 @@
 A mobile-first single-page app for browsing the Mealime recipe catalog,
 building a meal plan, and generating a grocery list from it.
 
-Fully offline: the repo ships the complete recipe catalog — all 2,730 full
-recipe documents (`public/data/recipes/`, ~15 MB, one JSON per variant id)
-plus the catalog snapshot. The app makes **no external calls at runtime**:
-recipe details are fetched from the bundled local files and cached in memory.
+Fully offline and fully self-contained: the repo ships the complete recipe
+catalog — all 2,730 full recipe documents (`public/data/recipes/`, ~15 MB,
+one JSON per variant id) plus the catalog snapshot — **and every recipe
+image** (`public/img/recipes/`, one WebP per archived Mealime CDN image).
+The app makes **no external requests at runtime**: recipe details are
+fetched from the bundled local files, and all imagery (thumbnails,
+presentation images, favourites) is served from the local archive via the
+naming rule *remote-URL basename with the extension swapped to `.webp`*.
+Recipes without an image (or whose local file is missing) fall back to a
+neutral placeholder.
 
 ## Features
 
@@ -50,6 +56,10 @@ npm run preview # serve the production build locally
 - `public/data/builder_data.json` — a snapshot of Mealime's recipe-builder
   payload (2,730 feasible recipe variants with metadata, macros, ratings,
   ingredient names and image references).
+- `public/img/recipes/` — the offline image archive: one WebP per distinct
+  Mealime CDN image (thumbnails at 400px, presentation images at 800px),
+  named after the basename of the original remote URL. Resolved at runtime
+  by `src/lib/images.ts`.
 - `public/data/user_data.json` — reference-only snapshot of a user account
   (used to extract the canonical grocery-store section list and the seed
   favourites; the auth token in it was scrubbed before it entered git).

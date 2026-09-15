@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { catalog, getRecipe } from '../lib/catalog'
+import { imageSrc, onImgError } from '../lib/images'
 import { scaleQuantity } from '../lib/quantity'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { addToPlan, planContains } from '../stores/plan'
@@ -107,8 +108,10 @@ function addAndClose() {
   >
     <div class="relative">
       <img
-        :src="meta.presentation_image_url"
+        :src="imageSrc(meta.presentation_image_url)"
         :alt="meta.name"
+        loading="lazy"
+        @error="onImgError"
         class="max-h-72 w-full bg-stone-200 object-cover"
       />
       <button

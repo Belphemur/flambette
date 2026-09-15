@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { imageSrc, onImgError } from '../lib/images'
 import type { VariantMeta } from '../lib/types'
 import { isFavourite, toggleFavourite } from '../stores/favourites'
 import { ui } from '../stores/ui'
@@ -17,9 +18,10 @@ function openDetail() {
   >
     <div class="relative">
       <img
-        :src="meta.thumbnail_image_url"
+        :src="imageSrc(meta.thumbnail_image_url)"
         :alt="meta.name"
         loading="lazy"
+        @error="onImgError"
         class="aspect-[4/3] w-full bg-stone-100 object-cover"
       />
       <span

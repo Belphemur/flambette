@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { catalog } from '../lib/catalog'
+import { imageSrc, onImgError } from '../lib/images'
 import type { VariantMeta } from '../lib/types'
 import {
   plan,
@@ -72,9 +73,10 @@ function openRecipe(id: number) {
           class="flex items-center gap-3 rounded-xl bg-white p-2.5 ring-1 ring-stone-200"
         >
           <img
-            :src="meal.meta.thumbnail_image_url"
+            :src="imageSrc(meal.meta.thumbnail_image_url)"
             :alt="meal.meta.name"
             loading="lazy"
+            @error="onImgError"
             class="size-16 shrink-0 cursor-pointer rounded-lg bg-stone-100 object-cover"
             @click="openRecipe(meal.meta.id)"
           />
