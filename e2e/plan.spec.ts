@@ -31,10 +31,11 @@ test('plan survives a page reload (Pinia persistence)', async ({ page }) => {
   const firstName = await openFirstRecipeDetail(page)
   await page.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
 
-  await page.reload()
-  await waitForCatalog(page)
+  // Leave the detail route so the reload lands on the plan tab
   await gotoTab(page, 'Plan')
-  await expect(page.getByRole('heading', { level: 3, name: firstName })).toBeVisible()
+  await page.reload()
+  await gotoTab(page, 'Plan')
+  await expect(page.getByRole('heading', { level: 3, name: firstName })).toBeVisible({ timeout: 15_000 })
   await expect(page.locator('main').getByText('meal', { exact: true })).toHaveText('meal')
 })
 

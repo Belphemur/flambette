@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
 import type { RecipeDoc } from '../lib/types'
@@ -8,11 +9,14 @@ import { useUiStore } from '../stores/ui'
 
 const plan = usePlanStore()
 const ui = useUiStore()
+const router = useRouter()
+
+/** Recipe variant id, passed as a route prop from /cooking/:id. */
+const props = defineProps<{ id: number }>()
 
 const doc = ref<RecipeDoc | null>(null)
 
-const meta = computed(() => catalog.value?.byId.get(ui.cookingRecipeId ?? -1) ?? null)
-const open = computed(() => ui.cookingRecipeId !== null && meta.value !== null)
+const meta = computed(() => catalog.value?.byId.get(props.id) ?? null)
 
 /**
  * Servings source: the plan entry's servings when the recipe is planned,
@@ -45,13 +49,17 @@ function prev() {
     ui.setCookingStep(meta.value.id, stepIndex.value - 1)
   }
 }
+function close() {
+  if (window.history.state?.back) router.back()
+  else void router.replace('/plan')
+}
+
 function finish() {
-  ui.closeCooking()
+  close()
   ui.showToast('Enjoy! 🍽')
 }
 
 function onKey(e: KeyboardEvent) {
-  if (!open.value) return
   if (e.key === 'ArrowRight') {
     e.preventDefault()
     next()
@@ -60,7 +68,7 @@ function onKey(e: KeyboardEvent) {
     prev()
   } else if (e.key === 'Escape') {
     e.preventDefault()
-    ui.closeCooking()
+    close()
   }
 }
 
@@ -89,7 +97,7 @@ async function releaseWakeLock() {
   wakeLock = null
 }
 function onVisibility() {
-  if (document.visibilityState === 'visible' && open.value) void acquireWakeLock()
+  if (document.visibilityState === 'visible' && meta.value) void acquireWakeLock()
 }
 
 async function loadDoc() {
@@ -102,16 +110,9 @@ async function loadDoc() {
   }
 }
 
-watch(open, (v) => {
-  if (v) {
-    void loadDoc()
-    void acquireWakeLock()
-  } else {
-    void releaseWakeLock()
-  }
-})
-
 onMounted(() => {
+  void loadDoc()
+  void acquireWakeLock()
   window.addEventListener('keydown', onKey)
   document.addEventListener('visibilitychange', onVisibility)
 })
@@ -138,7 +139,7 @@ function onTouchEnd(e: TouchEvent) {
 
 <template>
   <div
-    v-if="open && meta"
+    v-if="meta"
     class="fixed inset-0 z-40 flex flex-col bg-stone-50"
     role="dialog"
     aria-modal="true"
@@ -150,7 +151,7 @@ function onTouchEnd(e: TouchEvent) {
         <button
           class="flex size-11 shrink-0 items-center justify-center rounded-full text-lg text-stone-500 hover:bg-stone-100"
           aria-label="Close cooking mode"
-          @click="ui.closeCooking"
+          @click="close"
         >
           ✕
         </button>

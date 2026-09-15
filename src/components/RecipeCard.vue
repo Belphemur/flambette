@@ -2,15 +2,15 @@
 import { imageSrc, onImgError } from '../lib/images'
 import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
-import { useUiStore } from '../stores/ui'
+import { useRouter } from 'vue-router'
 
 const props = defineProps<{ meta: VariantMeta }>()
 
 const favourites = useFavouritesStore()
-const ui = useUiStore()
+const router = useRouter()
 
 function openDetail() {
-  ui.openRecipeId = props.meta.id
+  void router.push({ name: 'recipe', params: { id: String(props.meta.id) } })
 }
 </script>
 

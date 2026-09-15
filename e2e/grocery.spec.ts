@@ -50,8 +50,6 @@ test('checking an item updates the progress count, reload keeps it', async ({ pa
 
   // Reload — the checked state must persist (Pinia persistedstate)
   await page.reload()
-  await waitForCatalog(page)
-  await gotoTab(page, 'Grocery')
   await expect(page.locator('main').getByText(/\d+ \/ \d+ items/)).toHaveText(`1 / ${total} items`, {
     timeout: 10_000,
   })

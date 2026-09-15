@@ -1,20 +1,24 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { TABS, useUiStore } from './stores/ui'
-import RecipesTab from './components/RecipesTab.vue'
-import PlanTab from './components/PlanTab.vue'
-import GroceryTab from './components/GroceryTab.vue'
-import RecipeDetail from './components/RecipeDetail.vue'
-import CookingView from './components/CookingView.vue'
 import { getCatalog } from './lib/catalog'
 import { initFavourites } from './stores/favourites'
 
 const reload = () => location.reload()
 
+const route = useRoute()
+const router = useRouter()
 const ui = useUiStore()
 
 const loading = ref(true)
 const loadError = ref<string | null>(null)
+
+/** Cooking is a fullscreen focus mode: no app header, no bottom nav. */
+const isCooking = computed(() => route.name === 'cooking')
+
+/** The recipe detail view is full-bleed (edge-to-edge hero image). */
+const isRecipe = computed(() => route.name === 'recipe')
 
 onMounted(async () => {
   try {
@@ -30,6 +34,7 @@ onMounted(async () => {
 <template>
   <div class="mx-auto flex min-h-dvh max-w-2xl flex-col">
     <header
+      v-if="!isCooking"
       class="sticky top-0 z-20 border-b border-stone-200 bg-white/90 backdrop-blur"
     >
       <h1 class="px-4 py-3 text-lg font-bold tracking-tight text-primary-dark">
@@ -52,16 +57,17 @@ onMounted(async () => {
       </div>
     </main>
 
-    <main v-else class="flex-1 px-4 pt-4 pb-28">
-      <KeepAlive>
-        <RecipesTab v-if="ui.tab === 'recipes'" />
-        <PlanTab v-else-if="ui.tab === 'plan'" />
-        <GroceryTab v-else />
-      </KeepAlive>
+    <main
+      v-else
+      class="flex-1"
+      :class="isRecipe || isCooking ? '' : 'px-4 pt-4 pb-28'"
+    >
+      <RouterView v-slot="{ Component }">
+        <KeepAlive include="RecipesTab,PlanTab,GroceryTab">
+          <component :is="Component" />
+        </KeepAlive>
+      </RouterView>
     </main>
-
-    <RecipeDetail />
-    <CookingView />
 
     <Transition name="toast">
       <div
@@ -74,6 +80,7 @@ onMounted(async () => {
     </Transition>
 
     <nav
+      v-if="!isCooking"
       class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-stone-200 bg-white"
       aria-label="Main navigation"
     >
@@ -82,9 +89,9 @@ onMounted(async () => {
           v-for="tab in TABS"
           :key="tab.id"
           class="flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors"
-          :class="ui.tab === tab.id ? 'text-primary-dark' : 'text-stone-400'"
-          :aria-current="ui.tab === tab.id ? 'page' : undefined"
-          @click="ui.setTab(tab.id)"
+          :class="route.path === tab.to ? 'text-primary-dark' : 'text-stone-400'"
+          :aria-current="route.path === tab.to ? 'page' : undefined"
+          @click="router.push(tab.to)"
         >
           <span class="text-xl leading-none">{{ tab.icon }}</span>
           {{ tab.label }}

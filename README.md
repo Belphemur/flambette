@@ -60,7 +60,9 @@ for `index.html`).
 
 - Vue 3 (`<script setup>`) + Vite + TypeScript
 - Tailwind CSS v4 (via `@tailwindcss/vite`)
-- No router; state via Pinia stores in `src/stores/`, persisted to
+- Vue Router 4 for deep-linkable routes (`/`, `/plan`, `/grocery`,
+  `/recipe/:id`, `/cooking/:id`)
+- State via Pinia stores in `src/stores/`, persisted to
   localStorage under the `mealime-planner:v1:*` keys
   (`mealime-planner:v1:favourites`, `mealime-planner:v1:plan`,
   `mealime-planner:v1:checked`)

@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
 import { aggregateGroceries, type GroceryItem } from '../lib/grocery'
 import { STORE_SECTIONS } from '../lib/sections'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
 import { useGroceryStore } from '../stores/grocery'
-import { useUiStore } from '../stores/ui'
 
 const plan = usePlanStore()
 const checked = useGroceryStore()
-const ui = useUiStore()
+const router = useRouter()
 
 const docs = ref(new Map<number, RecipeDoc>())
 const loading = ref(false)
@@ -94,7 +94,7 @@ watch(plannedMetas, ensureDocs, { immediate: true })
       <p class="mt-1 text-sm">Add meals to your plan and the grocery list builds itself.</p>
       <button
         class="mt-4 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white"
-        @click="ui.tab = 'recipes'"
+        @click="router.push('/')"
       >
         Browse recipes
       </button>

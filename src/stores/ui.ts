@@ -1,43 +1,28 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-export type Tab = 'recipes' | 'plan' | 'grocery'
-
-export const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'recipes', label: 'Recipes', icon: '📖' },
-  { id: 'plan', label: 'Plan', icon: '📅' },
-  { id: 'grocery', label: 'Grocery', icon: '🛒' },
+/** Bottom-nav entries, in display order. `to` is the route path. */
+export const TABS: { id: string; label: string; icon: string; to: string }[] = [
+  { id: 'recipes', label: 'Recipes', icon: '📖', to: '/' },
+  { id: 'plan', label: 'Plan', icon: '📅', to: '/plan' },
+  { id: 'grocery', label: 'Grocery', icon: '🛒', to: '/grocery' },
 ]
 
-/** UI state (active tab, open detail sheet, cooking mode). Not persisted. */
+/**
+ * UI state not owned by the router: cooking step positions (survive tab
+ * switches within a session) and transient toasts. Not persisted.
+ *
+ * The active tab, open recipe and cooking mode are router-driven now —
+ * see src/router.ts.
+ */
 export const useUiStore = defineStore(
   'ui',
   () => {
-    const tab = ref<Tab>('recipes')
-    /** Variant id of the recipe currently open in the detail sheet, if any. */
-    const openRecipeId = ref<number | null>(null)
-    /** Variant id of the recipe currently in cooking mode, if any. */
-    const cookingRecipeId = ref<number | null>(null)
-    /** Current cooking step index, keyed by variant id (survives tab switches). */
+    /** Cooking step index, keyed by variant id (survives tab switches). */
     const cookingStepIndex = ref<Record<number, number>>({})
     /** Transient toast message (e.g. "Enjoy! 🍽"). */
     const toast = ref<string | null>(null)
     let toastTimer: ReturnType<typeof setTimeout> | undefined
-
-    function setTab(t: Tab) {
-      tab.value = t
-      window.scrollTo({ top: 0 })
-    }
-
-    /** Enter cooking mode for a recipe; the step position resets on open. */
-    function openCooking(variantId: number) {
-      cookingRecipeId.value = variantId
-      cookingStepIndex.value[variantId] = 0
-    }
-
-    function closeCooking() {
-      cookingRecipeId.value = null
-    }
 
     function setCookingStep(variantId: number, step: number) {
       cookingStepIndex.value[variantId] = step
@@ -54,14 +39,8 @@ export const useUiStore = defineStore(
     }
 
     return {
-      tab,
-      openRecipeId,
-      cookingRecipeId,
       cookingStepIndex,
       toast,
-      setTab,
-      openCooking,
-      closeCooking,
       setCookingStep,
       cookingStep,
       showToast,

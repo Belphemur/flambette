@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
 import { scaleQuantity } from '../lib/quantity'
@@ -8,11 +9,13 @@ import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
 import { useFavouritesStore } from '../stores/favourites'
 import { onMounted, onUnmounted } from 'vue'
-import { useUiStore } from '../stores/ui'
 
 const plan = usePlanStore()
 const favourites = useFavouritesStore()
-const ui = useUiStore()
+const router = useRouter()
+
+/** Recipe variant id, passed as a route prop from /recipe/:id. */
+const props = defineProps<{ id: number }>()
 
 const doc = ref<RecipeDoc | null>(null)
 const loading = ref(false)
@@ -20,7 +23,7 @@ const loadError = ref<string | null>(null)
 const servings = ref(1)
 
 const meta = computed<VariantMeta | null>(
-  () => catalog.value?.byId.get(ui.openRecipeId ?? -1) ?? null,
+  () => catalog.value?.byId.get(props.id) ?? null,
 )
 
 /** Scale factor for ingredients/instructions vs. the recipe's base servings. */
@@ -66,41 +69,42 @@ async function loadDoc() {
 }
 
 watch(
-  () => ui.openRecipeId,
-  (id) => {
-    if (id !== null) void loadDoc()
+  meta,
+  (m) => {
+    if (m) void loadDoc()
   },
+  { immediate: true },
 )
 
+/** Back to wherever the user came from; deep links fall back to `/`. */
 function close() {
-  ui.openRecipeId = null
+  if (window.history.state?.back) router.back()
+  else router.replace('/')
 }
 
 function onKey(e: KeyboardEvent) {
-  // Don't close the detail sheet while the cooking overlay handles Escape.
-  if (e.key === 'Escape' && ui.openRecipeId !== null && ui.cookingRecipeId === null) close()
+  if (e.key === 'Escape') close()
 }
 onMounted(() => window.addEventListener('keydown', onKey))
 onUnmounted(() => window.removeEventListener('keydown', onKey))
 
-function addAndClose() {
+function addToPlan() {
   if (!meta.value) return
   plan.addToPlan(meta.value, servings.value)
-  close()
 }
 
+/** Cooking is plan-driven: head to the gated /cooking/:id route. */
 function startCooking() {
   if (!meta.value) return
-  ui.openCooking(meta.value.id)
+  void router.push({ name: 'cooking', params: { id: String(meta.value.id) } })
 }
 </script>
 
 <template>
   <div
-    v-if="ui.openRecipeId !== null && meta"
-    class="fixed inset-0 z-30 overflow-y-auto bg-stone-50"
+    v-if="meta"
+    class="min-h-full bg-stone-50"
     role="dialog"
-    aria-modal="true"
     :aria-label="meta.name"
     tabindex="-1"
     @keydown="onKey"
@@ -115,7 +119,7 @@ function startCooking() {
       />
       <button
         class="absolute top-3 left-3 flex size-11 items-center justify-center rounded-full bg-white/90 text-lg shadow"
-        aria-label="Back to recipes"
+        aria-label="Back"
         @click="close"
       >
         ←
@@ -172,7 +176,7 @@ function startCooking() {
           </div>
           <button
             class="h-11 flex-1 max-w-48 rounded-xl bg-primary px-4 text-sm font-semibold text-white shadow-sm active:bg-primary-dark"
-            @click="addAndClose"
+            @click="addToPlan"
           >
             {{ inPlan ? 'Update in plan' : 'Add to plan' }}
           </button>

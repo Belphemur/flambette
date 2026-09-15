@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { catalog } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
 import type { VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
-import { useUiStore } from '../stores/ui'
 
 const plan = usePlanStore()
-const ui = useUiStore()
+const router = useRouter()
 
 interface PlannedMeal {
   meta: VariantMeta
@@ -31,7 +31,7 @@ const totals = computed(() => ({
 }))
 
 function openRecipe(id: number) {
-  ui.openRecipeId = id
+  void router.push({ name: 'recipe', params: { id: String(id) } })
 }
 </script>
 <template>
@@ -42,7 +42,7 @@ function openRecipe(id: number) {
       <p class="mt-1 text-sm">Add recipes from the Recipes tab to build your week.</p>
       <button
         class="mt-4 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white"
-        @click="ui.tab = 'recipes'"
+        @click="router.push('/')"
       >
         Browse recipes
       </button>

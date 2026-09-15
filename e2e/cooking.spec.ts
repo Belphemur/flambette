@@ -7,10 +7,13 @@ test.beforeEach(async ({ page }) => {
   await waitForCatalog(page)
 })
 
-/** Open the first recipe and enter cooking mode. Returns the cooking dialog. */
+/** Open the first recipe and enter cooking mode. Returns the cooking dialog.
+ *  Cooking is plan-driven, so the recipe is added to the plan first. */
 async function startCooking(page: import('@playwright/test').Page) {
   await openFirstRecipeDetail(page)
-  await page.getByRole('dialog').getByRole('button', { name: 'Start cooking' }).click()
+  const sheet = page.getByRole('dialog')
+  await sheet.getByRole('button', { name: /Add to plan|Update in plan/ }).click()
+  await sheet.getByRole('button', { name: 'Start cooking' }).click()
   const cooking = page.getByRole('dialog', { name: /Cooking / })
   await expect(cooking).toBeVisible()
   return cooking
@@ -66,9 +69,10 @@ test('cooking position is not persisted across a reload', async ({ page }) => {
   await cooking.getByRole('button', { name: /Next/ }).click()
   await expect(cooking.getByText(/Step 2 \/ \d+/)).toBeVisible()
 
+  // The route (and plan membership) survive the reload; the step position
+  // resets to the first step.
   await page.reload()
-  await waitForCatalog(page)
-  // Back on the recipes tab: no detail sheet, no cooking view
-  await expect(page.getByRole('dialog')).toHaveCount(0)
-  await expect(page.locator('main article').first()).toBeVisible()
+  const reopened = page.getByRole('dialog', { name: /Cooking / })
+  await expect(reopened).toBeVisible({ timeout: 15_000 })
+  await expect(reopened.getByText(/Step 1 \/ \d+/)).toBeVisible()
 })
