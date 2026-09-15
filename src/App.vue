@@ -4,7 +4,9 @@ import { ui, TABS, setTab } from './stores/ui'
 import RecipesTab from './components/RecipesTab.vue'
 import PlanTab from './components/PlanTab.vue'
 import GroceryTab from './components/GroceryTab.vue'
+import RecipeDetail from './components/RecipeDetail.vue'
 import { getCatalog } from './lib/catalog'
+import { initFavourites } from './stores/favourites'
 
 const reload = () => location.reload()
 
@@ -15,6 +17,7 @@ onMounted(async () => {
   try {
     await getCatalog()
     loading.value = false
+    void initFavourites()
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
@@ -47,10 +50,14 @@ onMounted(async () => {
     </main>
 
     <main v-else class="flex-1 px-4 pt-4 pb-28">
-      <RecipesTab v-if="ui.tab === 'recipes'" />
-      <PlanTab v-else-if="ui.tab === 'plan'" />
-      <GroceryTab v-else />
+      <KeepAlive>
+        <RecipesTab v-if="ui.tab === 'recipes'" />
+        <PlanTab v-else-if="ui.tab === 'plan'" />
+        <GroceryTab v-else />
+      </KeepAlive>
     </main>
+
+    <RecipeDetail />
 
     <nav
       class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-stone-200 bg-white"

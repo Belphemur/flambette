@@ -73,8 +73,8 @@ export interface BuilderData {
 export interface RecipeInstruction {
   id: number
   primary_message: string
-  /** Per-step ingredient breakdown, newline separated; may be empty. */
-  secondary_message: string
+  /** Per-step ingredient breakdown, newline separated; may be empty or null. */
+  secondary_message: string | null
 }
 
 export interface LineItem {

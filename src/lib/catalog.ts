@@ -1,3 +1,4 @@
+import { shallowRef } from 'vue'
 import type { BuilderData, RecipeDoc, VariantMeta, VariantData } from './types'
 
 /**
@@ -22,6 +23,9 @@ export interface Catalog {
 
 let catalogPromise: Promise<Catalog> | null = null
 
+/** The loaded catalog, once `getCatalog()` resolves. Reactive (shallowRef). */
+export const catalog = shallowRef<Catalog | null>(null)
+
 function buildCatalog(data: BuilderData): Catalog {
   const byId = new Map<number, VariantMeta>()
   for (const meta of data.variant_meta) byId.set(meta.id, meta)
@@ -42,7 +46,9 @@ function buildCatalog(data: BuilderData): Catalog {
 export function getCatalog(): Promise<Catalog> {
   catalogPromise ??= fetch(BUILDER_DATA_URL).then(async (res) => {
     if (!res.ok) throw new Error(`Failed to load catalog: HTTP ${res.status}`)
-    return buildCatalog((await res.json()) as BuilderData)
+    const built = buildCatalog((await res.json()) as BuilderData)
+    catalog.value = built
+    return built
   })
   return catalogPromise
 }
