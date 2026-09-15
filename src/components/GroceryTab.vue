@@ -102,11 +102,11 @@ watch(plannedMetas, ensureDocs, { immediate: true })
 
     <template v-else-if="loading && items.length === 0">
       <div class="space-y-2" aria-busy="true">
-        <div v-for="i in 6" :key="i" class="h-10 animate-pulse rounded-lg bg-stone-200" />
+        <div v-for="i in 6" :key="i" class="h-10 animate-pulse rounded-lg dark:bg-stone-700" />
       </div>
     </template>
 
-    <div v-else-if="loadError" class="rounded-xl bg-rose-50 p-4 text-center text-sm text-rose-700">
+    <div v-else-if="loadError" class="rounded-xl dark:bg-rose-950 p-4 text-center text-sm dark:text-rose-300">
       <p class="font-medium">Couldn't build the grocery list</p>
       <p class="mt-1 text-xs">{{ loadError }}</p>
       <button class="mt-2 rounded-lg bg-rose-600 px-3 py-1.5 text-white" @click="ensureDocs">Retry</button>
@@ -114,12 +114,12 @@ watch(plannedMetas, ensureDocs, { immediate: true })
 
     <template v-else>
       <div
-        class="sticky top-12 z-10 -mx-4 flex items-center justify-between border-b border-stone-200 bg-stone-50/95 px-4 py-2 backdrop-blur"
+        class="sticky top-12 z-10 -mx-4 flex items-center justify-between border-b dark:border-stone-700 dark:bg-stone-950/95 px-4 py-2 backdrop-blur"
       >
         <p class="text-sm font-semibold" aria-live="polite">
           {{ checkedCount }} / {{ totalCount }} items
         </p>
-        <div class="h-1.5 w-24 overflow-hidden rounded-full bg-stone-200">
+        <div class="h-1.5 w-24 overflow-hidden rounded-full dark:bg-stone-700">
           <div
             class="h-full rounded-full bg-primary transition-all"
             :style="{ width: totalCount ? `${(checkedCount / totalCount) * 100}%` : '0%' }"
@@ -127,7 +127,7 @@ watch(plannedMetas, ensureDocs, { immediate: true })
         </div>
         <button
           v-if="checkedCount > 0"
-          class="rounded-lg px-2 py-1 text-xs font-medium text-stone-500 hover:bg-stone-200"
+          class="rounded-lg px-2 py-1 text-xs font-medium dark:text-stone-400 hover:dark:bg-stone-700"
           @click="checked.clearChecked"
         >
           Clear checked
@@ -138,7 +138,7 @@ watch(plannedMetas, ensureDocs, { immediate: true })
         <h3 class="px-1 pt-2 text-xs font-bold tracking-wider text-stone-400 uppercase">
           {{ section.name }}
         </h3>
-        <ul class="divide-y divide-stone-100 overflow-hidden rounded-xl bg-white ring-1 ring-stone-200">
+        <ul class="divide-y dark:divide-stone-800 overflow-hidden rounded-xl dark:bg-stone-900 ring-1 dark:ring-stone-700">
           <li v-for="item in section.items" :key="item.normalized">
             <div
               v-for="line in item.lines"

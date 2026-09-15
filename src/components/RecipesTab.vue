@@ -12,7 +12,9 @@ const category = ref('all')
 const favOnly = ref(false)
 const proOnly = ref(false)
 const maxTime = ref<number | null>(null)
-const sortBy = ref<'rating' | 'time' | 'calories' | 'popularity'>('rating')
+const sortBy = ref<
+  'rating' | 'time' | 'calories' | 'popularity' | 'latest'
+>('rating')
 
 const favourites = useFavouritesStore()
 
@@ -59,6 +61,10 @@ const results = computed<VariantMeta[]>(() => {
     case 'popularity':
       list.sort((a, b) => popularityScore(b.popularity) - popularityScore(a.popularity))
       break
+    case 'latest':
+      // Newest creations first; missing timestamps sink to the bottom.
+      list.sort((a, b) => (b.first_published_at ?? 0) - (a.first_published_at ?? 0))
+      break
   }
   return list
 })
@@ -82,14 +88,14 @@ function clearFilters() {
       v-model="query"
       type="search"
       placeholder="Search recipes or ingredients…"
-      class="h-11 w-full rounded-xl border border-stone-200 bg-white px-4 text-sm outline-none focus:border-primary"
+      class="h-11 w-full rounded-xl border dark:border-stone-700 dark:bg-stone-900 px-4 text-sm outline-none focus:border-primary"
       aria-label="Search recipes or ingredients"
     />
 
     <div class="flex flex-wrap items-center gap-2">
       <select
         v-model="category"
-        class="h-11 rounded-lg border border-stone-200 bg-white px-2 text-sm"
+        class="h-11 rounded-lg border dark:border-stone-700 dark:bg-stone-900 px-2 text-sm"
         aria-label="Filter by category"
       >
         <option value="all">All diets</option>
@@ -100,7 +106,7 @@ function clearFilters() {
 
       <select
         v-model.number="maxTime"
-        class="h-11 rounded-lg border border-stone-200 bg-white px-2 text-sm"
+        class="h-11 rounded-lg border dark:border-stone-700 dark:bg-stone-900 px-2 text-sm"
         aria-label="Filter by max cook time"
       >
         <option :value="null">Any cook time</option>
@@ -111,7 +117,7 @@ function clearFilters() {
 
       <button
         class="h-11 rounded-lg border px-3 text-sm font-medium transition-colors"
-        :class="favOnly ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-stone-200 bg-white text-stone-600'"
+        :class="favOnly ? 'border-amber-400 dark:bg-amber-950 dark:text-amber-300' : 'dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'"
         :aria-pressed="favOnly"
         @click="favOnly = !favOnly"
       >
@@ -120,7 +126,7 @@ function clearFilters() {
 
       <button
         class="h-11 rounded-lg border px-3 text-sm font-medium transition-colors"
-        :class="proOnly ? 'border-stone-900 bg-stone-900 text-amber-300' : 'border-stone-200 bg-white text-stone-600'"
+        :class="proOnly ? 'border-stone-900 bg-stone-900 text-amber-300' : 'dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'"
         :aria-pressed="proOnly"
         @click="proOnly = !proOnly"
       >
@@ -129,10 +135,11 @@ function clearFilters() {
 
       <select
         v-model="sortBy"
-        class="ml-auto h-11 rounded-lg border border-stone-200 bg-white px-2 text-sm"
+        class="ml-auto h-11 rounded-lg border dark:border-stone-700 dark:bg-stone-900 px-2 text-sm"
         aria-label="Sort recipes"
       >
         <option value="rating">Sort: Top rated</option>
+        <option value="latest">Sort: Latest</option>
         <option value="popularity">Sort: Most popular</option>
         <option value="time">Sort: Quickest</option>
         <option value="calories">Sort: Fewest calories</option>

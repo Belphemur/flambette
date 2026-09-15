@@ -16,7 +16,7 @@ function openDetail() {
 
 <template>
   <article
-    class="group relative cursor-pointer overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-stone-200 transition-shadow hover:shadow-md"
+    class="group relative cursor-pointer overflow-hidden rounded-xl dark:bg-stone-900 shadow-sm ring-1 dark:ring-stone-700 transition-shadow hover:shadow-md"
     @click="openDetail"
   >
     <div class="relative">
@@ -25,7 +25,7 @@ function openDetail() {
         :alt="meta.name"
         loading="lazy"
         @error="onImgError"
-        class="aspect-[4/3] w-full bg-stone-100 object-cover"
+        class="aspect-[4/3] w-full dark:bg-stone-800 object-cover"
       />
       <span
         v-if="meta.is_pro"
@@ -45,7 +45,7 @@ function openDetail() {
     </div>
     <div class="p-3">
       <h3 class="line-clamp-2 min-h-10 text-sm leading-5 font-semibold">{{ meta.name }}</h3>
-      <p class="mt-1.5 flex items-center gap-3 text-xs text-stone-500">
+      <p class="mt-1.5 flex items-center gap-3 text-xs dark:text-stone-400">
         <span class="flex items-center gap-1">🔥 {{ meta.calories }} kcal</span>
         <span class="flex items-center gap-1">⏱ {{ meta.cooking_minutes }} min</span>
       </p>

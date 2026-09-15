@@ -103,7 +103,7 @@ function startCooking() {
 <template>
   <div
     v-if="meta"
-    class="min-h-full bg-stone-50"
+    class="min-h-full dark:bg-stone-950"
     role="dialog"
     :aria-label="meta.name"
     tabindex="-1"
@@ -115,17 +115,17 @@ function startCooking() {
         :alt="meta.name"
         loading="lazy"
         @error="onImgError"
-        class="max-h-72 w-full bg-stone-200 object-cover"
+        class="max-h-72 w-full dark:bg-stone-700 object-cover"
       />
       <button
-        class="absolute top-3 left-3 flex size-11 items-center justify-center rounded-full bg-white/90 text-lg shadow"
+        class="absolute top-3 left-3 flex size-11 items-center justify-center rounded-full dark:bg-stone-900/90 text-lg shadow"
         aria-label="Back"
         @click="close"
       >
         ←
       </button>
       <button
-        class="absolute top-3 right-3 flex size-11 items-center justify-center rounded-full bg-white/90 text-xl shadow"
+        class="absolute top-3 right-3 flex size-11 items-center justify-center rounded-full dark:bg-stone-900/90 text-xl shadow"
         :aria-label="favourites.isFavourite(meta.id) ? 'Remove from favourites' : 'Add to favourites'"
         @click="favourites.toggleFavourite(meta.id)"
       >
@@ -137,12 +137,12 @@ function startCooking() {
 
     <div class="mx-auto max-w-2xl space-y-6 p-4 pb-24">
       <header class="space-y-2">
-        <div class="flex items-center gap-2 text-xs text-stone-500">
+        <div class="flex items-center gap-2 text-xs dark:text-stone-400">
           <span v-if="meta.is_pro" class="rounded bg-stone-900 px-1.5 py-0.5 font-bold text-amber-300">PRO</span>
           <span class="capitalize">{{ catalog?.dataById.get(meta.id)?.category_name ?? meta.ruleset }}</span>
         </div>
         <h2 class="text-2xl font-bold tracking-tight">{{ meta.name }}</h2>
-        <p class="flex flex-wrap gap-3 text-sm text-stone-500">
+        <p class="flex flex-wrap gap-3 text-sm dark:text-stone-400">
           <span>🔥 {{ Math.round(meta.calories * factor) }} kcal / serving</span>
           <span>⏱ {{ meta.cooking_minutes }} min</span>
           <span>🍽 serves {{ servings }}</span>
@@ -151,13 +151,13 @@ function startCooking() {
       </header>
 
       <!-- Servings + add to plan -->
-      <div class="sticky top-0 z-10 -mx-4 border-y border-stone-200 bg-white/95 px-4 py-2 backdrop-blur">
+      <div class="sticky top-0 z-10 -mx-4 border-y dark:border-stone-700 dark:bg-stone-900/95 px-4 py-2 backdrop-blur">
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
             <span class="text-sm font-medium">Servings</span>
-            <div class="flex items-center rounded-lg border border-stone-200">
+            <div class="flex items-center rounded-lg border dark:border-stone-700">
               <button
-                class="flex size-11 items-center justify-center text-lg text-stone-600"
+                class="flex size-11 items-center justify-center text-lg dark:text-stone-300"
                 :disabled="servings <= 1"
                 aria-label="Fewer servings"
                 @click="servings--"
@@ -166,7 +166,7 @@ function startCooking() {
               </button>
               <span class="w-8 text-center text-sm font-semibold">{{ servings }}</span>
               <button
-                class="flex size-11 items-center justify-center text-lg text-stone-600"
+                class="flex size-11 items-center justify-center text-lg dark:text-stone-300"
                 :aria-label="`More servings`"
                 @click="servings++"
               >
@@ -191,11 +191,11 @@ function startCooking() {
 
       <!-- Macros -->
       <section class="space-y-2">
-        <h3 class="text-sm font-semibold tracking-wide text-stone-500 uppercase">Macro split</h3>
-        <div class="space-y-1.5 rounded-xl bg-white p-4 ring-1 ring-stone-200">
+        <h3 class="text-sm font-semibold tracking-wide dark:text-stone-400 uppercase">Macro split</h3>
+        <div class="space-y-1.5 rounded-xl dark:bg-stone-900 p-4 ring-1 dark:ring-stone-700">
           <div v-for="bar in macroBars" :key="bar.label" class="flex items-center gap-2">
-            <span class="w-16 text-xs text-stone-500">{{ bar.label }}</span>
-            <div class="h-2.5 flex-1 overflow-hidden rounded-full bg-stone-100">
+            <span class="w-16 text-xs dark:text-stone-400">{{ bar.label }}</span>
+            <div class="h-2.5 flex-1 overflow-hidden rounded-full dark:bg-stone-800">
               <div class="h-full rounded-full" :class="bar.color" :style="{ width: `${Math.round(bar.value * 100)}%` }" />
             </div>
             <span class="w-10 text-right text-xs font-medium">{{ Math.round(bar.value * 100) }}%</span>
@@ -205,11 +205,11 @@ function startCooking() {
 
       <template v-if="loading">
         <div class="space-y-3">
-          <div v-for="i in 3" :key="i" class="h-6 w-2/3 animate-pulse rounded bg-stone-200" />
+          <div v-for="i in 3" :key="i" class="h-6 w-2/3 animate-pulse rounded dark:bg-stone-700" />
         </div>
       </template>
 
-      <div v-else-if="loadError" class="rounded-xl bg-rose-50 p-4 text-center text-sm text-rose-700">
+      <div v-else-if="loadError" class="rounded-xl dark:bg-rose-950 p-4 text-center text-sm dark:text-rose-300">
         <p class="font-medium">Couldn't load recipe details</p>
         <p class="mt-1 text-xs">{{ loadError }}</p>
         <button class="mt-2 rounded-lg bg-rose-600 px-3 py-1.5 text-white" @click="loadDoc">Retry</button>
@@ -218,9 +218,9 @@ function startCooking() {
       <template v-else-if="doc">
         <!-- Cookwares -->
         <section v-if="doc.cookwares.length">
-          <h3 class="mb-2 text-sm font-semibold tracking-wide text-stone-500 uppercase">Cookware</h3>
+          <h3 class="mb-2 text-sm font-semibold tracking-wide dark:text-stone-400 uppercase">Cookware</h3>
           <ul class="flex flex-wrap gap-2">
-            <li v-for="cw in doc.cookwares" :key="cw.id" class="rounded-full bg-white px-3 py-1 text-xs ring-1 ring-stone-200">
+            <li v-for="cw in doc.cookwares" :key="cw.id" class="rounded-full dark:bg-stone-900 px-3 py-1 text-xs ring-1 dark:ring-stone-700">
               {{ cw.name }}
             </li>
           </ul>
@@ -228,10 +228,10 @@ function startCooking() {
 
         <!-- Ingredients -->
         <section>
-          <h3 class="mb-2 text-sm font-semibold tracking-wide text-stone-500 uppercase">
+          <h3 class="mb-2 text-sm font-semibold tracking-wide dark:text-stone-400 uppercase">
             Ingredients ({{ servings }} servings)
           </h3>
-          <ul class="divide-y divide-stone-100 rounded-xl bg-white ring-1 ring-stone-200">
+          <ul class="divide-y dark:divide-stone-800 rounded-xl dark:bg-stone-900 ring-1 dark:ring-stone-700">
             <li v-for="item in scaledIngredients" :key="item.id" class="flex gap-3 px-4 py-2.5 text-sm">
               <span class="w-24 shrink-0 font-medium text-primary-dark">{{ item.quantity || '—' }}</span>
               <span>{{ item.ingredient_name }}</span>
@@ -241,16 +241,16 @@ function startCooking() {
 
         <!-- Instructions -->
         <section>
-          <h3 class="mb-2 text-sm font-semibold tracking-wide text-stone-500 uppercase">Instructions</h3>
+          <h3 class="mb-2 text-sm font-semibold tracking-wide dark:text-stone-400 uppercase">Instructions</h3>
           <ol class="space-y-3">
-            <li v-for="(step, i) in scaledSteps" :key="i" class="rounded-xl bg-white p-4 ring-1 ring-stone-200">
+            <li v-for="(step, i) in scaledSteps" :key="i" class="rounded-xl dark:bg-stone-900 p-4 ring-1 dark:ring-stone-700">
               <div class="flex gap-3">
                 <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
                   {{ i + 1 }}
                 </span>
                 <p class="text-sm leading-5">{{ step.primary }}</p>
               </div>
-              <ul v-if="step.details.length" class="mt-2 ml-9 space-y-0.5 border-l-2 border-stone-100 pl-3 text-xs text-stone-500">
+              <ul v-if="step.details.length" class="mt-2 ml-9 space-y-0.5 border-l-2 dark:border-stone-800 pl-3 text-xs dark:text-stone-400">
                 <li v-for="(d, j) in step.details" :key="j">{{ d }}</li>
               </ul>
             </li>

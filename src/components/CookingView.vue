@@ -140,16 +140,16 @@ function onTouchEnd(e: TouchEvent) {
 <template>
   <div
     v-if="meta"
-    class="fixed inset-0 z-40 flex flex-col bg-stone-50"
+    class="fixed inset-0 z-40 flex flex-col dark:bg-stone-950"
     role="dialog"
     aria-modal="true"
     :aria-label="`Cooking ${meta.name}`"
   >
     <!-- Header: name, servings, progress + thin progress bar -->
-    <header class="border-b border-stone-200 bg-white">
+    <header class="border-b dark:border-stone-700 dark:bg-stone-900">
       <div class="mx-auto flex max-w-2xl items-center justify-between gap-2 px-4 py-3">
         <button
-          class="flex size-11 shrink-0 items-center justify-center rounded-full text-lg text-stone-500 hover:bg-stone-100"
+          class="flex size-11 shrink-0 items-center justify-center rounded-full text-lg dark:text-stone-400 hover:dark:bg-stone-800"
           aria-label="Close cooking mode"
           @click="close"
         >
@@ -157,14 +157,14 @@ function onTouchEnd(e: TouchEvent) {
         </button>
         <div class="min-w-0 flex-1 text-center">
           <p class="truncate text-sm font-bold tracking-tight">{{ meta.name }}</p>
-          <p class="text-xs text-stone-500" aria-live="polite">
+          <p class="text-xs dark:text-stone-400" aria-live="polite">
             serves {{ servings }} ·
             <span class="font-semibold">Step {{ stepIndex + 1 }} / {{ total }}</span>
           </p>
         </div>
         <span class="size-11 shrink-0" aria-hidden="true"></span>
       </div>
-      <div class="mx-auto mb-2 h-1 max-w-2xl overflow-hidden rounded-full bg-stone-200">
+      <div class="mx-auto mb-2 h-1 max-w-2xl overflow-hidden rounded-full dark:bg-stone-700">
         <div
           class="h-full rounded-full bg-primary transition-all"
           :style="{ width: total ? `${((stepIndex + 1) / total) * 100}%` : '0%' }"
@@ -179,8 +179,8 @@ function onTouchEnd(e: TouchEvent) {
       @touchend.passive="onTouchEnd"
     >
       <div v-if="!doc" class="mx-auto max-w-2xl space-y-3" aria-busy="true">
-        <div class="h-10 w-3/4 animate-pulse rounded bg-stone-200" />
-        <div class="h-6 w-1/2 animate-pulse rounded bg-stone-200" />
+        <div class="h-10 w-3/4 animate-pulse rounded dark:bg-stone-700" />
+        <div class="h-6 w-1/2 animate-pulse rounded dark:bg-stone-700" />
       </div>
 
       <div v-else-if="step" class="mx-auto max-w-2xl space-y-6">
@@ -191,10 +191,10 @@ function onTouchEnd(e: TouchEvent) {
           <li
             v-for="(d, j) in step.details"
             :key="j"
-            class="flex items-start gap-3 rounded-xl bg-white p-3 text-sm ring-1 ring-stone-200"
+            class="flex items-start gap-3 rounded-xl dark:bg-stone-900 p-3 text-sm ring-1 dark:ring-stone-700"
           >
             <span
-              class="mt-0.5 size-5 shrink-0 rounded border-2 border-stone-300"
+              class="mt-0.5 size-5 shrink-0 rounded border-2 dark:border-stone-600"
               aria-hidden="true"
             ></span>
             <span class="leading-relaxed">{{ d }}</span>
@@ -204,10 +204,10 @@ function onTouchEnd(e: TouchEvent) {
     </div>
 
     <!-- Big navigation buttons -->
-    <footer class="border-t border-stone-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+    <footer class="border-t dark:border-stone-700 dark:bg-stone-900 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <div class="mx-auto flex max-w-2xl gap-3">
         <button
-          class="h-14 min-w-28 flex-1 rounded-xl border border-stone-300 bg-white text-base font-semibold text-stone-700 transition-opacity disabled:opacity-40"
+          class="h-14 min-w-28 flex-1 rounded-xl border dark:border-stone-600 dark:bg-stone-900 text-base font-semibold dark:text-stone-200 transition-opacity disabled:opacity-40"
           :disabled="isFirst"
           @click="prev"
         >

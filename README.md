@@ -59,7 +59,9 @@ for `index.html`).
 ## Stack
 
 - Vue 3 (`<script setup>`) + Vite + TypeScript
-- Tailwind CSS v4 (via `@tailwindcss/vite`)
+- Tailwind CSS v4 (via `@tailwindcss/vite`), class-based dark mode via
+  `useDark` from `@vueuse/core` (system preference by default, manual
+  override persisted)
 - Vue Router 4 for deep-linkable routes (`/`, `/plan`, `/grocery`,
   `/recipe/:id`, `/cooking/:id`)
 - State via Pinia stores in `src/stores/`, persisted to

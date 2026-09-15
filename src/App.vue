@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useDark, useToggle } from '@vueuse/core'
 import { TABS, useUiStore } from './stores/ui'
 import { getCatalog } from './lib/catalog'
 import { initFavourites } from './stores/favourites'
@@ -10,6 +11,16 @@ const reload = () => location.reload()
 const route = useRoute()
 const router = useRouter()
 const ui = useUiStore()
+
+/** Dark mode: follows the system preference until the user overrides it
+ *  (the override persists in localStorage via useDark). */
+const isDark = useDark({
+  selector: 'html',
+  attribute: 'class',
+  valueDark: 'dark',
+  valueLight: 'light',
+})
+const toggleDark = useToggle(isDark)
 
 const loading = ref(true)
 const loadError = ref<string | null>(null)
@@ -35,11 +46,20 @@ onMounted(async () => {
   <div class="mx-auto flex min-h-dvh max-w-2xl flex-col">
     <header
       v-if="!isCooking"
-      class="sticky top-0 z-20 border-b border-stone-200 bg-white/90 backdrop-blur"
+      class="sticky top-0 z-20 border-b border-stone-200 bg-white/90 backdrop-blur dark:border-stone-700 dark:bg-stone-900/90"
     >
-      <h1 class="px-4 py-3 text-lg font-bold tracking-tight text-primary-dark">
-        🥗 Mealime Planner
-      </h1>
+      <div class="flex items-center justify-between px-4 py-2">
+        <h1 class="py-1 text-lg font-bold tracking-tight text-primary-dark dark:text-primary">
+          🥗 Mealime Planner
+        </h1>
+        <button
+          class="flex size-11 items-center justify-center rounded-full text-xl transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
+          :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+          @click="toggleDark()"
+        >
+          <span aria-hidden="true">{{ isDark ? '☀️' : '🌙' }}</span>
+        </button>
+      </div>
     </header>
 
     <main v-if="loadError" class="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
@@ -81,7 +101,7 @@ onMounted(async () => {
 
     <nav
       v-if="!isCooking"
-      class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-stone-200 bg-white"
+      class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-900"
       aria-label="Main navigation"
     >
       <div class="mx-auto flex max-w-2xl">
