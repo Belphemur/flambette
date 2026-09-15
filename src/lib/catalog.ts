@@ -7,7 +7,6 @@ import type { BuilderData, RecipeDoc, VariantMeta, VariantData } from './types'
  */
 
 const BUILDER_DATA_URL = `${import.meta.env.BASE_URL}data/builder_data.json`
-const RECIPE_CDN = 'https://cdn-recipes.mealime.com'
 
 export interface Catalog {
   data: BuilderData
@@ -55,24 +54,30 @@ export function getCatalog(): Promise<Catalog> {
 
 /* ---------- Full recipe documents ---------- */
 
-const recipeCache = new Map<string, RecipeDoc>()
-const recipePromises = new Map<string, Promise<RecipeDoc>>()
+const recipeCache = new Map<number, RecipeDoc>()
+const recipePromises = new Map<number, Promise<RecipeDoc>>()
 
-/** Lazy-fetch the full recipe document for a variant (cached in memory). */
+/**
+ * Fetch the full recipe document for a variant from the bundled local
+ * catalog (public/data/recipes/{variant_id}.json — complete, offline).
+ * Cached in memory.
+ */
 export function getRecipe(meta: VariantMeta): Promise<RecipeDoc> {
-  const uuid = meta.published_recipe_uuid
-  const cached = recipeCache.get(uuid)
+  const id = meta.id
+  const cached = recipeCache.get(id)
   if (cached) return Promise.resolve(cached)
-  let p = recipePromises.get(uuid)
+  let p = recipePromises.get(id)
   if (!p) {
-    p = fetch(`${RECIPE_CDN}/${uuid}.json`).then(async (res) => {
-      if (!res.ok) throw new Error(`Failed to load recipe: HTTP ${res.status}`)
-      const doc = (await res.json()) as RecipeDoc
-      recipeCache.set(uuid, doc)
-      recipePromises.delete(uuid)
-      return doc
-    })
-    recipePromises.set(uuid, p)
+    p = fetch(`${import.meta.env.BASE_URL}data/recipes/${id}.json`).then(
+      async (res) => {
+        if (!res.ok) throw new Error(`Failed to load recipe: HTTP ${res.status}`)
+        const doc = (await res.json()) as RecipeDoc
+        recipeCache.set(id, doc)
+        recipePromises.delete(id)
+        return doc
+      },
+    )
+    recipePromises.set(id, p)
   }
   return p
 }

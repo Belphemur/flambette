@@ -3,11 +3,10 @@
 A mobile-first single-page app for browsing the Mealime recipe catalog,
 building a meal plan, and generating a grocery list from it.
 
-Fully static and offline-first: the recipe catalog ships as a data snapshot,
-and full recipe details (ingredients, scaled instructions, cookware) are
-lazy-fetched from Mealime's public CDN (`cdn-recipes.mealime.com`, CORS
-enabled) and cached in memory. No accounts, no tokens, no live Mealime API
-calls from the app.
+Fully offline: the repo ships the complete recipe catalog — all 2,730 full
+recipe documents (`public/data/recipes/`, ~15 MB, one JSON per variant id)
+plus the catalog snapshot. The app makes **no external calls at runtime**:
+recipe details are fetched from the bundled local files and cached in memory.
 
 ## Features
 
@@ -45,11 +44,13 @@ npm run preview # serve the production build locally
 
 ## Data provenance
 
+- `public/data/recipes/{variant_id}.json` — the complete offline catalog:
+  2,730 full recipe documents (ingredients, line items, scaled instructions,
+  cookware, nutrition), one file per variant id in `feasible_variants`.
 - `public/data/builder_data.json` — a snapshot of Mealime's recipe-builder
   payload (2,730 feasible recipe variants with metadata, macros, ratings,
-  ingredient names and CDN image/recipe references).
+  ingredient names and image references).
 - `public/data/user_data.json` — reference-only snapshot of a user account
   (used to extract the canonical grocery-store section list and the seed
   favourites; the auth token in it was scrubbed before it entered git).
-- Full recipe documents are fetched per-view at runtime from
-  `https://cdn-recipes.mealime.com/{published_recipe_uuid}.json`.
+  Not fetched by the app.
