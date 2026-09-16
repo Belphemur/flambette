@@ -30,7 +30,7 @@ const aggregateInputs = computed(() =>
   plannedMetas.value.flatMap((meta) => {
     const doc = docs.value.get(meta.id)
     if (!doc) return []
-    return [{ doc, factor: entryServings(meta.id) / doc.serving_count }]
+    return [{ doc, factor: entryServings(meta.id) / doc.serving_count, recipeName: meta.name }]
   }),
 )
 
@@ -162,6 +162,11 @@ watch(plannedMetas, ensureDocs, { immediate: true })
                     :class="checked.map[line.key] ? 'text-stone-400 line-through' : ''"
                   >{{ line.display }}</span>
                   <span :class="checked.map[line.key] ? 'text-stone-400 line-through' : ''">{{ item.name }}</span>
+                  <span
+                    v-if="item.recipes.length > 1"
+                    class="ml-1 shrink-0 whitespace-nowrap rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-semibold text-primary-dark dark:bg-primary/20 dark:text-primary"
+                    :title="`Shared between ${item.recipes.length} planned meals: ${item.recipes.join(', ')}`"
+                  >{{ item.recipes.length }} recipes</span>
                 </span>
               </label>
             </div>

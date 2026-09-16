@@ -104,5 +104,10 @@ test('shared ingredient merges into a single summed grocery line', async ({ page
   await expect(garlic).toHaveCount(1, { timeout: 10_000 })
   const expected = fmt((a.amount * 8) / a.base + b.amount * (b.base / b.base))
   await expect(garlic.first()).toHaveText(new RegExp(`${expected} cloves`))
+  // Provenance: the shared ingredient is marked as spanning both meals,
+  // with both meal names available (tooltip).
+  await expect(garlic.first().getByText('2 recipes')).toBeVisible()
+  const title = await garlic.first().getByText('2 recipes').getAttribute('title')
+  expect(title).toContain('Carrot Ginger-Turmeric Soup')
   await expectZeroMealimeRequests(page)
 })
