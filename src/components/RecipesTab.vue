@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { catalog } from '../lib/catalog'
 import { popularityScore } from '../lib/quantity'
 import { searchVariantIds } from '../lib/search'
@@ -80,6 +80,35 @@ function clearFilters() {
   proOnly.value = false
   maxTime.value = null
 }
+
+/* ---------- Incremental rendering ---------- */
+
+/** Cards rendered per batch; the rest load in as the sentinel scrolls in. */
+const BATCH_SIZE = 60
+const visibleCount = ref(BATCH_SIZE)
+const visibleResults = computed(() => results.value.slice(0, visibleCount.value))
+const hasMore = computed(() => visibleCount.value < results.value.length)
+
+// New filter/search/sort results reset the window back to the first batch.
+watch(results, () => {
+  visibleCount.value = BATCH_SIZE
+})
+
+const sentinel = ref<HTMLElement | null>(null)
+let observer: IntersectionObserver | null = null
+
+onMounted(() => {
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((e) => e.isIntersecting) && hasMore.value) {
+        visibleCount.value = Math.min(visibleCount.value + BATCH_SIZE, results.value.length)
+      }
+    },
+    { rootMargin: '800px' },
+  )
+  observer.observe(sentinel.value!)
+})
+onUnmounted(() => observer?.disconnect())
 </script>
 
 <template>
@@ -158,7 +187,16 @@ function clearFilters() {
     </p>
 
     <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-      <RecipeCard v-for="meta in results" :key="meta.id" :meta="meta" />
+      <RecipeCard v-for="meta in visibleResults" :key="meta.id" :meta="meta" />
+    </div>
+
+    <div
+      v-if="hasMore"
+      ref="sentinel"
+      class="py-4 text-center text-xs text-stone-400"
+      aria-live="polite"
+    >
+      Loading more recipes…
     </div>
 
     <div v-if="results.length === 0" class="py-16 text-center text-stone-400">

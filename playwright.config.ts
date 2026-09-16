@@ -16,6 +16,8 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:4173',
     trace: 'retain-on-failure',
+    // Components use data-test="..." rather than the data-testid default.
+    testIdAttribute: 'data-test',
   },
   projects: [
     { name: 'Desktop Chrome', use: { ...devices['Desktop Chrome'] } },

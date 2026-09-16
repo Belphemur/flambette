@@ -15,6 +15,8 @@ export const usePlanStore = defineStore(
   'plan',
   () => {
     const plan = ref<PlanEntry[]>([])
+    /** Free-form extra grocery items (not tied to any recipe). */
+    const customItems = ref<string[]>([])
 
     function planContains(variantId: number): boolean {
       return plan.value.some((e) => e.variantId === variantId)
@@ -43,17 +45,43 @@ export const usePlanStore = defineStore(
       plan.value = []
     }
 
+    /** Add a free-form grocery item (deduped case-insensitively). */
+    function addCustomItem(text: string): boolean {
+      const t = text.trim().slice(0, 80)
+      if (!t) return false
+      if (customItems.value.some((i) => i.toLowerCase() === t.toLowerCase())) return false
+      customItems.value.push(t)
+      return true
+    }
+
+    function removeCustomItem(text: string): void {
+      const i = customItems.value.indexOf(text)
+      if (i >= 0) customItems.value.splice(i, 1)
+    }
+
     /** Replace the whole plan (used when importing a shared plan). */
-    function replacePlan(entries: PlanEntry[]): void {
+    function replacePlan(entries: PlanEntry[], custom: string[] = []): void {
       plan.value = entries.map((e) => ({
         variantId: e.variantId,
         servings: Math.max(1, Math.round(e.servings)),
       }))
+      customItems.value = custom
     }
 
-    return { plan, planContains, addToPlan, removeFromPlan, setServings, clearPlan, replacePlan }
+    return {
+      plan,
+      customItems,
+      planContains,
+      addToPlan,
+      removeFromPlan,
+      setServings,
+      clearPlan,
+      addCustomItem,
+      removeCustomItem,
+      replacePlan,
+    }
   },
   {
-    persist: { key: 'mealime-planner:v1:plan', pick: ['plan'] },
+    persist: { key: 'mealime-planner:v1:plan', pick: ['plan', 'customItems'] },
   },
 )

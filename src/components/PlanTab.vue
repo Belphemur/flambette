@@ -24,15 +24,15 @@ const nativeShareSupported = typeof navigator.share === 'function'
 
 // Recompute the share link whenever the plan changes; null = too large.
 watch(
-  () => plan.plan,
+  () => [plan.plan, plan.customItems] as const,
   async () => {
-    shareUrl.value = await planShareUrl(plan.plan)
+    shareUrl.value = await planShareUrl(plan.plan, plan.customItems)
   },
   { immediate: true, deep: true },
 )
 
 async function openShareSheet() {
-  shareUrl.value = await planShareUrl(plan.plan)
+  shareUrl.value = await planShareUrl(plan.plan, plan.customItems)
   if (!shareUrl.value) {
     ui.showToast('Plan too large to share via URL')
     return

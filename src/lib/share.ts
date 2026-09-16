@@ -6,6 +6,16 @@ import type { PlanEntry } from '../stores/plan'
  * MAX_SHARE_LENGTH chars are rejected — most messaging apps/UIs mangle
  * overly long URLs.
  */
+/**
+ * Shared-plan payload: recipe entries + free-form extra grocery items.
+ * Encoded as gzip(JSON({e: entries, c: custom})) → base64url. Decoding still
+ * accepts the v1 format (a bare entries array) for old shared links.
+ */
+export interface SharedPlan {
+  entries: PlanEntry[]
+  custom: string[]
+}
+
 export const MAX_SHARE_LENGTH = 1800
 
 async function pipeGzip(bytes: Uint8Array, compress: boolean): Promise<Uint8Array> {
@@ -30,23 +40,26 @@ function fromBase64Url(str: string): Uint8Array {
   return bytes
 }
 
-/** Encode a plan into the `?p=` param value (base64url of gzip JSON). */
-export async function encodePlan(plan: PlanEntry[]): Promise<string> {
-  const json = JSON.stringify(plan)
+/** Encode plan entries + custom items into the `?p=` param value. */
+export async function encodePlan(plan: PlanEntry[], custom: string[] = []): Promise<string> {
+  const json = JSON.stringify({ e: plan, c: custom })
   const gzipped = await pipeGzip(new TextEncoder().encode(json), true)
   return toBase64Url(gzipped)
 }
 
 /**
- * Decode a `?p=` param value back into plan entries. Returns null when the
- * payload is malformed or doesn't look like a plan.
+ * Decode a `?p=` param value back into plan entries + custom items. Returns
+ * null when the payload is malformed or doesn't look like a plan.
  */
-export async function decodePlan(str: string): Promise<PlanEntry[] | null> {
+export async function decodePlan(str: string): Promise<SharedPlan | null> {
   try {
     const bytes = await pipeGzip(fromBase64Url(str), false)
     const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes))
-    if (!Array.isArray(parsed)) return null
-    const entries = parsed.filter(
+    // v1 payloads are a bare entries array; v2 is {e, c}.
+    const rawEntries: unknown = Array.isArray(parsed) ? parsed : (parsed as { e?: unknown })?.e
+    const rawCustom: unknown = Array.isArray(parsed) ? [] : (parsed as { c?: unknown })?.c
+    if (!Array.isArray(rawEntries) || !Array.isArray(rawCustom)) return null
+    const entries = rawEntries.filter(
       (e): e is PlanEntry =>
         typeof e === 'object' &&
         e !== null &&
@@ -55,19 +68,25 @@ export async function decodePlan(str: string): Promise<PlanEntry[] | null> {
         Number.isFinite((e as PlanEntry).variantId) &&
         (e as PlanEntry).servings >= 1,
     )
-    return entries.length === parsed.length ? entries : null
+    if (entries.length !== rawEntries.length) return null
+    const custom = rawCustom.filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+    if (custom.length !== rawCustom.length) return null
+    return { entries, custom }
   } catch {
     return null
   }
 }
 
 /**
- * Full share URL for the plan (`<origin><base>?p=<encoded>`), or null when
- * the encoded plan is too long to share reliably.
+ * Full share URL for the plan (`<origin>/plan?p=<encoded>`), or null when
+ * there is nothing to share or the encoded plan is too long to share reliably.
  */
-export async function planShareUrl(plan: PlanEntry[]): Promise<string | null> {
-  if (plan.length === 0) return null
-  const encoded = await encodePlan(plan)
+export async function planShareUrl(
+  plan: PlanEntry[],
+  custom: string[] = [],
+): Promise<string | null> {
+  if (plan.length === 0 && custom.length === 0) return null
+  const encoded = await encodePlan(plan, custom)
   if (encoded.length > MAX_SHARE_LENGTH) return null
   // Deep-link straight into the plan tab; nginx SPA fallback serves the app.
   return `${window.location.origin}${import.meta.env.BASE_URL}plan?p=${encoded}`

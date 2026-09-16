@@ -44,10 +44,25 @@ const items = computed<GroceryItem[]>(() =>
     : [],
 )
 
-const totalCount = computed(() => items.value.reduce((n, item) => n + item.lines.length, 0))
-const checkedCount = computed(
-  () => items.value.reduce((n, item) => n + item.lines.filter((l) => checked.map[l.key]).length, 0),
+const totalCount = computed(
+  () =>
+    items.value.reduce((n, item) => n + item.lines.length, 0) + plan.customItems.length,
 )
+const checkedCount = computed(
+  () =>
+    items.value.reduce((n, item) => n + item.lines.filter((l) => checked.map[l.key]).length, 0) +
+    plan.customItems.filter((i) => checked.map[`custom||${i.toLowerCase()}`]).length,
+)
+
+/* ---------- Custom (free-form) grocery items ---------- */
+
+const newItem = ref('')
+
+function addNewItem() {
+  if (plan.addCustomItem(newItem.value)) {
+    newItem.value = ''
+  }
+}
 
 /** Sections with items, in canonical order. */
 const sections = computed(() => {
@@ -88,7 +103,10 @@ watch(plannedMetas, ensureDocs, { immediate: true })
 
 <template>
   <section class="space-y-3">
-    <div v-if="plan.plan.length === 0" class="py-16 text-center text-stone-400">
+    <div
+      v-if="plan.plan.length === 0 && plan.customItems.length === 0"
+      class="py-16 text-center text-stone-400"
+    >
       <p class="text-4xl">🛒</p>
       <p class="mt-2 font-medium">Nothing to buy yet</p>
       <p class="mt-1 text-sm">Add meals to your plan and the grocery list builds itself.</p>
@@ -98,6 +116,24 @@ watch(plannedMetas, ensureDocs, { immediate: true })
       >
         Browse recipes
       </button>
+
+      <form class="mx-auto mt-6 flex max-w-sm gap-2" data-test="add-item-form" @submit.prevent="addNewItem">
+        <input
+          v-model="newItem"
+          type="text"
+          maxlength="80"
+          placeholder="Add an item not in the recipes…"
+          aria-label="Add a custom grocery item"
+          class="h-11 w-full rounded-xl border dark:border-stone-700 dark:bg-stone-900 px-4 text-sm outline-none focus:border-primary"
+        />
+        <button
+          type="submit"
+          class="h-11 shrink-0 rounded-xl bg-primary px-4 text-sm font-semibold text-white active:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="newItem.trim().length === 0"
+        >
+          Add
+        </button>
+      </form>
     </div>
 
     <template v-else-if="loading && items.length === 0">
@@ -134,11 +170,66 @@ watch(plannedMetas, ensureDocs, { immediate: true })
         </button>
       </div>
 
+      <form class="flex gap-2" data-test="add-item-form" @submit.prevent="addNewItem">
+        <input
+          v-model="newItem"
+          type="text"
+          maxlength="80"
+          placeholder="Add an item not in the recipes…"
+          aria-label="Add a custom grocery item"
+          class="h-11 w-full rounded-xl border dark:border-stone-700 dark:bg-stone-900 px-4 text-sm outline-none focus:border-primary"
+        />
+        <button
+          type="submit"
+          class="h-11 shrink-0 rounded-xl bg-primary px-4 text-sm font-semibold text-white active:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="newItem.trim().length === 0"
+        >
+          Add
+        </button>
+      </form>
+
+      <div
+        v-if="plan.customItems.length > 0"
+        class="space-y-1.5"
+        data-test="custom-items"
+      >
+        <h3 class="px-1 pt-2 text-xs font-bold tracking-wider text-stone-400 uppercase">
+          Extra items
+        </h3>
+        <ul class="divide-y dark:divide-stone-800 rounded-xl dark:bg-stone-900 ring-1 dark:ring-stone-700">
+          <li
+            v-for="item in plan.customItems"
+            :key="item"
+            class="flex min-h-11 items-center gap-3 px-3 py-2"
+          >
+            <label class="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+              <input
+                type="checkbox"
+                class="size-5 shrink-0 accent-primary"
+                :checked="!!checked.map[`custom||${item.toLowerCase()}`]"
+                @change="checked.toggleChecked(`custom||${item.toLowerCase()}`)"
+              />
+              <span
+                class="min-w-0 truncate text-sm"
+                :class="checked.map[`custom||${item.toLowerCase()}`] ? 'text-stone-400 line-through' : ''"
+              >{{ item }}</span>
+            </label>
+            <button
+              class="flex size-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:text-rose-600"
+              :aria-label="`Remove ${item} from the grocery list`"
+              @click="plan.removeCustomItem(item)"
+            >
+              ✕
+            </button>
+          </li>
+        </ul>
+      </div>
+
       <div v-for="section in sections" :key="section.name" class="space-y-1.5">
         <h3 class="px-1 pt-2 text-xs font-bold tracking-wider text-stone-400 uppercase">
           {{ section.name }}
         </h3>
-        <ul class="divide-y dark:divide-stone-800 overflow-hidden rounded-xl dark:bg-stone-900 ring-1 dark:ring-stone-700">
+        <ul class="divide-y dark:divide-stone-800 rounded-xl dark:bg-stone-900 ring-1 dark:ring-stone-700">
           <li v-for="item in section.items" :key="item.normalized">
             <div
               v-for="line in item.lines"
@@ -164,9 +255,22 @@ watch(plannedMetas, ensureDocs, { immediate: true })
                   <span :class="checked.map[line.key] ? 'text-stone-400 line-through' : ''">{{ item.name }}</span>
                   <span
                     v-if="item.recipes.length > 1"
-                    class="ml-1 shrink-0 whitespace-nowrap rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-semibold text-primary-dark dark:bg-primary/20 dark:text-primary"
-                    :title="`Shared between ${item.recipes.length} planned meals: ${item.recipes.join(', ')}`"
-                  >{{ item.recipes.length }} recipes</span>
+                    class="group/pill relative ml-1 inline-flex shrink-0"
+                    @click.stop
+                  >
+                    <span
+                      tabindex="0"
+                      role="note"
+                      :aria-label="`Used by ${item.recipes.length} planned meals: ${item.recipes.join(', ')}`"
+                      class="cursor-help whitespace-nowrap rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-semibold text-primary-dark outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-primary/20 dark:text-primary"
+                    >{{ item.recipes.length }} recipes</span>
+                    <span
+                      class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-56 -translate-x-1/2 rounded-lg bg-stone-900 px-2.5 py-1.5 text-[11px] leading-snug text-white shadow-lg group-hover/pill:block group-focus-within/pill:block dark:bg-stone-700"
+                    >
+                      <span class="block font-semibold">Used by {{ item.recipes.length }} planned meal{{ item.recipes.length === 1 ? '' : 's' }}:</span>
+                      {{ item.recipes.join(', ') }}
+                    </span>
+                  </span>
                 </span>
               </label>
             </div>

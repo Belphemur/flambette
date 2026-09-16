@@ -32,6 +32,12 @@ test('share link restores the plan in a fresh browser context', async ({ page, b
   const secondName = (await sheet2.getByRole('heading', { level: 2 }).textContent())!.trim()
   await sheet2.getByRole('button', { name: /Add to plan|Update in plan/ }).click()
 
+  // Add a free-form grocery item — it must ride along in the share payload.
+  await gotoTab(page, 'Grocery')
+  await page.getByLabel('Add a custom grocery item').fill('Sparkling water')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(page.getByTestId('custom-items')).toContainText('Sparkling water')
+
   await gotoTab(page, 'Plan')
   const plannedNames = (await page.locator('main h3').allTextContents()).map((s) => s.trim())
   expect(plannedNames).toEqual([firstName, secondName])
@@ -70,6 +76,8 @@ test('share link restores the plan in a fresh browser context', async ({ page, b
   await expect(freshPage.locator('main').getByText(/\d+ \/ \d+ items/)).toBeVisible({
     timeout: 15_000,
   })
+  // The free-form item made it through the share payload too.
+  await expect(freshPage.getByTestId('custom-items')).toContainText('Sparkling water')
 
   await freshContext.close()
 })

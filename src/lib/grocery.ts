@@ -10,7 +10,7 @@ export interface GroceryLine {
 }
 
 export interface GroceryItem {
-  /** Normalized (lowercase, trimmed) ingredient name. */
+  /** Singularized, lowercased merge key for the ingredient name. */
   normalized: string
   /** Display name as first seen. */
   name: string
@@ -32,6 +32,25 @@ function unitKey(unit: string): string {
   if (u.length > 3 && u.endsWith('es')) return u.slice(0, -2)
   if (u.length > 2 && u.endsWith('s')) return u.slice(0, -1)
   return u
+}
+
+/**
+ * Same idea for ingredient NAMES, so "carrot" and "carrots" group together.
+ * Handles English plural classes verified in the catalog data:
+ * -oes (potatoes→potato), -ses/-xes/-zes/-ches/-shes (bunches→bunch), plain -s
+ * (carrots→carrot). Merge key only — display keeps the first-seen spelling.
+ */
+function nameKey(name: string): string {
+  const s = name.trim().toLowerCase()
+  if (s.length > 3 && s.endsWith('oes')) return s.slice(0, -2)
+  if (
+    s.length > 4 &&
+    (s.endsWith('ses') || s.endsWith('xes') || s.endsWith('zes') || s.endsWith('ches') || s.endsWith('shes'))
+  ) {
+    return s.slice(0, -2)
+  }
+  if (s.length > 3 && s.endsWith('s')) return s.slice(0, -1)
+  return s
 }
 
 interface UnitSum {
@@ -72,7 +91,7 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
 
   for (const { doc, factor, recipeName } of inputs) {
     for (const item of doc.line_items) {
-      const normalized = item.ingredient_name.trim().toLowerCase()
+      const normalized = nameKey(item.ingredient_name)
       if (!normalized) continue
       let group = groups.get(normalized)
       if (!group) {

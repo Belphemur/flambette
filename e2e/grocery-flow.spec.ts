@@ -104,10 +104,44 @@ test('shared ingredient merges into a single summed grocery line', async ({ page
   await expect(garlic).toHaveCount(1, { timeout: 10_000 })
   const expected = fmt((a.amount * 8) / a.base + b.amount * (b.base / b.base))
   await expect(garlic.first()).toHaveText(new RegExp(`${expected} cloves`))
-  // Provenance: the shared ingredient is marked as spanning both meals,
-  // with both meal names available (tooltip).
-  await expect(garlic.first().getByText('2 recipes')).toBeVisible()
-  const title = await garlic.first().getByText('2 recipes').getAttribute('title')
-  expect(title).toContain('Carrot Ginger-Turmeric Soup')
+  // Provenance: the shared ingredient is marked as spanning both meals.
+  const pill = garlic.first().getByText('2 recipes')
+  await expect(pill).toBeVisible()
+  // Accessible name carries the full list, and hovering reveals the tooltip.
+  const label = await pill.getAttribute('aria-label')
+  expect(label).toContain('Carrot Ginger-Turmeric Soup')
+  // Tooltip shows on hover AND keyboard focus; focus is deterministic in CI
+  // (hover can be intercepted by the sticky progress bar on small viewports).
+  await pill.focus()
+  await expect(garlic.first().getByText('Used by 2 planned meals:')).toBeVisible()
   await expectZeroMealimeRequests(page)
+})
+
+test('custom grocery items: add, dedupe, persist, remove', async ({ page }) => {
+  await gotoTab(page, 'Grocery')
+  // No plan yet — the add-item form is still reachable from the empty state.
+  await expect(page.getByText('Nothing to buy yet')).toBeVisible()
+
+  const input = page.getByLabel('Add a custom grocery item')
+  await input.fill('Olive oil')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await input.fill('Paper towels')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  const custom = page.getByTestId('custom-items')
+  await expect(custom).toContainText('Olive oil')
+  await expect(custom).toContainText('Paper towels')
+
+  // Case-insensitive dedupe: same item is not added twice.
+  await input.fill('olive oil')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(custom.locator('li')).toHaveCount(2)
+
+  // Persisted across reloads (no waitForCatalog here — we're on Grocery).
+  await page.reload()
+  await gotoTab(page, 'Grocery')
+  await expect(page.getByTestId('custom-items')).toContainText('Paper towels')
+
+  // Remove works.
+  await page.getByRole('button', { name: 'Remove Paper towels from the grocery list' }).click()
+  await expect(page.getByTestId('custom-items').locator('li')).toHaveCount(1)
 })

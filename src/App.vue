@@ -38,9 +38,9 @@ const isRecipe = computed(() => route.name === 'recipe')
 async function importSharedPlan() {
   const p = route.query.p
   if (typeof p !== 'string' || p === '') return
-  const entries = await decodePlan(p)
-  if (entries) {
-    plan.replacePlan(entries)
+  const shared = await decodePlan(p)
+  if (shared) {
+    plan.replacePlan(shared.entries, shared.custom)
     ui.showToast('Plan loaded from link')
   } else {
     ui.showToast("Couldn't load the shared plan")
