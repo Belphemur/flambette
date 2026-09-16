@@ -29,7 +29,7 @@ JSON text frames, both directions.
 | Client → relay | Relay → client |
 | --- | --- |
 | `{"type":"create"}` | `{"type":"created","code":"…6 chars…"}` |
-| `{"type":"join","code":"ABC123"}` | `{"type":"joined","code":"ABC123","state":<obj\|null>}` — unknown code ⇒ `{"type":"error","code":"not_found"}` |
+| `{"type":"join","code":"ABC123"}` | `{"type":"joined","code":"ABC123","rev":<int\|0>,"state":<obj\|null>}` — unknown code ⇒ `{"type":"error","code":"not_found"}` |
 | `{"type":"state","rev":<int>,"state":<obj>}` | fan-out to every *other* peer in the room: `{"type":"state","rev":<int>,"state":<obj>,"from":"<peerId>"}` |
 | `{"type":"leave"}` (or socket close) | `{"type":"left"}` |
 

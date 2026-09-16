@@ -7,9 +7,11 @@ import { imageSrc, onImgError } from '../lib/images'
 import { planShareUrl } from '../lib/share'
 import type { VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
+import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 
 const plan = usePlanStore()
+const room = useRoomStore()
 const router = useRouter()
 const ui = useUiStore()
 
@@ -33,10 +35,6 @@ watch(
 
 async function openShareSheet() {
   shareUrl.value = await planShareUrl(plan.plan, plan.customItems)
-  if (!shareUrl.value) {
-    ui.showToast('Plan too large to share via URL')
-    return
-  }
   shareSheetOpen.value = true
 }
 
@@ -48,6 +46,21 @@ function copyShareUrl() {
   if (!shareUrl.value) return
   // useClipboard resolves even via the legacy path; reject -> toast.
   void copyText(shareUrl.value).catch(() => ui.showToast("Couldn't copy the link"))
+}
+
+function copyRoomLink() {
+  const link = room.roomLink()
+  if (!link) return
+  void copyText(link).catch(() => ui.showToast("Couldn't copy the link"))
+}
+
+/* ---------- Live room ---------- */
+
+const roomLink = computed(() => room.roomLink())
+
+function startLiveRoom() {
+  if (room.status === 'connecting') return
+  room.create()
 }
 
 async function nativeShare() {
@@ -177,9 +190,8 @@ function openRecipe(id: number) {
           Clear plan
         </button>
         <button
-          class="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-white shadow-sm active:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="shareUrl === null"
-          :title="shareUrl === null ? 'Plan too large to share via URL' : 'Share your plan via a link'"
+          class="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-white shadow-sm active:bg-primary-dark"
+          title="Share your plan via a link or a live room"
           @click="openShareSheet"
         >
           Share
@@ -223,10 +235,11 @@ function openRecipe(id: number) {
           <div class="flex gap-2">
             <button
               class="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-stone-900 px-4 text-sm font-semibold text-amber-300 active:bg-stone-800 dark:bg-stone-800 dark:text-primary"
+              :disabled="shareUrl === null"
               data-test="copy-share-link"
               @click="copyShareUrl"
             >
-              {{ copied ? '✓ Copied' : 'Copy link' }}
+              {{ copied ? '✓ Copied' : 'Copy one-time link' }}
             </button>
             <button
               v-if="nativeShareSupported"
@@ -236,6 +249,58 @@ function openRecipe(id: number) {
               Share…
             </button>
           </div>
+          <p v-if="shareUrl === null" class="text-xs text-amber-600 dark:text-amber-400">
+            Plan too large for a one-time link — share it live instead.
+          </p>
+        </div>
+
+        <!-- Live room -->
+        <div class="space-y-2 rounded-xl bg-stone-50 p-3 dark:bg-stone-950">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-bold tracking-tight">Live room</span>
+            <span
+              class="rounded-full bg-stone-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-stone-600 dark:bg-stone-800 dark:text-stone-300"
+              >New</span
+            >
+          </div>
+          <p class="text-xs dark:text-stone-400">
+            Share your plan live: everyone sees plan and grocery changes instantly, both ways.
+          </p>
+          <template v-if="room.inRoom">
+            <input
+              class="h-11 w-full rounded-lg border border-stone-200 bg-stone-50 px-3 text-xs text-stone-700 outline-none focus:border-primary dark:border-stone-700 dark:bg-stone-950 dark:text-stone-300"
+              type="text"
+              readonly
+              :value="roomLink ?? ''"
+              aria-label="Live room link"
+              @focus="($event.target as HTMLInputElement).select()"
+            />
+            <div class="flex gap-2">
+              <button
+                class="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-stone-900 px-4 text-sm font-semibold text-amber-300 active:bg-stone-800 dark:bg-stone-800 dark:text-primary"
+                data-test="copy-room-link"
+                @click="copyRoomLink"
+              >
+                {{ copied ? '✓ Copied' : 'Copy room link' }}
+              </button>
+              <button
+                class="h-11 rounded-xl border dark:border-stone-700 px-4 text-sm font-medium dark:text-stone-300 dark:hover:bg-stone-800"
+                data-test="leave-room"
+                @click="room.leave()"
+              >
+                Leave room
+              </button>
+            </div>
+          </template>
+          <button
+            v-else
+            class="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-semibold text-white active:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
+            data-test="start-room"
+            :disabled="room.status === 'connecting'"
+            @click="startLiveRoom"
+          >
+            {{ room.status === 'connecting' ? 'Starting…' : '⏺ Start live room' }}
+          </button>
         </div>
       </div>
     </Teleport>

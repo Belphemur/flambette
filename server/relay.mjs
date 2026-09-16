@@ -105,7 +105,7 @@ wss.on('connection', (ws) => {
         room.peers.add(ws)
         ws.roomCode = room.code
         touchRoom(room)
-        send(ws, { type: 'joined', code: room.code, state: room.state ?? null })
+        send(ws, { type: 'joined', code: room.code, rev: room.rev ?? 0, state: room.state ?? null })
         break
       }
 
