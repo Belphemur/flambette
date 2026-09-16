@@ -63,6 +63,8 @@ test('share link restores the plan in a fresh browser context', async ({ page, b
   // Plan restored with the right meals and servings — and the grocery list
   // is prefilled automatically from the imported plan.
   await gotoTab(freshPage, 'Plan')
+  // Catalog load races the row render on a cold context — wait for rows.
+  await expect(freshPage.locator('main h3').first()).toBeVisible({ timeout: 15_000 })
   const restoredNames = (await freshPage.locator('main h3').allTextContents()).map((s) => s.trim())
   expect(restoredNames).toEqual(plannedNames)
   const servings = await freshPage
