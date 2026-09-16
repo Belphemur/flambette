@@ -11,6 +11,7 @@
  *
  * Run: `node server/relay.mjs` (listens on :8081, override with PORT env).
  */
+import { createServer } from 'node:http'
 import { WebSocketServer } from 'ws'
 
 const PORT = Number(process.env.PORT ?? 8081)
@@ -66,7 +67,15 @@ function send(ws, payload) {
   if (ws.readyState === 1 /* OPEN */) ws.send(JSON.stringify(payload))
 }
 
-const wss = new WebSocketServer({ port: PORT })
+// Plain HTTP server so health probes (playwright webServer url check,
+// load balancers) get a 200; WebSocket upgrades are handed to the wss below.
+const httpServer = createServer((_req, res) => {
+  res.writeHead(200, { 'content-type': 'text/plain' })
+  res.end('mealime relay\n')
+})
+
+const wss = new WebSocketServer({ server: httpServer })
+httpServer.listen(PORT)
 console.log(`[relay] listening on :${PORT}`)
 
 wss.on('connection', (ws) => {
@@ -166,7 +175,7 @@ const heartbeat = setInterval(() => {
 }, HEARTBEAT_MS)
 
 wss.on('close', () => clearInterval(heartbeat))
-wss.on('error', (err) => {
+httpServer.on('error', (err) => {
   console.error(`[relay] ${err.message}`)
   process.exit(1)
 })

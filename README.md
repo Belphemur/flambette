@@ -29,8 +29,39 @@ neutral placeholder.
   canonical grocery-store sections via a keyword heuristic (fallback:
   "Other"). Checkboxes, progress bar and "clear checked" persist to
   `localStorage`.
+- **Live room sync** — the plan tab's share sheet can start a *live room*:
+  one person creates it, anyone opening `/plan?room=CODE` joins, and every
+  change to the plan, custom grocery items and grocery checkmarks
+  propagates instantly both ways (last-write-wins per revision). A status
+  chip in the header shows Live / Connecting / Offline; the room code is
+  kept for the browser session so page reloads re-join automatically. The
+  classic one-time `?p=` share link is still available for offline
+  sharing.
+- **Shopping mode** — a full-screen, big-target checklist of the grocery
+  list, optimized for in-store use: one collapsible section per store
+  section, large tap rows with big custom checkboxes, checked items fade
+  and sink within their section, and a sticky progress bar with an Exit
+  button. Entered from the grocery tab's "Start shopping" button.
 
 Favourites are seeded from the data snapshot and can be toggled per recipe.
+
+## Live room relay
+
+The relay is a tiny Node service (`server/`, single dependency `ws`,
+in-memory only — rooms expire after 12h idle; see `server/README.md` for
+the wire protocol). The web app talks to it at `/ws` on its own origin:
+
+- **dev / e2e**: `vite.config.ts` proxies `/ws` to `ws://localhost:8081`
+  for both the dev server and `vite preview`; start the relay with
+  `node server/relay.mjs` (the e2e suite starts it automatically as a
+  Playwright webServer).
+- **production**: docker-compose runs the relay next to the web container
+  and nginx upgrades-proxies `/ws` to it.
+
+```bash
+docker compose up --build
+# open http://localhost:8097
+```
 
 ## Run it
 
@@ -63,11 +94,12 @@ for `index.html`).
   `useDark` from `@vueuse/core` (system preference by default, manual
   override persisted)
 - Vue Router 4 for deep-linkable routes (`/`, `/plan`, `/grocery`,
-  `/recipe/:id`, `/cooking/:id`)
+  `/shop`, `/recipe/:id`, `/cooking/:id`)
 - State via Pinia stores in `src/stores/`, persisted to
   localStorage under the `mealime-planner:v1:*` keys
   (`mealime-planner:v1:favourites`, `mealime-planner:v1:plan`,
-  `mealime-planner:v1:checked`)
+  `mealime-planner:v1:checked`); the live-room code is kept in
+  sessionStorage (`mealime-planner:v1` scope, `room` store)
 - No runtime dependencies besides Vue, Pinia and MiniSearch (search)
 
 ## Data provenance

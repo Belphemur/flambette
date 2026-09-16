@@ -20,6 +20,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install relay dependencies (live room sync)
+        run: npm ci --prefix server
+
       - name: Install Playwright chromium
         run: npx playwright install --with-deps chromium
 
@@ -45,3 +48,6 @@ jobs:
 
       - name: Build Docker image
         run: docker build .
+
+      - name: Build relay Docker image
+        run: docker build ./server

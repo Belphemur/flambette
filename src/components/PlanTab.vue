@@ -252,7 +252,6 @@ function openRecipe(id: number) {
           <p v-if="shareUrl === null" class="text-xs text-amber-600 dark:text-amber-400">
             Plan too large for a one-time link — share it live instead.
           </p>
-        </div>
 
         <!-- Live room -->
         <div class="space-y-2 rounded-xl bg-stone-50 p-3 dark:bg-stone-950">
@@ -302,6 +301,7 @@ function openRecipe(id: number) {
             {{ room.status === 'connecting' ? 'Starting…' : '⏺ Start live room' }}
           </button>
         </div>
+      </div>
       </div>
     </Teleport>
   </section>

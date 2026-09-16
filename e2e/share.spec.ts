@@ -48,7 +48,7 @@ test('share link restores the plan in a fresh browser context', async ({ page, b
   await expect(shareSheet).toBeVisible()
   const shareLink = await shareSheet.getByRole('textbox', { name: 'Share link' }).inputValue()
   expect(shareLink).toContain('?p=')
-  await shareSheet.getByRole('button', { name: 'Copy link' }).click()
+  await shareSheet.getByRole('button', { name: 'Copy one-time link' }).click()
   await expect(shareSheet.getByRole('button', { name: /Copied/ })).toBeVisible()
 
   // Fresh, incognito-like context: no storage state carried over
@@ -108,11 +108,11 @@ test('desktop chromium without navigator.share falls back to copy', async ({ pag
   // No native "Share…" button rendered when navigator.share is absent
   await expect(shareSheet.getByRole('button', { name: 'Share…' })).toHaveCount(0)
 
-  await shareSheet.getByRole('button', { name: 'Copy link' }).click()
+  await shareSheet.getByRole('button', { name: 'Copy one-time link' }).click()
   await expect(shareSheet.getByRole('button', { name: /Copied/ })).toBeVisible()
 })
 
-test('oversized plans disable the share button with a hint', async ({ page }) => {
+test('oversized plans fall back to the live room share', async ({ page }) => {
   await page.goto('/')
   await waitForCatalog(page)
 
@@ -134,10 +134,18 @@ test('oversized plans disable the share button with a hint', async ({ page }) =>
   await waitForCatalog(page)
 
   await gotoTab(page, 'Plan')
+  // The Share button stays available — a live room doesn't have the URL
+  // size limit. The sheet shows the one-time link as unavailable with a
+  // hint pointing at the live room.
   const shareButton = page.getByRole('button', { name: 'Share', exact: true })
-  await expect(shareButton).toBeDisabled({ timeout: 15_000 })
-  await expect(shareButton).toHaveAttribute('title', 'Plan too large to share via URL')
-
-  // The share sheet can't be opened; nothing else breaks
-  await expect(page.getByRole('dialog', { name: 'Share your meal plan' })).toHaveCount(0)
+  await page.waitForTimeout(500)
+  await expect(shareButton).toBeEnabled({ timeout: 15_000 })
+  await shareButton.click()
+  const shareSheet = page.getByRole('dialog', { name: 'Share your meal plan' })
+  await expect(shareSheet).toBeVisible()
+  const oneTime = shareSheet.getByRole('button', { name: 'Copy one-time link' })
+  await expect(oneTime).toBeDisabled({ timeout: 15_000 })
+  await expect(shareSheet.getByText(/Plan too large for a one-time link/)).toBeVisible()
+  // The live room escape hatch is still there and usable.
+  await expect(shareSheet.getByTestId('start-room')).toBeEnabled()
 })
