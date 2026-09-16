@@ -143,10 +143,10 @@ function startCooking() {
         </div>
         <h2 class="text-2xl font-bold tracking-tight">{{ meta.name }}</h2>
         <p class="flex flex-wrap gap-3 text-sm dark:text-stone-400">
-          <span>🔥 {{ Math.round(meta.calories * factor) }} kcal / serving</span>
+          <span>🔥 {{ Math.round(meta.calories) }} kcal / serving</span>
           <span>⏱ {{ meta.cooking_minutes }} min</span>
           <span>🍽 serves {{ servings }}</span>
-          <span v-if="meta.sodium_mg">🧂 {{ Math.round(meta.sodium_mg * factor) }} mg sodium</span>
+          <span v-if="meta.sodium_mg">🧂 {{ Math.round(meta.sodium_mg) }} mg sodium</span>
         </p>
       </header>
 
