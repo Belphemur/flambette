@@ -69,5 +69,6 @@ export async function planShareUrl(plan: PlanEntry[]): Promise<string | null> {
   if (plan.length === 0) return null
   const encoded = await encodePlan(plan)
   if (encoded.length > MAX_SHARE_LENGTH) return null
-  return `${window.location.origin}${import.meta.env.BASE_URL}?p=${encoded}`
+  // Deep-link straight into the plan tab; nginx SPA fallback serves the app.
+  return `${window.location.origin}${import.meta.env.BASE_URL}plan?p=${encoded}`
 }

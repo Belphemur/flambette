@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useClipboard } from '@vueuse/core'
 import { catalog } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
 import { planShareUrl } from '../lib/share'
@@ -16,7 +17,9 @@ const ui = useUiStore()
 
 const shareSheetOpen = ref(false)
 const shareUrl = ref<string | null>(null)
-const copied = ref(false)
+// legacy: true falls back to document.execCommand('copy') on insecure
+// origins (plain-HTTP LAN IPs), where navigator.clipboard is undefined.
+const { copy: copyText, copied } = useClipboard({ legacy: true, copiedDuring: 2000 })
 const nativeShareSupported = typeof navigator.share === 'function'
 
 // Recompute the share link whenever the plan changes; null = too large.
@@ -24,7 +27,6 @@ watch(
   () => plan.plan,
   async () => {
     shareUrl.value = await planShareUrl(plan.plan)
-    copied.value = false
   },
   { immediate: true, deep: true },
 )
@@ -35,7 +37,6 @@ async function openShareSheet() {
     ui.showToast('Plan too large to share via URL')
     return
   }
-  copied.value = false
   shareSheetOpen.value = true
 }
 
@@ -43,15 +44,10 @@ function closeShareSheet() {
   shareSheetOpen.value = false
 }
 
-async function copyShareUrl() {
+function copyShareUrl() {
   if (!shareUrl.value) return
-  try {
-    await navigator.clipboard.writeText(shareUrl.value)
-    copied.value = true
-    setTimeout(() => (copied.value = false), 2000)
-  } catch {
-    ui.showToast("Couldn't copy the link")
-  }
+  // useClipboard resolves even via the legacy path; reject -> toast.
+  void copyText(shareUrl.value).catch(() => ui.showToast("Couldn't copy the link"))
 }
 
 async function nativeShare() {
