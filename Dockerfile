@@ -1,5 +1,5 @@
 # Build stage: install deps and produce the production bundle in dist/
-FROM node:22-alpine AS build
+FROM node:lts-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci

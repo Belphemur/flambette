@@ -6,3 +6,9 @@ dist/
 .DS_Store
 test-results/
 playwright-report/
+
+# Raw scrape archives live outside the repo (~/workspace/mealime-media)
+raw_recipes/
+raw_images/
+scrape_recipes.py
+scrape_images.py

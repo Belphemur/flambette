@@ -1,5 +1,5 @@
 # Relay service: plain node + ws, no build step.
-FROM node:22-alpine
+FROM node:lts-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
