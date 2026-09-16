@@ -127,7 +127,7 @@ watch(plannedMetas, ensureDocs, { immediate: true })
         </div>
         <button
           v-if="checkedCount > 0"
-          class="rounded-lg px-2 py-1 text-xs font-medium dark:text-stone-400 hover:dark:bg-stone-700"
+          class="rounded-lg px-2 py-1 text-xs font-medium dark:text-stone-400 dark:hover:bg-stone-700"
           @click="checked.clearChecked"
         >
           Clear checked

@@ -43,7 +43,15 @@ export const usePlanStore = defineStore(
       plan.value = []
     }
 
-    return { plan, planContains, addToPlan, removeFromPlan, setServings, clearPlan }
+    /** Replace the whole plan (used when importing a shared plan). */
+    function replacePlan(entries: PlanEntry[]): void {
+      plan.value = entries.map((e) => ({
+        variantId: e.variantId,
+        servings: Math.max(1, Math.round(e.servings)),
+      }))
+    }
+
+    return { plan, planContains, addToPlan, removeFromPlan, setServings, clearPlan, replacePlan }
   },
   {
     persist: { key: 'mealime-planner:v1:plan', pick: ['plan'] },

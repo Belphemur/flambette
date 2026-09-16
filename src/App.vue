@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useDark, useToggle } from '@vueuse/core'
 import { TABS, useUiStore } from './stores/ui'
 import { getCatalog } from './lib/catalog'
+import { decodePlan } from './lib/share'
+import { usePlanStore } from './stores/plan'
 import { initFavourites } from './stores/favourites'
 
 const reload = () => location.reload()
@@ -11,6 +13,7 @@ const reload = () => location.reload()
 const route = useRoute()
 const router = useRouter()
 const ui = useUiStore()
+const plan = usePlanStore()
 
 /** Dark mode: follows the system preference until the user overrides it
  *  (the override persists in localStorage via useDark). */
@@ -31,7 +34,24 @@ const isCooking = computed(() => route.name === 'cooking')
 /** The recipe detail view is full-bleed (edge-to-edge hero image). */
 const isRecipe = computed(() => route.name === 'recipe')
 
+/** Import a shared plan from `?p=` (replaces the current plan). */
+async function importSharedPlan() {
+  const p = route.query.p
+  if (typeof p !== 'string' || p === '') return
+  const entries = await decodePlan(p)
+  if (entries) {
+    plan.replacePlan(entries)
+    ui.showToast('Plan loaded from link')
+  } else {
+    ui.showToast("Couldn't load the shared plan")
+  }
+  // Strip the param so a reload doesn't re-import (the plan persists).
+  void router.replace({ query: {} })
+}
+
 onMounted(async () => {
+  await router.isReady()
+  void importSharedPlan()
   try {
     await getCatalog()
     loading.value = false

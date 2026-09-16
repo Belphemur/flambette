@@ -1,13 +1,72 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { catalog } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
+import { planShareUrl } from '../lib/share'
 import type { VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
+import { useUiStore } from '../stores/ui'
 
 const plan = usePlanStore()
 const router = useRouter()
+const ui = useUiStore()
+
+/* ---------- Share sheet ---------- */
+
+const shareSheetOpen = ref(false)
+const shareUrl = ref<string | null>(null)
+const copied = ref(false)
+const nativeShareSupported = typeof navigator.share === 'function'
+
+// Recompute the share link whenever the plan changes; null = too large.
+watch(
+  () => plan.plan,
+  async () => {
+    shareUrl.value = await planShareUrl(plan.plan)
+    copied.value = false
+  },
+  { immediate: true, deep: true },
+)
+
+async function openShareSheet() {
+  shareUrl.value = await planShareUrl(plan.plan)
+  if (!shareUrl.value) {
+    ui.showToast('Plan too large to share via URL')
+    return
+  }
+  copied.value = false
+  shareSheetOpen.value = true
+}
+
+function closeShareSheet() {
+  shareSheetOpen.value = false
+}
+
+async function copyShareUrl() {
+  if (!shareUrl.value) return
+  try {
+    await navigator.clipboard.writeText(shareUrl.value)
+    copied.value = true
+    setTimeout(() => (copied.value = false), 2000)
+  } catch {
+    ui.showToast("Couldn't copy the link")
+  }
+}
+
+async function nativeShare() {
+  if (!shareUrl.value || !nativeShareSupported) return
+  try {
+    await navigator.share({
+      title: 'My Mealime meal plan',
+      text: 'Check out my meal plan!',
+      url: shareUrl.value,
+    })
+    shareSheetOpen.value = false
+  } catch {
+    // User dismissed the native sheet — nothing to do.
+  }
+}
 
 interface PlannedMeal {
   meta: VariantMeta
@@ -114,12 +173,75 @@ function openRecipe(id: number) {
         </li>
       </ul>
 
-      <button
-        class="w-full rounded-xl border dark:border-stone-700 dark:bg-stone-900 py-3 text-sm font-medium dark:text-stone-300 hover:dark:bg-stone-800"
-        @click="plan.clearPlan"
-      >
-        Clear plan
-      </button>
+      <div class="flex gap-2">
+        <button
+          class="w-full rounded-xl border dark:border-stone-700 dark:bg-stone-900 py-3 text-sm font-medium dark:text-stone-300 dark:hover:bg-stone-800"
+          @click="plan.clearPlan"
+        >
+          Clear plan
+        </button>
+        <button
+          class="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-white shadow-sm active:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="shareUrl === null"
+          :title="shareUrl === null ? 'Plan too large to share via URL' : 'Share your plan via a link'"
+          @click="openShareSheet"
+        >
+          Share
+        </button>
+      </div>
     </template>
+
+    <!-- Share sheet -->
+    <Teleport to="body">
+      <div
+        v-if="shareSheetOpen"
+        class="fixed inset-0 z-40 flex items-end justify-center bg-stone-900/50"
+        @click.self="closeShareSheet"
+      >
+        <div
+          class="w-full max-w-2xl space-y-3 rounded-t-2xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl dark:bg-stone-900"
+          role="dialog"
+          aria-label="Share your meal plan"
+        >
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold tracking-tight">Share your plan</h3>
+            <button
+              class="flex size-9 items-center justify-center rounded-full dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"
+              aria-label="Close share sheet"
+              @click="closeShareSheet"
+            >
+              ✕
+            </button>
+          </div>
+          <p class="text-xs dark:text-stone-400">
+            Anyone with this link gets your current plan loaded into their app.
+          </p>
+          <input
+            class="h-11 w-full rounded-lg border border-stone-200 bg-stone-50 px-3 text-xs text-stone-700 outline-none focus:border-primary dark:border-stone-700 dark:bg-stone-950 dark:text-stone-300"
+            type="text"
+            readonly
+            :value="shareUrl ?? ''"
+            aria-label="Share link"
+            @focus="($event.target as HTMLInputElement).select()"
+          />
+          <div class="flex gap-2">
+            <button
+              class="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-stone-900 px-4 text-sm font-semibold text-amber-300 active:bg-stone-800 dark:bg-stone-800 dark:text-primary"
+              data-test="copy-share-link"
+              @click="copyShareUrl"
+            >
+              {{ copied ? '✓ Copied' : 'Copy link' }}
+            </button>
+            <button
+              v-if="nativeShareSupported"
+              class="flex h-11 flex-1 items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-white active:bg-primary-dark"
+              @click="nativeShare"
+            >
+              Share…
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </section>
 </template>

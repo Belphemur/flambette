@@ -149,7 +149,7 @@ function onTouchEnd(e: TouchEvent) {
     <header class="border-b dark:border-stone-700 dark:bg-stone-900">
       <div class="mx-auto flex max-w-2xl items-center justify-between gap-2 px-4 py-3">
         <button
-          class="flex size-11 shrink-0 items-center justify-center rounded-full text-lg dark:text-stone-400 hover:dark:bg-stone-800"
+          class="flex size-11 shrink-0 items-center justify-center rounded-full text-lg dark:text-stone-400 dark:hover:bg-stone-800"
           aria-label="Close cooking mode"
           @click="close"
         >
