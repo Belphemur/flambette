@@ -1,58 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { catalog, getRecipe } from '../lib/catalog'
-import { aggregateGroceries, type GroceryItem } from '../lib/grocery'
-import { STORE_SECTIONS } from '../lib/sections'
-import type { RecipeDoc, VariantMeta } from '../lib/types'
+import { useGroceryList } from '../lib/useGroceryList'
 import { usePlanStore } from '../stores/plan'
-import { useGroceryStore } from '../stores/grocery'
 
 const plan = usePlanStore()
-const checked = useGroceryStore()
 const router = useRouter()
-
-const docs = ref(new Map<number, RecipeDoc>())
-const loading = ref(false)
-const loadError = ref<string | null>(null)
-
-const plannedMetas = computed<VariantMeta[]>(() => {
-  const c = catalog.value
-  if (!c) return []
-  return plan.plan.flatMap((entry) => {
-    const meta = c.byId.get(entry.variantId)
-    return meta ? [meta] : []
-  })
-})
-
-/** Factor per planned meal: planned servings / base recipe servings. */
-const aggregateInputs = computed(() =>
-  plannedMetas.value.flatMap((meta) => {
-    const doc = docs.value.get(meta.id)
-    if (!doc) return []
-    return [{ doc, factor: entryServings(meta.id) / doc.serving_count, recipeName: meta.name }]
-  }),
-)
-
-function entryServings(variantId: number): number {
-  return plan.plan.find((e) => e.variantId === variantId)?.servings ?? 1
-}
-
-const items = computed<GroceryItem[]>(() =>
-  aggregateInputs.value.length === plannedMetas.value.length && plannedMetas.value.length > 0
-    ? aggregateGroceries(aggregateInputs.value)
-    : [],
-)
-
-const totalCount = computed(
-  () =>
-    items.value.reduce((n, item) => n + item.lines.length, 0) + plan.customItems.length,
-)
-const checkedCount = computed(
-  () =>
-    items.value.reduce((n, item) => n + item.lines.filter((l) => checked.map[l.key]).length, 0) +
-    plan.customItems.filter((i) => checked.map[`custom||${i.toLowerCase()}`]).length,
-)
+const { checked, loadError, loading, items, totalCount, checkedCount, sections, ensureDocs } =
+  useGroceryList()
 
 /* ---------- Custom (free-form) grocery items ---------- */
 
@@ -63,42 +18,6 @@ function addNewItem() {
     newItem.value = ''
   }
 }
-
-/** Sections with items, in canonical order. */
-const sections = computed(() => {
-  const bySection = new Map<string, GroceryItem[]>()
-  for (const item of items.value) {
-    const list = bySection.get(item.section) ?? []
-    list.push(item)
-    bySection.set(item.section, list)
-  }
-  return STORE_SECTIONS.filter((s) => bySection.has(s)).map((s) => ({
-    name: s,
-    items: bySection.get(s)!,
-  }))
-})
-
-async function ensureDocs() {
-  const missing = plannedMetas.value.filter((meta) => !docs.value.has(meta.id))
-  if (missing.length === 0) {
-    loading.value = false
-    return
-  }
-  loading.value = true
-  loadError.value = null
-  try {
-    const loaded = await Promise.all(missing.map((meta) => getRecipe(meta)))
-    for (const doc of loaded) {
-      docs.value.set(doc.id, doc)
-    }
-  } catch (e) {
-    loadError.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    loading.value = false
-  }
-}
-
-watch(plannedMetas, ensureDocs, { immediate: true })
 </script>
 
 <template>
@@ -149,6 +68,14 @@ watch(plannedMetas, ensureDocs, { immediate: true })
     </div>
 
     <template v-else>
+      <button
+        class="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-bold text-white shadow-sm active:bg-primary-dark"
+        data-test="start-shopping"
+        @click="router.push('/shop')"
+      >
+        🛒 Start shopping
+      </button>
+
       <div
         class="sticky top-12 z-10 -mx-4 flex items-center justify-between border-b dark:border-stone-700 dark:bg-stone-950/95 px-4 py-2 backdrop-blur"
       >

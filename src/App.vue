@@ -30,8 +30,10 @@ const toggleDark = useToggle(isDark)
 const loading = ref(true)
 const loadError = ref<string | null>(null)
 
-/** Cooking is a fullscreen focus mode: no app header, no bottom nav. */
+/** Cooking and shopping are fullscreen focus modes: no app header, no bottom nav. */
 const isCooking = computed(() => route.name === 'cooking')
+const isShopping = computed(() => route.name === 'shop')
+const isFullscreenMode = computed(() => isCooking.value || isShopping.value)
 
 /** Room status chip shown in the header while sharing a live room. */
 const roomChip = computed(() => {
@@ -92,7 +94,7 @@ onMounted(async () => {
 <template>
   <div class="mx-auto flex min-h-dvh max-w-2xl flex-col">
     <header
-      v-if="!isCooking"
+      v-if="!isFullscreenMode"
       class="sticky top-0 z-20 border-b border-stone-200 bg-white/90 backdrop-blur dark:border-stone-700 dark:bg-stone-900/90"
     >
       <div class="flex items-center justify-between px-4 py-2">
@@ -139,7 +141,7 @@ onMounted(async () => {
     <main
       v-else
       class="flex-1"
-      :class="isRecipe || isCooking ? '' : 'px-4 pt-4 pb-28'"
+      :class="isRecipe || isFullscreenMode ? '' : 'px-4 pt-4 pb-28'"
     >
       <RouterView v-slot="{ Component }">
         <KeepAlive include="RecipesTab,PlanTab,GroceryTab">
@@ -159,7 +161,7 @@ onMounted(async () => {
     </Transition>
 
     <nav
-      v-if="!isCooking"
+      v-if="!isFullscreenMode"
       class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-900"
       aria-label="Main navigation"
     >
