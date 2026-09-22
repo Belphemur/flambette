@@ -8,6 +8,18 @@ export const TABS: { id: string; label: string; icon: string; to: string }[] = [
   { id: 'grocery', label: 'Grocery', icon: '🛒', to: '/grocery' },
 ]
 
+/** An inline button on a toast (e.g. [Clear] [Cancel]). */
+export interface ToastAction {
+  label: string
+  run: () => void
+}
+
+export interface Toast {
+  message: string
+  /** Inline buttons rendered next to the message. */
+  actions?: ToastAction[]
+}
+
 /**
  * UI state not owned by the router: cooking step positions (survive tab
  * switches within a session) and transient toasts. Not persisted.
@@ -20,8 +32,8 @@ export const useUiStore = defineStore(
   () => {
     /** Cooking step index, keyed by variant id (survives tab switches). */
     const cookingStepIndex = ref<Record<number, number>>({})
-    /** Transient toast message (e.g. "Enjoy! 🍽"). */
-    const toast = ref<string | null>(null)
+    /** Transient toast: plain message, optionally with inline action buttons. */
+    const toast = ref<Toast | null>(null)
     let toastTimer: ReturnType<typeof setTimeout> | undefined
 
     function setCookingStep(variantId: number, step: number) {
@@ -32,10 +44,19 @@ export const useUiStore = defineStore(
       return cookingStepIndex.value[variantId] ?? 0
     }
 
-    function showToast(message: string, ms = 2500) {
-      toast.value = message
+    function showToast(
+      message: string,
+      options: { actions?: ToastAction[]; duration?: number } = {},
+    ) {
+      toast.value = { message, actions: options.actions }
       if (toastTimer) clearTimeout(toastTimer)
-      toastTimer = setTimeout(() => (toast.value = null), ms)
+      toastTimer = setTimeout(() => (toast.value = null), options.duration ?? 2500)
+    }
+
+    /** Dismiss the current toast immediately (e.g. the Cancel button). */
+    function dismissToast() {
+      if (toastTimer) clearTimeout(toastTimer)
+      toast.value = null
     }
 
     return {
@@ -44,6 +65,7 @@ export const useUiStore = defineStore(
       setCookingStep,
       cookingStep,
       showToast,
+      dismissToast,
     }
   },
 )

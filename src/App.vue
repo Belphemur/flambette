@@ -153,10 +153,21 @@ onMounted(async () => {
     <Transition name="toast">
       <div
         v-if="ui.toast"
-        class="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow-lg"
+        class="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow-lg"
         role="status"
+        data-test="toast"
       >
-        {{ ui.toast }}
+        <span>{{ ui.toast.message }}</span>
+        <button
+          v-for="(action, i) in ui.toast.actions ?? []"
+          :key="action.label"
+          class="rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide"
+          :class="i === 0 ? 'bg-primary text-white' : 'text-stone-300 hover:text-white'"
+          :data-test="`toast-action-${i === 0 ? 'primary' : 'secondary'}`"
+          @click="action.run()"
+        >
+          {{ action.label }}
+        </button>
       </div>
     </Transition>
 

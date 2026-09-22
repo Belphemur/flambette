@@ -23,7 +23,12 @@ export const useGroceryStore = defineStore(
       map.value = {}
     }
 
-    return { map, isChecked, toggleChecked, clearChecked }
+    /** Wipe the whole checkbox map (used by the clear-grocery workflow). */
+    function clearAll(): void {
+      clearChecked()
+    }
+
+    return { map, isChecked, toggleChecked, clearChecked, clearAll }
   },
   {
     persist: { key: 'mealime-planner:v1:checked', pick: ['map'] },

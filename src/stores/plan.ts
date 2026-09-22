@@ -7,6 +7,16 @@ export interface PlanEntry {
   servings: number
 }
 
+/** One "cooked this meal" event, newest first in the history. */
+export interface CookedEntry {
+  variantId: number
+  cookedAt: number
+}
+
+/** cookedHistory keeps at most this many entries, newest first. */
+const COOKED_HISTORY_CAP = 200
+const COOKED_RECENT_MS = 30 * 24 * 60 * 60 * 1000
+
 /**
  * Meal plan: list of {variantId, servings}. Persisted to localStorage under
  * the `mealime-planner:v1:plan` key by pinia-plugin-persistedstate.
@@ -17,6 +27,8 @@ export const usePlanStore = defineStore(
     const plan = ref<PlanEntry[]>([])
     /** Free-form extra grocery items (not tied to any recipe). */
     const customItems = ref<string[]>([])
+    /** Personal cooked-meal history — NOT part of the shared room state. */
+    const cookedHistory = ref<CookedEntry[]>([])
 
     function planContains(variantId: number): boolean {
       return plan.value.some((e) => e.variantId === variantId)
@@ -59,6 +71,30 @@ export const usePlanStore = defineStore(
       if (i >= 0) customItems.value.splice(i, 1)
     }
 
+    /** Empty the free-form grocery items (used by the clear-grocery workflow). */
+    function clearCustomItems(): void {
+      customItems.value = []
+    }
+
+    /**
+     * Mark a meal as cooked: drop it from the plan and record it in the
+     * personal (not room-synced) cooked history, newest first, capped.
+     * Its grocery lines disappear automatically — the list is derived.
+     */
+    function markCooked(variantId: number): void {
+      removeFromPlan(variantId)
+      cookedHistory.value = [
+        { variantId, cookedAt: Date.now() },
+        ...cookedHistory.value.filter((e) => e.variantId !== variantId),
+      ].slice(0, COOKED_HISTORY_CAP)
+    }
+
+    /** True when the meal was cooked in the last 30 days. */
+    function isCookedRecently(variantId: number): boolean {
+      const cutoff = Date.now() - COOKED_RECENT_MS
+      return cookedHistory.value.some((e) => e.variantId === variantId && e.cookedAt >= cutoff)
+    }
+
     /** Replace the whole plan (used when importing a shared plan). */
     function replacePlan(entries: PlanEntry[], custom: string[] = []): void {
       plan.value = entries.map((e) => ({
@@ -78,10 +114,17 @@ export const usePlanStore = defineStore(
       clearPlan,
       addCustomItem,
       removeCustomItem,
+      clearCustomItems,
+      markCooked,
+      isCookedRecently,
       replacePlan,
+      cookedHistory,
     }
   },
   {
-    persist: { key: 'mealime-planner:v1:plan', pick: ['plan', 'customItems'] },
+    persist: {
+      key: 'mealime-planner:v1:plan',
+      pick: ['plan', 'customItems', 'cookedHistory'],
+    },
   },
 )
