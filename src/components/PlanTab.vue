@@ -173,6 +173,14 @@ function openRecipe(id: number) {
             </button>
           </div>
           <button
+            class="flex size-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:text-primary"
+            :aria-label="`Mark ${meal.meta.name} as cooked`"
+            data-test="mark-cooked"
+            @click="plan.markCooked(meal.meta.id)"
+          >
+            ✓
+          </button>
+          <button
             class="flex size-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:text-rose-600"
             :aria-label="`Remove ${meal.meta.name} from plan`"
             @click="plan.removeFromPlan(meal.meta.id)"

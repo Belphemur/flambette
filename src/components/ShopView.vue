@@ -4,8 +4,17 @@ import { useRouter } from 'vue-router'
 import { useGroceryList } from '../lib/useGroceryList'
 
 const router = useRouter()
-const { checked, loadError, loading, totalCount, checkedCount, sections, ensureDocs, plan } =
-  useGroceryList()
+const {
+  checked,
+  loadError,
+  loading,
+  totalCount,
+  checkedCount,
+  sections,
+  ensureDocs,
+  plan,
+  confirmAndClearGrocery,
+} = useGroceryList()
 
 /** Collapsed store sections (open by default). */
 const collapsed = ref(new Set<string>())
@@ -54,6 +63,15 @@ function exitShopping() {
             />
           </div>
         </div>
+        <button
+          v-if="checkedCount > 0"
+          class="flex h-10 shrink-0 items-center gap-1 rounded-xl border dark:border-stone-700 px-3 text-sm font-medium dark:text-stone-300 active:bg-stone-100 dark:active:bg-stone-800"
+          data-test="clear-list"
+          aria-label="Clear grocery list"
+          @click="confirmAndClearGrocery()"
+        >
+          ♻️ Clear list
+        </button>
       </div>
     </div>
 

@@ -59,6 +59,13 @@ function finish() {
   ui.showToast('Enjoy! 🍽')
 }
 
+/** Finish cooking AND record the meal in the personal cooked history. */
+function finishCooked() {
+  if (meta.value) plan.markCooked(meta.value.id)
+  close()
+  ui.showToast('Marked as cooked ✓')
+}
+
 function onKey(e: KeyboardEvent) {
   if (e.key === 'ArrowRight') {
     e.preventDefault()
@@ -205,27 +212,37 @@ function onTouchEnd(e: TouchEvent) {
 
     <!-- Big navigation buttons -->
     <footer class="border-t dark:border-stone-700 dark:bg-stone-900 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-      <div class="mx-auto flex max-w-2xl gap-3">
+      <div class="mx-auto flex max-w-2xl flex-col gap-2">
+        <div class="flex gap-3">
+          <button
+            class="h-14 min-w-28 flex-1 rounded-xl border dark:border-stone-600 dark:bg-stone-900 text-base font-semibold dark:text-stone-200 transition-opacity disabled:opacity-40"
+            :disabled="isFirst"
+            @click="prev"
+          >
+            ← Previous
+          </button>
+          <button
+            v-if="!isLast"
+            class="h-14 flex-[2] rounded-xl bg-primary text-base font-semibold text-white shadow-sm active:bg-primary-dark"
+            @click="next"
+          >
+            Next →
+          </button>
+          <button
+            v-else
+            class="h-14 flex-[2] rounded-xl bg-primary text-base font-semibold text-white shadow-sm active:bg-primary-dark"
+            @click="finish"
+          >
+            Finish 🎉
+          </button>
+        </div>
         <button
-          class="h-14 min-w-28 flex-1 rounded-xl border dark:border-stone-600 dark:bg-stone-900 text-base font-semibold dark:text-stone-200 transition-opacity disabled:opacity-40"
-          :disabled="isFirst"
-          @click="prev"
+          v-if="isLast"
+          class="h-12 rounded-xl border dark:border-stone-600 dark:bg-stone-900 text-sm font-semibold text-primary-dark dark:text-primary active:bg-stone-100 dark:active:bg-stone-800"
+          data-test="mark-cooked"
+          @click="finishCooked"
         >
-          ← Previous
-        </button>
-        <button
-          v-if="!isLast"
-          class="h-14 flex-[2] rounded-xl bg-primary text-base font-semibold text-white shadow-sm active:bg-primary-dark"
-          @click="next"
-        >
-          Next →
-        </button>
-        <button
-          v-else
-          class="h-14 flex-[2] rounded-xl bg-primary text-base font-semibold text-white shadow-sm active:bg-primary-dark"
-          @click="finish"
-        >
-          Finish 🎉
+          ✓ Mark as cooked
         </button>
       </div>
     </footer>

@@ -3,6 +3,7 @@ import { catalog, getRecipe } from './catalog'
 import { aggregateGroceries, type GroceryItem } from './grocery'
 import { STORE_SECTIONS } from './sections'
 import type { RecipeDoc, VariantMeta } from './types'
+import { confirmAndClearGrocery } from '../composables/useConfirm'
 import { usePlanStore } from '../stores/plan'
 import { useGroceryStore } from '../stores/grocery'
 
@@ -93,6 +94,28 @@ export function useGroceryList() {
 
   watch(plannedMetas, ensureDocs, { immediate: true })
 
+  /* ---------- Clear-grocery workflow ---------- */
+
+  /**
+   * Auto-trigger (decision 1): when the last grocery item gets checked
+   * (totalCount > 0 and checkedCount reaches the total), prompt to clear
+   * the list. Armed only after a transition through not-full, so a page
+   * loaded with everything already checked does not prompt on its own.
+   * Both views share this composable, and confirmAndClearGrocery()
+   * dedupes concurrent prompts via its module-level guard.
+   */
+  let allCheckedArmed = false
+  watch([checkedCount, totalCount], ([checked, total]) => {
+    if (total === 0 || checked < total) {
+      allCheckedArmed = true
+      return
+    }
+    if (allCheckedArmed) {
+      allCheckedArmed = false
+      void confirmAndClearGrocery('All items checked — clear the list?')
+    }
+  })
+
   return {
     plan,
     checked,
@@ -104,5 +127,6 @@ export function useGroceryList() {
     checkedCount,
     sections,
     ensureDocs,
+    confirmAndClearGrocery,
   }
 }

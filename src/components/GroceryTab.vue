@@ -6,7 +6,7 @@ import { usePlanStore } from '../stores/plan'
 
 const plan = usePlanStore()
 const router = useRouter()
-const { checked, loadError, loading, items, totalCount, checkedCount, sections, ensureDocs } =
+const { checked, loadError, loading, items, totalCount, checkedCount, sections, ensureDocs, confirmAndClearGrocery } =
   useGroceryList()
 
 /* ---------- Custom (free-form) grocery items ---------- */
@@ -90,10 +90,12 @@ function addNewItem() {
         </div>
         <button
           v-if="checkedCount > 0"
-          class="rounded-lg px-2 py-1 text-xs font-medium dark:text-stone-400 dark:hover:bg-stone-700"
-          @click="checked.clearChecked"
+          class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium dark:text-stone-400 dark:hover:bg-stone-700"
+          data-test="clear-list"
+          aria-label="Clear grocery list"
+          @click="confirmAndClearGrocery()"
         >
-          Clear checked
+          ♻️ Clear list
         </button>
       </div>
 
