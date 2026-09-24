@@ -186,10 +186,14 @@ function exitShopping() {
         <p
           v-if="totalCount === 0"
           class="py-16 text-center text-stone-400"
-          data-test="shop-empty"
+          :data-test="plan.plan.length > 0 ? 'cleared-empty' : 'shop-empty'"
         >
           <span class="text-4xl">🛒</span>
-          <span class="mt-2 block font-medium">The list is empty</span>
+          <span class="mt-2 block font-medium">{{
+            plan.plan.length > 0
+              ? "All ingredients cleared. They'll come back when you plan new recipes."
+              : 'The list is empty'
+          }}</span>
         </p>
       </template>
     </main>
