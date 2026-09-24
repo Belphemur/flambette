@@ -1,10 +1,10 @@
 # Build stage: install deps and produce the production bundle in dist/
-FROM node:lts-alpine AS build
+FROM oven/bun:1-alpine AS build
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 COPY . .
-RUN npm run build
+RUN bun run build
 
 # Serve stage: static nginx with SPA fallback + cache headers
 FROM nginx:alpine

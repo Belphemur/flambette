@@ -16,11 +16,12 @@ host** — this is enforced by e2e (`blockExternalRequests` +
 ## Commands
 
 ```bash
-npm run dev                    # dev server (proxies /ws → localhost:8081)
-node server/relay.mjs          # relay for dev
-npm run build                  # type-check + production build — MUST be green
-npx playwright test            # full e2e suite (starts its own relay)
-npx playwright test e2e/x.spec.ts   # single spec
+bun install                    # install deps (bun.lock is the lockfile)
+bun run dev                    # dev server (proxies /ws → localhost:8081)
+bun server/relay.mjs           # relay for dev
+bun run build                  # type-check + production build — MUST be green
+bunx playwright test           # full e2e suite (starts its own relay)
+bunx playwright test e2e/x.spec.ts   # single spec
 docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
 ```
 

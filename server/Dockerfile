@@ -1,8 +1,6 @@
-# Relay service: plain node + ws, no build step.
-FROM node:lts-alpine
+# Relay service: zero-dependency Bun WebSocket relay, no build step.
+FROM oven/bun:1-alpine
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
 COPY relay.mjs .
 EXPOSE 8081
-CMD ["node", "relay.mjs"]
+CMD ["bun", "relay.mjs"]
