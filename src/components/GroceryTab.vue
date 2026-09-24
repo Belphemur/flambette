@@ -186,7 +186,7 @@ function addNewItem() {
                   @change="checked.toggleChecked(line.key)"
                 />
                 <span
-                  class="min-w-0 truncate text-sm"
+                  class="min-w-0 flex-1 truncate text-sm"
                   :class="checked.map[line.key] ? 'text-stone-400 line-through' : ''"
                 >
                   <span
@@ -195,23 +195,28 @@ function addNewItem() {
                     :class="checked.map[line.key] ? 'text-stone-400 line-through' : ''"
                   >{{ line.display }}</span>
                   <span :class="checked.map[line.key] ? 'text-stone-400 line-through' : ''">{{ item.name }}</span>
+                </span>
+                <!-- Provenance pill: a shrink-0 flex sibling OUTSIDE the
+                     truncating span, so the tooltip is never clipped by the
+                     name's overflow and the pill can never crowd the text
+                     (or the checkbox, which sits at the row's far left). -->
+                <span
+                  v-if="item.recipes.length > 1"
+                  class="group/pill relative inline-flex shrink-0"
+                  data-test="provenance-pill"
+                  @click.stop
+                >
                   <span
-                    v-if="item.recipes.length > 1"
-                    class="group/pill relative ml-1 inline-flex shrink-0"
-                    @click.stop
+                    tabindex="0"
+                    role="note"
+                    :aria-label="`Used by ${item.recipes.length} planned meals: ${item.recipes.join(', ')}`"
+                    class="cursor-help whitespace-nowrap rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary-dark outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-primary/20 dark:text-primary"
+                  >{{ item.recipes.length }} recipes</span>
+                  <span
+                    class="pointer-events-none absolute bottom-full right-0 z-20 mb-1.5 hidden w-56 rounded-lg bg-stone-900 px-2.5 py-1.5 text-[11px] leading-snug text-white shadow-lg group-hover/pill:block group-focus-within/pill:block dark:bg-stone-700"
                   >
-                    <span
-                      tabindex="0"
-                      role="note"
-                      :aria-label="`Used by ${item.recipes.length} planned meals: ${item.recipes.join(', ')}`"
-                      class="cursor-help whitespace-nowrap rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-semibold text-primary-dark outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-primary/20 dark:text-primary"
-                    >{{ item.recipes.length }} recipes</span>
-                    <span
-                      class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-56 -translate-x-1/2 rounded-lg bg-stone-900 px-2.5 py-1.5 text-[11px] leading-snug text-white shadow-lg group-hover/pill:block group-focus-within/pill:block dark:bg-stone-700"
-                    >
-                      <span class="block font-semibold">Used by {{ item.recipes.length }} planned meal{{ item.recipes.length === 1 ? '' : 's' }}:</span>
-                      {{ item.recipes.join(', ') }}
-                    </span>
+                    <span class="block font-semibold">Used by {{ item.recipes.length }} planned meal{{ item.recipes.length === 1 ? '' : 's' }}:</span>
+                    {{ item.recipes.join(', ') }}
                   </span>
                 </span>
               </label>
