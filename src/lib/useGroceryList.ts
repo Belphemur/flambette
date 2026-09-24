@@ -1,9 +1,12 @@
 import { computed, ref, watch } from 'vue'
 import { catalog, getRecipe } from './catalog'
-import { aggregateGroceries, type GroceryItem } from './grocery'
+import { aggregateGroceries, nameKey, type GroceryItem } from './grocery'
 import { STORE_SECTIONS } from './sections'
 import type { RecipeDoc, VariantMeta } from './types'
-import { confirmAndClearGrocery } from '../composables/useConfirm'
+import {
+  confirmAndClearGrocery,
+  registerClearSnapshotProvider,
+} from '../composables/useConfirm'
 import { usePlanStore } from '../stores/plan'
 import { useGroceryStore } from '../stores/grocery'
 
@@ -34,7 +37,15 @@ export function useGroceryList() {
     plannedMetas.value.flatMap((meta) => {
       const doc = docs.value.get(meta.id)
       if (!doc) return []
-      return [{ doc, factor: entryServings(meta.id) / doc.serving_count, recipeName: meta.name }]
+      const cleared = plan.clearedIngredients[meta.id]
+      return [
+        {
+          doc,
+          factor: entryServings(meta.id) / doc.serving_count,
+          recipeName: meta.name,
+          cleared: cleared?.length ? new Set(cleared) : undefined,
+        },
+      ]
     }),
   )
 
@@ -97,6 +108,20 @@ export function useGroceryList() {
   /* ---------- Clear-grocery workflow ---------- */
 
   /**
+   * Per-meal ingredient snapshot taken at clear time: variantId ->
+   * nameKey-normalized keys, from the already-loaded recipe docs.
+   */
+  registerClearSnapshotProvider(() => {
+    const byVariant: Record<number, string[]> = {}
+    for (const { doc } of aggregateInputs.value) {
+      byVariant[doc.id] = doc.line_items
+        .map((item) => nameKey(item.ingredient_name))
+        .filter((key) => key.length > 0)
+    }
+    return byVariant
+  })
+
+  /**
    * Auto-trigger (decision 1): prompt when the user CHECKS the last item.
    *
    * We watch the checkbox map itself, not the computed counts: only a
@@ -114,7 +139,9 @@ export function useGroceryList() {
     () => {
       const total = totalCount.value
       if (total === 0 || checkedCount.value < total) return
-      void confirmAndClearGrocery('All items checked — clear the list?')
+      void confirmAndClearGrocery(
+        'All items checked — clear the grocery list? Ingredients stay hidden until you cook the meals.',
+      )
     },
     { deep: true },
   )
