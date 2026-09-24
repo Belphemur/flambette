@@ -37,7 +37,9 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   them by servings; only totals scale.
 - **Share/rooms**: `?p=` is the one-time gzip+base64url export (v1 bare
   arrays still decode). Room sync is whole-state last-write-wins keyed by
-  `rev`; shared state = `{plan, customItems, checked}` ONLY —
+  `rev`; shared state = `{plan, customItems, checked, cleared}` —
+  `cleared` is `clearedIngredients` (household state: clearing hides
+  ingredients for everyone until re-planned/cooked).
   `cookedHistory` is personal and must stay out of the room payload.
 - **Toasts**: `ui.showToast(message, { actions, duration, onDismiss })`.
   `onDismiss` fires exactly once on every end path (timeout, replacement,
