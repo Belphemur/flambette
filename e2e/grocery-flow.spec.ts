@@ -34,6 +34,9 @@ async function readIngredient(page: Page, name: RegExp): Promise<IngredientInfo>
   const base = Number(serves!.match(/serves (\d+)/)![1])
 
   const rows = sheet.locator('ul.divide-y > li')
+  // The ingredient list renders asynchronously after the sheet opens — wait
+  // for it before counting, else a loaded machine returns 0 rows.
+  await rows.first().waitFor()
   const n = await rows.count()
   for (let i = 0; i < n; i++) {
     const row = rows.nth(i)

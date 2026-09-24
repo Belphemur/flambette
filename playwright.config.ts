@@ -25,14 +25,15 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'npm run preview',
+      command: 'bun run preview',
       url: 'http://localhost:4173',
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
     },
     {
-      // Live-room relay: the app talks to it through the /ws proxy.
-      command: 'node server/relay.mjs',
+      // Live-room relay (zero-dep, Bun native WebSocket): the app talks to it
+      // through the /ws proxy.
+      command: 'bun server/relay.mjs',
       url: 'http://localhost:8081',
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,

@@ -6,11 +6,13 @@ whole shared state through the relay. The relay stores nothing but the
 latest state per room — conflict resolution lives entirely on the client
 (last-write-wins keyed by a monotonic `rev`).
 
+A zero-dependency Bun service (Bun's native WebSocket API — no npm
+install step at all).
+
 Run it directly:
 
 ```sh
-npm install
-npm start          # listens on :8081 (override with PORT)
+bun relay.mjs      # listens on :8081 (override with PORT)
 ```
 
 Or via Docker / from the repo root:

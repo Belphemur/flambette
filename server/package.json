@@ -3,14 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "In-memory WebSocket relay for Mealime Planner live room sync",
+  "description": "Zero-dependency in-memory WebSocket relay for Mealime Planner live room sync (Bun native WebSocket)",
   "scripts": {
-    "start": "node relay.mjs"
+    "start": "bun relay.mjs"
   },
   "engines": {
-    "node": ">=22"
-  },
-  "dependencies": {
-    "ws": "^8.18.3"
+    "bun": ">=1"
   }
 }

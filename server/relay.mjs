@@ -6,13 +6,12 @@
  * owns conflict resolution via monotonic `rev` numbers — the relay only
  * stores and fans out).
  *
+ * Zero dependencies: runs on Bun's native WebSocket support (Bun.serve).
  * No database, no persistence: rooms expire after 12h of inactivity.
  * Heartbeat ping/pong every 30s prunes dead sockets.
  *
- * Run: `node server/relay.mjs` (listens on :8081, override with PORT env).
+ * Run: `bun server/relay.mjs` (listens on :8081, override with PORT env).
  */
-import { createServer } from 'node:http'
-import { WebSocketServer } from 'ws'
 
 const PORT = Number(process.env.PORT ?? 8081)
 const IDLE_TTL_MS = 12 * 60 * 60 * 1000 // rooms expire after 12h idle
@@ -26,6 +25,9 @@ const CODE_ALPHABET = '0123456789BCDFGHJKLMNPQRSTVWXZ'
 const CODE_LENGTH = 6
 
 const rooms = new Map()
+
+/** All live sockets (Bun has no iterable server.clients — track manually). */
+const sockets = new Set()
 
 /** Monotonic peer id for attribution on fan-out (informational only). */
 let nextPeerId = 0
@@ -58,7 +60,7 @@ function touchRoom(room) {
 
 function removePeer(ws, room) {
   room.peers.delete(ws)
-  ws.roomCode = undefined
+  ws.data.roomCode = undefined
   // State deliberately stays in memory even when the room empties —
   // a returning peer can still join until idle expiry.
 }
@@ -67,115 +69,122 @@ function send(ws, payload) {
   if (ws.readyState === 1 /* OPEN */) ws.send(JSON.stringify(payload))
 }
 
-// Plain HTTP server so health probes (playwright webServer url check,
-// load balancers) get a 200; WebSocket upgrades are handed to the wss below.
-const httpServer = createServer((_req, res) => {
-  res.writeHead(200, { 'content-type': 'text/plain' })
-  res.end('mealime relay\n')
-})
+let server
+try {
+  server = Bun.serve({
+    port: PORT,
+    // Plain HTTP responses so health probes (playwright webServer url check,
+    // load balancers) get a 200; WebSocket upgrades are handed to the
+    // websocket handler below.
+    fetch(req, srv) {
+      if (srv.upgrade(req, { data: { isAlive: true, roomCode: undefined } })) return
+      return new Response('mealime relay\n', { headers: { 'content-type': 'text/plain' } })
+    },
+    websocket: {
+      open(ws) {
+        ws.data.peerId = `p${++nextPeerId}`
+        sockets.add(ws)
+      },
 
-const wss = new WebSocketServer({ server: httpServer })
-httpServer.listen(PORT)
-console.log(`[relay] listening on :${PORT}`)
-
-wss.on('connection', (ws) => {
-  ws.isAlive = true
-  ws.peerId = `p${++nextPeerId}`
-  ws.on('pong', () => {
-    ws.isAlive = true
-  })
-
-  ws.on('message', (data) => {
-    let msg
-    try {
-      msg = JSON.parse(data.toString())
-    } catch {
-      send(ws, { type: 'error', code: 'bad_json' })
-      return
-    }
-
-    switch (msg.type) {
-      case 'create': {
-        const room = createRoom()
-        room.peers.add(ws)
-        ws.roomCode = room.code
-        touchRoom(room)
-        send(ws, { type: 'created', code: room.code })
-        break
-      }
-
-      case 'join': {
-        const code = typeof msg.code === 'string' ? msg.code.trim().toUpperCase() : ''
-        const room = rooms.get(code)
-        if (!room) {
-          send(ws, { type: 'error', code: 'not_found' })
+      message(ws, data) {
+        let msg
+        try {
+          msg = JSON.parse(typeof data === 'string' ? data : Buffer.from(data).toString())
+        } catch {
+          send(ws, { type: 'error', code: 'bad_json' })
           return
         }
-        room.peers.add(ws)
-        ws.roomCode = room.code
-        touchRoom(room)
-        send(ws, { type: 'joined', code: room.code, rev: room.rev ?? 0, state: room.state ?? null })
-        break
-      }
 
-      case 'state': {
-        const room = ws.roomCode ? rooms.get(ws.roomCode) : undefined
-        const rev = msg.rev
-        if (
-          !room ||
-          typeof rev !== 'number' ||
-          !Number.isFinite(rev) ||
-          typeof msg.state !== 'object' ||
-          msg.state === null
-        ) {
-          send(ws, { type: 'error', code: 'bad_state' })
-          return
-        }
-        room.rev = rev
-        room.state = msg.state
-        touchRoom(room)
-        for (const peer of room.peers) {
-          if (peer !== ws) send(peer, { type: 'state', rev, state: msg.state, from: ws.peerId })
-        }
-        break
-      }
+        switch (msg.type) {
+          case 'create': {
+            const room = createRoom()
+            room.peers.add(ws)
+            ws.data.roomCode = room.code
+            touchRoom(room)
+            send(ws, { type: 'created', code: room.code })
+            break
+          }
 
-      case 'leave': {
-        if (ws.roomCode) {
-          const room = rooms.get(ws.roomCode)
+          case 'join': {
+            const code = typeof msg.code === 'string' ? msg.code.trim().toUpperCase() : ''
+            const room = rooms.get(code)
+            if (!room) {
+              send(ws, { type: 'error', code: 'not_found' })
+              return
+            }
+            room.peers.add(ws)
+            ws.data.roomCode = room.code
+            touchRoom(room)
+            send(ws, { type: 'joined', code: room.code, rev: room.rev ?? 0, state: room.state ?? null })
+            break
+          }
+
+          case 'state': {
+            const room = ws.data.roomCode ? rooms.get(ws.data.roomCode) : undefined
+            const rev = msg.rev
+            if (
+              !room ||
+              typeof rev !== 'number' ||
+              !Number.isFinite(rev) ||
+              typeof msg.state !== 'object' ||
+              msg.state === null
+            ) {
+              send(ws, { type: 'error', code: 'bad_state' })
+              return
+            }
+            room.rev = rev
+            room.state = msg.state
+            touchRoom(room)
+            for (const peer of room.peers) {
+              if (peer !== ws) send(peer, { type: 'state', rev, state: msg.state, from: ws.data.peerId })
+            }
+            break
+          }
+
+          case 'leave': {
+            if (ws.data.roomCode) {
+              const room = rooms.get(ws.data.roomCode)
+              if (room) removePeer(ws, room)
+            }
+            send(ws, { type: 'left' })
+            break
+          }
+
+          default:
+            send(ws, { type: 'error', code: 'unknown_type' })
+        }
+      },
+
+      pong(ws) {
+        ws.data.isAlive = true
+      },
+
+      close(ws) {
+        sockets.delete(ws)
+        if (ws.data?.roomCode) {
+          const room = rooms.get(ws.data.roomCode)
           if (room) removePeer(ws, room)
         }
-        send(ws, { type: 'left' })
-        break
-      }
-
-      default:
-        send(ws, { type: 'error', code: 'unknown_type' })
-    }
+      },
+    },
   })
+} catch (err) {
+  console.error(`[relay] ${err.message}`)
+  process.exit(1)
+}
 
-  ws.on('close', () => {
-    if (ws.roomCode) {
-      const room = rooms.get(ws.roomCode)
-      if (room) removePeer(ws, room)
-    }
-  })
-})
+console.log(`[relay] listening on :${PORT}`)
 
 /** Prune dead sockets: a missed pong (30s) marks the socket, the next beat terminates it. */
 const heartbeat = setInterval(() => {
-  for (const ws of wss.clients) {
-    if (ws.isAlive === false) {
+  for (const ws of sockets) {
+    if (ws.data.isAlive === false) {
       ws.terminate()
       continue
     }
-    ws.isAlive = false
+    ws.data.isAlive = false
     ws.ping()
   }
 }, HEARTBEAT_MS)
 
-wss.on('close', () => clearInterval(heartbeat))
-httpServer.on('error', (err) => {
-  console.error(`[relay] ${err.message}`)
-  process.exit(1)
-})
+process.on('exit', () => clearInterval(heartbeat))

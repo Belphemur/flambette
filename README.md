@@ -139,17 +139,17 @@ works via the clipboard `execCommand` fallback.
 ## Development
 
 ```bash
-npm install
-npm run dev                      # dev server (proxies /ws to the relay)
-node server/relay.mjs            # relay on :8081 (dev/e2e)
-npm run build                    # type-check + production build into dist/
-npm run preview                  # serve the production build locally
-npx playwright test              # e2e suite (starts the relay itself)
+bun install
+bun run dev                      # dev server (proxies /ws to the relay)
+bun server/relay.mjs             # relay on :8081 (dev/e2e)
+bun run build                    # type-check + production build into dist/
+bun run preview                  # serve the production build locally
+bunx playwright test             # e2e suite (starts the relay itself)
 ```
 
-The relay is a tiny Node service (`server/`, single dependency `ws`,
-in-memory only — rooms expire after 12h idle); `server/README.md` documents
-the wire protocol.
+The relay is a zero-dependency Bun service (`server/`, Bun's native
+WebSocket API, in-memory only — rooms expire after 12h idle);
+`server/README.md` documents the wire protocol.
 
 ## Stack
 
