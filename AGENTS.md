@@ -56,7 +56,9 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
 - `waitForCatalog` is only valid on the Recipes tab — on Grocery/Plan
   after reload, wait for that tab's own content instead.
 - Prefer `focus()` over `hover()` for tooltip assertions (sticky bars
-  intercept hover on the Pixel 7 viewport).
+  intercept hover on the Pixel 7 viewport); the grocery provenance pill
+  must stay a flex sibling OUTSIDE the truncating name span, else its
+  tooltip gets clipped.
 - Full suite (72+ tests × 2 projects: Desktop Chrome + Pixel 7) must pass
   before any merge. Run `npm run build` first — vite serve hides some bugs.
 
