@@ -69,13 +69,8 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
 - Never `git add -A` at repo root: scrape scripts/raw archives are
   gitignored but sit in the workdir; add files by explicit path.
 
-## Release & deploy
+## Release
 
 - `git tag v<semver>` + push tag → release workflow publishes
   `ghcr.io/belphemur/mealime-planner` AND `...-relay` (tags `X.Y.Z`,
   `X.Y`, `latest` — the workflow strips the `v` prefix).
-- Production runs on Unraid via compose-manager
-  (`/boot/config/plugins/compose.manager/projects/mealime-planner/`,
-  `:latest` images behind Traefik at `mealime.dogehub.cloud`); GHCR login
-  at array start via the "GHCR login" user script; watchtower auto-updates
-  both containers.
