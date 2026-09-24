@@ -3,6 +3,7 @@ import {
   blockExternalRequests,
   gotoTab,
   openFirstRecipeDetail,
+  openRecipeDetail,
   waitForCatalog,
 } from './helpers'
 
@@ -15,9 +16,10 @@ test.beforeEach(async ({ page }) => {
 /**
  * Phase 7: clear-grocery workflow + mark-as-cooked.
  *
- * The grocery list is derived from plan.plan + plan.customItems, with
- * checkbox state in the grocery store. "Clear" wipes ONLY the checkbox
- * map and the custom items — planned meals stay in the plan.
+ * Phase 9: "Clear" REMOVES the planned meals' ingredients from the
+ * grocery list (persisted per meal until cooked or re-planned fresh).
+ * The checkbox map and custom items are wiped as before; planned meals
+ * stay in the plan, and the list renders empty until ingredients return.
  */
 
 /** Plan the first catalog recipe (returns its display name). */
@@ -68,7 +70,7 @@ test('checking the last item prompts to clear; Cancel aborts, then Clear works',
 
   // Non-blocking confirmation with Clear / Cancel — not window.confirm.
   const toast = confirmToast(page)
-  await expect(toast).toContainText('All items checked — clear the list?')
+  await expect(toast).toContainText('All items checked — clear the grocery list? Ingredients stay hidden until you cook the meals.')
   await expect(toast.locator('[data-test=toast-action-secondary]')).toContainText('Cancel')
 
   // Cancel aborts: toast gone, state untouched.
@@ -80,15 +82,16 @@ test('checking the last item prompts to clear; Cancel aborts, then Clear works',
   // Re-trigger (uncheck one, check it again) and confirm this time.
   await page.locator('main input[type=checkbox]:checked').first().click()
   await page.locator('main input[type=checkbox]:not(:checked)').first().click()
-  await expect(toast).toContainText('All items checked — clear the list?')
+  await expect(toast).toContainText('All items checked — clear the grocery list? Ingredients stay hidden until you cook the meals.')
   await toast.locator('[data-test=toast-action-primary]').click()
 
-  // Checkbox map wiped + custom items emptied; feedback toast shows.
-  // Planned meals stay, so the derived list rebuilds: recipe lines are
-  // back (unchecked), only the custom item is gone.
-  await expect(page.getByText(/(\d+) \/ (\d+) items/)).toHaveText(`0 / ${total - 1} items`)
+  // Ingredients REMOVED: the list is empty even though the meal stays
+  // planned. Custom items emptied; feedback toast shows.
+  await expect(page.getByTestId('cleared-empty')).toBeVisible()
   await expect(page.locator('[data-test=custom-items]')).toHaveCount(0)
-  await expect(page.getByText('Grocery list cleared')).toBeVisible()
+  await expect(
+    page.getByText('Grocery list cleared — ingredients return when you plan again'),
+  ).toBeVisible()
 })
 
 test('the Clear-list button works from the Grocery tab', async ({ page }) => {
@@ -105,10 +108,12 @@ test('the Clear-list button works from the Grocery tab', async ({ page }) => {
 
   await page.locator('[data-test=clear-list]').click()
   const toast = confirmToast(page)
-  await expect(toast).toContainText('Clear the grocery list?')
+  await expect(toast).toContainText(
+    'Clear the grocery list? Ingredients stay hidden until you cook the meals.',
+  )
   await toast.locator('[data-test=toast-action-primary]').click()
-  // Map wiped: unchecked again. Planned meals stay, so the list rebuilds.
-  await expect(page.getByText(/(\d+) \/ (\d+) items/)).toHaveText(`0 / ${total} items`)
+  // Ingredients removed: the list empties (cleared state), meals stay planned.
+  await expect(page.getByTestId('cleared-empty')).toBeVisible()
   await expect(page.locator('[data-test=clear-list]')).toHaveCount(0)
 })
 
@@ -127,11 +132,13 @@ test('the Clear-list button works from shopping mode', async ({ page }) => {
   const toast = confirmToast(page)
   await expect(toast).toContainText('Clear the grocery list?')
   await toast.locator('[data-test=toast-action-primary]').click()
-  // Map wiped (rows undimmed again); planned meals stay, so the derived
-  // list rebuilds — the shop empty-state is NOT expected here.
-  await expect(page.locator('[data-test=shopping-progress]')).toHaveText(/^0 \/ \d+$/)
-  await expect(page.locator('[data-test=shop-row]:not(.opacity-40)').first()).toBeVisible()
-  await expect(page.getByText('Grocery list cleared')).toBeVisible()
+  // Ingredients removed: the cleared empty-state replaces the rows even
+  // though the meals are still planned.
+  await expect(page.getByTestId('cleared-empty')).toBeVisible()
+  await expect(page.getByTestId('shop-row')).toHaveCount(0)
+  await expect(
+    page.getByText('Grocery list cleared — ingredients return when you plan again'),
+  ).toBeVisible()
 })
 
 test('clearing removes custom items but keeps the planned meals', async ({ page }) => {
@@ -140,15 +147,14 @@ test('clearing removes custom items but keeps the planned meals', async ({ page 
   await addCustomItem(page, 'Olive oil')
   await checkAllGroceryItems(page)
   const toast = confirmToast(page)
-  await expect(toast).toContainText('All items checked — clear the list?')
+  await expect(toast).toContainText('All items checked — clear the grocery list? Ingredients stay hidden until you cook the meals.')
   await toast.locator('[data-test=toast-action-primary]').click()
 
-  // Grocery side: checkbox map + custom items gone. Planned meals stay,
-  // so their ingredient lines rebuild (unchecked); the form is back.
-  await expect(page.getByText(/(\d+) \/ (\d+) items/)).toHaveText(new RegExp(`^0 \/ \\d+ items\\s*$`))
+  // Grocery side: checkbox map + custom items gone, and the planned
+  // meals' ingredients are REMOVED — the list is empty (cleared state).
+  await expect(page.getByTestId('cleared-empty')).toBeVisible()
   await expect(page.locator('[data-test=custom-items]')).toHaveCount(0)
   await expect(page.getByLabel('Add a custom grocery item')).toBeVisible()
-  await expect(page.locator('main label').filter({ hasText: /cloves|carrot/i }).first()).toBeVisible()
 
   // The Plan tab still lists the planned meal.
   await gotoTab(page, 'Plan')
@@ -162,7 +168,7 @@ test('the full empty state reappears after clearing a custom-only list', async (
 
   await checkAllGroceryItems(page)
   const toast = confirmToast(page)
-  await expect(toast).toContainText('All items checked — clear the list?')
+  await expect(toast).toContainText('All items checked — clear the grocery list? Ingredients stay hidden until you cook the meals.')
   await toast.locator('[data-test=toast-action-primary]').click()
 
   // Nothing planned + nothing custom → the "Nothing to buy yet" empty state.
@@ -229,4 +235,128 @@ test('cooking view completion offers "Mark as cooked" and records it', async ({ 
   await gotoTab(page, 'Plan')
   await expect(page.getByText('Your meal plan is empty')).toBeVisible()
   await expect(page.getByRole('heading', { name: meal })).toHaveCount(0)
+})
+/* ---------- Phase 9: clear REMOVES ingredients ---------- */
+
+/** Remove a planned meal from the Plan tab (by name). */
+async function removeMealFromPlan(page: Page, name: string): Promise<void> {
+  await gotoTab(page, 'Plan')
+  // Plan rows carry the FULL recipe title — match as a prefix.
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const remove = new RegExp(`^Remove ${escaped}[^\\r\n]* from plan$`)
+  await page.getByRole('button', { name: remove }).click()
+  await expect(page.getByRole('heading', { name: new RegExp(`^${escaped}[^\r\n]*$`) })).toHaveCount(0)
+}
+
+/** Re-add a recipe by name from the Recipes tab (fresh planning). */
+async function reAddRecipe(page: Page, name: string): Promise<void> {
+  await gotoTab(page, 'Recipes')
+  await page.getByLabel('Search recipes or ingredients').fill(name.split(' ')[0])
+  await openRecipeDetail(page, new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
+  await page.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
+}
+
+test('clear removes planned ingredients: list empties, plan keeps the meals', async ({
+  page,
+}) => {
+  const meal = await planFirstRecipe(page)
+  await gotoTab(page, 'Grocery')
+  await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+
+  // Check one item so the Clear-list button appears, then clear.
+  await page.locator('main input[type=checkbox]').first().click()
+  await page.locator('[data-test=clear-list]').click()
+  await confirmToast(page).locator('[data-test=toast-action-primary]').click()
+
+  // 0 lines despite the meal still being planned.
+  await expect(page.getByTestId('cleared-empty')).toBeVisible()
+  await expect(page.locator('main label').filter({ hasText: /cloves|garlic/i })).toHaveCount(0)
+
+  // The Plan tab still shows the meal.
+  await gotoTab(page, 'Plan')
+  await expect(page.getByRole('heading', { name: meal })).toBeVisible()
+
+  // (f) Reload: the cleared snapshot persists — the list stays empty.
+  await page.reload()
+  await gotoTab(page, 'Grocery')
+  await expect(page.getByTestId('cleared-empty')).toBeVisible({ timeout: 10_000 })
+  const persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('mealime-planner:v1:plan') ?? '{}'),
+  )
+  expect(Object.keys(persisted.clearedIngredients ?? {})).toHaveLength(1)
+})
+
+test('re-adding the same recipe returns its ingredients', async ({ page }) => {
+  const meal = await planFirstRecipe(page)
+  await gotoTab(page, 'Grocery')
+  await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+
+  await page.locator('main input[type=checkbox]').first().click()
+  await page.locator('[data-test=clear-list]').click()
+  await confirmToast(page).locator('[data-test=toast-action-primary]').click()
+  await expect(page.getByTestId('cleared-empty')).toBeVisible()
+
+  // Remove + re-add the SAME recipe: fresh planning = fresh ingredients.
+  await removeMealFromPlan(page, meal)
+  await reAddRecipe(page, meal)
+
+  await gotoTab(page, 'Grocery')
+  await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByTestId('cleared-empty')).toHaveCount(0)
+})
+
+test('shared ingredient cleared by one meal still appears from the other after re-add', async ({
+  page,
+}) => {
+  // Meal A: first catalog recipe (has garlic). Meal B: also has garlic.
+  await planFirstRecipe(page)
+  await gotoTab(page, 'Recipes')
+  await page.getByLabel('Search recipes or ingredients').fill('Carrot Ginger-Turmeric')
+  await openRecipeDetail(page, /Carrot Ginger-Turmeric Soup/)
+  await page.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
+
+  // Clear: BOTH meals' ingredients (including the shared garlic) hidden.
+  await gotoTab(page, 'Grocery')
+  await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+  await page.locator('main input[type=checkbox]').first().click()
+  await page.locator('[data-test=clear-list]').click()
+  await confirmToast(page).locator('[data-test=toast-action-primary]').click()
+  await expect(page.getByTestId('cleared-empty')).toBeVisible()
+
+  // Re-add ONLY meal B (Carrot Ginger-Turmeric Soup): its garlic returns,
+  // meal A's cleared ingredients stay hidden.
+  await removeMealFromPlan(page, 'Carrot Ginger-Turmeric Soup')
+  await reAddRecipe(page, 'Carrot Ginger-Turmeric Soup')
+
+  await gotoTab(page, 'Grocery')
+  const garlic = page.locator('main label').filter({ hasText: /garlic/i })
+  await expect(garlic).toHaveCount(1, { timeout: 10_000 })
+  // Garlic comes only from the re-added meal — no "2 recipes" pill.
+  await expect(garlic.first().getByText('2 recipes')).toHaveCount(0)
+})
+
+test('marking a cleared meal cooked forgets its cleared snapshot', async ({ page }) => {
+  const meal = await planFirstRecipe(page)
+  await gotoTab(page, 'Grocery')
+  await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+
+  await page.locator('main input[type=checkbox]').first().click()
+  await page.locator('[data-test=clear-list]').click()
+  await confirmToast(page).locator('[data-test=toast-action-primary]').click()
+  await expect(page.getByTestId('cleared-empty')).toBeVisible()
+
+  // Cooking the meal removes it AND its cleared entry…
+  await gotoTab(page, 'Plan')
+  await page.getByRole('button', { name: `Mark ${meal} as cooked` }).click()
+  await expect(page.getByText('Your meal plan is empty')).toBeVisible()
+  const persisted = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('mealime-planner:v1:plan') ?? '{}'),
+  )
+  expect(persisted.clearedIngredients ?? {}).toEqual({})
+
+  // …so planning it again yields fresh ingredients.
+  await reAddRecipe(page, meal)
+  await gotoTab(page, 'Grocery')
+  await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByTestId('cleared-empty')).toHaveCount(0)
 })

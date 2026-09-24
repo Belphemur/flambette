@@ -140,6 +140,45 @@ test('reconnect: reloading B keeps it live in the room', async ({ browser }) => 
   await ctxB.close()
 })
 
+test('room sync: A clears the grocery list and B sees it empty', async ({ browser }) => {
+  const ctxA = await browser.newContext()
+  const a = await ctxA.newPage()
+  await blockExternalRequests(a)
+
+  const recipeName = await planARecipe(a)
+  const roomUrl = await startLiveRoom(a)
+
+  const ctxB = await browser.newContext()
+  const b = await ctxB.newPage()
+  await blockExternalRequests(b)
+  await b.goto(roomUrl)
+  await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 10_000 })
+
+  // B initially sees the (non-empty) shared grocery list.
+  await b.goto('/grocery')
+  await expect(b.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+
+  // A clears the list from the Grocery tab…
+  await a.goto('/grocery')
+  await expect(a.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+  await a.locator('main input[type=checkbox]').first().click()
+  await a.locator('[data-test=clear-list]').click()
+  await a.getByTestId('toast').getByTestId('toast-action-primary').click()
+  await expect(a.getByTestId('cleared-empty')).toBeVisible()
+
+  // …and B's list empties live (cleared ingredients are household state).
+  await expect(b.getByTestId('cleared-empty')).toBeVisible({ timeout: 10_000 })
+  await expect(b.locator('[data-test=shop-row]')).toHaveCount(0)
+
+  // The meal itself stays shared on both plan tabs.
+  await b.goto('/plan')
+  await expect(b.getByRole('heading', { level: 3, name: recipeName })).toBeVisible()
+
+  void ctxA
+  await ctxA.close()
+  await ctxB.close()
+})
+
 test('joining an unknown room surfaces an error state', async ({ page }) => {
   await blockExternalRequests(page)
   await page.goto('/plan?room=ZZZZZZ')

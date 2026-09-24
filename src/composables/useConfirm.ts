@@ -6,9 +6,12 @@ import { useUiStore } from '../stores/ui'
  * Clear-grocery confirmation workflow, shared by the Grocery tab and
  * Shopping mode.
  *
- * "Clear" wipes ONLY the grocery UI state: the checkbox map and the
- * free-form custom items. Planned meals stay in the plan (the grocery
- * list is derived, so it empties itself) — see the phase-7 brief.
+ * "Clear" REMOVES the planned meals' ingredients from the grocery list:
+ * each planned meal's ingredient names are snapshotted into the plan
+ * store's clearedIngredients map (persisted, room-synced), so the derived
+ * list stays empty until the meals are cooked or re-planned fresh. The
+ * checkbox map and free-form custom items are wiped as before — see the
+ * phase-9 brief.
  */
 
 /**
@@ -18,15 +21,33 @@ import { useUiStore } from '../stores/ui'
  */
 let prompting = false
 
+/**
+ * Provider for the per-meal ingredient snapshots taken at clear time:
+ * variantId -> nameKey-normalized ingredient keys. Registered by
+ * useGroceryList(), which owns the loaded recipe docs the snapshot needs.
+ */
+let snapshotProvider: (() => Record<number, string[]>) | null = null
+
+export function registerClearSnapshotProvider(fn: () => Record<number, string[]>): void {
+  snapshotProvider = fn
+}
+
 /** True when at least one grocery line is checked. */
 function anythingChecked(): boolean {
   return Object.values(useGroceryStore().map).some(Boolean)
 }
 
-/** Wipe checkbox state + custom items; planned meals stay in the plan. */
+/**
+ * Snapshot + hide every planned meal's ingredients, wipe checkbox state
+ * and custom items; planned meals stay in the plan.
+ */
 function performClear(): void {
+  const planStore = usePlanStore()
+  if (snapshotProvider) {
+    planStore.clearIngredientsForCurrentMeals(snapshotProvider())
+  }
   useGroceryStore().clearAll()
-  usePlanStore().clearCustomItems()
+  planStore.clearCustomItems()
 }
 
 /**
@@ -40,7 +61,7 @@ function performClear(): void {
  * (qodo finding 1).
  */
 export function confirmAndClearGrocery(
-  message = 'Clear the grocery list?',
+  message = 'Clear the grocery list? Ingredients stay hidden until you cook the meals.',
 ): Promise<void> {
   return new Promise((resolve) => {
     const ui = useUiStore()
@@ -68,7 +89,9 @@ export function confirmAndClearGrocery(
           label: 'Clear',
           run: () => {
             settle(true)
-            ui.showToast('Grocery list cleared')
+            ui.showToast(
+              'Grocery list cleared — ingredients return when you plan again',
+            )
           },
         },
         {

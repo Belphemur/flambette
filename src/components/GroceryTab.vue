@@ -68,36 +68,49 @@ function addNewItem() {
     </div>
 
     <template v-else>
-      <button
-        class="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-bold text-white shadow-sm active:bg-primary-dark"
-        data-test="start-shopping"
-        @click="router.push('/shop')"
-      >
-        🛒 Start shopping
-      </button>
-
+      <!-- Meals planned but every ingredient cleared (phase 9) -->
       <div
-        class="sticky top-12 z-10 -mx-4 flex items-center justify-between border-b dark:border-stone-700 dark:bg-stone-950/95 px-4 py-2 backdrop-blur"
+        v-if="totalCount === 0 && plan.plan.length > 0"
+        class="py-16 text-center text-stone-400"
+        data-test="cleared-empty"
       >
-        <p class="text-sm font-semibold" aria-live="polite">
-          {{ checkedCount }} / {{ totalCount }} items
-        </p>
-        <div class="h-1.5 w-24 overflow-hidden rounded-full dark:bg-stone-700">
-          <div
-            class="h-full rounded-full bg-primary transition-all"
-            :style="{ width: totalCount ? `${(checkedCount / totalCount) * 100}%` : '0%' }"
-          />
-        </div>
-        <button
-          v-if="checkedCount > 0"
-          class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium dark:text-stone-400 dark:hover:bg-stone-700"
-          data-test="clear-list"
-          aria-label="Clear grocery list"
-          @click="confirmAndClearGrocery()"
-        >
-          ♻️ Clear list
-        </button>
+        <p class="text-4xl">🧹</p>
+        <p class="mt-2 font-medium">All ingredients cleared.</p>
+        <p class="mt-1 text-sm">They'll come back when you plan new recipes.</p>
       </div>
+
+      <template v-else>
+        <button
+          class="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-bold text-white shadow-sm active:bg-primary-dark"
+          data-test="start-shopping"
+          @click="router.push('/shop')"
+        >
+          🛒 Start shopping
+        </button>
+
+        <div
+          class="sticky top-12 z-10 -mx-4 flex items-center justify-between border-b dark:border-stone-700 dark:bg-stone-950/95 px-4 py-2 backdrop-blur"
+        >
+          <p class="text-sm font-semibold" aria-live="polite">
+            {{ checkedCount }} / {{ totalCount }} items
+          </p>
+          <div class="h-1.5 w-24 overflow-hidden rounded-full dark:bg-stone-700">
+            <div
+              class="h-full rounded-full bg-primary transition-all"
+              :style="{ width: totalCount ? `${(checkedCount / totalCount) * 100}%` : '0%' }"
+            />
+          </div>
+          <button
+            v-if="checkedCount > 0"
+            class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium dark:text-stone-400 dark:hover:bg-stone-700"
+            data-test="clear-list"
+            aria-label="Clear grocery list"
+            @click="confirmAndClearGrocery()"
+          >
+            ♻️ Clear list
+          </button>
+        </div>
+      </template>
 
       <form class="flex gap-2" data-test="add-item-form" @submit.prevent="addNewItem">
         <input
@@ -209,7 +222,7 @@ function addNewItem() {
 
       <p class="pt-2 pb-4 text-center text-xs text-stone-400">
         {{ plan.plan.length }} meal{{ plan.plan.length === 1 ? '' : 's' }} ·
-        {{ items.length }} ingredients
+        {{ items.length }} ingredients shown
       </p>
     </template>
   </section>

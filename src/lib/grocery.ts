@@ -40,7 +40,7 @@ function unitKey(unit: string): string {
  * -oes (potatoes→potato), -ses/-xes/-zes/-ches/-shes (bunches→bunch), plain -s
  * (carrots→carrot). Merge key only — display keeps the first-seen spelling.
  */
-function nameKey(name: string): string {
+export function nameKey(name: string): string {
   const s = name.trim().toLowerCase()
   if (s.length > 3 && s.endsWith('oes')) return s.slice(0, -2)
   if (
@@ -75,6 +75,8 @@ export interface AggregateInput {
   factor: number
   /** Display name of the planned meal (for provenance). */
   recipeName: string
+  /** nameKey-normalized ingredient keys hidden for THIS meal only. */
+  cleared?: Set<string>
 }
 
 /**
@@ -85,14 +87,19 @@ export interface AggregateInput {
  *   amounts with genuinely different units stay separate lines
  * - pass unparseable quantities through verbatim
  * - track which planned meals use each ingredient
+ * - skip ingredients cleared per meal (cleared set): an ingredient cleared
+ *   by one meal still appears if another planned meal uses it
  */
 export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   const groups = new Map<string, Group>()
 
-  for (const { doc, factor, recipeName } of inputs) {
+  for (const { doc, factor, recipeName, cleared } of inputs) {
     for (const item of doc.line_items) {
       const normalized = nameKey(item.ingredient_name)
       if (!normalized) continue
+      // Hidden for this meal (cleared from the grocery list) — skipped
+      // entirely, other meals' contributions are aggregated separately.
+      if (cleared?.has(normalized)) continue
       let group = groups.get(normalized)
       if (!group) {
         group = { name: item.ingredient_name.trim(), byUnit: new Map(), raw: new Set(), recipes: new Set() }

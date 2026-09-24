@@ -10,6 +10,8 @@ interface SharedState {
   plan: { variantId: number; servings: number }[]
   customItems: string[]
   checked: Record<string, boolean>
+  /** variantId -> nameKey-normalized ingredient keys cleared per meal. */
+  cleared?: Record<number, string[]>
 }
 
 const PUSH_DEBOUNCE_MS = 300
@@ -60,6 +62,7 @@ export const useRoomStore = defineStore('room', () => {
       plan: plan.plan.map((e) => ({ variantId: e.variantId, servings: e.servings })),
       customItems: [...plan.customItems],
       checked,
+      cleared: { ...plan.clearedIngredients },
     }
   }
 
@@ -72,6 +75,7 @@ export const useRoomStore = defineStore('room', () => {
         if (value) checked[key] = true
       }
       grocery.map = checked
+      plan.setClearedIngredients(state.cleared ?? {})
     } finally {
       applyingRemote = false
     }
@@ -94,7 +98,7 @@ export const useRoomStore = defineStore('room', () => {
   // flush: 'sync' so remote snapshots applied inside applyRemote() (guarded
   // by `applyingRemote`) never echo back as new pushes.
   watch(
-    () => [plan.plan, plan.customItems, grocery.map] as const,
+    () => [plan.plan, plan.customItems, grocery.map, plan.clearedIngredients] as const,
     () => schedulePush(),
     { deep: true, flush: 'sync' },
   )

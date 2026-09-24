@@ -29,6 +29,10 @@ export const usePlanStore = defineStore(
     const customItems = ref<string[]>([])
     /** Personal cooked-meal history — NOT part of the shared room state. */
     const cookedHistory = ref<CookedEntry[]>([])
+    /** variantId -> nameKey-normalized ingredient keys cleared from the
+     *  grocery list for that meal. Stays until the meal is cooked or
+     *  re-planned fresh. Part of the shared room state. */
+    const clearedIngredients = ref<Record<number, string[]>>({})
 
     function planContains(variantId: number): boolean {
       return plan.value.some((e) => e.variantId === variantId)
@@ -40,6 +44,8 @@ export const usePlanStore = defineStore(
         existing.servings = servings
         return
       }
+      // Fresh planning = fresh ingredients: forget any cleared snapshot.
+      delete clearedIngredients.value[meta.id]
       plan.value.push({ variantId: meta.id, servings })
     }
 
@@ -77,12 +83,40 @@ export const usePlanStore = defineStore(
     }
 
     /**
+     * Clear-grocery workflow: snapshot each currently planned meal's
+     * ingredient name keys (per-variant maps of nameKey-normalized names,
+     * provided by the caller — the grocery engine holds the recipe docs).
+     * The cleared ingredients stay hidden in the derived grocery list until
+     * the meal is cooked or re-planned fresh.
+     */
+    function clearIngredientsForCurrentMeals(keysByVariant: Record<number, string[]>): void {
+      for (const entry of plan.value) {
+        const keys = keysByVariant[entry.variantId]
+        if (keys?.length) {
+          clearedIngredients.value[entry.variantId] = [...new Set(keys)]
+        }
+      }
+    }
+
+    /** Forget a meal's cleared snapshot (meal re-planned or cooked). */
+    function restoreIngredients(variantId: number): void {
+      delete clearedIngredients.value[variantId]
+    }
+
+    /** Replace the cleared map wholesale (room-sync apply path). */
+    function setClearedIngredients(value: Record<number, string[]>): void {
+      clearedIngredients.value = value
+    }
+
+    /**
      * Mark a meal as cooked: drop it from the plan and record it in the
      * personal (not room-synced) cooked history, newest first, capped.
-     * Its grocery lines disappear automatically — the list is derived.
+     * Its grocery lines disappear automatically — the list is derived —
+     * and its cleared snapshot is forgotten (nothing left to remember).
      */
     function markCooked(variantId: number): void {
       removeFromPlan(variantId)
+      restoreIngredients(variantId)
       cookedHistory.value = [
         { variantId, cookedAt: Date.now() },
         ...cookedHistory.value.filter((e) => e.variantId !== variantId),
@@ -115,16 +149,20 @@ export const usePlanStore = defineStore(
       addCustomItem,
       removeCustomItem,
       clearCustomItems,
+      clearIngredientsForCurrentMeals,
+      restoreIngredients,
+      setClearedIngredients,
       markCooked,
       isCookedRecently,
       replacePlan,
       cookedHistory,
+      clearedIngredients,
     }
   },
   {
     persist: {
       key: 'mealime-planner:v1:plan',
-      pick: ['plan', 'customItems', 'cookedHistory'],
+      pick: ['plan', 'customItems', 'cookedHistory', 'clearedIngredients'],
     },
   },
 )
