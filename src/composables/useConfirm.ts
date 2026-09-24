@@ -33,6 +33,11 @@ function performClear(): void {
  * Show a non-blocking confirmation toast ("Clear the grocery list?" with
  * Clear / Cancel, 10 s auto-dismiss) and clear on confirmation.
  * No-op (no prompt) when nothing is checked. Resolves once settled.
+ *
+ * The prompting guard is reset by the toast's onDismiss, which the ui
+ * store fires on EVERY end path — timeout, replacement by another toast,
+ * or dismissToast() — so a timed-out prompt can never wedge the guard
+ * (qodo finding 1).
  */
 export function confirmAndClearGrocery(
   message = 'Clear the grocery list?',
@@ -46,25 +51,29 @@ export function confirmAndClearGrocery(
     }
 
     prompting = true
+    let settled = false
+    const settle = (clear: boolean) => {
+      if (settled) return
+      settled = true
+      prompting = false
+      if (clear) performClear()
+      resolve()
+    }
+
     ui.showToast(message, {
       duration: 10_000,
+      onDismiss: () => settle(false),
       actions: [
         {
           label: 'Clear',
           run: () => {
-            performClear()
-            prompting = false
+            settle(true)
             ui.showToast('Grocery list cleared')
-            resolve()
           },
         },
         {
           label: 'Cancel',
-          run: () => {
-            ui.dismissToast()
-            prompting = false
-            resolve()
-          },
+          run: () => ui.dismissToast(), // onDismiss settles the promise
         },
       ],
     })

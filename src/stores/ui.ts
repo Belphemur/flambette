@@ -20,6 +20,18 @@ export interface Toast {
   actions?: ToastAction[]
 }
 
+export interface ToastOptions {
+  /** Inline buttons rendered next to the message. */
+  actions?: ToastAction[]
+  /** Auto-dismiss delay in ms (default 2500). */
+  duration?: number
+  /**
+   * Called exactly once when the toast ends, whatever the cause:
+   * timeout, replacement by a newer toast, or dismissToast().
+   */
+  onDismiss?: () => void
+}
+
 /**
  * UI state not owned by the router: cooking step positions (survive tab
  * switches within a session) and transient toasts. Not persisted.
@@ -35,6 +47,8 @@ export const useUiStore = defineStore(
     /** Transient toast: plain message, optionally with inline action buttons. */
     const toast = ref<Toast | null>(null)
     let toastTimer: ReturnType<typeof setTimeout> | undefined
+    /** Dismissal callback of the toast currently on screen. */
+    let onDismiss: (() => void) | undefined
 
     function setCookingStep(variantId: number, step: number) {
       cookingStepIndex.value[variantId] = step
@@ -44,19 +58,29 @@ export const useUiStore = defineStore(
       return cookingStepIndex.value[variantId] ?? 0
     }
 
-    function showToast(
-      message: string,
-      options: { actions?: ToastAction[]; duration?: number } = {},
-    ) {
+    /** End the current toast (if any) and fire its onDismiss exactly once. */
+    function endToast() {
+      if (toastTimer) {
+        clearTimeout(toastTimer)
+        toastTimer = undefined
+      }
+      const cb = onDismiss
+      onDismiss = undefined
+      toast.value = null
+      cb?.()
+    }
+
+    function showToast(message: string, options: ToastOptions = {}) {
+      // A replacing toast ends the previous one first (its onDismiss fires).
+      endToast()
+      onDismiss = options.onDismiss
       toast.value = { message, actions: options.actions }
-      if (toastTimer) clearTimeout(toastTimer)
-      toastTimer = setTimeout(() => (toast.value = null), options.duration ?? 2500)
+      toastTimer = setTimeout(endToast, options.duration ?? 2500)
     }
 
     /** Dismiss the current toast immediately (e.g. the Cancel button). */
     function dismissToast() {
-      if (toastTimer) clearTimeout(toastTimer)
-      toast.value = null
+      endToast()
     }
 
     return {

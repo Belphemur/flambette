@@ -97,24 +97,27 @@ export function useGroceryList() {
   /* ---------- Clear-grocery workflow ---------- */
 
   /**
-   * Auto-trigger (decision 1): when the last grocery item gets checked
-   * (totalCount > 0 and checkedCount reaches the total), prompt to clear
-   * the list. Armed only after a transition through not-full, so a page
-   * loaded with everything already checked does not prompt on its own.
-   * Both views share this composable, and confirmAndClearGrocery()
-   * dedupes concurrent prompts via its module-level guard.
+   * Auto-trigger (decision 1): prompt when the user CHECKS the last item.
+   *
+   * We watch the checkbox map itself, not the computed counts: only a
+   * checkbox toggle can fire the prompt. Plan edits that move the counts
+   * without a toggle (removing a planned meal, re-adding an item whose
+   * persisted key is still checked) must not prompt (qodo finding 2),
+   * and having no armed-state means a one-item list checked for the
+   * first time prompts correctly (qodo finding 3). A page loaded with
+   * everything already checked never self-prompts — its map is untouched
+   * until the user toggles something. confirmAndClearGrocery() dedupes
+   * concurrent prompts via its module-level guard.
    */
-  let allCheckedArmed = false
-  watch([checkedCount, totalCount], ([checked, total]) => {
-    if (total === 0 || checked < total) {
-      allCheckedArmed = true
-      return
-    }
-    if (allCheckedArmed) {
-      allCheckedArmed = false
+  watch(
+    () => checked.map,
+    () => {
+      const total = totalCount.value
+      if (total === 0 || checkedCount.value < total) return
       void confirmAndClearGrocery('All items checked — clear the list?')
-    }
-  })
+    },
+    { deep: true },
+  )
 
   return {
     plan,
