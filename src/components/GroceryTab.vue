@@ -1,13 +1,75 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGroceryList } from '../lib/useGroceryList'
+import type { GroceryItem } from '../lib/grocery'
 import { usePlanStore } from '../stores/plan'
 
 const plan = usePlanStore()
 const router = useRouter()
 const { checked, loadError, loading, items, totalCount, checkedCount, sections, ensureDocs, confirmAndClearGrocery } =
   useGroceryList()
+
+/* ---------- Auto-collapse of completed categories ---------- */
+
+/** Sections the user collapsed by hand. */
+const manualCollapsed = ref(new Set<string>())
+/** Sections collapsed automatically because every item was checked off. */
+const autoCollapsed = ref(new Set<string>())
+
+function isCollapsed(name: string): boolean {
+  return manualCollapsed.value.has(name) || autoCollapsed.value.has(name)
+}
+
+/** Header click: re-open a collapsed section, or collapse an open one. */
+function toggleSection(name: string): void {
+  if (isCollapsed(name)) {
+    const m = new Set(manualCollapsed.value)
+    const a = new Set(autoCollapsed.value)
+    m.delete(name)
+    a.delete(name)
+    manualCollapsed.value = m
+    autoCollapsed.value = a
+  } else {
+    manualCollapsed.value = new Set(manualCollapsed.value).add(name)
+  }
+}
+
+/** A section is "done" when every grocery line under it is checked. */
+const sectionDone = computed(() => {
+  const m = new Map<string, boolean>()
+  for (const s of sections.value) {
+    const lines = s.items.flatMap((i) => i.lines)
+    m.set(s.name, lines.length > 0 && lines.every((l) => !!checked.map[l.key]))
+  }
+  return m
+})
+
+/**
+ * Collapse a section the moment it becomes fully checked; re-open it as
+ * soon as any item is unchecked. Manual collapses are left alone here —
+ * an uncheck re-opens only sections that were auto-collapsed.
+ */
+watch(sectionDone, (now, prev) => {
+  for (const [name, done] of now) {
+    const wasDone = prev?.get(name) ?? false
+    if (done && !wasDone) {
+      autoCollapsed.value = new Set(autoCollapsed.value).add(name)
+    } else if (!done && autoCollapsed.value.has(name)) {
+      const next = new Set(autoCollapsed.value)
+      next.delete(name)
+      autoCollapsed.value = next
+    }
+  }
+})
+
+function sectionDoneCount(section: { items: GroceryItem[] }): number {
+  return section.items.flatMap((i) => i.lines).filter((l) => !!checked.map[l.key]).length
+}
+
+function sectionTotalCount(section: { items: GroceryItem[] }): number {
+  return section.items.reduce((n, i) => n + i.lines.length, 0)
+}
 
 /* ---------- Custom (free-form) grocery items ---------- */
 
@@ -167,16 +229,43 @@ function addNewItem() {
         </ul>
       </div>
 
-      <div v-for="section in sections" :key="section.name" class="space-y-1.5">
-        <h3 class="px-1 pt-2 text-xs font-bold tracking-wider text-stone-400 uppercase">
-          {{ section.name }}
-        </h3>
-        <ul class="divide-y dark:divide-stone-800 rounded-xl dark:bg-stone-900 ring-1 dark:ring-stone-700">
+      <div
+        v-for="section in sections"
+        :key="section.name"
+        class="space-y-1.5"
+        data-test="grocery-section"
+      >
+        <button
+          class="flex w-full items-center justify-between px-1 pt-2 text-left"
+          :aria-expanded="!isCollapsed(section.name)"
+          :aria-label="`${section.name}: ${sectionDoneCount(section)} of ${sectionTotalCount(section)} checked`"
+          data-test="grocery-section-toggle"
+          @click="toggleSection(section.name)"
+        >
+          <span class="text-xs font-bold tracking-wider text-stone-400 uppercase">
+            {{ section.name }}
+          </span>
+          <span class="flex items-center gap-2">
+            <span
+              class="rounded-full bg-stone-100 px-2 py-px text-[10px] font-semibold text-stone-500 dark:bg-stone-800 dark:text-stone-400"
+              data-test="section-count-pill"
+            >{{ sectionDoneCount(section) }}/{{ sectionTotalCount(section) }}</span>
+            <span class="text-xs text-stone-400" aria-hidden="true">
+              {{ isCollapsed(section.name) ? '▸' : '▾' }}
+            </span>
+          </span>
+        </button>
+        <ul
+          v-if="!isCollapsed(section.name)"
+          class="divide-y dark:divide-stone-800 rounded-xl dark:bg-stone-900 ring-1 dark:ring-stone-700"
+          data-test="grocery-section-rows"
+        >
           <li v-for="item in section.items" :key="item.normalized">
             <div
               v-for="line in item.lines"
               :key="line.key"
               class="flex min-h-11 items-center gap-3 px-3 py-2"
+              data-test="grocery-row"
             >
               <label class="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
                 <input
