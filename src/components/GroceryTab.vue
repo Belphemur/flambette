@@ -235,26 +235,28 @@ function addNewItem() {
         class="space-y-1.5"
         data-test="grocery-section"
       >
-        <button
-          class="flex w-full items-center justify-between px-1 pt-2 text-left"
-          :aria-expanded="!isCollapsed(section.name)"
-          :aria-label="`${section.name}: ${sectionDoneCount(section)} of ${sectionTotalCount(section)} checked`"
-          data-test="grocery-section-toggle"
-          @click="toggleSection(section.name)"
-        >
-          <span class="text-xs font-bold tracking-wider text-stone-400 uppercase">
-            {{ section.name }}
-          </span>
-          <span class="flex items-center gap-2">
-            <span
-              class="rounded-full bg-stone-100 px-2 py-px text-[10px] font-semibold text-stone-500 dark:bg-stone-800 dark:text-stone-400"
-              data-test="section-count-pill"
-            >{{ sectionDoneCount(section) }}/{{ sectionTotalCount(section) }}</span>
-            <span class="text-xs text-stone-400" aria-hidden="true">
-              {{ isCollapsed(section.name) ? '▸' : '▾' }}
+        <h3 class="pt-2">
+          <button
+            class="flex w-full items-center justify-between text-left"
+            :aria-expanded="!isCollapsed(section.name)"
+            :aria-label="`${section.name}: ${sectionDoneCount(section)} of ${sectionTotalCount(section)} checked`"
+            data-test="grocery-section-toggle"
+            @click="toggleSection(section.name)"
+          >
+            <span class="text-xs font-bold tracking-wider text-stone-400 uppercase">
+              {{ section.name }}
             </span>
-          </span>
-        </button>
+            <span class="flex items-center gap-2">
+              <span
+                class="rounded-full bg-stone-100 px-2 py-px text-[10px] font-semibold text-stone-500 dark:bg-stone-800 dark:text-stone-400"
+                data-test="section-count-pill"
+              >{{ sectionDoneCount(section) }}/{{ sectionTotalCount(section) }}</span>
+              <span class="text-xs text-stone-400" aria-hidden="true">
+                {{ isCollapsed(section.name) ? '▸' : '▾' }}
+              </span>
+            </span>
+          </button>
+        </h3>
         <ul
           v-if="!isCollapsed(section.name)"
           class="divide-y dark:divide-stone-800 rounded-xl dark:bg-stone-900 ring-1 dark:ring-stone-700"
