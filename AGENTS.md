@@ -48,6 +48,11 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   `@vueuse/core` (system preference default, manual override persisted).
 - Every interactive element gets an `aria-label`; every view must work in
   dark mode.
+- **Design ADRs**: `docs/design/` holds ADR-style decision records
+  (offline catalog, derived grocery, per-serving nutrition, clear
+  semantics, rooms, Bun toolchain, auto-collapse). Skim them before
+  proposing changes; new lasting decisions get a new
+  `ADR-NNNN-slug.md` (never rewrite an accepted one in place).
 
 ## E2E rules (Playwright)
 
