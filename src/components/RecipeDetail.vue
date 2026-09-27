@@ -8,6 +8,7 @@ import { scaleSteps, type ScaledStep } from '../lib/recipe'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
 import { useFavouritesStore } from '../stores/favourites'
+import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
 import { onMounted, onUnmounted } from 'vue'
 
 const plan = usePlanStore()
@@ -52,6 +53,20 @@ const macroBars = computed(() => {
 })
 
 const inPlan = computed(() => (meta.value ? plan.planContains(meta.value.id) : false))
+
+/** Personal cooked history (this device only, ADR-0011). */
+const cooked = useCookHistory()
+const cookCount = computed(() => (meta.value ? cooked.count(meta.value.id) : 0))
+const cookLine = computed(() => {
+  if (cookCount.value === 0) return null
+  const times = cookCount.value === 1 ? '1 time' : `${cookCount.value} times`
+  const last = meta.value ? cooked.last(meta.value.id) : null
+  return last ? `Cooked ${times} · last ${formatRelative(last)}` : `Cooked ${times}`
+})
+const cookLastTitle = computed(() => {
+  const last = meta.value ? cooked.last(meta.value.id) : null
+  return last ? `Last cooked ${formatAbsolute(last)}` : undefined
+})
 
 async function loadDoc() {
   if (!meta.value) return
@@ -147,6 +162,14 @@ function startCooking() {
           <span>⏱ {{ meta.cooking_minutes }} min</span>
           <span>🍽 serves {{ servings }}</span>
           <span v-if="meta.sodium_mg">🧂 {{ Math.round(meta.sodium_mg) }} mg sodium</span>
+        </p>
+        <p
+          v-if="cookLine"
+          class="text-sm font-medium text-primary-dark dark:text-primary"
+          :title="cookLastTitle"
+          data-test="cook-history"
+        >
+          🍳 {{ cookLine }}
         </p>
       </header>
 

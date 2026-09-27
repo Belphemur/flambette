@@ -7,7 +7,11 @@ export interface PlanEntry {
   servings: number
 }
 
-/** One "cooked this meal" event, newest first in the history. */
+/** One "cooked this meal" event, newest first in the history.
+ *
+ *  One row PER EVENT: cooking the same meal twice appends two rows so
+ *  the UI can aggregate a cook count (ADR-0011). Newest first, capped.
+ */
 export interface CookedEntry {
   variantId: number
   cookedAt: number
@@ -109,17 +113,19 @@ export const usePlanStore = defineStore(
     }
 
     /**
-     * Mark a meal as cooked: drop it from the plan and record it in the
-     * personal (not room-synced) cooked history, newest first, capped.
-     * Its grocery lines disappear automatically — the list is derived —
-     * and its cleared snapshot is forgotten (nothing left to remember).
+     * Mark a meal as cooked: drop it from the plan and record a cooked
+     * EVENT in the personal (not room-synced) cooked history, newest
+     * first, capped. Every cook appends its own row — the UI aggregates
+     * per-variant counts (ADR-0011). Its grocery lines disappear
+     * automatically — the list is derived — and its cleared snapshot is
+     * forgotten (nothing left to remember).
      */
     function markCooked(variantId: number): void {
       removeFromPlan(variantId)
       restoreIngredients(variantId)
       cookedHistory.value = [
         { variantId, cookedAt: Date.now() },
-        ...cookedHistory.value.filter((e) => e.variantId !== variantId),
+        ...cookedHistory.value,
       ].slice(0, COOKED_HISTORY_CAP)
     }
 
