@@ -84,6 +84,11 @@ function addNewItem(payload: { name: string; category: string }) {
     customIngredients.remember(payload.name, payload.category)
   }
 }
+
+/** Remembered store category for a custom row (undefined when unknown). */
+function customCategory(item: string): string | undefined {
+  return customIngredients.find(item)?.category
+}
 </script>
 
 <template>
@@ -189,6 +194,14 @@ function addNewItem(payload: { name: string; category: string }) {
                 class="min-w-0 truncate text-sm"
                 :class="checked.map[`custom||${item.toLowerCase()}`] ? 'text-stone-400 line-through' : ''"
               >{{ item }}</span>
+              <!-- Remembered store category (ADR-0012): device-local chip
+                   from the typed-name memory; a shrink-0 flex sibling
+                   OUTSIDE the truncating span, so it is never clipped. -->
+              <span
+                v-if="customCategory(item)"
+                class="shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold text-stone-500 dark:bg-stone-800 dark:text-stone-400"
+                data-test="custom-item-category"
+              >{{ customCategory(item) }}</span>
             </label>
             <button
               class="flex size-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:text-rose-600"

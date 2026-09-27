@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { STORE_SECTIONS } from '../lib/sections'
 import {
   suggestIngredients,
@@ -46,32 +46,28 @@ const showCategory = computed(() => query.value.trim().length > 0)
 const canSubmit = computed(() => query.value.trim().length > 0)
 
 let suggestToken = 0
-/** Programmatic query change (picking a suggestion) must not re-open the dropdown. */
-let suppressNext = false
-watch(
-  () => query.value,
-  async (q) => {
-    const token = ++suggestToken
-    if (suppressNext) {
-      suppressNext = false
-      return
-    }
-    const trimmed = q.trim()
-    if (trimmed.length < 2) {
-      suggestions.value = []
-      open.value = false
-      return
-    }
-    const result = await suggestIngredients(trimmed, customIngredients.list)
-    if (token !== suggestToken) return // a newer keystroke already won
-    suggestions.value = result
-    activeIndex.value = -1
-    open.value = result.length > 0
-  },
-)
+async function refreshSuggestions() {
+  const token = ++suggestToken
+  const trimmed = query.value.trim()
+  if (trimmed.length < 2) {
+    suggestions.value = []
+    open.value = false
+    return
+  }
+  const result = await suggestIngredients(trimmed, customIngredients.list)
+  if (token !== suggestToken) return // a newer keystroke already won
+  suggestions.value = result
+  activeIndex.value = -1
+  open.value = result.length > 0
+}
+
+/** Real user typing only — programmatic value sets never fire input. */
+function onInput(event: Event) {
+  query.value = (event.target as HTMLInputElement).value
+  void refreshSuggestions()
+}
 
 function choose(s: IngredientSuggestion) {
-  suppressNext = true
   query.value = s.name
   category.value = s.category
   open.value = false
@@ -165,7 +161,7 @@ const ariaLabel = 'Add a custom grocery item'
       @submit.prevent="submit"
     >
       <input
-        v-model="query"
+        :value="query"
         type="text"
         maxlength="80"
         :placeholder="'Add an item not in the recipes…'"
@@ -177,6 +173,7 @@ const ariaLabel = 'Add a custom grocery item'
         :aria-activedescendant="activeIndex >= 0 ? optionId(activeIndex) : undefined"
         class="h-11 w-full rounded-xl border dark:border-stone-700 dark:bg-stone-900 px-4 text-sm outline-none focus:border-primary"
         data-test="ingredient-input"
+        @input="onInput"
         @keydown="onKeydown"
       />
       <button
