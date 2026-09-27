@@ -1,4 +1,5 @@
 import { parseQuantity, formatAmount } from './quantity'
+import { isSeasoning, scaleQuantity } from './recipe'
 import { bucketFor, type StoreSection } from './sections'
 import type { RecipeDoc } from './types'
 
@@ -81,7 +82,8 @@ export interface AggregateInput {
 
 /**
  * Aggregate line items across all planned recipes (grocery spec v2):
- * - scale parseable quantities by each meal's serving factor
+ * - scale parseable quantities by each meal's serving factor — linearly
+ *   for ingredients, sub-linearly + capped for seasonings (ADR-0009)
  * - group by normalized ingredient name (no stemming/plural-merging of names)
  * - normalize units before summing ("2 cloves" + "1 clove" → "3 cloves");
  *   amounts with genuinely different units stay separate lines
@@ -94,6 +96,10 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   const groups = new Map<string, Group>()
 
   for (const { doc, factor, recipeName, cleared } of inputs) {
+    // ADR-0009: seasonings scale sub-linearly against the recipe's own
+    // authored serving count, so keep base/target, not just the ratio.
+    const base = doc.serving_count
+    const target = base * factor
     for (const item of doc.line_items) {
       const normalized = nameKey(item.ingredient_name)
       if (!normalized) continue
@@ -109,9 +115,16 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       const parsed = parseQuantity(item.quantity)
       if (parsed) {
         const key = unitKey(parsed.unit)
+        const scaled = scaleQuantity(
+          parsed.amount,
+          base,
+          target,
+          isSeasoning(item.ingredient_name),
+          item.ingredient_name,
+        )
         const current = group.byUnit.get(key)
-        if (current) current.amount += parsed.amount * factor
-        else group.byUnit.set(key, { unit: parsed.unit, amount: parsed.amount * factor })
+        if (current) current.amount += scaled
+        else group.byUnit.set(key, { unit: parsed.unit, amount: scaled })
       } else {
         // Unparseable or empty quantity — pass through verbatim (may be '').
         group.raw.add(item.quantity.trim())

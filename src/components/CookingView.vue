@@ -33,20 +33,68 @@ const servings = computed(() => {
 const factor = computed(() => (doc.value ? servings.value / doc.value.serving_count : 1))
 const steps = computed<ScaledStep[]>(() => (doc.value ? scaleSteps(doc.value, factor.value) : []))
 
+/* ---------- Step views: single steps + "Meanwhile" pairs (ADR-0010) ----------
+ *
+ * A step whose text opens with "Meanwhile" runs concurrently with the
+ * PREVIOUS step, so it is rendered together with it as one view. Views
+ * are keyed by their leader (the non-concurrent step); navigation moves
+ * whole views, so a pair advances the cursor by two raw steps.
+ */
+interface StepView {
+  leader: number
+  partner: number | null
+}
+
+const views = computed<StepView[]>(() => {
+  const list: StepView[] = []
+  for (let i = 0; i < steps.value.length; i++) {
+    const prev = list[list.length - 1]
+    if (steps.value[i].concurrent && prev && prev.partner === null) prev.partner = i
+    else list.push({ leader: i, partner: null })
+  }
+  return list
+})
+
 const stepIndex = computed(() => (meta.value ? ui.cookingStep(meta.value.id) : 0))
 const total = computed(() => steps.value.length)
-const step = computed(() => steps.value[Math.min(stepIndex.value, Math.max(total.value - 1, 0))])
-const isFirst = computed(() => stepIndex.value <= 0)
-const isLast = computed(() => stepIndex.value >= total.value - 1)
+
+/** The view showing the stored step; a stored partner index coerces to its pair. */
+const currentView = computed<StepView | null>(() => {
+  const list = views.value
+  if (!list.length) return null
+  const raw = Math.min(Math.max(stepIndex.value, 0), total.value - 1)
+  return list.find((v) => raw >= v.leader && raw <= (v.partner ?? v.leader)) ?? list[0]
+})
+const viewIndex = computed(() => (currentView.value ? views.value.indexOf(currentView.value) : -1))
+const isFirst = computed(() => viewIndex.value <= 0)
+const isLast = computed(() => viewIndex.value >= views.value.length - 1)
+
+/** One or two steps currently on screen (leader first, then the partner). */
+const visibleSteps = computed(() => {
+  const v = currentView.value
+  if (!v) return []
+  const out = [{ step: steps.value[v.leader], partner: false }]
+  if (v.partner !== null) out.push({ step: steps.value[v.partner], partner: true })
+  return out
+})
+
+/** "Step 3 / 12", or "Steps 3–4 / 12" for a Meanwhile pair. */
+const counterLabel = computed(() => {
+  const v = currentView.value
+  if (!v) return ''
+  return v.partner !== null
+    ? `Steps ${v.leader + 1}–${v.partner + 1} / ${total.value}`
+    : `Step ${v.leader + 1} / ${total.value}`
+})
 
 function next() {
-  if (meta.value && stepIndex.value < total.value - 1) {
-    ui.setCookingStep(meta.value.id, stepIndex.value + 1)
+  if (meta.value && viewIndex.value < views.value.length - 1) {
+    ui.setCookingStep(meta.value.id, views.value[viewIndex.value + 1].leader)
   }
 }
 function prev() {
-  if (meta.value && stepIndex.value > 0) {
-    ui.setCookingStep(meta.value.id, stepIndex.value - 1)
+  if (meta.value && viewIndex.value > 0) {
+    ui.setCookingStep(meta.value.id, views.value[viewIndex.value - 1].leader)
   }
 }
 function close() {
@@ -166,7 +214,7 @@ function onTouchEnd(e: TouchEvent) {
           <p class="truncate text-sm font-bold tracking-tight">{{ meta.name }}</p>
           <p class="text-xs dark:text-stone-400" aria-live="polite">
             serves {{ servings }} ·
-            <span class="font-semibold">Step {{ stepIndex + 1 }} / {{ total }}</span>
+            <span class="font-semibold" data-test="step-counter">{{ counterLabel }}</span>
           </p>
         </div>
         <span class="size-11 shrink-0" aria-hidden="true"></span>
@@ -174,7 +222,11 @@ function onTouchEnd(e: TouchEvent) {
       <div class="mx-auto mb-2 h-1 max-w-2xl overflow-hidden rounded-full dark:bg-stone-700">
         <div
           class="h-full rounded-full bg-primary transition-all"
-          :style="{ width: total ? `${((stepIndex + 1) / total) * 100}%` : '0%' }"
+          :style="{
+            width: currentView
+              ? `${(((currentView.partner ?? currentView.leader) + 1) / total) * 100}%`
+              : '0%',
+          }"
         />
       </div>
     </header>
@@ -190,23 +242,43 @@ function onTouchEnd(e: TouchEvent) {
         <div class="h-6 w-1/2 animate-pulse rounded dark:bg-stone-700" />
       </div>
 
-      <div v-else-if="step" class="mx-auto max-w-2xl space-y-6">
-        <p class="text-xl leading-relaxed font-medium sm:text-2xl sm:leading-relaxed">
-          {{ step.primary }}
-        </p>
-        <ul v-if="step.details.length" class="space-y-2">
-          <li
-            v-for="(d, j) in step.details"
-            :key="j"
-            class="flex items-start gap-3 rounded-xl dark:bg-stone-900 p-3 text-sm ring-1 dark:ring-stone-700"
+      <div
+        v-else-if="visibleSteps.length"
+        class="mx-auto max-w-2xl space-y-6"
+        :data-test="visibleSteps.length > 1 ? 'step-pair' : 'step-single'"
+      >
+        <template v-for="(vs, i) in visibleSteps" :key="i">
+          <div
+            v-if="vs.partner"
+            class="flex items-center gap-3 text-sm font-semibold text-primary-dark dark:text-primary"
+            role="separator"
+            aria-label="Meanwhile — do this at the same time"
+            data-test="meanwhile-divider"
           >
-            <span
-              class="mt-0.5 size-5 shrink-0 rounded border-2 dark:border-stone-600"
-              aria-hidden="true"
-            ></span>
-            <span class="leading-relaxed">{{ d }}</span>
-          </li>
-        </ul>
+            <span class="h-px flex-1 dark:bg-stone-700" aria-hidden="true"></span>
+            <span>⏳ Meanwhile</span>
+            <span class="h-px flex-1 dark:bg-stone-700" aria-hidden="true"></span>
+          </div>
+          <p
+            class="text-xl leading-relaxed font-medium sm:text-2xl sm:leading-relaxed"
+            :data-test="vs.partner ? 'step-partner-text' : 'step-text'"
+          >
+            {{ vs.step.primary }}
+          </p>
+          <ul v-if="vs.step.details.length" class="space-y-2">
+            <li
+              v-for="(d, j) in vs.step.details"
+              :key="j"
+              class="flex items-start gap-3 rounded-xl dark:bg-stone-900 p-3 text-sm ring-1 dark:ring-stone-700"
+            >
+              <span
+                class="mt-0.5 size-5 shrink-0 rounded border-2 dark:border-stone-600"
+                aria-hidden="true"
+              ></span>
+              <span class="leading-relaxed">{{ d }}</span>
+            </li>
+          </ul>
+        </template>
       </div>
     </div>
 
