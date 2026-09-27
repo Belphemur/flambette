@@ -11,7 +11,11 @@ host** — this is enforced by e2e (`blockExternalRequests` +
 - Pinia + `pinia-plugin-persistedstate` (keys: `mealime-planner:v1:*`)
 - vue-router 4: `/`, `/plan`, `/grocery`, `/shop`, `/recipe/:id`, `/cooking/:id`
 - MiniSearch (search), `@vueuse/core` (`useDark`, `useClipboard({ legacy: true })`)
-- WebSocket relay (`server/relay.mjs`, dep: `ws`) for live room sync
+- WebSocket relay (`server/relay.mjs`, zero-dep Bun-native WebSocket)
+  for live room sync
+- Bun 1.x toolchain (`bun.lock`); docker bases `oven/bun:1-alpine`
+  (build) + `nginx:alpine` (serve); **never pin a major** on base
+  images or actions
 
 ## Commands
 
@@ -64,8 +68,9 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   intercept hover on the Pixel 7 viewport); the grocery provenance pill
   must stay a flex sibling OUTSIDE the truncating name span, else its
   tooltip gets clipped.
-- Full suite (72+ tests × 2 projects: Desktop Chrome + Pixel 7) must pass
-  before any merge. Run `npm run build` first — vite serve hides some bugs.
+- Full suite (88 tests × 2 projects: Desktop Chrome + Pixel 7) must pass
+  before any merge. Run `bun run build` first — vite serve hides some
+  bugs.
 
 ## Known pitfalls
 
