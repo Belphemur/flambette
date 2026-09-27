@@ -1,0 +1,2034 @@
+{
+ "generatedAt": "2026-09-27T21:54:10",
+ "count": 338,
+ "ingredients": [
+  {
+   "name": "acorn squash",
+   "nameKey": "acorn squash",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "alfalfa sprouts",
+   "nameKey": "alfalfa sprout",
+   "category": "Other",
+   "unit": "(3 oz) pkgs"
+  },
+  {
+   "name": "Alfredo sauce",
+   "nameKey": "alfredo sauce",
+   "category": "Pasta & Sauces",
+   "unit": "(454 g) jars"
+  },
+  {
+   "name": "all-purpose flour",
+   "nameKey": "all-purpose flour",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "almonds",
+   "nameKey": "almond",
+   "category": "Nuts, Seeds & Dried Fruit",
+   "unit": "cup"
+  },
+  {
+   "name": "almond meal/flour",
+   "nameKey": "almond meal/flour",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "almond milk, unsweetened",
+   "nameKey": "almond milk, unsweetened",
+   "category": "Nuts, Seeds & Dried Fruit",
+   "unit": "ml"
+  },
+  {
+   "name": "almonds, sliced",
+   "nameKey": "almonds, sliced",
+   "category": "Nuts, Seeds & Dried Fruit",
+   "unit": "cup"
+  },
+  {
+   "name": "anchovy fillets, packed in oil",
+   "nameKey": "anchovy fillets, packed in oil",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "apple cider vinegar",
+   "nameKey": "apple cider vinegar",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "apricots",
+   "nameKey": "apricot",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "arrowroot starch/powder",
+   "nameKey": "arrowroot starch/powder",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "artichoke hearts, marinated",
+   "nameKey": "artichoke hearts, marinated",
+   "category": "Canned & Jarred Goods",
+   "unit": "(170 ml) jars"
+  },
+  {
+   "name": "asparagus",
+   "nameKey": "asparagu",
+   "category": "Produce",
+   "unit": "small bunches"
+  },
+  {
+   "name": "avocados",
+   "nameKey": "avocado",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "avocado oil mayonnaise",
+   "nameKey": "avocado oil mayonnaise",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "baby arugula",
+   "nameKey": "baby arugula",
+   "category": "Produce",
+   "unit": "(142 g) pkg"
+  },
+  {
+   "name": "baby bok choy",
+   "nameKey": "baby bok choy",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "baby spinach",
+   "nameKey": "baby spinach",
+   "category": "Produce",
+   "unit": "(142 g) pkg"
+  },
+  {
+   "name": "bacon",
+   "nameKey": "bacon",
+   "category": "Meat & Seafood",
+   "unit": "slices"
+  },
+  {
+   "name": "baking powder",
+   "nameKey": "baking powder",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "baking soda",
+   "nameKey": "baking soda",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "balsamic vinaigrette",
+   "nameKey": "balsamic vinaigrette",
+   "category": "Oils, Sauces & Condiments",
+   "unit": "ml"
+  },
+  {
+   "name": "balsamic vinegar",
+   "nameKey": "balsamic vinegar",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "bananas",
+   "nameKey": "banana",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "barbecue sauce",
+   "nameKey": "barbecue sauce",
+   "category": "Other",
+   "unit": null
+  },
+  {
+   "name": "basil pesto",
+   "nameKey": "basil pesto",
+   "category": "Produce",
+   "unit": "cup"
+  },
+  {
+   "name": "basil, dried",
+   "nameKey": "basil, dried",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "basmati rice",
+   "nameKey": "basmati rice",
+   "category": "Rice, Grains & Beans",
+   "unit": "cups"
+  },
+  {
+   "name": "black beans",
+   "nameKey": "black bean",
+   "category": "Rice, Grains & Beans",
+   "unit": "(398 ml) cans"
+  },
+  {
+   "name": "black pepper",
+   "nameKey": "black pepper",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "blackberries",
+   "nameKey": "blackberrie",
+   "category": "Other",
+   "unit": "(170 g) pkgs"
+  },
+  {
+   "name": "blue cheese dressing",
+   "nameKey": "blue cheese dressing",
+   "category": "Oils, Sauces & Condiments",
+   "unit": "ml"
+  },
+  {
+   "name": "blueberries",
+   "nameKey": "blueberrie",
+   "category": "Other",
+   "unit": "(170 g) pkgs"
+  },
+  {
+   "name": "broccoli",
+   "nameKey": "broccoli",
+   "category": "Produce",
+   "unit": "crowns"
+  },
+  {
+   "name": "broccoli florets",
+   "nameKey": "broccoli floret",
+   "category": "Produce",
+   "unit": "(510 g) bags"
+  },
+  {
+   "name": "broccoli slaw",
+   "nameKey": "broccoli slaw",
+   "category": "Produce",
+   "unit": "(340 g) pkgs"
+  },
+  {
+   "name": "brown lentils, dried",
+   "nameKey": "brown lentils, dried",
+   "category": "Baking & Spices",
+   "unit": "cups"
+  },
+  {
+   "name": "brown sugar",
+   "nameKey": "brown sugar",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "Brussels sprouts",
+   "nameKey": "brussels sprout",
+   "category": "Other",
+   "unit": "kg"
+  },
+  {
+   "name": "butter (Boston) lettuce",
+   "nameKey": "butter (boston) lettuce",
+   "category": "Produce",
+   "unit": "heads"
+  },
+  {
+   "name": "butter, unsalted",
+   "nameKey": "butter, unsalted",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": null
+  },
+  {
+   "name": "butternut squash",
+   "nameKey": "butternut squash",
+   "category": "Produce",
+   "unit": "small"
+  },
+  {
+   "name": "Caesar dressing",
+   "nameKey": "caesar dressing",
+   "category": "Oils, Sauces & Condiments",
+   "unit": "cup"
+  },
+  {
+   "name": "Cajun seasoning",
+   "nameKey": "cajun seasoning",
+   "category": "Other",
+   "unit": null
+  },
+  {
+   "name": "cannellini (white kidney) beans",
+   "nameKey": "cannellini (white kidney) bean",
+   "category": "Rice, Grains & Beans",
+   "unit": "(398 ml) cans"
+  },
+  {
+   "name": "capers",
+   "nameKey": "caper",
+   "category": "Canned & Jarred Goods",
+   "unit": "tbsp"
+  },
+  {
+   "name": "cardamom, ground",
+   "nameKey": "cardamom, ground",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "carrots",
+   "nameKey": "carrot",
+   "category": "Produce",
+   "unit": "medium"
+  },
+  {
+   "name": "cashews, roasted unsalted",
+   "nameKey": "cashews, roasted unsalted",
+   "category": "Nuts, Seeds & Dried Fruit",
+   "unit": "cup"
+  },
+  {
+   "name": "cauliflower",
+   "nameKey": "cauliflower",
+   "category": "Produce",
+   "unit": "medium heads"
+  },
+  {
+   "name": "cauliflower florets",
+   "nameKey": "cauliflower floret",
+   "category": "Produce",
+   "unit": "(283 g) bags"
+  },
+  {
+   "name": "cayenne pepper",
+   "nameKey": "cayenne pepper",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "celery",
+   "nameKey": "celery",
+   "category": "Produce",
+   "unit": "sticks"
+  },
+  {
+   "name": "cheddar cheese",
+   "nameKey": "cheddar cheese",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "(227 g) block"
+  },
+  {
+   "name": "cheese ravioli, fresh or frozen",
+   "nameKey": "cheese ravioli, fresh or frozen",
+   "category": "Frozen",
+   "unit": "g"
+  },
+  {
+   "name": "cheese tortellini, fresh or frozen",
+   "nameKey": "cheese tortellini, fresh or frozen",
+   "category": "Frozen",
+   "unit": "g"
+  },
+  {
+   "name": "chia seeds",
+   "nameKey": "chia seed",
+   "category": "Nuts, Seeds & Dried Fruit",
+   "unit": null
+  },
+  {
+   "name": "chicken breasts, boneless skinless",
+   "nameKey": "chicken breasts, boneless skinles",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "chicken drumsticks",
+   "nameKey": "chicken drumstick",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "chicken or vegetable broth",
+   "nameKey": "chicken or vegetable broth",
+   "category": "Canned & Jarred Goods",
+   "unit": "ml"
+  },
+  {
+   "name": "chicken thighs, boneless skinless",
+   "nameKey": "chicken thighs, boneless skinles",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "chicken wings, split with tips removed",
+   "nameKey": "chicken wings, split with tips removed",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "chili powder",
+   "nameKey": "chili powder",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "chili-garlic sauce",
+   "nameKey": "chili-garlic sauce",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "chives",
+   "nameKey": "chive",
+   "category": "Produce",
+   "unit": "small pkg"
+  },
+  {
+   "name": "chunk light tuna in water",
+   "nameKey": "chunk light tuna in water",
+   "category": "Meat & Seafood",
+   "unit": "(170 g) cans"
+  },
+  {
+   "name": "cilantro",
+   "nameKey": "cilantro",
+   "category": "Produce",
+   "unit": "small bunch"
+  },
+  {
+   "name": "cinnamon, ground",
+   "nameKey": "cinnamon, ground",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "cloves, ground",
+   "nameKey": "cloves, ground",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "cocoa powder",
+   "nameKey": "cocoa powder",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "coconut milk",
+   "nameKey": "coconut milk",
+   "category": "Canned & Jarred Goods",
+   "unit": "(398 ml) cans"
+  },
+  {
+   "name": "cod fillet",
+   "nameKey": "cod fillet",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "coriander, ground",
+   "nameKey": "coriander, ground",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "corn",
+   "nameKey": "corn",
+   "category": "Produce",
+   "unit": "ears"
+  },
+  {
+   "name": "cornstarch",
+   "nameKey": "cornstarch",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "cottage cheese",
+   "nameKey": "cottage cheese",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "cups"
+  },
+  {
+   "name": "cream cheese",
+   "nameKey": "cream cheese",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "(227 g) block"
+  },
+  {
+   "name": "cremini mushrooms",
+   "nameKey": "cremini mushroom",
+   "category": "Produce",
+   "unit": "kg"
+  },
+  {
+   "name": "crumbled blue cheese",
+   "nameKey": "crumbled blue cheese",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "(113 g) pkg"
+  },
+  {
+   "name": "crumbled feta cheese",
+   "nameKey": "crumbled feta cheese",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "(113 g) pkg"
+  },
+  {
+   "name": "crushed red pepper",
+   "nameKey": "crushed red pepper",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "cumin, ground",
+   "nameKey": "cumin, ground",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "curry powder",
+   "nameKey": "curry powder",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "dark chocolate chips",
+   "nameKey": "dark chocolate chip",
+   "category": "Baking & Spices",
+   "unit": "cup"
+  },
+  {
+   "name": "deli roast beef",
+   "nameKey": "deli roast beef",
+   "category": "Meat & Seafood",
+   "unit": "g"
+  },
+  {
+   "name": "diced tomatoes",
+   "nameKey": "diced tomato",
+   "category": "Canned & Jarred Goods",
+   "unit": "(398 ml) cans"
+  },
+  {
+   "name": "Dijon mustard",
+   "nameKey": "dijon mustard",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "dill, dried",
+   "nameKey": "dill, dried",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "dried apricots",
+   "nameKey": "dried apricot",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "dried cranberries",
+   "nameKey": "dried cranberrie",
+   "category": "Other",
+   "unit": "cup"
+  },
+  {
+   "name": "edamame",
+   "nameKey": "edamame",
+   "category": "Produce",
+   "unit": "cups"
+  },
+  {
+   "name": "eggs",
+   "nameKey": "egg",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": null
+  },
+  {
+   "name": "eggplants",
+   "nameKey": "eggplant",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "English cucumber",
+   "nameKey": "english cucumber",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "English muffins",
+   "nameKey": "english muffin",
+   "category": "Bakery",
+   "unit": null
+  },
+  {
+   "name": "extra firm tofu",
+   "nameKey": "extra firm tofu",
+   "category": "International",
+   "unit": "(340 g) pkgs"
+  },
+  {
+   "name": "extra virgin olive oil",
+   "nameKey": "extra virgin olive oil",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "fennel bulbs",
+   "nameKey": "fennel bulb",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "fettuccine pasta",
+   "nameKey": "fettuccine pasta",
+   "category": "Pasta & Sauces",
+   "unit": "g"
+  },
+  {
+   "name": "fish sauce",
+   "nameKey": "fish sauce",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "flank steaks",
+   "nameKey": "flank steak",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "flat rice (pad thai) noodles",
+   "nameKey": "flat rice (pad thai) noodle",
+   "category": "Pasta & Sauces",
+   "unit": null
+  },
+  {
+   "name": "flatbreads or naan",
+   "nameKey": "flatbreads or naan",
+   "category": "Bakery",
+   "unit": null
+  },
+  {
+   "name": "French vinaigrette",
+   "nameKey": "french vinaigrette",
+   "category": "Oils, Sauces & Condiments",
+   "unit": "ml"
+  },
+  {
+   "name": "fresh basil",
+   "nameKey": "fresh basil",
+   "category": "Produce",
+   "unit": "small pkg"
+  },
+  {
+   "name": "fresh dill",
+   "nameKey": "fresh dill",
+   "category": "Produce",
+   "unit": "small bunch"
+  },
+  {
+   "name": "fresh mint",
+   "nameKey": "fresh mint",
+   "category": "Produce",
+   "unit": "small pkg"
+  },
+  {
+   "name": "fresh mozzarella cheese",
+   "nameKey": "fresh mozzarella cheese",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "(227 g) pkg"
+  },
+  {
+   "name": "fresh rosemary",
+   "nameKey": "fresh rosemary",
+   "category": "Produce",
+   "unit": "small pkgs"
+  },
+  {
+   "name": "fresh sage",
+   "nameKey": "fresh sage",
+   "category": "Produce",
+   "unit": "small pkg"
+  },
+  {
+   "name": "fresh thyme",
+   "nameKey": "fresh thyme",
+   "category": "Produce",
+   "unit": "small pkg"
+  },
+  {
+   "name": "frozen blueberries",
+   "nameKey": "frozen blueberrie",
+   "category": "Frozen",
+   "unit": "cups"
+  },
+  {
+   "name": "frozen butternut squash, pieces",
+   "nameKey": "frozen butternut squash, piece",
+   "category": "Frozen",
+   "unit": "cups"
+  },
+  {
+   "name": "frozen cherries",
+   "nameKey": "frozen cherrie",
+   "category": "Frozen",
+   "unit": "cups"
+  },
+  {
+   "name": "frozen chopped spinach",
+   "nameKey": "frozen chopped spinach",
+   "category": "Frozen",
+   "unit": "(454 g) bags"
+  },
+  {
+   "name": "frozen corn",
+   "nameKey": "frozen corn",
+   "category": "Frozen",
+   "unit": "cups"
+  },
+  {
+   "name": "frozen mangoes",
+   "nameKey": "frozen mango",
+   "category": "Frozen",
+   "unit": "cups"
+  },
+  {
+   "name": "frozen mixed berries",
+   "nameKey": "frozen mixed berrie",
+   "category": "Frozen",
+   "unit": "cups"
+  },
+  {
+   "name": "frozen mixed vegetables (carrots, corn, green beans, peas)",
+   "nameKey": "frozen mixed vegetables (carrots, corn, green beans, peas)",
+   "category": "Frozen",
+   "unit": "cups"
+  },
+  {
+   "name": "frozen peas",
+   "nameKey": "frozen pea",
+   "category": "Frozen",
+   "unit": "cups"
+  },
+  {
+   "name": "frozen raspberries",
+   "nameKey": "frozen raspberrie",
+   "category": "Frozen",
+   "unit": "cups"
+  },
+  {
+   "name": "frozen shredded hash brown potatoes",
+   "nameKey": "frozen shredded hash brown potato",
+   "category": "Frozen",
+   "unit": "cups"
+  },
+  {
+   "name": "frozen, riced cauliflower",
+   "nameKey": "frozen, riced cauliflower",
+   "category": "Frozen",
+   "unit": "(340 g) bags"
+  },
+  {
+   "name": "Gala apples",
+   "nameKey": "gala apple",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "garam masala",
+   "nameKey": "garam masala",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "garbanzo beans (chickpeas)",
+   "nameKey": "garbanzo beans (chickpeas)",
+   "category": "Rice, Grains & Beans",
+   "unit": "(398 ml) cans"
+  },
+  {
+   "name": "garlic",
+   "nameKey": "garlic",
+   "category": "Produce",
+   "unit": "cloves"
+  },
+  {
+   "name": "garlic powder",
+   "nameKey": "garlic powder",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "ginger root",
+   "nameKey": "ginger root",
+   "category": "Produce",
+   "unit": "(2 ½ cm) pieces"
+  },
+  {
+   "name": "goat cheese",
+   "nameKey": "goat cheese",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "(113 g) logs"
+  },
+  {
+   "name": "graham crackers",
+   "nameKey": "graham cracker",
+   "category": "Snacks",
+   "unit": null
+  },
+  {
+   "name": "Granny Smith apples",
+   "nameKey": "granny smith apple",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "granola",
+   "nameKey": "granola",
+   "category": "Breakfast",
+   "unit": "cups"
+  },
+  {
+   "name": "granulated sugar",
+   "nameKey": "granulated sugar",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "grape tomatoes",
+   "nameKey": "grape tomato",
+   "category": "Produce",
+   "unit": "small pkgs"
+  },
+  {
+   "name": "grapefruits",
+   "nameKey": "grapefruit",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "green beans",
+   "nameKey": "green bean",
+   "category": "Produce",
+   "unit": "kg"
+  },
+  {
+   "name": "green bell peppers",
+   "nameKey": "green bell pepper",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "green lentils, dried",
+   "nameKey": "green lentils, dried",
+   "category": "Rice, Grains & Beans",
+   "unit": "cups"
+  },
+  {
+   "name": "green onions (scallions)",
+   "nameKey": "green onions (scallions)",
+   "category": "Produce",
+   "unit": "small bunch"
+  },
+  {
+   "name": "ground chicken",
+   "nameKey": "ground chicken",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "ground pork sausage",
+   "nameKey": "ground pork sausage",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "ground turkey",
+   "nameKey": "ground turkey",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "guacamole",
+   "nameKey": "guacamole",
+   "category": "Other",
+   "unit": "cups"
+  },
+  {
+   "name": "halibut fillet",
+   "nameKey": "halibut fillet",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "halloumi cheese",
+   "nameKey": "halloumi cheese",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "(250 g) pkgs"
+  },
+  {
+   "name": "ham steak, boneless",
+   "nameKey": "ham steak, boneles",
+   "category": "Meat & Seafood",
+   "unit": "g"
+  },
+  {
+   "name": "hard taco shells",
+   "nameKey": "hard taco shell",
+   "category": "Other",
+   "unit": null
+  },
+  {
+   "name": "hard-cooked eggs, peeled",
+   "nameKey": "hard-cooked eggs, peeled",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": null
+  },
+  {
+   "name": "heavy whipping cream",
+   "nameKey": "heavy whipping cream",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "ml"
+  },
+  {
+   "name": "hoisin sauce",
+   "nameKey": "hoisin sauce",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "honey",
+   "nameKey": "honey",
+   "category": "Nut Butters, Honey & Jams",
+   "unit": null
+  },
+  {
+   "name": "honey mustard dressing",
+   "nameKey": "honey mustard dressing",
+   "category": "Oils, Sauces & Condiments",
+   "unit": "ml"
+  },
+  {
+   "name": "hot sauce",
+   "nameKey": "hot sauce",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "hummus",
+   "nameKey": "hummu",
+   "category": "Other",
+   "unit": "cups"
+  },
+  {
+   "name": "Italian (flat-leaf) parsley",
+   "nameKey": "italian (flat-leaf) parsley",
+   "category": "Produce",
+   "unit": "small bunch"
+  },
+  {
+   "name": "Italian salad dressing",
+   "nameKey": "italian salad dressing",
+   "category": "Oils, Sauces & Condiments",
+   "unit": "ml"
+  },
+  {
+   "name": "Italian seasoning",
+   "nameKey": "italian seasoning",
+   "category": "Other",
+   "unit": null
+  },
+  {
+   "name": "jalapeño peppers",
+   "nameKey": "jalapeño pepper",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "jasmine rice",
+   "nameKey": "jasmine rice",
+   "category": "Rice, Grains & Beans",
+   "unit": "cups"
+  },
+  {
+   "name": "Kalamata olives, pitted",
+   "nameKey": "kalamata olives, pitted",
+   "category": "Canned & Jarred Goods",
+   "unit": "cup"
+  },
+  {
+   "name": "kale",
+   "nameKey": "kale",
+   "category": "Produce",
+   "unit": "bunches"
+  },
+  {
+   "name": "kale, cut and ready to use",
+   "nameKey": "kale, cut and ready to use",
+   "category": "Produce",
+   "unit": "(283 g) bags"
+  },
+  {
+   "name": "ketchup",
+   "nameKey": "ketchup",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "kidney beans",
+   "nameKey": "kidney bean",
+   "category": "Rice, Grains & Beans",
+   "unit": "(398 ml) cans"
+  },
+  {
+   "name": "kiwifruit",
+   "nameKey": "kiwifruit",
+   "category": "Other",
+   "unit": null
+  },
+  {
+   "name": "lamb loin chops",
+   "nameKey": "lamb loin chop",
+   "category": "Meat & Seafood",
+   "unit": null
+  },
+  {
+   "name": "lamb rib chops",
+   "nameKey": "lamb rib chop",
+   "category": "Meat & Seafood",
+   "unit": null
+  },
+  {
+   "name": "large flour tortillas",
+   "nameKey": "large flour tortilla",
+   "category": "Bakery",
+   "unit": null
+  },
+  {
+   "name": "Late July sea salt multigrain tortilla chips",
+   "nameKey": "late july sea salt multigrain tortilla chip",
+   "category": "Bakery",
+   "unit": "g"
+  },
+  {
+   "name": "lean ground beef",
+   "nameKey": "lean ground beef",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "lean ground pork",
+   "nameKey": "lean ground pork",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "leeks",
+   "nameKey": "leek",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "lemon",
+   "nameKey": "lemon",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "lentils",
+   "nameKey": "lentil",
+   "category": "Rice, Grains & Beans",
+   "unit": "(255 g) cans"
+  },
+  {
+   "name": "limes",
+   "nameKey": "lime",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "linguine pasta",
+   "nameKey": "linguine pasta",
+   "category": "Pasta & Sauces",
+   "unit": "g"
+  },
+  {
+   "name": "macaroni (elbow) pasta",
+   "nameKey": "macaroni (elbow) pasta",
+   "category": "Pasta & Sauces",
+   "unit": "g"
+  },
+  {
+   "name": "mangoes",
+   "nameKey": "mango",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "marinara sauce",
+   "nameKey": "marinara sauce",
+   "category": "Pasta & Sauces",
+   "unit": "(680 g) jars"
+  },
+  {
+   "name": "mayonnaise",
+   "nameKey": "mayonnaise",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "medjool dates, pitted",
+   "nameKey": "medjool dates, pitted",
+   "category": "Produce",
+   "unit": "cup"
+  },
+  {
+   "name": "miso paste, red",
+   "nameKey": "miso paste, red",
+   "category": "International",
+   "unit": "ml"
+  },
+  {
+   "name": "miso paste, white",
+   "nameKey": "miso paste, white",
+   "category": "International",
+   "unit": "ml"
+  },
+  {
+   "name": "mozzarella cheese",
+   "nameKey": "mozzarella cheese",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "(227 g) block"
+  },
+  {
+   "name": "napa cabbage",
+   "nameKey": "napa cabbage",
+   "category": "Produce",
+   "unit": "medium heads"
+  },
+  {
+   "name": "natural almond butter",
+   "nameKey": "natural almond butter",
+   "category": "Nut Butters, Honey & Jams",
+   "unit": null
+  },
+  {
+   "name": "natural peanut butter",
+   "nameKey": "natural peanut butter",
+   "category": "Nut Butters, Honey & Jams",
+   "unit": null
+  },
+  {
+   "name": "neutral vegetable oil",
+   "nameKey": "neutral vegetable oil",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "new potatoes",
+   "nameKey": "new potato",
+   "category": "Produce",
+   "unit": "kg"
+  },
+  {
+   "name": "no-boil lasagna noodles",
+   "nameKey": "no-boil lasagna noodle",
+   "category": "Pasta & Sauces",
+   "unit": null
+  },
+  {
+   "name": "nutmeg, ground",
+   "nameKey": "nutmeg, ground",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "nutritional yeast flakes",
+   "nameKey": "nutritional yeast flake",
+   "category": "Baking & Spices",
+   "unit": "cup"
+  },
+  {
+   "name": "oats, quick cooking",
+   "nameKey": "oats, quick cooking",
+   "category": "Rice, Grains & Beans",
+   "unit": null
+  },
+  {
+   "name": "Oikos Triple Zero Greek vanilla yogurt",
+   "nameKey": "oikos triple zero greek vanilla yogurt",
+   "category": "Baking & Spices",
+   "unit": "cups"
+  },
+  {
+   "name": "onion powder",
+   "nameKey": "onion powder",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "oranges",
+   "nameKey": "orange",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "orange bell peppers",
+   "nameKey": "orange bell pepper",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "oregano, dried",
+   "nameKey": "oregano, dried",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "OREO chocolate sandwich cookies",
+   "nameKey": "oreo chocolate sandwich cookie",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "orzo pasta",
+   "nameKey": "orzo pasta",
+   "category": "Pasta & Sauces",
+   "unit": "g"
+  },
+  {
+   "name": "oven roasted turkey breast, sliced",
+   "nameKey": "oven roasted turkey breast, sliced",
+   "category": "Meat & Seafood",
+   "unit": "g"
+  },
+  {
+   "name": "Pace chunky salsa",
+   "nameKey": "pace chunky salsa",
+   "category": "Oils, Sauces & Condiments",
+   "unit": "cup"
+  },
+  {
+   "name": "panko bread crumbs",
+   "nameKey": "panko bread crumb",
+   "category": "Bakery",
+   "unit": null
+  },
+  {
+   "name": "paprika",
+   "nameKey": "paprika",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "Parmesan cheese",
+   "nameKey": "parmesan cheese",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "g"
+  },
+  {
+   "name": "Parmesan cheese, shredded",
+   "nameKey": "parmesan cheese, shredded",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "cup"
+  },
+  {
+   "name": "parsley flakes",
+   "nameKey": "parsley flake",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "parsnips",
+   "nameKey": "parsnip",
+   "category": "Produce",
+   "unit": "medium"
+  },
+  {
+   "name": "peaches",
+   "nameKey": "peach",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "peanut sauce",
+   "nameKey": "peanut sauce",
+   "category": "Nuts, Seeds & Dried Fruit",
+   "unit": "cup"
+  },
+  {
+   "name": "peanuts, roasted unsalted",
+   "nameKey": "peanuts, roasted unsalted",
+   "category": "Nuts, Seeds & Dried Fruit",
+   "unit": "cup"
+  },
+  {
+   "name": "pears",
+   "nameKey": "pear",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "pecan halves",
+   "nameKey": "pecan halve",
+   "category": "Nuts, Seeds & Dried Fruit",
+   "unit": "cup"
+  },
+  {
+   "name": "penne pasta",
+   "nameKey": "penne pasta",
+   "category": "Pasta & Sauces",
+   "unit": "g"
+  },
+  {
+   "name": "Philadelphia brick cream cheese",
+   "nameKey": "philadelphia brick cream cheese",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "(227 g) blocks"
+  },
+  {
+   "name": "pine nuts",
+   "nameKey": "pine nut",
+   "category": "Nuts, Seeds & Dried Fruit",
+   "unit": "cup"
+  },
+  {
+   "name": "pineapples",
+   "nameKey": "pineapple",
+   "category": "Produce",
+   "unit": "small"
+  },
+  {
+   "name": "pinto beans",
+   "nameKey": "pinto bean",
+   "category": "Rice, Grains & Beans",
+   "unit": "(398 ml) cans"
+  },
+  {
+   "name": "pistachios, unsalted",
+   "nameKey": "pistachios, unsalted",
+   "category": "Nuts, Seeds & Dried Fruit",
+   "unit": "cup"
+  },
+  {
+   "name": "plain Greek yogurt",
+   "nameKey": "plain greek yogurt",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "cup"
+  },
+  {
+   "name": "plums",
+   "nameKey": "plum",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "polenta (cornmeal)",
+   "nameKey": "polenta (cornmeal)",
+   "category": "Rice, Grains & Beans",
+   "unit": "cups"
+  },
+  {
+   "name": "polenta, pre-cooked",
+   "nameKey": "polenta, pre-cooked",
+   "category": "Rice, Grains & Beans",
+   "unit": "(510 g) tubes"
+  },
+  {
+   "name": "poppy seeds",
+   "nameKey": "poppy seed",
+   "category": "Nuts, Seeds & Dried Fruit",
+   "unit": null
+  },
+  {
+   "name": "pork chops, bone-in",
+   "nameKey": "pork chops, bone-in",
+   "category": "Meat & Seafood",
+   "unit": null
+  },
+  {
+   "name": "pork chops, boneless",
+   "nameKey": "pork chops, boneles",
+   "category": "Meat & Seafood",
+   "unit": null
+  },
+  {
+   "name": "pork sausages",
+   "nameKey": "pork sausage",
+   "category": "Meat & Seafood",
+   "unit": null
+  },
+  {
+   "name": "portobello mushrooms",
+   "nameKey": "portobello mushroom",
+   "category": "Produce",
+   "unit": "caps"
+  },
+  {
+   "name": "potato gnocchi",
+   "nameKey": "potato gnocchi",
+   "category": "Pasta & Sauces",
+   "unit": "(454 g) pkgs"
+  },
+  {
+   "name": "powdered sugar",
+   "nameKey": "powdered sugar",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "pre-cooked vegan sausage",
+   "nameKey": "pre-cooked vegan sausage",
+   "category": "Meat & Seafood",
+   "unit": null
+  },
+  {
+   "name": "prosciutto",
+   "nameKey": "prosciutto",
+   "category": "Meat & Seafood",
+   "unit": "slices"
+  },
+  {
+   "name": "pumpkin seeds",
+   "nameKey": "pumpkin seed",
+   "category": "Produce",
+   "unit": "cup"
+  },
+  {
+   "name": "pure maple syrup",
+   "nameKey": "pure maple syrup",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "pure pumpkin purée",
+   "nameKey": "pure pumpkin purée",
+   "category": "Produce",
+   "unit": "(398 ml) cans"
+  },
+  {
+   "name": "quinoa",
+   "nameKey": "quinoa",
+   "category": "Rice, Grains & Beans",
+   "unit": "cups"
+  },
+  {
+   "name": "radish",
+   "nameKey": "radish",
+   "category": "Produce",
+   "unit": "bunches"
+  },
+  {
+   "name": "raisins",
+   "nameKey": "raisin",
+   "category": "Nuts, Seeds & Dried Fruit",
+   "unit": "cup"
+  },
+  {
+   "name": "ranch dressing",
+   "nameKey": "ranch dressing",
+   "category": "Oils, Sauces & Condiments",
+   "unit": "ml"
+  },
+  {
+   "name": "raspberries",
+   "nameKey": "raspberrie",
+   "category": "Other",
+   "unit": "(170 g) pkg"
+  },
+  {
+   "name": "raw peeled shrimp, fresh or frozen",
+   "nameKey": "raw peeled shrimp, fresh or frozen",
+   "category": "Frozen",
+   "unit": "kg"
+  },
+  {
+   "name": "red bell peppers",
+   "nameKey": "red bell pepper",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "red cabbage",
+   "nameKey": "red cabbage",
+   "category": "Produce",
+   "unit": "small heads"
+  },
+  {
+   "name": "red chili peppers",
+   "nameKey": "red chili pepper",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "red grapes",
+   "nameKey": "red grape",
+   "category": "Produce",
+   "unit": "kg"
+  },
+  {
+   "name": "red lentils, dried",
+   "nameKey": "red lentils, dried",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "red onion",
+   "nameKey": "red onion",
+   "category": "Produce",
+   "unit": "medium"
+  },
+  {
+   "name": "red potatoes",
+   "nameKey": "red potato",
+   "category": "Produce",
+   "unit": "medium"
+  },
+  {
+   "name": "red wine vinegar",
+   "nameKey": "red wine vinegar",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "ribeye steak",
+   "nameKey": "ribeye steak",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "rice vinegar",
+   "nameKey": "rice vinegar",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "ricotta cheese",
+   "nameKey": "ricotta cheese",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "(425 g) pkgs"
+  },
+  {
+   "name": "RO-TEL diced tomatoes & green chilies",
+   "nameKey": "ro-tel diced tomatoes & green chilie",
+   "category": "Produce",
+   "unit": "(284 ml) cans"
+  },
+  {
+   "name": "roasted red bell peppers",
+   "nameKey": "roasted red bell pepper",
+   "category": "Produce",
+   "unit": "(340 g) jars"
+  },
+  {
+   "name": "romaine hearts",
+   "nameKey": "romaine heart",
+   "category": "Other",
+   "unit": "hearts"
+  },
+  {
+   "name": "romaine lettuce",
+   "nameKey": "romaine lettuce",
+   "category": "Produce",
+   "unit": "heads"
+  },
+  {
+   "name": "rosemary, dried",
+   "nameKey": "rosemary, dried",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "rotini pasta",
+   "nameKey": "rotini pasta",
+   "category": "Pasta & Sauces",
+   "unit": "g"
+  },
+  {
+   "name": "rotisserie chicken, white and dark meat",
+   "nameKey": "rotisserie chicken, white and dark meat",
+   "category": "Meat & Seafood",
+   "unit": "(850 g) whole chickens"
+  },
+  {
+   "name": "sage, dried",
+   "nameKey": "sage, dried",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "salmon fillet",
+   "nameKey": "salmon fillet",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "salsa",
+   "nameKey": "salsa",
+   "category": "Oils, Sauces & Condiments",
+   "unit": "cups"
+  },
+  {
+   "name": "salt",
+   "nameKey": "salt",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "sauerkraut",
+   "nameKey": "sauerkraut",
+   "category": "Other",
+   "unit": "cups"
+  },
+  {
+   "name": "sea scallops",
+   "nameKey": "sea scallop",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "sesame ginger dressing",
+   "nameKey": "sesame ginger dressing",
+   "category": "Oils, Sauces & Condiments",
+   "unit": "cup"
+  },
+  {
+   "name": "sesame seeds",
+   "nameKey": "sesame seed",
+   "category": "Nuts, Seeds & Dried Fruit",
+   "unit": null
+  },
+  {
+   "name": "shallots",
+   "nameKey": "shallot",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "shredded cabbage (coleslaw mix)",
+   "nameKey": "shredded cabbage (coleslaw mix)",
+   "category": "Produce",
+   "unit": "(397 g) bags"
+  },
+  {
+   "name": "shredded carrots",
+   "nameKey": "shredded carrot",
+   "category": "Produce",
+   "unit": "(283 g) bags"
+  },
+  {
+   "name": "shredded cheese, Italian blend",
+   "nameKey": "shredded cheese, italian blend",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "cups"
+  },
+  {
+   "name": "shredded cheese, Mexican blend",
+   "nameKey": "shredded cheese, mexican blend",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "cups"
+  },
+  {
+   "name": "shredded sweetened coconut",
+   "nameKey": "shredded sweetened coconut",
+   "category": "Other",
+   "unit": "cup"
+  },
+  {
+   "name": "shredded unsweetened coconut",
+   "nameKey": "shredded unsweetened coconut",
+   "category": "Other",
+   "unit": "cup"
+  },
+  {
+   "name": "Silk Original almond milk",
+   "nameKey": "silk original almond milk",
+   "category": "Nuts, Seeds & Dried Fruit",
+   "unit": "ml"
+  },
+  {
+   "name": "sliced black olives",
+   "nameKey": "sliced black olive",
+   "category": "Canned & Jarred Goods",
+   "unit": "(108 g) cans"
+  },
+  {
+   "name": "sliced white mushrooms",
+   "nameKey": "sliced white mushroom",
+   "category": "Produce",
+   "unit": "(227g ) pkgs"
+  },
+  {
+   "name": "small corn tortillas",
+   "nameKey": "small corn tortilla",
+   "category": "Bakery",
+   "unit": null
+  },
+  {
+   "name": "small flour tortillas",
+   "nameKey": "small flour tortilla",
+   "category": "Bakery",
+   "unit": null
+  },
+  {
+   "name": "smoked paprika",
+   "nameKey": "smoked paprika",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "smoked salmon",
+   "nameKey": "smoked salmon",
+   "category": "Meat & Seafood",
+   "unit": "(113 g) pkg"
+  },
+  {
+   "name": "soba (buckwheat) noodles",
+   "nameKey": "soba (buckwheat) noodle",
+   "category": "Pasta & Sauces",
+   "unit": "g"
+  },
+  {
+   "name": "sockeye salmon fillet",
+   "nameKey": "sockeye salmon fillet",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "sole fillets",
+   "nameKey": "sole fillet",
+   "category": "Other",
+   "unit": "kg"
+  },
+  {
+   "name": "sourdough bread",
+   "nameKey": "sourdough bread",
+   "category": "Bakery",
+   "unit": "slices"
+  },
+  {
+   "name": "soy sauce",
+   "nameKey": "soy sauce",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "spaghetti pasta",
+   "nameKey": "spaghetti pasta",
+   "category": "Pasta & Sauces",
+   "unit": "g"
+  },
+  {
+   "name": "spaghetti squash",
+   "nameKey": "spaghetti squash",
+   "category": "Pasta & Sauces",
+   "unit": "medium"
+  },
+  {
+   "name": "spring mix (mixed greens)",
+   "nameKey": "spring mix (mixed greens)",
+   "category": "Other",
+   "unit": "(142 g) pkg"
+  },
+  {
+   "name": "stir-fry sauce",
+   "nameKey": "stir-fry sauce",
+   "category": "Other",
+   "unit": null
+  },
+  {
+   "name": "strawberries",
+   "nameKey": "strawberrie",
+   "category": "Other",
+   "unit": "(454 g) pkgs"
+  },
+  {
+   "name": "striploin (New York strip) steak",
+   "nameKey": "striploin (new york strip) steak",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "sugar snap peas",
+   "nameKey": "sugar snap pea",
+   "category": "Baking & Spices",
+   "unit": "(227 g) pkg"
+  },
+  {
+   "name": "sun-dried tomato pesto",
+   "nameKey": "sun-dried tomato pesto",
+   "category": "Canned & Jarred Goods",
+   "unit": "cup"
+  },
+  {
+   "name": "sun-dried tomatoes, oil-packed",
+   "nameKey": "sun-dried tomatoes, oil-packed",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "sweet potato",
+   "nameKey": "sweet potato",
+   "category": "Produce",
+   "unit": "kg"
+  },
+  {
+   "name": "Swiss chard",
+   "nameKey": "swiss chard",
+   "category": "Other",
+   "unit": "bunches"
+  },
+  {
+   "name": "taco seasoning",
+   "nameKey": "taco seasoning",
+   "category": "Other",
+   "unit": "ml"
+  },
+  {
+   "name": "tahini",
+   "nameKey": "tahini",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "tamari soy sauce",
+   "nameKey": "tamari soy sauce",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "tempeh",
+   "nameKey": "tempeh",
+   "category": "International",
+   "unit": "(227g ) pkgs"
+  },
+  {
+   "name": "Thai curry paste, green",
+   "nameKey": "thai curry paste, green",
+   "category": "Other",
+   "unit": "ml"
+  },
+  {
+   "name": "Thai curry paste, red",
+   "nameKey": "thai curry paste, red",
+   "category": "Other",
+   "unit": "ml"
+  },
+  {
+   "name": "thyme, dried",
+   "nameKey": "thyme, dried",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "tilapia fillet",
+   "nameKey": "tilapia fillet",
+   "category": "Meat & Seafood",
+   "unit": "kg"
+  },
+  {
+   "name": "toasted sesame oil",
+   "nameKey": "toasted sesame oil",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "tomatoes",
+   "nameKey": "tomato",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "tomato paste",
+   "nameKey": "tomato paste",
+   "category": "Canned & Jarred Goods",
+   "unit": "tbsp"
+  },
+  {
+   "name": "tomato sauce",
+   "nameKey": "tomato sauce",
+   "category": "Produce",
+   "unit": "(213 ml) cans"
+  },
+  {
+   "name": "tortilla chips",
+   "nameKey": "tortilla chip",
+   "category": "Bakery",
+   "unit": "g"
+  },
+  {
+   "name": "turmeric, ground",
+   "nameKey": "turmeric, ground",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "turnips",
+   "nameKey": "turnip",
+   "category": "Produce",
+   "unit": "medium"
+  },
+  {
+   "name": "tzatziki sauce",
+   "nameKey": "tzatziki sauce",
+   "category": "Other",
+   "unit": "cups"
+  },
+  {
+   "name": "vanilla extract",
+   "nameKey": "vanilla extract",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "vanilla ice cream",
+   "nameKey": "vanilla ice cream",
+   "category": "Baking & Spices",
+   "unit": "ml"
+  },
+  {
+   "name": "vanilla whey-based protein powder (containing 20 grams protein/serving)",
+   "nameKey": "vanilla whey-based protein powder (containing 20 grams protein/serving)",
+   "category": "Baking & Spices",
+   "unit": null
+  },
+  {
+   "name": "vegan mayonnaise",
+   "nameKey": "vegan mayonnaise",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "veggie burger patties, plant-based",
+   "nameKey": "veggie burger patties, plant-based",
+   "category": "Other",
+   "unit": null
+  },
+  {
+   "name": "veggie ground, plant based",
+   "nameKey": "veggie ground, plant based",
+   "category": "Other",
+   "unit": "g"
+  },
+  {
+   "name": "virgin coconut oil",
+   "nameKey": "virgin coconut oil",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "walnuts",
+   "nameKey": "walnut",
+   "category": "Nuts, Seeds & Dried Fruit",
+   "unit": "cup"
+  },
+  {
+   "name": "water",
+   "nameKey": "water",
+   "category": "Other",
+   "unit": null
+  },
+  {
+   "name": "water chestnuts",
+   "nameKey": "water chestnut",
+   "category": "Other",
+   "unit": "g"
+  },
+  {
+   "name": "white mushrooms",
+   "nameKey": "white mushroom",
+   "category": "Produce",
+   "unit": "kg"
+  },
+  {
+   "name": "white wine vinegar",
+   "nameKey": "white wine vinegar",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "whole grain bread",
+   "nameKey": "whole grain bread",
+   "category": "Bakery",
+   "unit": "slices"
+  },
+  {
+   "name": "whole grain buns or rolls",
+   "nameKey": "whole grain buns or roll",
+   "category": "Bakery",
+   "unit": null
+  },
+  {
+   "name": "whole grain pitas",
+   "nameKey": "whole grain pita",
+   "category": "Bakery",
+   "unit": null
+  },
+  {
+   "name": "whole milk",
+   "nameKey": "whole milk",
+   "category": "Dairy, Cheese & Eggs",
+   "unit": "ml"
+  },
+  {
+   "name": "whole wheat couscous",
+   "nameKey": "whole wheat couscou",
+   "category": "Rice, Grains & Beans",
+   "unit": "cups"
+  },
+  {
+   "name": "wild pink salmon, traditional style",
+   "nameKey": "wild pink salmon, traditional style",
+   "category": "Meat & Seafood",
+   "unit": "(213 g) cans"
+  },
+  {
+   "name": "Worcestershire sauce",
+   "nameKey": "worcestershire sauce",
+   "category": "Oils, Sauces & Condiments",
+   "unit": null
+  },
+  {
+   "name": "yellow bell peppers",
+   "nameKey": "yellow bell pepper",
+   "category": "Produce",
+   "unit": null
+  },
+  {
+   "name": "yellow onions",
+   "nameKey": "yellow onion",
+   "category": "Produce",
+   "unit": "medium"
+  },
+  {
+   "name": "yellow potatoes",
+   "nameKey": "yellow potato",
+   "category": "Produce",
+   "unit": "medium"
+  },
+  {
+   "name": "zucchini squash",
+   "nameKey": "zucchini squash",
+   "category": "Produce",
+   "unit": "medium"
+  }
+ ]
+}
