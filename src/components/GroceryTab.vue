@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import { useGroceryList } from '../lib/useGroceryList'
 import type { GroceryItem } from '../lib/grocery'
 import { usePlanStore } from '../stores/plan'
+import { useCustomIngredientsStore } from '../stores/customIngredients'
+import IngredientAutocomplete from './IngredientAutocomplete.vue'
 
 const plan = usePlanStore()
 const router = useRouter()
@@ -73,11 +75,13 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
 
 /* ---------- Custom (free-form) grocery items ---------- */
 
-const newItem = ref('')
+const customIngredients = useCustomIngredientsStore()
 
-function addNewItem() {
-  if (plan.addCustomItem(newItem.value)) {
-    newItem.value = ''
+function addNewItem(payload: { name: string; category: string }) {
+  if (plan.addCustomItem(payload.name)) {
+    // Device-local memory (ADR-0012): remember the typed name + category
+    // so it reappears as a "mine" suggestion on future visits.
+    customIngredients.remember(payload.name, payload.category)
   }
 }
 </script>
@@ -98,23 +102,7 @@ function addNewItem() {
         Browse recipes
       </button>
 
-      <form class="mx-auto mt-6 flex max-w-sm gap-2" data-test="add-item-form" @submit.prevent="addNewItem">
-        <input
-          v-model="newItem"
-          type="text"
-          maxlength="80"
-          placeholder="Add an item not in the recipes…"
-          aria-label="Add a custom grocery item"
-          class="h-11 w-full rounded-xl border dark:border-stone-700 dark:bg-stone-900 px-4 text-sm outline-none focus:border-primary"
-        />
-        <button
-          type="submit"
-          class="h-11 shrink-0 rounded-xl bg-primary px-4 text-sm font-semibold text-white active:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="newItem.trim().length === 0"
-        >
-          Add
-        </button>
-      </form>
+      <IngredientAutocomplete compact @add="addNewItem" />
     </div>
 
     <template v-else-if="loading && items.length === 0">
@@ -174,23 +162,7 @@ function addNewItem() {
         </div>
       </template>
 
-      <form class="flex gap-2" data-test="add-item-form" @submit.prevent="addNewItem">
-        <input
-          v-model="newItem"
-          type="text"
-          maxlength="80"
-          placeholder="Add an item not in the recipes…"
-          aria-label="Add a custom grocery item"
-          class="h-11 w-full rounded-xl border dark:border-stone-700 dark:bg-stone-900 px-4 text-sm outline-none focus:border-primary"
-        />
-        <button
-          type="submit"
-          class="h-11 shrink-0 rounded-xl bg-primary px-4 text-sm font-semibold text-white active:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="newItem.trim().length === 0"
-        >
-          Add
-        </button>
-      </form>
+      <IngredientAutocomplete @add="addNewItem" />
 
       <div
         v-if="plan.customItems.length > 0"

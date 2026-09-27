@@ -2,6 +2,8 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGroceryList } from '../lib/useGroceryList'
+import { useCustomIngredientsStore } from '../stores/customIngredients'
+import IngredientAutocomplete from './IngredientAutocomplete.vue'
 
 const router = useRouter()
 const {
@@ -15,6 +17,14 @@ const {
   plan,
   confirmAndClearGrocery,
 } = useGroceryList()
+
+const customIngredients = useCustomIngredientsStore()
+
+function addNewItem(payload: { name: string; category: string }) {
+  if (plan.addCustomItem(payload.name)) {
+    customIngredients.remember(payload.name, payload.category)
+  }
+}
 
 /** Collapsed store sections (open by default). */
 const collapsed = ref(new Set<string>())
@@ -195,6 +205,12 @@ function exitShopping() {
               : 'The list is empty'
           }}</span>
         </p>
+
+        <!-- Add-item flow (ADR-0012): same autocomplete as the Grocery tab
+             — picking a suggestion defaults the category, Enter keeps raw. -->
+        <div class="pt-2">
+          <IngredientAutocomplete @add="addNewItem" />
+        </div>
       </template>
     </main>
   </div>
