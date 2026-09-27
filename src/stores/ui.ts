@@ -6,6 +6,7 @@ export const TABS: { id: string; label: string; icon: string; to: string }[] = [
   { id: 'recipes', label: 'Recipes', icon: '📖', to: '/' },
   { id: 'plan', label: 'Plan', icon: '📅', to: '/plan' },
   { id: 'grocery', label: 'Grocery', icon: '🛒', to: '/grocery' },
+  { id: 'history', label: 'History', icon: '🕓', to: '/history' },
 ]
 
 /** An inline button on a toast (e.g. [Clear] [Cancel]). */

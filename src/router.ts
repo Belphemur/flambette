@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import RecipesTab from './components/RecipesTab.vue'
 import PlanTab from './components/PlanTab.vue'
 import GroceryTab from './components/GroceryTab.vue'
+import HistoryView from './components/HistoryView.vue'
 import RecipeDetail from './components/RecipeDetail.vue'
 import CookingView from './components/CookingView.vue'
 import ShopView from './components/ShopView.vue'
@@ -17,6 +18,7 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'recipes', component: RecipesTab },
     { path: '/plan', name: 'plan', component: PlanTab },
+    { path: '/history', name: 'history', component: HistoryView },
     { path: '/grocery', name: 'grocery', component: GroceryTab },
     { path: '/shop', name: 'shop', component: ShopView },
     {
