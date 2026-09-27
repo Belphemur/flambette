@@ -22,7 +22,12 @@ export const useFavouritesStore = defineStore(
       if (!ids.value.delete(variantId)) ids.value.add(variantId)
     }
 
-    return { ids, seeded, isFavourite, toggleFavourite }
+    /** Replace the set wholesale (backup import). */
+    function replaceAll(newIds: number[]): void {
+      ids.value = new Set(newIds.filter((n) => Number.isFinite(n)))
+    }
+
+    return { ids, replaceAll, seeded, isFavourite, toggleFavourite }
   },
   {
     persist: {

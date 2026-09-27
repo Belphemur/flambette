@@ -45,6 +45,9 @@ export const useUiStore = defineStore(
   () => {
     /** Cooking step index, keyed by variant id (survives tab switches). */
     const cookingStepIndex = ref<Record<number, number>>({})
+    /** Share personal cooked history with the live room (off by default —
+     *  history is personal data; see ADR-0011 addendum). Part of backups. */
+    const shareCookedHistory = ref(false)
     /** Transient toast: plain message, optionally with inline action buttons. */
     const toast = ref<Toast | null>(null)
     let toastTimer: ReturnType<typeof setTimeout> | undefined
@@ -57,6 +60,12 @@ export const useUiStore = defineStore(
 
     function cookingStep(variantId: number): number {
       return cookingStepIndex.value[variantId] ?? 0
+    }
+
+    /** Replace persisted ui prefs wholesale (backup import). */
+    function applySettings(prefs: { cookingStepIndex?: Record<number, number>; shareCookedHistory?: boolean }): void {
+      if (prefs.cookingStepIndex !== undefined) cookingStepIndex.value = prefs.cookingStepIndex
+      if (typeof prefs.shareCookedHistory === 'boolean') shareCookedHistory.value = prefs.shareCookedHistory
     }
 
     /** End the current toast (if any) and fire its onDismiss exactly once. */
@@ -86,11 +95,16 @@ export const useUiStore = defineStore(
 
     return {
       cookingStepIndex,
+      shareCookedHistory,
       toast,
       setCookingStep,
       cookingStep,
+      applySettings,
       showToast,
       dismissToast,
     }
+  },
+  {
+    persist: { key: 'mealime-planner:v1:ui', pick: ['cookingStepIndex', 'shareCookedHistory'] },
   },
 )

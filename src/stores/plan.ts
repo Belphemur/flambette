@@ -135,6 +135,14 @@ export const usePlanStore = defineStore(
       return cookedHistory.value.some((e) => e.variantId === variantId && e.cookedAt >= cutoff)
     }
 
+    /** Replace the cooked history wholesale (backup import). */
+    function replaceCookedHistory(rows: CookedEntry[]): void {
+      cookedHistory.value = rows
+        .filter((r) => Number.isFinite(r.variantId) && Number.isFinite(r.cookedAt))
+        .map((r) => ({ variantId: r.variantId, cookedAt: r.cookedAt }))
+        .slice(0, COOKED_HISTORY_CAP)
+    }
+
     /** Replace the whole plan (used when importing a shared plan). */
     function replacePlan(entries: PlanEntry[], custom: string[] = []): void {
       plan.value = entries.map((e) => ({
@@ -158,6 +166,7 @@ export const usePlanStore = defineStore(
       clearIngredientsForCurrentMeals,
       restoreIngredients,
       setClearedIngredients,
+      replaceCookedHistory,
       markCooked,
       isCookedRecently,
       replacePlan,
