@@ -11,8 +11,9 @@ import {
 /**
  * Personal cooking history (ADR-0011): cookedHistory is written by
  * markCooked, shown on the recipe detail line and in the /history tab.
- * It is NEVER room-synced — the room payload is
- * {plan, customItems, checked, cleared} only.
+ * It is room-excluded by DEFAULT: the shareCookedHistory setting
+ * (ADR-0011 addendum) is off, so the payload carries no cookedHistory
+ * unless the sender opted in.
  */
 
 async function planAndCook(page: Page): Promise<string> {

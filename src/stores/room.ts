@@ -1,17 +1,28 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
+import { useCustomIngredientsStore, type CustomIngredient } from './customIngredients'
+import { usePlanStore, type CookedEntry } from './plan'
 import { useGroceryStore } from './grocery'
-import { usePlanStore } from './plan'
+import { useUiStore } from './ui'
 
 export type RoomStatus = 'idle' | 'connecting' | 'live' | 'error'
 
-/** Shape both peers share via the relay. Client-owned, whole-state LWW. */
+/** Shape both peers share via the relay. Client-owned, whole-state LWW.
+ *  Unknown optional fields (customs, cookedHistory) are ignored by older
+ *  peers — the payload evolves additively (ADR-0012 / ADR-0011 addendum). */
 interface SharedState {
   plan: { variantId: number; servings: number }[]
   customItems: string[]
   checked: Record<string, boolean>
   /** variantId -> nameKey-normalized ingredient keys cleared per meal. */
   cleared?: Record<number, string[]>
+  /** Remembered custom-ingredient names — HOUSEHOLD state (ADR-0012:
+   *  device-local → household, 2026 policy change). */
+  customs?: CustomIngredient[]
+  /** Personal cooked history — included ONLY when the sender opted in via
+   *  the shareCookedHistory setting (ADR-0011 addendum); otherwise a
+   *  personal slice that must never cross the wire. */
+  cookedHistory?: CookedEntry[]
 }
 
 const PUSH_DEBOUNCE_MS = 300
@@ -29,6 +40,8 @@ function wsUrl(): string {
 export const useRoomStore = defineStore('room', () => {
   const plan = usePlanStore()
   const grocery = useGroceryStore()
+  const customIngredients = useCustomIngredientsStore()
+  const ui = useUiStore()
 
   const status = ref<RoomStatus>('idle')
   const code = ref<string | null>(null)
@@ -58,12 +71,19 @@ export const useRoomStore = defineStore('room', () => {
     for (const [key, value] of Object.entries(grocery.map)) {
       if (value) checked[key] = true
     }
-    return {
+    const state: SharedState = {
       plan: plan.plan.map((e) => ({ variantId: e.variantId, servings: e.servings })),
       customItems: [...plan.customItems],
       checked,
       cleared: { ...plan.clearedIngredients },
+      // Household state (ADR-0012): remembered custom-ingredient names.
+      customs: customIngredients.list.map((c) => ({ ...c })),
     }
+    // Personal history only crosses the wire when the sender opted in.
+    if (ui.shareCookedHistory) {
+      state.cookedHistory = plan.cookedHistory.map((h) => ({ ...h }))
+    }
+    return state
   }
 
   function applyRemote(state: SharedState) {
@@ -76,6 +96,13 @@ export const useRoomStore = defineStore('room', () => {
       }
       grocery.map = checked
       plan.setClearedIngredients(state.cleared ?? {})
+      // Household custom-ingredient memory (ADR-0012); absent on old
+      // payloads → treated as "nothing shared yet", NOT as "wipe local".
+      if (state.customs) customIngredients.replaceAll(state.customs)
+      // Cooked history arrives only from opted-in senders (ADR-0011
+      // addendum). Wipe-to-empty is intentional when a sharer with an
+      // empty history pushes: whole-state LWW.
+      if (state.cookedHistory) plan.replaceCookedHistory(state.cookedHistory)
     } finally {
       applyingRemote = false
     }
@@ -98,7 +125,16 @@ export const useRoomStore = defineStore('room', () => {
   // flush: 'sync' so remote snapshots applied inside applyRemote() (guarded
   // by `applyingRemote`) never echo back as new pushes.
   watch(
-    () => [plan.plan, plan.customItems, grocery.map, plan.clearedIngredients] as const,
+    () =>
+      [
+        plan.plan,
+        plan.customItems,
+        grocery.map,
+        plan.clearedIngredients,
+        customIngredients.list,
+        plan.cookedHistory, // only pushed when ui.shareCookedHistory — snapshot() gates it
+        ui.shareCookedHistory, // flipping ON must trigger a retroactive push
+      ] as const,
     () => schedulePush(),
     { deep: true, flush: 'sync' },
   )

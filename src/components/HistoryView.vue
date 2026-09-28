@@ -44,7 +44,7 @@ function addToPlan(row: Row) {
 <template>
   <section class="space-y-3" aria-label="Cooking history">
     <p class="text-xs text-stone-500 dark:text-stone-400">
-      Personal to this device — cooked history is never shared in rooms.
+      Personal to this device — leaves the device only if the room owner opts in from the Plan tab.
     </p>
 
     <div

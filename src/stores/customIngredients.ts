@@ -65,7 +65,21 @@ export const useCustomIngredientsStore = defineStore(
       list.value = []
     }
 
-    return { list, remember, find, forget, clear }
+    /** Replace the list wholesale (room-sync or backup import). */
+    function replaceAll(rows: CustomIngredient[]): void {
+      list.value = rows
+        .filter(
+          (r) =>
+            typeof r?.name === 'string' &&
+            typeof r?.nameKey === 'string' &&
+            r.nameKey.length > 0 &&
+            typeof r?.category === 'string',
+        )
+        .map((r) => ({ name: r.name, nameKey: r.nameKey, category: r.category }))
+        .slice(0, CUSTOM_INGREDIENTS_CAP)
+    }
+
+    return { list, remember, find, forget, clear, replaceAll }
   },
   {
     persist: { key: 'mealime-planner:v1:customIngredients', pick: ['list'] },

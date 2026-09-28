@@ -41,10 +41,21 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   them by servings; only totals scale.
 - **Share/rooms**: `?p=` is the one-time gzip+base64url export (v1 bare
   arrays still decode). Room sync is whole-state last-write-wins keyed by
-  `rev`; shared state = `{plan, customItems, checked, cleared}` —
+  `rev`; shared state = `{plan, customItems, checked, cleared, customs}` —
   `cleared` is `clearedIngredients` (household state: clearing hides
-  ingredients for everyone until re-planned/cooked).
-  `cookedHistory` is personal and must stay out of the room payload.
+  ingredients for everyone until re-planned/cooked) and `customs` is the
+  remembered custom-ingredient memory (household since 2026-09-27,
+  ADR-0012 change note).
+  `cookedHistory` is personal and must stay out of the room payload
+  UNLESS the sender opted in via the `shareCookedHistory` setting
+  (default off; ADR-0011 addendum) — then the payload may carry it and
+  peers apply it.
+- **Backup registry (standing rule, ADR-0013)**: every persisted store
+  slice MUST be registered in `STORE_SLICES` (src/lib/backup.ts) in the
+  same change that adds the store — export, import and validation all
+  iterate that single registry. Unregistered slices make every export
+  fail loudly (assertRegistryCoverage + e2e registry-coverage case).
+  Import is validation-first and atomic: never partial-apply.
 - **Toasts**: `ui.showToast(message, { actions, duration, onDismiss })`.
   `onDismiss` fires exactly once on every end path (timeout, replacement,
   dismiss) — anything guarded around a toast must reset via `onDismiss`.
@@ -68,7 +79,7 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   intercept hover on the Pixel 7 viewport); the grocery provenance pill
   must stay a flex sibling OUTSIDE the truncating name span, else its
   tooltip gets clipped.
-- Full suite (88 tests × 2 projects: Desktop Chrome + Pixel 7) must pass
+- Full suite (126 tests × 2 projects: Desktop Chrome + Pixel 7) must pass
   before any merge. Run `bun run build` first — vite serve hides some
   bugs.
 
