@@ -56,6 +56,9 @@ export interface SliceDef<T = unknown> {
   file: string
   /** Human label for the import confirm dialog. */
   label: string
+  /** Persisted-store keys this slice covers (used by the export-time
+   *  registry-coverage assertion below). Slices of the same store share its key. */
+  persistKeys: string[]
   /** Current state as a JSON-ready value. */
   read: () => T
   /** Return an error string for malformed data, else null. */
@@ -70,6 +73,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
   {
     file: 'plan.json',
     label: 'meal plan, custom grocery items, cleared ingredients',
+    persistKeys: ['mealime-planner:v1:plan'],
     read: () => {
       const plan = usePlanStore()
       return {
@@ -121,6 +125,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
   {
     file: 'checked.json',
     label: 'grocery checkbox state',
+    persistKeys: ['mealime-planner:v1:checked'],
     read: () => ({ ...useGroceryStore().map }),
     validate(value) {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -147,6 +152,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
   {
     file: 'cooked-history.json',
     label: 'cooked-meal history',
+    persistKeys: ['mealime-planner:v1:plan'],
     read: () => usePlanStore().cookedHistory.map((h) => ({ ...h })),
     validate(value) {
       if (!Array.isArray(value)) return 'cooked-history.json must be an array'
@@ -169,6 +175,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
   {
     file: 'custom-ingredients.json',
     label: 'remembered custom ingredient names',
+    persistKeys: ['mealime-planner:v1:customIngredients'],
     read: () => useCustomIngredientsStore().list.map((r) => ({ ...r })),
     validate(value) {
       if (!Array.isArray(value)) return 'custom-ingredients.json must be an array'
@@ -192,6 +199,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
   {
     file: 'settings.json',
     label: 'settings (cooked-history room sharing + theme)',
+    persistKeys: ['mealime-planner:v1:ui'],
     read: () => ({
       shareCookedHistory: useUiStore().shareCookedHistory,
       theme: readTheme(),
@@ -227,6 +235,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
   {
     file: 'favourites.json',
     label: 'favourite recipes',
+    persistKeys: ['mealime-planner:v1:favourites'],
     read: () => [...useFavouritesStore().ids],
     validate(value) {
       if (!Array.isArray(value)) return 'favourites.json must be an array'
@@ -277,7 +286,26 @@ function writeTheme(theme: string): void {
  * ------------------------------------------------------------------ */
 
 /** Build the backup zip bytes (stored entries) from the registry. */
+/**
+ * Registry-coverage assertion: EVERY persisted `mealime-planner:v1:*`
+ * localStorage key must be covered by a registered slice. A new store
+ * that skips registration fails every export here (standing AGENTS.md
+ * rule; asserted by the e2e registry-coverage case).
+ */
+function assertRegistryCoverage(): void {
+  const covered = new Set(STORE_SLICES.flatMap((s) => s.persistKeys))
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key?.startsWith('mealime-planner:v1:') && !covered.has(key)) {
+      throw new Error(
+        `Persisted slice "${key}" is not registered in STORE_SLICES — it would disappear from backups (see AGENTS.md)`,
+      )
+    }
+  }
+}
+
 export function buildBackupZip(): Uint8Array {
+  assertRegistryCoverage()
   const files: ZipEntry[] = [
     {
       name: META_FILE,

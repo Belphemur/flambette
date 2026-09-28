@@ -64,7 +64,16 @@ const pendingBackup = ref<File | null>(null)
 const backupConfirmOpen = computed(() => pendingBackup.value !== null)
 
 function downloadBackup(): void {
-  const blob = new Blob([buildBackupZip() as BlobPart], { type: 'application/zip' })
+  let blob: Blob
+  try {
+    blob = new Blob([buildBackupZip() as BlobPart], { type: 'application/zip' })
+  } catch (e) {
+    // Registry-coverage violation (AGENTS.md standing rule) — fail loudly.
+    ui.showToast(`Backup failed — ${e instanceof Error ? e.message : 'unknown error'}`, {
+      duration: 6000,
+    })
+    return
+  }
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -259,6 +268,43 @@ function openRecipe(id: number) {
       </div>
     </template>
 
+    <!-- Backup &amp; restore: ALWAYS rendered (even on an empty plan —
+         restoring a backup is precisely what an empty plan needs). -->
+    <!-- Backup & restore (ADR-0013) -->
+      <div class="space-y-2 rounded-xl bg-stone-50 p-3 dark:bg-stone-950">
+        <span class="text-sm font-bold tracking-tight">Backup &amp; restore</span>
+        <p class="text-xs dark:text-stone-400">
+          Save everything (plan, groceries, history, favourites, settings) to a file — or restore one. Works fully offline.
+        </p>
+        <div class="flex gap-2">
+          <button
+            class="flex h-11 flex-1 items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-white active:bg-primary-dark"
+            data-test="export-settings"
+            aria-label="Download backup file"
+            @click="downloadBackup"
+          >
+            ⬇ Export backup
+          </button>
+          <button
+            class="flex h-11 flex-1 items-center justify-center rounded-xl border dark:border-stone-700 px-4 text-sm font-medium dark:text-stone-300 dark:hover:bg-stone-800"
+            data-test="import-settings"
+            aria-label="Choose a backup file to restore"
+            @click="backupInput?.click()"
+          >
+            ⬆ Import backup
+          </button>
+        </div>
+        <input
+          ref="backupInput"
+          type="file"
+          accept="application/zip,.zip"
+          class="hidden"
+          aria-label="Backup file picker"
+          data-test="import-settings-input"
+          @change="onBackupInputChange"
+        />
+      </div>
+
     <!-- Share sheet -->
     <Teleport to="body">
       <div
@@ -378,80 +424,47 @@ function openRecipe(id: number) {
           </button>
         </div>
 
-        <!-- Backup & restore (ADR-0013) -->
-        <div class="space-y-2 rounded-xl bg-stone-50 p-3 dark:bg-stone-950">
-          <span class="text-sm font-bold tracking-tight">Backup &amp; restore</span>
-          <p class="text-xs dark:text-stone-400">
-            Save everything (plan, groceries, history, favourites, settings) to a file — or restore one. Works fully offline.
-          </p>
-          <div class="flex gap-2">
-            <button
-              class="flex h-11 flex-1 items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-white active:bg-primary-dark"
-              data-test="export-settings"
-              aria-label="Download backup file"
-              @click="downloadBackup"
-            >
-              ⬇ Export backup
-            </button>
-            <button
-              class="flex h-11 flex-1 items-center justify-center rounded-xl border dark:border-stone-700 px-4 text-sm font-medium dark:text-stone-300 dark:hover:bg-stone-800"
-              data-test="import-settings"
-              aria-label="Choose a backup file to restore"
-              @click="backupInput?.click()"
-            >
-              ⬆ Import backup
-            </button>
-          </div>
-          <input
-            ref="backupInput"
-            type="file"
-            accept="application/zip,.zip"
-            class="hidden"
-            aria-label="Backup file picker"
-            data-test="import-settings-input"
-            @change="onBackupInputChange"
-          />
-        </div>
-        <!-- Import-backup confirm dialog -->
-        <div
-          v-if="backupConfirmOpen"
-          class="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4"
-          @click.self="cancelBackupImport"
-        >
-          <div
-            class="w-full max-w-md space-y-3 rounded-2xl bg-white p-4 shadow-xl dark:bg-stone-900"
-            role="dialog"
-            aria-label="Confirm backup restore"
-          >
-            <h3 class="text-sm font-bold tracking-tight">Restore this backup?</h3>
-            <p class="text-xs dark:text-stone-400">
-              This overwrites your current plan, checked items, cooked history, favourites, custom ingredients and settings with the backup’s contents.
-            </p>
-            <p class="truncate text-xs dark:text-stone-500">
-              {{ pendingBackup?.name }}
-            </p>
-            <div class="flex gap-2">
-              <button
-                class="h-11 flex-1 rounded-xl border dark:border-stone-700 text-sm font-medium dark:text-stone-300 dark:hover:bg-stone-800"
-                data-test="import-settings-cancel"
-                aria-label="Cancel restore"
-                @click="cancelBackupImport"
-              >
-                Cancel
-              </button>
-              <button
-                class="h-11 flex-1 rounded-xl bg-primary text-sm font-semibold text-white active:bg-primary-dark"
-                data-test="import-settings-confirm"
-                aria-label="Restore backup"
-                @click="confirmBackupImport"
-              >
-                Restore
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
       </div>
     </Teleport>
+
+    <!-- Import-backup confirm dialog -->
+    <div
+      v-if="backupConfirmOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4"
+      @click.self="cancelBackupImport"
+    >
+      <div
+        class="w-full max-w-md space-y-3 rounded-2xl bg-white p-4 shadow-xl dark:bg-stone-900"
+        role="dialog"
+        aria-label="Confirm backup restore"
+      >
+        <h3 class="text-sm font-bold tracking-tight">Restore this backup?</h3>
+        <p class="text-xs dark:text-stone-400">
+          This overwrites your current plan, checked items, cooked history, favourites, custom ingredients and settings with the backup’s contents.
+        </p>
+        <p class="truncate text-xs dark:text-stone-500">
+          {{ pendingBackup?.name }}
+        </p>
+        <div class="flex gap-2">
+          <button
+        class="h-11 flex-1 rounded-xl border dark:border-stone-700 text-sm font-medium dark:text-stone-300 dark:hover:bg-stone-800"
+        data-test="import-settings-cancel"
+        aria-label="Cancel restore"
+        @click="cancelBackupImport"
+          >
+        Cancel
+          </button>
+          <button
+        class="h-11 flex-1 rounded-xl bg-primary text-sm font-semibold text-white active:bg-primary-dark"
+        data-test="import-settings-confirm"
+        aria-label="Restore backup"
+        @click="confirmBackupImport"
+          >
+        Restore
+          </button>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
