@@ -144,7 +144,7 @@ onMounted(async () => {
       :class="isRecipe || isFullscreenMode ? '' : 'px-4 pt-4 pb-28'"
     >
       <RouterView v-slot="{ Component }">
-        <KeepAlive include="RecipesTab,PlanTab,GroceryTab">
+        <KeepAlive include="RecipesTab,PlanTab,GroceryTab,SettingsTab">
           <component :is="Component" />
         </KeepAlive>
       </RouterView>

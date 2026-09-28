@@ -56,7 +56,7 @@ export async function openRecipeDetail(page: Page, name: string | RegExp): Promi
 
 export async function gotoTab(
   page: Page,
-  label: 'Recipes' | 'Plan' | 'Grocery' | 'History',
+  label: 'Recipes' | 'Plan' | 'Grocery' | 'History' | 'Settings',
 ): Promise<void> {
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: label }).click()
 }

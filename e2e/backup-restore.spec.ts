@@ -23,21 +23,12 @@ import { unzipStore, zipStore } from '../src/lib/zip'
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
-/** The Backup & restore controls sit at the bottom of the Plan tab (always
- *  rendered — reachable even on an EMPTY plan, which is exactly when you
- *  restore). Navigate there for export/import. */
+/** Backup & restore lives on the Settings tab (ADR-0016 — MOVED from Plan).
+ *  Always reachable, even with an empty plan, which is exactly when you
+ *  restore. Navigate there for export/import. */
 async function openBackup(page: Page): Promise<void> {
-  await gotoTab(page, 'Plan')
-  await awaitEmptyPlanIfAny(page)
-}
-
-/** Best-effort: wait till Plan tab settled (meals rows or empty state). */
-async function awaitEmptyPlanIfAny(page: Page): Promise<void> {
-  await page
-    .getByText('Your meal plan is empty')
-    .or(page.getByRole('heading', { level: 3 }).first())
-    .waitFor({ timeout: 10_000 })
-    .catch(() => {})
+  await gotoTab(page, 'Settings')
+  await expect(page.getByTestId('export-settings')).toBeVisible()
 }
 
 /** Export via the UI; returns (suggested filename, zip bytes). */
@@ -194,7 +185,8 @@ test('full round-trip: seed, export, fresh context, import — everything is res
 
   await expect(b.getByTestId('toast')).toContainText('Backup restored — 1 plans, 2 items')
 
-  // Plan restored.
+  // Plan restored (the import ran from the Settings tab — go back to Plan).
+  await gotoTab(b, 'Plan')
   await expect(b.getByRole('heading', { level: 3, name: seed.planned })).toBeVisible()
   // Cooked history restored (personal slice, backup always carries it).
   await gotoTab(b, 'History')
