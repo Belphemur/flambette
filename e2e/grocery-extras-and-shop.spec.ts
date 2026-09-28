@@ -221,3 +221,75 @@ test.describe('EXTRA ITEMS with category tags (ADR-0015)', () => {
     await expect(produce.locator('[data-test=grocery-row]').filter({ hasText: 'banana' })).toHaveCount(0)
   })
 })
+
+test.describe('ShopView auto-collapse (ADR-0008 addendum)', () => {
+  test('completing a category collapses it (header + N/N stay); unchecking re-expands', async ({ page }) => {
+    await blockExternalRequests(page)
+    await planFirstRecipe(page)
+    await page.getByTestId('start-shopping').click()
+    await expect(page.getByTestId('shopping-progress')).toBeVisible()
+
+    // Work one category to completion: Produce (a Tuscan-kale soup plan
+    // always has one), toggling every row via its header-scoped list.
+    const produce = page.locator('[data-test=shop-section]').filter({ has: page.getByText('Produce', { exact: true }) })
+    const rows = produce.locator('[data-test=shop-row]')
+    const total = await rows.count()
+    expect(total).toBeGreaterThan(0)
+
+    for (let i = 0; i < total; i++) {
+      // The sink re-sorts as we go, so always take the first NOT-checked row.
+      const next = produce.locator('[data-test=shop-row]:not(.opacity-40)').first()
+      await next.click()
+      // Sink first, collapse last: the header still reads the running N/N.
+      await expect(produce.getByTestId('section-count-pill')).toHaveText(`${i + 1}/${total}`)
+    }
+
+    // Auto-collapsed: rows gone, header + count pill + chevron remain.
+    const toggle = produce.getByTestId('shop-section-toggle')
+    await expect(produce.locator('[data-test=shop-row]')).toHaveCount(0)
+    await expect(toggle).toBeVisible()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(produce.getByTestId('section-count-pill')).toHaveText(`${total}/${total}`)
+    await expect(toggle).toHaveAttribute('aria-label', `Produce: ${total} of ${total} checked`)
+    await expect(toggle).toContainText('▸')
+
+    // Other sections are untouched.
+    await expect(page.locator('[data-test=shop-section]').locator('[data-test=shop-section-rows]').first()).toBeVisible()
+
+    // Unchecking one line re-expands: open the group, drop a check.
+    await toggle.click() // manual re-open keeps rows visible
+    await expect(produce.locator('[data-test=shop-row]')).toHaveCount(total)
+    await produce.locator('[data-test=shop-row].opacity-40').first().click()
+    await expect(produce.getByTestId('section-count-pill')).toHaveText(`${total - 1}/${total}`)
+    // Not done any more → the group stays expanded (auto state cleared).
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(produce.locator('[data-test=shop-row]')).toHaveCount(total)
+
+    // Re-checking the last line collapses it again.
+    await produce.locator('[data-test=shop-row]:not(.opacity-40)').first().click()
+    await expect(produce.locator('[data-test=shop-row]')).toHaveCount(0)
+    await expect(produce.getByTestId('section-count-pill')).toHaveText(`${total}/${total}`)
+
+    await expectZeroMealimeRequests(page)
+  })
+
+  test('extra items stay manual-only in ShopView (no auto-collapse on a one-item extra)', async ({ page }) => {
+    await blockExternalRequests(page)
+    await planFirstRecipe(page)
+    await input(page).fill('Sticky tape')
+    await page.locator('[data-test=ingredient-submit]').click()
+    await expect(page.getByTestId('extra-section')).toContainText('Sticky tape')
+
+    await page.getByTestId('start-shopping').click()
+    const extras = page.getByTestId('shop-custom-items')
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(1)
+    await extras.locator('[data-test=shop-row]').click()
+    // The whole list is now done, but the extra group does NOT auto-collapse.
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(1)
+    await expect(extras.getByTestId('shop-section-toggle')).toHaveAttribute('aria-expanded', 'true')
+
+    // Manual collapse still works.
+    await extras.getByTestId('shop-section-toggle').click()
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(0)
+  })
+})

@@ -125,7 +125,14 @@ test('the Clear-list button works from shopping mode', async ({ page }) => {
 
   // Hidden while nothing is checked.
   await expect(page.locator('[data-test=clear-list]')).toHaveCount(0)
-  await page.locator('[data-test=shop-row]').first().click()
+  // Click a row from a MULTI-line section: a one-line section auto-collapses
+  // the moment it is checked (ADR-0008 addendum), detaching the row
+  // mid-click.
+  const multiLine = page
+    .locator('[data-test=shop-section]')
+    .filter({ has: page.locator('[data-test=shop-section-rows] li:nth-child(2)') })
+  await expect(multiLine.first()).toBeVisible()
+  await multiLine.first().locator('[data-test=shop-row]').first().click()
   await expect(page.locator('[data-test=clear-list]')).toBeVisible()
 
   await page.locator('[data-test=clear-list]').click()
