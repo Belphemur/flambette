@@ -45,3 +45,16 @@ must stay out of the room payload — what I cooked on my device is mine.
   variants — a heavy cook loop can evict old single-event recipes. The
   cap stays for localStorage size; eviction is oldest-first, which is
   the desired recency bias.
+
+
+## Addendum (2026-09-27, owner decision): opt-in room sharing
+
+cookedHistory is personal BY DEFAULT and room-excluded. A new persisted
+ui pref `shareCookedHistory` (default FALSE — history is the sensitive
+data) opts the DEVICE in: when true, the sender's room payload includes
+`cookedHistory` (per-event rows, newest first, capped) and peers apply it
+via the plan store's replaceCookedHistory; flipping the toggle ON fires a
+retroactive push within the existing debounce. When false, the payload
+MUST NOT include cookedHistory. Old peers ignore the field (additive
+payload evolution). Backups (ADR-0013) always contain cooked history, with
+or without the toggle — the backup is the user's own archive.

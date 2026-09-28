@@ -102,3 +102,16 @@ a free-form item lives in this memory, not on the room-synced
   no runtime request, honoring the offline rule.
 - `plan.customItems` (room-synced) remains string-only; category
   enrichment never leaks into shared state.
+
+
+## Boundary change (2026-09-27, owner decision): remembered names are household
+
+Originally the remembered-names memory was DEVICE-LOCAL state, explicitly
+left out of room sync ("one household member's typed history is not
+household data"). Policy CHANGED on 2026-09-27: `customIngredients` is
+HOUSEHOLD state. The room payload is now
+`{plan, customItems, checked, cleared, customs}`; applyRemote is tolerant
+of missing `customs` on old payloads (no wipe-to-empty). The push watcher
+covers list changes. Personal cookedHistory remains room-excluded (see
+ADR-0011 addendum for its opt-in sharing). Backups (ADR-0013) carry both
+slices regardless — the backup is the user's own archive.
