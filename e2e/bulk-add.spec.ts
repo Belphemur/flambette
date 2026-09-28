@@ -26,7 +26,7 @@ const matchRows = (page: Page) => page.locator('[data-test=add-suggestion-row]')
 
 test('three adds in a row: input clears & refocuses, three toasts with correct categories', async ({ page }) => {
   const box = page.locator('[data-test=ingredient-suggestions]')
-  const rows = page.locator('[data-test=custom-items] li')
+  const rows = page.locator('[data-test=extra-section] li')
 
   // "banana" — exact index match (nameKey "banana" → Produce).
   await input(page).fill('banana')
@@ -60,13 +60,16 @@ test('three adds in a row: input clears & refocuses, three toasts with correct c
   await expectZeroMealimeRequests(page)
 })
 
-test('unknown "milk 2%" adds as Other, gets a chip, and is remembered with its chosen category', async ({ page }) => {
-  // Add it once as Other (no override).
+test('unknown "milk 2%" adds as Other, gets no category tag, and is remembered with its chosen category', async ({ page }) => {
+  // Add it once as Other (no override). "Other" is the UNKNOWN bucket, so the
+  // extra row stays plain — no category tag (ADR-0015).
   await input(page).fill('milk 2%')
   await expect(firstRow(page).locator('[data-test=suggestion-category]')).toHaveText('Other')
   await firstRow(page).click()
   await expect(page.getByTestId('added-toast')).toContainText('Added to Other')
-  await expect(page.getByTestId('custom-item-category').filter({ hasText: 'Other' })).toBeVisible()
+  const milkRow = page.locator('[data-test=extra-section] li').filter({ hasText: 'milk 2%' })
+  await expect(milkRow).toHaveCount(1)
+  await expect(milkRow.locator('[data-test=extra-item-category-tag]')).toHaveCount(0)
 
   // Re-add later: the remembered custom now suggestion-matches with its
   // stored category — not a fresh Other-guess.
@@ -86,6 +89,12 @@ test('unknown "milk 2%" adds as Other, gets a chip, and is remembered with its c
   await input(page).fill('milk 2')
   const mineUpgraded = matchRows2(page).filter({ hasText: 'milk 2%' }).first()
   await expect(mineUpgraded.locator('[data-test=suggestion-category]')).toHaveText('Household')
+  // The corrected memory now shows as a category TAG on the extra row —
+  // the item itself stays in EXTRA ITEMS (never routed into Household).
+  await expect(
+    page.locator('[data-test=extra-section] li').filter({ hasText: 'milk 2%' }).locator('[data-test=extra-item-category-tag]'),
+  ).toHaveText('#Household')
+  await expect(page.locator('[data-test=grocery-section]').filter({ hasText: 'Household' })).toHaveCount(0)
 })
 
 /** Ranked rows below the typed + row (may include mine rows). */
@@ -94,7 +103,7 @@ function matchRows2(page: Page) {
 }
 
 test('keyboard flow: ArrowDown highlights (typed row first), Enter adds it; Escape closes without adding', async ({ page }) => {
-  const rows = page.locator('[data-test=custom-items] li')
+  const rows = page.locator('[data-test=extra-section] li')
   const box = page.locator('[data-test=ingredient-suggestions]')
 
   await input(page).fill('apple')

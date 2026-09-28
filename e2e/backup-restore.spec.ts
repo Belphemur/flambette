@@ -66,14 +66,14 @@ async function backupSeed(page: Page): Promise<{ planned: string; cooked: string
   const custom = 'Boglamp oil'
   await page.getByLabel('Add a custom grocery item').fill(custom)
   await page.keyboard.press('Enter')
-  await expect(page.getByTestId('custom-items')).toContainText(custom)
+  await expect(page.getByTestId('extra-section')).toContainText(custom)
 
   // Remembered custom ingredient (customIngredients store): an unknown
   // name — typed and submitted, it is remembered with a "mine" badge.
   const remembered = 'Ziipieram sorbet cups'
   await page.getByLabel('Add a custom grocery item').fill(remembered)
   await page.getByLabel('Add a custom grocery item').press('Enter')
-  await expect(page.getByTestId('custom-items')).toContainText(remembered)
+  await expect(page.getByTestId('extra-section')).toContainText(remembered)
 
   // Check the first recipe-derived grocery line.
   const firstBox = page.locator('[data-test=grocery-row] input[type=checkbox]').first()
@@ -194,7 +194,7 @@ test('full round-trip: seed, export, fresh context, import — everything is res
   await expect(b.getByTestId('history-row').first()).toContainText(seed.cooked)
   // Checkbox map restored for the same plan lines.
   await gotoTab(b, 'Grocery')
-  await expect(b.locator('[data-test=custom-items]')).toContainText(seed.custom)
+  await expect(b.locator('[data-test=extra-section]')).toContainText(seed.custom)
   const restoredKeys = JSON.parse(await piniaState(b, 'grocery', 'map')) as Record<string, boolean>
   for (const key of seed.checkedKeys) {
     expect(restoredKeys[key]).toBe(true)

@@ -130,7 +130,7 @@ test('custom grocery items: add, dedupe, persist, remove', async ({ page }) => {
   await page.getByRole('button', { name: 'Add', exact: true }).click()
   await input.fill('Paper towels')
   await page.getByRole('button', { name: 'Add', exact: true }).click()
-  const custom = page.getByTestId('custom-items')
+  const custom = page.getByTestId('extra-section')
   await expect(custom).toContainText('Olive oil')
   await expect(custom).toContainText('Paper towels')
 
@@ -142,9 +142,9 @@ test('custom grocery items: add, dedupe, persist, remove', async ({ page }) => {
   // Persisted across reloads (no waitForCatalog here — we're on Grocery).
   await page.reload()
   await gotoTab(page, 'Grocery')
-  await expect(page.getByTestId('custom-items')).toContainText('Paper towels')
+  await expect(page.getByTestId('extra-section')).toContainText('Paper towels')
 
   // Remove works.
   await page.getByRole('button', { name: 'Remove Paper towels from the grocery list' }).click()
-  await expect(page.getByTestId('custom-items').locator('li')).toHaveCount(1)
+  await expect(page.getByTestId('extra-section').locator('li')).toHaveCount(1)
 })

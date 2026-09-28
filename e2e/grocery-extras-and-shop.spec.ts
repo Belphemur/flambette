@@ -132,8 +132,92 @@ test.describe('Settings tab (data surface)', () => {
 
     // The imported state is live on the Grocery tab.
     await gotoTab(page, 'Grocery')
-    await expect(page.getByTestId('custom-items')).toContainText('Restored item')
+    await expect(page.getByTestId('extra-section')).toContainText('Restored item')
 
     await expectZeroMealimeRequests(page)
+  })
+})
+
+test.describe('EXTRA ITEMS with category tags (ADR-0015)', () => {
+  test.beforeEach(async ({ page }) => {
+    await blockExternalRequests(page)
+    await planFirstRecipe(page)
+  })
+
+  test('an extra with a known category gets a TAG and stays in EXTRA ITEMS (never routed)', async ({ page }) => {
+    // Unknown name, explicit category pick (the ADR-0012 override select).
+    await input(page).fill('Sunshade tent')
+    await page.locator('[data-test=ingredient-category]').selectOption('Household')
+    await page.locator('[data-test=ingredient-submit]').click()
+    await expect(page.getByTestId('added-toast')).toContainText('Added to Household')
+
+    const extra = page.getByTestId('extra-section')
+    const row = extra.locator('li').filter({ hasText: 'Sunshade tent' })
+    await expect(row).toHaveCount(1)
+
+    // The category renders as a small tag pill, not a section header.
+    await expect(row.locator('[data-test=extra-item-category-tag]')).toHaveText('#Household')
+    // Header stays static (EXTRA ITEMS, no chevron/toggle).
+    await expect(extra.getByRole('heading')).toHaveText(/Extra items/)
+    await expect(extra.locator('[data-test=grocery-section-toggle]')).toHaveCount(0)
+
+    // NOT routed: no Household store section exists, and the item is not in
+    // any real section row.
+    await expect(page.locator('[data-test=grocery-section]').filter({ hasText: 'Household' })).toHaveCount(0)
+    await expect(page.locator('[data-test=grocery-row]').filter({ hasText: 'Sunshade tent' })).toHaveCount(0)
+
+    // EXTRA ITEMS is the FIRST group on the tab: above Produce and every
+    // other store section, with the add-row anchored under its header.
+    const order = await page.evaluate(() => {
+      const extra = document.querySelector('[data-test=extra-section]')!
+      const firstSection = document.querySelector('[data-test=grocery-section]')
+      const addBar = document.querySelector('[data-test=add-bar-input]')!
+      const header = extra.querySelector('h3')!
+      return {
+        extraTop: extra.getBoundingClientRect().top + window.scrollY,
+        firstSectionTop: firstSection
+          ? firstSection.getBoundingClientRect().top + window.scrollY
+          : Number.POSITIVE_INFINITY,
+        addBarTop: addBar.getBoundingClientRect().top + window.scrollY,
+        headerBottom: header.getBoundingClientRect().bottom + window.scrollY,
+      }
+    })
+    expect(order.extraTop).toBeLessThan(order.firstSectionTop)
+    // Add-row sits directly under the EXTRA ITEMS header.
+    expect(order.addBarTop).toBeGreaterThan(order.headerBottom)
+    expect(order.addBarTop - order.headerBottom).toBeLessThan(80)
+
+    await expectZeroMealimeRequests(page)
+  })
+
+  test('an extra with no category stays a plain row — no tag, no section', async ({ page }) => {
+    // Unknown name, no override → the "Other" bucket = unknown, not a tag.
+    await input(page).fill('ziplock bags')
+    await page.locator('[data-test=ingredient-submit]').click()
+    await expect(page.getByTestId('added-toast')).toContainText('Added to Other')
+
+    const extra = page.getByTestId('extra-section')
+    const row = extra.locator('li').filter({ hasText: 'ziplock bags' })
+    await expect(row).toHaveCount(1)
+    await expect(row.locator('[data-test=extra-item-category-tag]')).toHaveCount(0)
+    // The row is still the plain name + remove button.
+    await expect(row.getByRole('button', { name: /Remove ziplock bags/ })).toBeVisible()
+    await expect(page.locator('[data-test=grocery-section]').filter({ hasText: 'Other' })).toHaveCount(0)
+
+    await expectZeroMealimeRequests(page)
+  })
+
+  test('an index-known extra (banana → Produce) is tagged, not moved into PRODUCE', async ({ page }) => {
+    await input(page).fill('banana')
+    await firstRow(page).click()
+    await expect(page.getByTestId('added-toast')).toContainText('Added to Produce')
+
+    const row = page.getByTestId('extra-section').locator('li').filter({ hasText: 'banana' })
+    await expect(row.locator('[data-test=extra-item-category-tag]')).toHaveText('#Produce')
+    // The real Produce section (from the planned recipe) is untouched: it
+    // has no row for the extra and keeps only its recipe-derived lines.
+    const produce = page.locator('[data-test=grocery-section]').filter({ hasText: 'Produce' }).first()
+    await expect(produce).toBeVisible()
+    await expect(produce.locator('[data-test=grocery-row]').filter({ hasText: 'banana' })).toHaveCount(0)
   })
 })

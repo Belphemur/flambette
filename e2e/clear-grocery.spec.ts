@@ -77,7 +77,7 @@ test('checking the last item prompts to clear; Cancel aborts, then Clear works',
   await toast.locator('[data-test=toast-action-secondary]').click()
   await expect(toast).toHaveCount(0)
   await expect(page.getByText(/(\d+) \/ (\d+) items/)).toHaveText(`${total} / ${total} items`)
-  await expect(page.locator('[data-test=custom-items] li')).toHaveCount(1)
+  await expect(page.locator('[data-test=extra-section] li')).toHaveCount(1)
 
   // Re-trigger (uncheck one, check it again) and confirm this time.
   await page.locator('main input[type=checkbox]:checked').first().click()
@@ -88,7 +88,7 @@ test('checking the last item prompts to clear; Cancel aborts, then Clear works',
   // Ingredients REMOVED: the list is empty even though the meal stays
   // planned. Custom items emptied; feedback toast shows.
   await expect(page.getByTestId('cleared-empty')).toBeVisible()
-  await expect(page.locator('[data-test=custom-items]')).toHaveCount(0)
+  await expect(page.locator('[data-test=extra-section]')).toHaveCount(0)
   await expect(
     page.getByText('Grocery list cleared — ingredients return when you plan again'),
   ).toBeVisible()
@@ -153,7 +153,7 @@ test('clearing removes custom items but keeps the planned meals', async ({ page 
   // Grocery side: checkbox map + custom items gone, and the planned
   // meals' ingredients are REMOVED — the list is empty (cleared state).
   await expect(page.getByTestId('cleared-empty')).toBeVisible()
-  await expect(page.locator('[data-test=custom-items]')).toHaveCount(0)
+  await expect(page.locator('[data-test=extra-section]')).toHaveCount(0)
   await expect(page.getByLabel('Add a custom grocery item')).toBeVisible()
 
   // The Plan tab still lists the planned meal.

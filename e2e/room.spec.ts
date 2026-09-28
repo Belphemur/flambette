@@ -18,7 +18,7 @@ async function addCustomItem(page: Page, text: string) {
   await page.goto('/grocery')
   await page.getByPlaceholder('Add an item not in the recipes…').fill(text)
   await page.keyboard.press('Enter')
-  await expect(page.locator('[data-test=custom-items]').getByText(text)).toBeVisible()
+  await expect(page.locator('[data-test=extra-section]').getByText(text)).toBeVisible()
 }
 
 /** Open the n-th (1-based) recipe card detail; returns its heading. */
@@ -61,7 +61,7 @@ test('room lifecycle: A shares, B joins and both see each other live', async ({ 
   // B received A's plan + custom items without any reload.
   await expect(b.getByRole('heading', { level: 3, name: recipeName })).toBeVisible()
   await b.goto('/grocery')
-  await expect(b.locator('[data-test=custom-items]').getByText('Live room olive oil')).toBeVisible()
+  await expect(b.locator('[data-test=extra-section]').getByText('Live room olive oil')).toBeVisible()
 
   // B adds a custom item -> appears on A (state-level, no reload).
   await b.getByPlaceholder('Add an item not in the recipes…').fill('B brings dessert')
@@ -79,7 +79,7 @@ test('room lifecycle: A shares, B joins and both see each other live', async ({ 
 
   // B checks a grocery line -> checked state appears on A.
   await b.goto('/grocery')
-  await b.locator('[data-test=custom-items] li').filter({ hasText: 'B brings dessert' }).click()
+  await b.locator('[data-test=extra-section] li').filter({ hasText: 'B brings dessert' }).click()
   await expect
     .poll(
       () =>
@@ -206,7 +206,7 @@ test('room sync: remembered custom ingredients (customs) sync as household state
   const unknown = 'Qoruvva jelly strips'
   await a.getByLabel('Add a custom grocery item').fill(unknown)
   await a.keyboard.press('Enter')
-  await expect(a.getByTestId('custom-items')).toContainText(unknown)
+  await expect(a.getByTestId('extra-section')).toContainText(unknown)
 
   // …B's remembered-names store receives it right away (ADR-0012: the
   // memory is now HOUSEHOLD state, room payload `customs`).
