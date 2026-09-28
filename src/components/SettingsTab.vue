@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { applyBackup, backupFileName, buildBackupZip } from '../lib/backup'
+import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 
 /**
@@ -14,6 +15,50 @@ import { useUiStore } from '../stores/ui'
  * only the host surface moved.
  */
 const ui = useUiStore()
+const room = useRoomStore()
+
+/* ---------- Household sync (ADR-0019) ---------- */
+
+/** Draft code, seeded from the persisted setting. */
+const roomInput = ref(ui.householdRoom)
+
+const householdCode = computed(() => ui.householdRoom)
+const canSaveRoom = computed(() => /^[A-Za-z0-9]{4,12}$/.test(roomInput.value.trim()))
+/** The live room differs from the saved one, so adopting it is meaningful. */
+const adoptableRoom = computed(() =>
+  room.inRoom && room.code && room.code !== ui.householdRoom ? room.code : null,
+)
+
+function saveHouseholdRoom(joinNow: boolean) {
+  const code = roomInput.value.trim().toUpperCase()
+  if (!canSaveRoom.value) {
+    ui.showToast('Room codes are 4–12 letters or digits', { kind: 'error' })
+    return
+  }
+  ui.setHouseholdRoom(code)
+  roomInput.value = code
+  if (joinNow) {
+    room.join(code)
+    ui.showToast(`Joining household ${code}…`, { kind: 'household' })
+  } else {
+    ui.showToast(`Household room ${code} saved — sync starts on next launch`)
+  }
+}
+
+/** Point the persistent setting at the room we're already in. */
+function adoptCurrentRoom() {
+  const code = adoptableRoom.value
+  if (!code) return
+  roomInput.value = code
+  ui.setHouseholdRoom(code)
+  ui.showToast(`Household sync active — ${code}`, { kind: 'household' })
+}
+
+function clearHouseholdRoom() {
+  ui.setHouseholdRoom('')
+  roomInput.value = ''
+  ui.showToast('Household sync turned off')
+}
 
 /* ---------- Backup & restore (ADR-0013) ---------- */
 
@@ -79,6 +124,74 @@ function cancelBackupImport(): void {
 <template>
   <section class="space-y-4 pb-4">
     <h2 class="text-lg font-bold tracking-tight">Settings</h2>
+
+    <!-- Household sync: set a room code once and this device re-joins it
+         on every launch, so the other phone needs no share link. The room
+         itself is unchanged (ephemeral relay, LWW state, ADR-0006/0011) —
+         this is only a persisted default join target (ADR-0019). -->
+    <div class="space-y-2 rounded-xl bg-stone-50 p-3 dark:bg-stone-950" data-test="household-card">
+      <span class="text-sm font-bold tracking-tight">Household sync</span>
+      <p class="text-xs dark:text-stone-400">
+        Sync your plan, grocery checks and extras with the other phone. Set the room code once — this device joins it automatically every time the app opens.
+      </p>
+      <p
+        v-if="householdCode"
+        class="text-xs font-semibold text-green-700 dark:text-green-400"
+        data-test="household-room-status"
+      >
+        Household sync active — {{ householdCode }}
+      </p>
+      <div class="flex gap-2">
+        <input
+          v-model="roomInput"
+          type="text"
+          inputmode="text"
+          maxlength="12"
+          placeholder="Room code"
+          aria-label="Household room code"
+          data-test="household-room-input"
+          class="h-11 min-w-0 flex-1 rounded-xl border bg-white px-3 text-sm uppercase outline-none focus:border-primary dark:border-stone-700 dark:bg-stone-900"
+        />
+        <button
+          class="h-11 rounded-xl bg-primary px-3 text-sm font-semibold text-white active:bg-primary-dark disabled:opacity-50"
+          data-test="household-room-save"
+          aria-label="Save household room code"
+          :disabled="!canSaveRoom"
+          @click="saveHouseholdRoom(false)"
+        >
+          Save
+        </button>
+        <button
+          class="h-11 rounded-xl border dark:border-stone-700 px-3 text-sm font-medium dark:text-stone-300 dark:hover:bg-stone-800 disabled:opacity-50"
+          data-test="household-room-join"
+          aria-label="Save household room code and join now"
+          :disabled="!canSaveRoom"
+          @click="saveHouseholdRoom(true)"
+        >
+          Join now
+        </button>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button
+          v-if="adoptableRoom"
+          class="h-9 rounded-lg border px-3 text-xs font-medium dark:border-stone-700 dark:text-stone-300"
+          data-test="household-room-adopt"
+          :aria-label="`Use live room ${adoptableRoom} as the household room`"
+          @click="adoptCurrentRoom"
+        >
+          Sync with live room {{ adoptableRoom }}
+        </button>
+        <button
+          v-if="householdCode"
+          class="h-9 rounded-lg border px-3 text-xs font-medium dark:border-stone-700 dark:text-stone-300"
+          data-test="household-room-clear"
+          aria-label="Turn off household sync"
+          @click="clearHouseholdRoom"
+        >
+          Turn off
+        </button>
+      </div>
+    </div>
 
     <!-- Backup & restore: ALWAYS rendered (restoring a backup is precisely
          what a fresh device needs, and this view is reachable on one). -->

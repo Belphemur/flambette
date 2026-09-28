@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDark, useToggle } from '@vueuse/core'
 import { TABS, useUiStore } from './stores/ui'
@@ -76,6 +76,33 @@ async function joinRoomFromLink() {
   void router.replace({ query: {} })
 }
 
+/**
+ * ADR-0019: the saved household room joins itself on every start, so the
+ * daily two-phone flow needs no share link. A session resume (room store)
+ * or an explicit `?room=` link wins; a failed join only toasts and never
+ * blocks the app — the retry happens on the next launch.
+ */
+function autoJoinHousehold() {
+  const code = ui.householdRoom
+  if (!code || room.inRoom || room.status !== 'idle') return
+  room.join(code)
+  ui.showToast(`Household sync active — ${code}`, { kind: 'household' })
+}
+
+// A room we can't reach (relay down, code expired after a relay restart)
+// is reported, never fatal: the UI keeps working offline and the next app
+// start retries.
+watch(
+  () => [room.status, room.error] as const,
+  ([status, error]) => {
+    if (status !== 'error' || !error) return
+    ui.showToast(`Household sync unavailable — ${error}. Will retry next launch.`, {
+      kind: 'household',
+      duration: 6000,
+    })
+  },
+)
+
 onMounted(async () => {
   await router.isReady()
   // Resume a room from a previous page load; a fresh ?room= link wins.
@@ -88,6 +115,9 @@ onMounted(async () => {
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
+  // Config is loaded: re-join the household room unless this launch is
+  // already in one (session resume / ?room= link).
+  autoJoinHousehold()
 })
 </script>
 
