@@ -110,7 +110,7 @@ function customCategory(item: string): string | undefined {
       <p class="mt-2 font-medium">Nothing to buy yet</p>
       <p class="mt-1 text-sm">Add meals to your plan and the grocery list builds itself.</p>
       <button
-        class="mt-4 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white"
+        class="mt-4 mb-8 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white"
         @click="router.push('/')"
       >
         Browse recipes
