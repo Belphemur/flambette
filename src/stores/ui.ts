@@ -63,8 +63,7 @@ export const useUiStore = defineStore(
     }
 
     /** Replace persisted ui prefs wholesale (backup import). */
-    function applySettings(prefs: { cookingStepIndex?: Record<number, number>; shareCookedHistory?: boolean }): void {
-      if (prefs.cookingStepIndex !== undefined) cookingStepIndex.value = prefs.cookingStepIndex
+    function applySettings(prefs: { shareCookedHistory?: boolean }): void {
       if (typeof prefs.shareCookedHistory === 'boolean') shareCookedHistory.value = prefs.shareCookedHistory
     }
 
@@ -105,6 +104,7 @@ export const useUiStore = defineStore(
     }
   },
   {
-    persist: { key: 'mealime-planner:v1:ui', pick: ['cookingStepIndex', 'shareCookedHistory'] },
+    // Only the share pref persists; cookingStepIndex stays session-scoped.
+    persist: { key: 'mealime-planner:v1:ui', pick: ['shareCookedHistory'] },
   },
 )

@@ -225,9 +225,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
     },
     write(value) {
       const v = value as { shareCookedHistory?: boolean; theme?: { theme?: string } }
-      const prefs: { cookingStepIndex?: Record<number, number>; shareCookedHistory?: boolean } = {}
-      if (typeof v.shareCookedHistory === 'boolean') prefs.shareCookedHistory = v.shareCookedHistory
-      useUiStore().applySettings(prefs)
+      useUiStore().applySettings({ shareCookedHistory: v.shareCookedHistory })
       if (v.theme) writeTheme(v.theme.theme ?? '')
     },
   },
