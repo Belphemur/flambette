@@ -36,7 +36,7 @@ test('share link restores the plan in a fresh browser context', async ({ page, b
   await gotoTab(page, 'Grocery')
   await page.getByLabel('Add a custom grocery item').fill('Sparkling water')
   await page.getByRole('button', { name: 'Add', exact: true }).click()
-  await expect(page.getByTestId('custom-items')).toContainText('Sparkling water')
+  await expect(page.getByTestId('extra-section')).toContainText('Sparkling water')
 
   await gotoTab(page, 'Plan')
   const plannedNames = (await page.locator('main h3').allTextContents()).map((s) => s.trim())
@@ -79,7 +79,7 @@ test('share link restores the plan in a fresh browser context', async ({ page, b
     timeout: 15_000,
   })
   // The free-form item made it through the share payload too.
-  await expect(freshPage.getByTestId('custom-items')).toContainText('Sparkling water')
+  await expect(freshPage.getByTestId('extra-section')).toContainText('Sparkling water')
 
   await freshContext.close()
 })

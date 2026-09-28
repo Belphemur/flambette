@@ -60,7 +60,7 @@ test('typed text row stays first with live category, + adds immediately', async 
   // custom row appears, input clears and the flow stays open.
   await first.click()
   await expect(page.getByTestId('added-toast')).toContainText('Added to Produce')
-  await expect(page.getByTestId('custom-items')).toContainText('tomato')
+  await expect(page.getByTestId('extra-section')).toContainText('tomato')
   await expect(input(page)).toHaveValue('')
   await expect(input(page)).toBeFocused()
   await expectZeroMealimeRequests(page)
@@ -84,7 +84,7 @@ test('picking an index match adopts its category; unknown shows Other first', as
   // Adding via the + row commits the index category.
   await first.click()
   await expect(page.getByTestId('added-toast')).toContainText('Added to Produce')
-  await expect(page.getByTestId('custom-items')).toContainText('tomato', { exact: false })
+  await expect(page.getByTestId('extra-section')).toContainText('tomato', { exact: false })
 })
 
 test('unknown item adds as custom, persists, and shows a mine badge next time', async ({ page }) => {
@@ -94,11 +94,11 @@ test('unknown item adds as custom, persists, and shows a mine badge next time', 
   await expect(page.locator('[data-test=add-suggestion-first]')).toBeVisible()
   await input(page).press('Enter')
 
-  await expect(page.getByTestId('custom-items')).toContainText(unknown)
+  await expect(page.getByTestId('extra-section')).toContainText(unknown)
 
   // Persisted across reload — and remembered as a future suggestion:
   await page.reload()
-  await expect(page.getByTestId('custom-items')).toContainText(unknown)
+  await expect(page.getByTestId('extra-section')).toContainText(unknown)
 
   await input(page).fill('Triple-filte')
   await expect(page.locator('[data-test=ingredient-suggestions]')).toBeVisible()
@@ -121,7 +121,7 @@ test('keyboard navigation: ArrowDown/Up move highlight, Enter adds, Escape close
 
   // Enter adds the highlighted (+ row) — immediate add, no dialogue.
   await input(page).press('Enter')
-  await expect(page.getByTestId('custom-items')).toContainText('tom')
+  await expect(page.getByTestId('extra-section')).toContainText('tom')
   await expect(input(page)).toHaveValue('')
 
   // Escape collapses the dropdown...
@@ -149,7 +149,7 @@ test('the add flow also works from Shopping mode (ShopView)', async ({ page }) =
   // custom item on Grocery first, then start shopping and add another one.
   await input(page).fill('Sunshade tent')
   await input(page).press('Enter')
-  await expect(page.getByTestId('custom-items')).toContainText('Sunshade tent')
+  await expect(page.getByTestId('extra-section')).toContainText('Sunshade tent')
 
   await page.locator('[data-test=start-shopping]').click()
   await expect(page).toHaveURL(/\/shop$/)

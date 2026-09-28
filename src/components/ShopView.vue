@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGroceryList } from '../lib/useGroceryList'
 import IngredientAutocomplete from './IngredientAutocomplete.vue'
@@ -17,14 +17,76 @@ const {
   confirmAndClearGrocery,
 } = useGroceryList()
 
+/* ---------- Auto-collapse of completed categories (ADR-0008 addendum) ---------- */
+
 /** Collapsed store sections (open by default). */
 const collapsed = ref(new Set<string>())
+/** Sections collapsed automatically because every item was checked off. */
+const autoCollapsed = ref(new Set<string>())
+
+function isCollapsed(name: string): boolean {
+  return collapsed.value.has(name) || autoCollapsed.value.has(name)
+}
 
 function toggleSection(name: string) {
+  // A header click always wins over the auto state (it clears both sets,
+  // exactly like the Grocery tab): clicking an auto-collapsed header
+  // re-opens it and pins it open until the category is done again.
   const next = new Set(collapsed.value)
-  if (next.has(name)) next.delete(name)
-  else next.add(name)
+  if (isCollapsed(name)) {
+    next.delete(name)
+    autoCollapsed.value = new Set<string>()
+  } else {
+    next.add(name)
+  }
   collapsed.value = next
+}
+
+/** A section is "done" when every grocery line under it is checked. */
+const sectionDone = computed(() => {
+  const m = new Map<string, boolean>()
+  for (const s of sections.value) {
+    const lines = s.items.flatMap((i) => i.lines)
+    m.set(s.name, lines.length > 0 && lines.every((l) => !!checked.map[l.key]))
+  }
+  return m
+})
+
+/**
+ * Collapse the category group the moment it becomes fully checked, and
+ * re-open it as soon as any line is unchecked — the same transition rule
+ * as the Grocery tab (ADR-0008), now extended to the shopping screen.
+ *
+ * Ordering: this watcher runs flush:'post', i.e. AFTER the checked-sink
+ * re-sort (a plain computed) has rendered. The sink moves the last
+ * checked row to the bottom of its group; the collapse then hides the
+ * whole group, so the header reads N/N for a frame before it hides.
+ * Doing it the other way round would hide the group before the sink
+ * order settled, and the re-expanded list would come back mid-sink.
+ */
+watch(
+  sectionDone,
+  (now, prev) => {
+    for (const [name, done] of now) {
+      const wasDone = prev?.get(name) ?? false
+      if (done && !wasDone) {
+        autoCollapsed.value = new Set(autoCollapsed.value).add(name)
+      } else if (!done && autoCollapsed.value.has(name)) {
+        const next = new Set(autoCollapsed.value)
+        next.delete(name)
+        autoCollapsed.value = next
+      }
+    }
+  },
+  { flush: 'post' },
+)
+
+function sectionDoneCount(section: { items: { lines: { key: string }[] }[] }): number {
+  return section.items.flatMap((i) => i.lines).filter((l) => !!checked.map[l.key]).length
+}
+
+function sectionTotalCount(section: { items: { lines: unknown[] }[] }): number {
+  return section.items.reduce((n, i) => n + i.lines.length, 0)
 }
 
 const progressPct = computed(() =>
@@ -93,7 +155,8 @@ function exitShopping() {
       </div>
 
       <template v-else>
-        <!-- Extra (custom) items -->
+        <!-- Extra items stay manual-only: they are the user's own scratch
+             pad, and a mis-tap on a one-item extra would yank the list. -->
         <section
           v-if="plan.customItems.length > 0"
           class="mb-6"
@@ -102,6 +165,7 @@ function exitShopping() {
           <button
             class="flex w-full items-center justify-between rounded-lg py-2 text-left"
             :aria-expanded="!collapsed.has('Extra items')"
+            data-test="shop-section-toggle"
             @click="toggleSection('Extra items')"
           >
             <span class="text-lg font-bold tracking-tight">Extra items</span>
@@ -134,20 +198,34 @@ function exitShopping() {
           </ul>
         </section>
 
-        <!-- Store sections -->
-        <section v-for="section in sections" :key="section.name" class="mb-6">
+        <!-- Store sections: auto-collapse on done (ADR-0008 addendum), same
+             watcher contract as the Grocery tab, header + count pill stay. -->
+        <section
+          v-for="section in sections"
+          :key="section.name"
+          class="mb-6"
+          data-test="shop-section"
+        >
           <button
             class="flex w-full items-center justify-between rounded-lg py-2 text-left"
-            :aria-expanded="!collapsed.has(section.name)"
+            :aria-expanded="!isCollapsed(section.name)"
+            :aria-label="`${section.name}: ${sectionDoneCount(section)} of ${sectionTotalCount(section)} checked`"
+            data-test="shop-section-toggle"
             @click="toggleSection(section.name)"
           >
             <span class="text-lg font-bold tracking-tight">{{ section.name }}</span>
-            <span class="text-lg dark:text-stone-400" aria-hidden="true">
-              {{ collapsed.has(section.name) ? '▸' : '▾' }}
+            <span class="flex items-center gap-2">
+              <span
+                class="rounded-full bg-stone-100 px-2 py-px text-[10px] font-semibold text-stone-500 dark:bg-stone-800 dark:text-stone-400"
+                data-test="section-count-pill"
+              >{{ sectionDoneCount(section) }}/{{ sectionTotalCount(section) }}</span>
+              <span class="text-lg dark:text-stone-400" aria-hidden="true">
+                {{ isCollapsed(section.name) ? '▸' : '▾' }}
+              </span>
             </span>
           </button>
-          <template v-if="!collapsed.has(section.name)">
-            <ul class="divide-y dark:divide-stone-800">
+          <template v-if="!isCollapsed(section.name)">
+            <ul class="divide-y dark:divide-stone-800" data-test="shop-section-rows">
               <!-- Unchecked first (checked items sink), stable within each group -->
               <li
                 v-for="entry in [...section.items]

@@ -90,9 +90,13 @@ watch(
   () => void nextTick(() => addForm.value?.focus()),
 )
 
-/** Remembered store category for a custom row (undefined when unknown). */
+/** Remembered store category for an extra row. "Other" (and a missing
+ *  memory) is the UNKNOWN bucket, not a real store section — an extra with
+ *  no known category renders as a plain row with no tag (ADR-0015). */
 function customCategory(item: string): string | undefined {
-  return customIngredients.find(item)?.category
+  const category = customIngredients.find(item)?.category
+  if (!category || category === 'Other') return undefined
+  return category
 }
 </script>
 
@@ -172,21 +176,28 @@ function customCategory(item: string): string | undefined {
         </div>
       </template>
 
-      <IngredientAutocomplete ref="addForm" />
-
-      <div
-        v-if="plan.customItems.length > 0"
-        class="space-y-1.5"
-        data-test="custom-items"
-      >
-        <h3 class="px-1 pt-2 text-xs font-bold tracking-wider text-stone-400 uppercase">
+      <!-- EXTRA ITEMS (ADR-0015): the static group for free-form items —
+           not part of any planned meal. It renders FIRST (above every real
+           store section) with the add-row anchored under its header, and a
+           known category is shown as a TAG: the item stays here and is
+           never routed into the category section (the user keeps manual
+           control of placement). -->
+      <div v-if="plan.customItems.length > 0" class="space-y-1.5" data-test="extra-section">
+        <h3 class="flex items-center gap-2 px-1 pt-2 text-xs font-bold tracking-wider text-stone-400 uppercase">
           Extra items
+          <span class="rounded-full bg-stone-100 px-2 py-px text-[10px] font-semibold text-stone-500 dark:bg-stone-800 dark:text-stone-400">
+            {{ plan.customItems.length }}
+          </span>
         </h3>
+
+        <IngredientAutocomplete ref="addForm" />
+
         <ul class="divide-y dark:divide-stone-800 rounded-xl dark:bg-stone-900 ring-1 dark:ring-stone-700">
           <li
             v-for="item in plan.customItems"
             :key="item"
             class="flex min-h-11 items-center gap-3 px-3 py-2"
+            data-test="extra-row"
           >
             <label class="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
               <input
@@ -199,14 +210,16 @@ function customCategory(item: string): string | undefined {
                 class="min-w-0 truncate text-sm"
                 :class="checked.map[`custom||${item.toLowerCase()}`] ? 'text-stone-400 line-through' : ''"
               >{{ item }}</span>
-              <!-- Remembered store category (ADR-0012): device-local chip
-                   from the typed-name memory; a shrink-0 flex sibling
-                   OUTSIDE the truncating span, so it is never clipped. -->
+              <!-- Category TAG (ADR-0015): a shrink-0 flex sibling OUTSIDE
+                   the truncating name span (never clipped) reading the
+                   remembered store category. The item stays in EXTRA
+                   ITEMS — this is a label, not a move. -->
               <span
                 v-if="customCategory(item)"
-                class="shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold text-stone-500 dark:bg-stone-800 dark:text-stone-400"
-                data-test="custom-item-category"
-              >{{ customCategory(item) }}</span>
+                class="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary-dark dark:bg-primary/20 dark:text-primary"
+                data-test="extra-item-category-tag"
+                :aria-label="`Category: ${customCategory(item)} (stays in Extra items)`"
+              >#{{ customCategory(item) }}</span>
             </label>
             <button
               class="flex size-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:text-rose-600"
@@ -218,6 +231,9 @@ function customCategory(item: string): string | undefined {
           </li>
         </ul>
       </div>
+
+      <!-- No extras yet: the same add-row, unheaded, at the very top. -->
+      <IngredientAutocomplete v-else ref="addForm" />
 
       <div
         v-for="section in sections"

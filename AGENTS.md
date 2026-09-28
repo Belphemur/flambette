@@ -9,7 +9,7 @@ host** — this is enforced by e2e (`blockExternalRequests` +
 
 - Vue 3 (`<script setup>`) + Vite + TypeScript + Tailwind CSS v4
 - Pinia + `pinia-plugin-persistedstate` (keys: `mealime-planner:v1:*`)
-- vue-router 4: `/`, `/plan`, `/grocery`, `/shop`, `/recipe/:id`, `/cooking/:id`
+- vue-router 4: `/`, `/plan`, `/grocery`, `/history`, `/settings`, `/shop`, `/recipe/:id`, `/cooking/:id` — five bottom tabs (Recipes, Plan, Grocery, History, Settings). All five keep visible labels: the fit was measured at Pixel 7 (82px/tab, widest label 49px, no overflow) and is pinned by e2e, so a 6th tab needs a re-measure (ADR-0016).
 - MiniSearch (search), `@vueuse/core` (`useDark`, `useClipboard({ legacy: true })`)
 - WebSocket relay (`server/relay.mjs`, zero-dep Bun-native WebSocket)
   for live room sync
@@ -55,7 +55,22 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   same change that adds the store — export, import and validation all
   iterate that single registry. Unregistered slices make every export
   fail loudly (assertRegistryCoverage + e2e registry-coverage case).
-  Import is validation-first and atomic: never partial-apply.
+  Import is validation-first and atomic: never partial-apply. The
+  backup & restore UI lives on the `/settings` tab (ADR-0016) — MOVED
+  out of Plan, never duplicated.
+- **Extras (ADR-0015)**: a free-form add that belongs to no planned
+  meal is an "Extra" and stays in the static **EXTRA ITEMS** group,
+  which renders FIRST on the Grocery tab (above every store section)
+  with the add-row anchored under its header. A known category renders
+  as a small tag pill (`extra-item-category-tag`) beside the row and is
+  NEVER a routing instruction — extras never join a store section, and
+  `Other` means "no category", so it renders no tag.
+- **Auto-collapse (ADR-0008 + addendum)**: GroceryTab AND ShopView
+  collapse a category group on the false→true done transition and
+  re-expand on true→false; the header keeps its chevron and `N/N` pill.
+  In ShopView the collapse watcher is `flush: 'post'`, so the collapse
+  is the LAST step after the checked-sink re-sort. ShopView's extras
+  group stays manual-collapse-only.
 - **Toasts**: `ui.showToast(message, { actions, duration, onDismiss })`.
   `onDismiss` fires exactly once on every end path (timeout, replacement,
   dismiss) — anything guarded around a toast must reset via `onDismiss`.
@@ -65,7 +80,8 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   dark mode.
 - **Design ADRs**: `docs/design/` holds ADR-style decision records
   (offline catalog, derived grocery, per-serving nutrition, clear
-  semantics, rooms, Bun toolchain, auto-collapse). Skim them before
+  semantics, rooms, Bun toolchain, auto-collapse, extras pilling,
+  settings tab). Skim them before
   proposing changes; new lasting decisions get a new
   `ADR-NNNN-slug.md` (never rewrite an accepted one in place).
 

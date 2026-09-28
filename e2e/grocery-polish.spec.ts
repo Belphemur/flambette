@@ -77,9 +77,15 @@ test('unchecking one item re-expands an auto-collapsed category', async ({ page 
   await expect(produce.locator('[data-test="grocery-section-rows"]')).toHaveCount(0)
 
   // Uncheck one item from shopping mode (rows are hidden on the Grocery
-  // tab while the category is collapsed).
+  // tab while the category is collapsed — and in shopping mode too, since
+  // the completed section is auto-collapsed there as well, ADR-0008
+  // addendum: re-open it from its header first).
   await page.getByTestId('start-shopping').click()
-  const garlicRow = page.getByTestId('shop-row').filter({ hasText: /garlic/i }).first()
+  const shopProduce = page.locator('[data-test=shop-section]').filter({ has: page.getByText('Produce', { exact: true }) })
+  const shopToggle = shopProduce.getByTestId('shop-section-toggle')
+  await expect(shopToggle).toHaveAttribute('aria-expanded', 'false')
+  await shopToggle.click()
+  const garlicRow = shopProduce.getByTestId('shop-row').filter({ hasText: /garlic/i }).first()
   await expect(garlicRow).toBeVisible()
   await garlicRow.click()
   await page.getByTestId('exit-shopping').click()

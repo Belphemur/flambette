@@ -6,6 +6,7 @@ import HistoryView from './components/HistoryView.vue'
 import RecipeDetail from './components/RecipeDetail.vue'
 import CookingView from './components/CookingView.vue'
 import ShopView from './components/ShopView.vue'
+import SettingsTab from './components/SettingsTab.vue'
 import { usePlanStore } from './stores/plan'
 
 /**
@@ -21,6 +22,7 @@ export const router = createRouter({
     { path: '/history', name: 'history', component: HistoryView },
     { path: '/grocery', name: 'grocery', component: GroceryTab },
     { path: '/shop', name: 'shop', component: ShopView },
+    { path: '/settings', name: 'settings', component: SettingsTab },
     {
       path: '/recipe/:id',
       name: 'recipe',
