@@ -1,49 +1,105 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { STORE_SECTIONS } from '../lib/sections'
+import { nameKey } from '../lib/grocery'
 import {
   suggestIngredients,
   type IngredientSuggestion,
 } from '../lib/ingredientSuggestions'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
+import { useAddGroceryItem } from '../lib/useAddGroceryItem'
 
 /**
- * Grocery add-item input with ingredient autocomplete (ADR-0012):
+ * Grocery add-item input with ingredient autocomplete (ADR-0012/0014):
  *
- * - typing >= 2 chars opens a listbox of suggestions from the baked
- *   ingredient index + device-local remembered names ("mine");
- * - picking a suggestion fills the name AND defaults the category
- *   dropdown (still overridable before submit);
- * - Enter always submits what is typed — unknown items stay addable
- *   (they are remembered for future suggestions);
- * - keyboard nav: ArrowDown/ArrowUp move the highlight, Enter picks the
- *   highlighted suggestion (or submits raw when none is highlighted),
- *   Escape closes the dropdown.
+ * - typing >= 2 chars opens a listbox whose FIRST row is always the
+ *   typed text itself with a "+" affix — picking it (or Enter with
+ *   nothing highlighted) adds the item IMMEDIATELY, then clears the
+ *   input while it keeps focus (row mousedown is prevented), so a run
+ *   of adds is ~1 tap per item ("banana" → +; "milk 2%" → +; …). The
+ *   flow never closes itself mid-run (ADR-0014); Escape collapses the
+ *   dropdown, a second Escape empties the input.
+ * - every row carries its store category — index match from the baked
+ *   ingredient index, remembered category for a "mine" row, and "Other"
+ *   for unknown typed text — visible BEFORE anything is committed.
+ * - keyboard nav: ArrowDown/ArrowUp move the highlight (row 0 = the
+ *   typed "+" row); Enter adds the highlighted row, or the raw typed
+ *   text when nothing is highlighted.
+ * - the category select stays an explicit override for the NEXT add; it
+ *   wins over the row's own category and resets after every add.
  */
 
-const props = defineProps<{
-  /** Row layout (inline category select) vs stacked (category under input). */
+defineProps<{
+  /** Row layout (single input + suggestions) vs legacy wide form. */
   compact?: boolean
 }>()
 
 const emit = defineEmits<{
-  /** Submit: name as typed/picked, chosen category (may be overridden). */
-  add: [payload: { name: string; category: string }]
+  /** Fired after a row was added (e.g. for counter updates). */
+  added: [payload: { name: string; category: string }]
 }>()
 
 const customIngredients = useCustomIngredientsStore()
+const addGroceryItem = useAddGroceryItem()
 
 const query = ref('')
 const suggestions = ref<IngredientSuggestion[]>([])
 const open = ref(false)
+/** -1 = none highlighted: Enter adds the raw typed text. */
 const activeIndex = ref(-1)
+/** Explicit category override for the NEXT add (empty = use row's own). */
 const category = ref<string>('')
-const listboxId = `ingredient-listbox-${Math.random().toString(36).slice(2, 8)}`
 const wrapper = ref<HTMLElement | null>(null)
+const listboxId = `ingredient-listbox-${Math.random().toString(36).slice(2, 8)}`
 
-/** Category select is hidden until there is an ingredient to categorize. */
 const showCategory = computed(() => query.value.trim().length > 0)
 const canSubmit = computed(() => query.value.trim().length > 0)
+
+/** The persistent "add this exact text" row — always row 0 (ADR-0014). */
+const typedRow = computed<IngredientSuggestion | null>(() => {
+  const trimmed = query.value.trim()
+  if (trimmed.length < 2) return null
+  return {
+    name: trimmed,
+    nameKey: `typed:${nameKey(trimmed)}`,
+    // Unknown names keep the bucketless "Other" live feedback; an exact
+    // index/custom match corrects it below via rowAt().
+    category: 'Other',
+    mine: false,
+  }
+})
+
+/**
+ * Index/custom entry exactly matching the typed text (nameKey level).
+ * The + row adopts its category/unit/mine flags so the live feedback
+ * reflects the known ingredient, not the bare "Other" bucket.
+ */
+function matchFor(trimmed: string): IngredientSuggestion | null {
+  const key = nameKey(trimmed)
+  return (
+    suggestions.value.find((s) => s.nameKey === key) ??
+    (customIngredients.find(trimmed)
+      ? { ...customIngredients.find(trimmed)!, mine: true }
+      : null)
+  )
+}
+
+/** The effective row rendered at list position `i`. */
+function rowAt(i: number): IngredientSuggestion | undefined {
+  const row = rows.value[i]
+  if (!row || row !== typedRow.value) return row
+  const match = matchFor(query.value.trim())
+  return match ? { ...match, name: row.name, nameKey: row.nameKey } : row
+}
+
+/** Rows in the listbox: the typed + row FIRST, then the ranked matches
+ *  (an exact match of the typed text is folded into the + row). */
+const rows = computed<IngredientSuggestion[]>(() => {
+  const typed = typedRow.value
+  if (!typed) return suggestions.value
+  const key = nameKey(typed.name)
+  return [typed, ...suggestions.value.filter((s) => s.nameKey !== key)]
+})
 
 let suggestToken = 0
 async function refreshSuggestions() {
@@ -52,24 +108,38 @@ async function refreshSuggestions() {
   if (trimmed.length < 2) {
     suggestions.value = []
     open.value = false
+    activeIndex.value = -1
     return
   }
   const result = await suggestIngredients(trimmed, customIngredients.list)
   if (token !== suggestToken) return // a newer keystroke already won
   suggestions.value = result
   activeIndex.value = -1
-  open.value = result.length > 0
+  // The typed + row keeps the listbox open past 2 chars even with zero
+  // catalog matches (unknown names stay addable + labeled).
+  open.value = true
 }
 
 /** Real user typing only — programmatic value sets never fire input. */
 function onInput(event: Event) {
+  // A new keystroke invalidates any pending category override.
+  category.value = ''
   query.value = (event.target as HTMLInputElement).value
   void refreshSuggestions()
 }
 
-function choose(s: IngredientSuggestion) {
-  query.value = s.name
-  category.value = s.category
+/**
+ * Add a row NOW (ADR-0014 immediate-add loop): the shared action persists
+ * the item, remembers it and toasts "Added to <Category>" (duplicates are
+ * silent), then the input clears and the flow stays open.
+ */
+function addRow(s: IngredientSuggestion) {
+  const chosen = category.value || s.category
+  const ok = addGroceryItem(s.name, chosen)
+  if (ok) emit('added', { name: s.name, category: chosen })
+  query.value = ''
+  category.value = ''
+  suggestions.value = []
   open.value = false
   activeIndex.value = -1
 }
@@ -78,58 +148,53 @@ function optionId(index: number): string {
   return `${listboxId}-opt-${index}`
 }
 
-/** Category for a submitted ingredient: explicit override > index match. */
-function effectiveCategory(): string {
-  if (category.value) return category.value
-  const match = suggestions.value.find((s) => s.name === query.value.trim())
-  return match?.category ?? 'Other'
-}
-
-function submit() {
-  const name = query.value.trim()
-  if (!name) return
-  emit('add', { name, category: effectiveCategory() })
-  query.value = ''
-  category.value = ''
-  suggestions.value = []
-  open.value = false
-  activeIndex.value = -1
-}
-
 function onKeydown(event: KeyboardEvent) {
-  if (open.value && suggestions.value.length > 0) {
+  if (open.value && rows.value.length > 0) {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
-      activeIndex.value = (activeIndex.value + 1) % suggestions.value.length
+      activeIndex.value = (activeIndex.value + 1) % rows.value.length
       return
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault()
       activeIndex.value =
-        activeIndex.value <= 0 ? suggestions.value.length - 1 : activeIndex.value - 1
+        activeIndex.value <= 0 ? rows.value.length - 1 : activeIndex.value - 1
       return
     }
     if (event.key === 'Enter' && activeIndex.value >= 0) {
-      event.preventDefault()
-      choose(suggestions.value[activeIndex.value])
-      return
+      const row = rowAt(activeIndex.value)
+      if (row) {
+        event.preventDefault()
+        addRow(row)
+        return
+      }
     }
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      open.value = false
-      activeIndex.value = -1
-      return
-    }
-  }
-  if (event.key === 'Escape' && query.value) {
-    query.value = ''
-    category.value = ''
-    return
   }
   if (event.key === 'Enter') {
-    event.preventDefault()
-    submit()
+    if (canSubmit.value) {
+      // Nothing highlighted: Enter adds the raw typed text (+ row).
+      event.preventDefault()
+      addRow(typedRow.value!)
+    }
+    return
   }
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    if (open.value) {
+      // First Escape: collapse the dropdown, keep the typed text.
+      open.value = false
+      activeIndex.value = -1
+    } else {
+      // The flow is an always-present form: "closing" = emptying it.
+      query.value = ''
+      category.value = ''
+    }
+  }
+}
+
+/** Explicit Add button: same immediate-add as the + row / Enter. */
+function onSubmit() {
+  if (canSubmit.value) addRow(typedRow.value!)
 }
 
 function onBlurOut(event: FocusEvent) {
@@ -153,26 +218,26 @@ const ariaLabel = 'Add a custom grocery item'
 </script>
 
 <template>
-  <div ref="wrapper" class="relative" @focusout="onBlurOut">
+  <div ref="wrapper" class="relative" data-test="add-bar" @focusout="onBlurOut">
     <form
       class="flex gap-2"
       :class="compact ? 'mx-auto max-w-sm' : ''"
       data-test="add-item-form"
-      @submit.prevent="submit"
+      @submit.prevent="onSubmit"
     >
       <input
         :value="query"
         type="text"
         maxlength="80"
-        :placeholder="'Add an item not in the recipes…'"
+        placeholder="Add an item not in the recipes…"
         :aria-label="ariaLabel"
         role="combobox"
-        :aria-expanded="open && suggestions.length > 0"
+        :aria-expanded="open && rows.length > 0"
         aria-autocomplete="list"
-        :aria-controls="open && suggestions.length > 0 ? listboxId : undefined"
+        :aria-controls="open && rows.length > 0 ? listboxId : undefined"
         :aria-activedescendant="activeIndex >= 0 ? optionId(activeIndex) : undefined"
         class="h-11 w-full rounded-xl border dark:border-stone-700 dark:bg-stone-900 px-4 text-sm outline-none focus:border-primary"
-        data-test="ingredient-input"
+        data-test="add-bar-input"
         @input="onInput"
         @keydown="onKeydown"
       />
@@ -186,8 +251,8 @@ const ariaLabel = 'Add a custom grocery item'
       </button>
     </form>
 
-    <!-- Category chooser: defaults from the picked suggestion, overrides
-         remember with the row. Kept outside the truncating form row. -->
+    <!-- Category chooser: explicit override for the NEXT add; resets on
+         every add so the row categories stay authoritative afterwards. -->
     <select
       v-if="showCategory"
       v-model="category"
@@ -200,7 +265,7 @@ const ariaLabel = 'Add a custom grocery item'
     </select>
 
     <ul
-      v-if="open && suggestions.length > 0"
+      v-if="open && rows.length > 0"
       :id="listboxId"
       role="listbox"
       aria-label="Ingredient suggestions"
@@ -208,26 +273,39 @@ const ariaLabel = 'Add a custom grocery item'
       data-test="ingredient-suggestions"
     >
       <li
-        v-for="(s, i) in suggestions"
+        v-for="(row, i) in rows"
         :id="optionId(i)"
-        :key="s.nameKey"
+        :key="row.nameKey"
         role="option"
         :aria-selected="i === activeIndex"
-        class="flex cursor-pointer items-center justify-between gap-2 px-4 py-2 text-sm"
+        :aria-label="`Add '${rowAt(i)!.name}' — ${rowAt(i)!.category}`"
+        class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm"
         :class="i === activeIndex ? 'bg-primary/10 dark:bg-primary/20' : ''"
-        data-test="ingredient-suggestion"
+        :data-test="i === 0 ? 'add-suggestion-first' : 'add-suggestion-row'"
         @mousedown.prevent
-        @click="choose(s)"
+        @click="addRow(rowAt(i)!)"
       >
-        <span class="min-w-0 flex-1 truncate">{{ s.name }}</span>
         <span
-          v-if="s.mine"
+          class="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary-dark dark:bg-primary/20 dark:text-primary"
+          aria-hidden="true"
+          >＋</span
+        >
+        <span class="min-w-0 flex-1 truncate font-medium">{{ row.name }}</span>
+        <span
+          v-if="rowAt(i)!.mine"
           class="shrink-0 rounded-full bg-primary/15 px-1.5 py-px text-[10px] font-semibold text-primary-dark dark:bg-primary/20 dark:text-primary"
           data-test="mine-badge"
           aria-label="Remembered from your own adds"
           >mine</span
         >
-        <span v-if="s.unit" class="shrink-0 text-xs text-stone-400">{{ s.unit }}</span>
+        <span v-if="rowAt(i)!.unit" class="shrink-0 text-xs text-stone-400">{{ rowAt(i)!.unit }}</span>
+        <!-- Live category feedback (ADR-0014): visible on every row and
+             folded into the row's accessible name (not decorative). -->
+        <span
+          class="shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold text-stone-500 dark:bg-stone-800 dark:text-stone-400"
+          data-test="suggestion-category"
+          >{{ rowAt(i)!.category }}</span
+        >
       </li>
     </ul>
   </div>

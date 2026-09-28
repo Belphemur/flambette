@@ -153,9 +153,9 @@ onMounted(async () => {
     <Transition name="toast">
       <div
         v-if="ui.toast"
-        class="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow-lg"
         role="status"
-        data-test="toast"
+        class="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-stone-900 px-4 py-2 text-sm font-medium text-white shadow-lg"
+        :data-test="ui.toast.kind ? `${ui.toast.kind}-toast` : 'toast'"
       >
         <span>{{ ui.toast.message }}</span>
         <button

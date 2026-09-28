@@ -77,14 +77,6 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
 
 const customIngredients = useCustomIngredientsStore()
 
-function addNewItem(payload: { name: string; category: string }) {
-  if (plan.addCustomItem(payload.name)) {
-    // Device-local memory (ADR-0012): remember the typed name + category
-    // so it reappears as a "mine" suggestion on future visits.
-    customIngredients.remember(payload.name, payload.category)
-  }
-}
-
 /** Remembered store category for a custom row (undefined when unknown). */
 function customCategory(item: string): string | undefined {
   return customIngredients.find(item)?.category
@@ -107,7 +99,7 @@ function customCategory(item: string): string | undefined {
         Browse recipes
       </button>
 
-      <IngredientAutocomplete compact @add="addNewItem" />
+      <IngredientAutocomplete compact />
     </div>
 
     <template v-else-if="loading && items.length === 0">
@@ -167,7 +159,7 @@ function customCategory(item: string): string | undefined {
         </div>
       </template>
 
-      <IngredientAutocomplete @add="addNewItem" />
+      <IngredientAutocomplete />
 
       <div
         v-if="plan.customItems.length > 0"
