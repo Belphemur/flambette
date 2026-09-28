@@ -1,3 +1,9 @@
+import {
+  containerContribution,
+  containerKey,
+  formatContainerQuantity,
+  parseContainerQuantity,
+} from './containers'
 import { parseQuantity, formatAmount } from './quantity'
 import { isSeasoning, scaleQuantity } from './recipe'
 import { bucketFor, type StoreSection } from './sections'
@@ -60,10 +66,28 @@ interface UnitSum {
   amount: number
 }
 
+/** Sum of container-unit contributions for one (container, annotation). */
+interface ContainerSum {
+  /** First-seen container phrase, used for display (`small bunch`). */
+  container: string
+  annotation: string
+  /** Sum of per-recipe container contributions. */
+  amount: number
+  /** How many planned meals contributed. */
+  contributions: number
+  /**
+   * Verbatim authored quantity when a single meal at its own serving count
+   * is the only contributor — keeps `½ (142 g) pkg` authentic.
+   */
+  verbatim?: string
+}
+
 interface Group {
   name: string
   /** normalized unit -> summed amount */
   byUnit: Map<string, UnitSum>
+  /** container merge key -> ceil-merged container total (ADR-0017) */
+  containers: Map<string, ContainerSum>
   /** verbatim quantities that didn't parse (deduped) */
   raw: Set<string>
   /** planned meal names using this ingredient */
@@ -87,6 +111,9 @@ export interface AggregateInput {
  * - group by normalized ingredient name (no stemming/plural-merging of names)
  * - normalize units before summing ("2 cloves" + "1 clove" → "3 cloves");
  *   amounts with genuinely different units stay separate lines
+ * - container units (`½ (142 g) pkg`, `1 small bunch`) are purchasable, not
+ *   divisible: they skip linear scaling and ceil-merge per container +
+ *   annotation (ADR-0017)
  * - pass unparseable quantities through verbatim
  * - track which planned meals use each ingredient
  * - skip ingredients cleared per meal (cleared set): an ingredient cleared
@@ -108,10 +135,40 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       if (cleared?.has(normalized)) continue
       let group = groups.get(normalized)
       if (!group) {
-        group = { name: item.ingredient_name.trim(), byUnit: new Map(), raw: new Set(), recipes: new Set() }
+        group = {
+          name: item.ingredient_name.trim(),
+          byUnit: new Map(),
+          containers: new Map(),
+          raw: new Set(),
+          recipes: new Set(),
+        }
         groups.set(normalized, group)
       }
       group.recipes.add(recipeName)
+      // ADR-0017: container units are bought whole — aggregate them before
+      // the linear path so a serving bump rounds UP to a purchasable
+      // container instead of inventing 1.7 packages.
+      const container = parseContainerQuantity(item.quantity)
+      if (container) {
+        const key = containerKey(container.container, container.annotation)
+        const contribution = containerContribution(container.count, factor)
+        const current = group.containers.get(key)
+        if (current) {
+          current.amount += contribution
+          current.contributions += 1
+          // A second contributor (or a scaled single one) drops verbatim text.
+          current.verbatim = undefined
+        } else {
+          group.containers.set(key, {
+            container: container.container,
+            annotation: container.annotation,
+            amount: contribution,
+            contributions: 1,
+            verbatim: contribution === container.count ? container.raw : undefined,
+          })
+        }
+        continue
+      }
       const parsed = parseQuantity(item.quantity)
       if (parsed) {
         const key = unitKey(parsed.unit)
@@ -137,6 +194,13 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
     const lines: GroceryLine[] = []
     for (const { unit, amount } of group.byUnit.values()) {
       const display = unit ? `${formatAmount(amount)} ${unit}` : formatAmount(amount)
+      lines.push({ key: `${normalized}||${display}`, display })
+    }
+    for (const { container, annotation, amount, verbatim } of group.containers.values()) {
+      // A single meal at its authored servings keeps the recipe's own text
+      // (`½ (142 g) pkg`); every other case renders the merged count, whole
+      // (`1 (142 g) pkg`, `2 (142 g) pkgs`) or fractional (`3/2 small bunch`).
+      const display = verbatim ?? formatContainerQuantity(amount, container, annotation)
       lines.push({ key: `${normalized}||${display}`, display })
     }
     // Sort summed lines numerically for stable, readable output.
