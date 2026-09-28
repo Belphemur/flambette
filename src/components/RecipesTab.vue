@@ -1,10 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { catalog } from '../lib/catalog'
+import {
+  DIET_DESCRIPTIONS,
+  DIET_IDS,
+  DIET_LABELS,
+  dietChipLabel,
+  dietIndexFor,
+  matchesAllDiets,
+  type DietId,
+} from '../lib/dietFilter'
 import { popularityScore } from '../lib/quantity'
 import { searchVariantIds } from '../lib/search'
 import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
+import { useUiStore } from '../stores/ui'
 import RecipeCard from './RecipeCard.vue'
 
 const query = ref('')
@@ -17,14 +27,42 @@ const sortBy = ref<
 >('rating')
 
 const favourites = useFavouritesStore()
+const ui = useUiStore()
 
 const categories = computed(() => catalog.value?.categories ?? [])
+
+/* ---------- Diet filter chips (ADR-0018) ---------- */
+
+/** Whole-catalog verdicts + chip counts, classified once at load time. */
+const dietIndex = computed(() => {
+  const c = catalog.value
+  return c ? dietIndexFor(c.data.variant_meta) : null
+})
+
+/** Active diet rules, ANDed together. */
+const activeDiets = computed<DietId[]>(() => ui.dietFilters)
+
+const dietCounts = computed(() => {
+  const counts = {} as Record<DietId, number>
+  for (const id of DIET_IDS) counts[id] = dietIndex.value?.counts[id] ?? 0
+  return counts
+})
+
+function toggleDiet(diet: DietId) {
+  const current = [...ui.dietFilters]
+  const at = current.indexOf(diet)
+  if (at === -1) current.push(diet)
+  else current.splice(at, 1)
+  ui.dietFilters = current
+}
 
 const results = computed<VariantMeta[]>(() => {
   const c = catalog.value
   if (!c) return []
   const maxT = maxTime.value
   const q = query.value.trim()
+  const diets = activeDiets.value
+  const index = dietIndex.value
 
   const facets = (meta: VariantMeta): boolean => {
     if (favOnly.value && !favourites.ids.has(meta.id)) return false
@@ -32,6 +70,10 @@ const results = computed<VariantMeta[]>(() => {
     if (category.value !== 'all' && c.dataById.get(meta.id)?.category_name !== category.value)
       return false
     if (maxT !== null && meta.cooking_minutes > maxT) return false
+    if (diets.length > 0) {
+      const verdict = index?.verdictById.get(meta.id)
+      if (!verdict || !matchesAllDiets(verdict, diets)) return false
+    }
     return true
   }
 
@@ -70,7 +112,13 @@ const results = computed<VariantMeta[]>(() => {
 })
 
 const filtersActive = computed(
-  () => query.value || favOnly.value || proOnly.value || category.value !== 'all' || maxTime.value !== null,
+  () =>
+    query.value ||
+    favOnly.value ||
+    proOnly.value ||
+    category.value !== 'all' ||
+    maxTime.value !== null ||
+    ui.dietFilters.length > 0,
 )
 
 function clearFilters() {
@@ -79,6 +127,7 @@ function clearFilters() {
   favOnly.value = false
   proOnly.value = false
   maxTime.value = null
+  ui.dietFilters = []
 }
 
 /* ---------- Incremental rendering ---------- */
@@ -173,6 +222,31 @@ onUnmounted(() => observer?.disconnect())
         <option value="time">Sort: Quickest</option>
         <option value="calories">Sort: Fewest calories</option>
       </select>
+    </div>
+
+    <div
+      class="flex flex-wrap items-center gap-2"
+      role="group"
+      aria-label="Diet filters"
+      data-test="diet-filters"
+    >
+      <button
+        v-for="d in DIET_IDS"
+        :key="d"
+        type="button"
+        :data-test="`diet-chip-${d}`"
+        class="h-9 rounded-full border px-3 text-xs font-medium transition-colors"
+        :class="
+          activeDiets.includes(d)
+            ? 'border-primary bg-primary text-white'
+            : 'dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'
+        "
+        :aria-pressed="activeDiets.includes(d)"
+        :aria-label="`${DIET_LABELS[d]}: ${DIET_DESCRIPTIONS[d]}`"
+        @click="toggleDiet(d)"
+      >
+        {{ dietChipLabel(d, dietCounts[d]) }}
+      </button>
     </div>
 
     <p class="text-xs text-stone-400">

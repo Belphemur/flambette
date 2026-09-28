@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { DIET_IDS, type DietId } from '../lib/dietFilter'
 
 /** Bottom-nav entries, in display order. `to` is the route path. */
 export const TABS: { id: string; label: string; icon: string; to: string }[] = [
@@ -55,6 +56,10 @@ export const useUiStore = defineStore(
     /** Share personal cooked history with the live room (off by default —
      *  history is personal data; see ADR-0011 addendum). Part of backups. */
     const shareCookedHistory = ref(false)
+    /** Active diet-filter chips on the Recipes tab (AND, ADR-0018). */
+    const dietFilters = ref<DietId[]>([])
+    /** Persistent household room code the app auto-joins on start (ADR-0019). */
+    const householdRoom = ref('')
     /** Transient toast: plain message, optionally with inline action buttons. */
     const toast = ref<Toast | null>(null)
     let toastTimer: ReturnType<typeof setTimeout> | undefined
@@ -70,8 +75,26 @@ export const useUiStore = defineStore(
     }
 
     /** Replace persisted ui prefs wholesale (backup import). */
-    function applySettings(prefs: { shareCookedHistory?: boolean }): void {
+    function applySettings(prefs: {
+      shareCookedHistory?: boolean
+      dietFilters?: DietId[]
+      householdRoom?: string
+    }): void {
       if (typeof prefs.shareCookedHistory === 'boolean') shareCookedHistory.value = prefs.shareCookedHistory
+      if (Array.isArray(prefs.dietFilters)) {
+        // Unknown ids are dropped rather than trusted (frozen rule set).
+        dietFilters.value = prefs.dietFilters.filter((d): d is DietId => DIET_IDS.includes(d as DietId))
+      }
+      if (typeof prefs.householdRoom === 'string') setHouseholdRoom(prefs.householdRoom)
+    }
+
+    /**
+     * Persist (or clear) the household room code. Normalized to upper
+     * case; anything that is not a plausible code clears the setting.
+     */
+    function setHouseholdRoom(code: string) {
+      const cleaned = code.trim().toUpperCase()
+      householdRoom.value = /^[A-Z0-9]{4,12}$/.test(cleaned) ? cleaned : ''
     }
 
     /** End the current toast (if any) and fire its onDismiss exactly once. */
@@ -102,16 +125,23 @@ export const useUiStore = defineStore(
     return {
       cookingStepIndex,
       shareCookedHistory,
+      dietFilters,
+      householdRoom,
       toast,
       setCookingStep,
       cookingStep,
       applySettings,
+      setHouseholdRoom,
       showToast,
       dismissToast,
     }
   },
   {
-    // Only the share pref persists; cookingStepIndex stays session-scoped.
-    persist: { key: 'mealime-planner:v1:ui', pick: ['shareCookedHistory'] },
+    // Only the share/diet/room prefs persist; cookingStepIndex stays
+    // session-scoped.
+    persist: {
+      key: 'mealime-planner:v1:ui',
+      pick: ['shareCookedHistory', 'dietFilters', 'householdRoom'],
+    },
   },
 )
