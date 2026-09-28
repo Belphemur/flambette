@@ -19,6 +19,10 @@ export interface Toast {
   message: string
   /** Inline buttons rendered next to the message. */
   actions?: ToastAction[]
+  /** Data-test marker discriminating confirmation kinds (e.g. "added").
+   *  Rendered as data-test="added-toast" so specs can target the
+   *  ingredient-added confirmation, not just any toast. */
+  kind?: string
 }
 
 export interface ToastOptions {
@@ -26,6 +30,8 @@ export interface ToastOptions {
   actions?: ToastAction[]
   /** Auto-dismiss delay in ms (default 2500). */
   duration?: number
+  /** Confirmation kind — emits data-test="added-toast" when set. */
+  kind?: string
   /**
    * Called exactly once when the toast ends, whatever the cause:
    * timeout, replacement by a newer toast, or dismissToast().
@@ -83,7 +89,7 @@ export const useUiStore = defineStore(
       // A replacing toast ends the previous one first (its onDismiss fires).
       endToast()
       onDismiss = options.onDismiss
-      toast.value = { message, actions: options.actions }
+      toast.value = { message, actions: options.actions, kind: options.kind }
       toastTimer = setTimeout(endToast, options.duration ?? 2500)
     }
 

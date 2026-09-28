@@ -7,9 +7,9 @@ import {
 } from './helpers'
 
 /**
- * Grocery add-item autocomplete (ADR-0012): baked ingredient index
- * suggestions + device-local remembered names ("mine"), category
- * dropdown, unknown names stay addable.
+ * Grocery add-item autocomplete (ADR-0012/0014): baked ingredient index
+ * suggestions + device-local remembered names ("mine"), live category on
+ * every row, typed text row FIRST with immediate-add (ADR-0014).
  */
 
 test.beforeEach(async ({ page }) => {
@@ -20,52 +20,78 @@ test.beforeEach(async ({ page }) => {
 })
 
 /** The add-item input (same visible label across Grocery + Shop forms). */
-const input = (page: Page) => page.getByLabel('Add a custom grocery item')
+const input = (page: Page) => page.getByTestId('add-bar-input')
 
-/** All visible suggestion rows. */
-function suggestions(page: Page) {
-  return page.locator('[data-test=ingredient-suggestion]')
+/** All visible suggestion rows (typed + row first, then ranked matches). */
+function suggestionRows(page: Page) {
+  return page.locator('[data-test=add-suggestion-first], [data-test=add-suggestion-row]')
+}
+
+/** All ranked-match rows (everything below the typed + row). */
+function matchRows(page: Page) {
+  return page.locator('[data-test=add-suggestion-row]')
 }
 
 /** The suggestion row marked with a "mine" badge. */
 function mineSuggestions(page: Page) {
-  return page
-    .locator('[data-test=ingredient-suggestion]')
-    .filter({ has: page.locator('[data-test=mine-badge]') })
+  return matchRows(page).filter({ has: page.locator('[data-test=mine-badge]') })
 }
 
-test('index suggestions are ranked with category auto-selected', async ({ page }) => {
+test('typed text row stays first with live category, + adds immediately', async ({ page }) => {
   await input(page).fill('tomato')
   const box = page.locator('[data-test=ingredient-suggestions]')
   await expect(box).toBeVisible()
 
-  // Ranked list is capped at 8 and includes both the exact nameKey match
-  // (tomatoes, Produce) and word-boundary matches (tomato paste, Canned…;
-  // tomatillo is not in this catalog, so boundary matches here are
-  // "tomato paste"/"tomato sauce"-like rows).
-  const rows = suggestions(page)
-  expect(await rows.count()).toBeGreaterThan(0)
-  expect(await rows.count()).toBeLessThanOrEqual(8)
-  // Exact nameKey match "tomato" (displayed as "tomatoes") must be present.
-  await expect(rows.filter({ hasText: /^tomatoes/ })).toHaveCount(1)
+  // Row 0 is the typed text itself, with the live category chip.
+  const first = page.locator('[data-test=add-suggestion-first]')
+  await expect(first).toHaveCount(1)
+  await expect(first).toContainText('tomato')
+  // "tomato" exactly matches the index entry (nameKey "tomato") → the
+  // + row adopts its real category instead of the bare Other bucket.
+  await expect(first.locator('[data-test=suggestion-category]')).toHaveText('Produce')
+
+  // Ranked matches capped at 8 total rows, exact nameKey match present.
+  expect(await matchRows(page).count()).toBeGreaterThan(0)
+  expect(await suggestionRows(page).count()).toBeLessThanOrEqual(8)
+  await expect(matchRows(page).filter({ hasText: /^tomatoes/ })).toHaveCount(0)
   await expect(page.locator('[data-test=mine-badge]')).toHaveCount(0)
 
-  // Pick the exact match → name + category default from the index.
-  await rows.filter({ hasText: /^tomatoes/ }).click()
-  await expect(input(page)).toHaveValue('tomatoes')
-  await expect(page.locator('[data-test=ingredient-category]')).toHaveValue('Produce')
-
-  // Submit adds the custom row.
-  await input(page).press('Enter')
-  await expect(page.getByTestId('custom-items')).toContainText('tomatoes')
+  // Pressing the typed + row adds IMMEDIATELY: toast "Added to Produce",
+  // custom row appears, input clears and the flow stays open.
+  await first.click()
+  await expect(page.getByTestId('added-toast')).toContainText('Added to Produce')
+  await expect(page.getByTestId('custom-items')).toContainText('tomato')
+  await expect(input(page)).toHaveValue('')
+  await expect(input(page)).toBeFocused()
   await expectZeroMealimeRequests(page)
+})
+
+test('picking an index match adopts its category; unknown shows Other first', async ({ page }) => {
+  // A genuinely unknown multi-word name shows the Other bucket live.
+  await input(page).fill('plastic wrap')
+  const first = page.locator('[data-test=add-suggestion-first]')
+  await expect(first).toBeVisible()
+  await expect(first.locator('[data-test=suggestion-category]')).toHaveText('Other')
+  await input(page).press('Escape')
+
+  await input(page).fill('tomato')
+  await expect(page.locator('[data-test=ingredient-suggestions]')).toBeVisible()
+
+  // The exact match "tomatoes" (Produce) is folded INTO the + row — the
+  // ranked list below it no longer duplicates it.
+  await expect(matchRows(page).filter({ hasText: /^tomatoes/ })).toHaveCount(0)
+
+  // Adding via the + row commits the index category.
+  await first.click()
+  await expect(page.getByTestId('added-toast')).toContainText('Added to Produce')
+  await expect(page.getByTestId('custom-items')).toContainText('tomato', { exact: false })
 })
 
 test('unknown item adds as custom, persists, and shows a mine badge next time', async ({ page }) => {
   const unknown = 'Triple-filtered glacier water'
   await input(page).fill(unknown)
-  // Dropdown stays closed for a made-up string (no index, no custom match).
-  await expect(page.locator('[data-test=ingredient-suggestions]')).toHaveCount(0)
+  // Unknown text still shows a + row (category Other), still addable.
+  await expect(page.locator('[data-test=add-suggestion-first]')).toBeVisible()
   await input(page).press('Enter')
 
   await expect(page.getByTestId('custom-items')).toContainText(unknown)
@@ -79,71 +105,34 @@ test('unknown item adds as custom, persists, and shows a mine badge next time', 
   await expect(mineSuggestions(page)).toContainText(unknown)
 })
 
-test('category dropdown override works and sticks on the added row', async ({ page }) => {
-  await input(page).fill('tomatoes')
-  const box = page.locator('[data-test=ingredient-suggestions]')
-  await expect(box).toBeVisible()
-
-  // Default from the index via the picked suggestion:
-  await suggestions(page).filter({ hasText: /^tomatoes/ }).click()
-  await expect(page.locator('[data-test=ingredient-category]')).toHaveValue('Produce')
-  // Override before submit:
-  await page.locator('[data-test=ingredient-category]').selectOption('Household')
-  await input(page).press('Enter')
-  await expect(page.getByTestId('custom-items')).toContainText('tomatoes')
-  // The chosen override is remembered and shown on the added row.
-  await expect(
-    page.locator('[data-test=custom-item-category]').filter({ hasText: 'Household' }),
-  ).toBeVisible()
-
-  // After reload the override still sticks to the added row (device-local:
-  // orthogonal to the room-synced customItems strings).
-  await page.reload()
-  await expect(
-    page.locator('[data-test=custom-item-category]').filter({ hasText: 'Household' }),
-  ).toBeVisible()
-
-  // A remembered override also becomes the next-time default: add an
-  // unknown item with a category, reload, retype — the suggestion row
-  // carries the "mine" badge and its remembered category default.
-  const remembered = 'Sunshade tent'
-  await input(page).fill(remembered)
-  await page.locator('[data-test=ingredient-category]').selectOption('Kitchen')
-  await input(page).press('Enter')
-  await expect(page.getByTestId('custom-items')).toContainText(remembered)
-
-  await page.reload()
-  await input(page).fill(remembered.slice(0, 9))
-  const mine = mineSuggestions(page).first()
-  await expect(mine).toContainText(remembered)
-  await mine.click()
-  await expect(page.locator('[data-test=ingredient-category]')).toHaveValue('Kitchen')
-})
-
-test('keyboard navigation: ArrowDown/Up move highlight, Enter picks, Escape closes', async ({ page }) => {
+test('keyboard navigation: ArrowDown/Up move highlight, Enter adds, Escape closes', async ({ page }) => {
   await input(page).fill('tom')
   const box = page.locator('[data-test=ingredient-suggestions]')
   await expect(box).toBeVisible()
 
   await input(page).press('ArrowDown')
-  await expect(suggestions(page).first()).toHaveAttribute('aria-selected', 'true')
+  await expect(suggestionRows(page).first()).toHaveAttribute('aria-selected', 'true')
 
   await input(page).press('ArrowDown')
-  await expect(suggestions(page).nth(1)).toHaveAttribute('aria-selected', 'true')
+  await expect(suggestionRows(page).nth(1)).toHaveAttribute('aria-selected', 'true')
 
   await input(page).press('ArrowUp')
-  await expect(suggestions(page).first()).toHaveAttribute('aria-selected', 'true')
+  await expect(suggestionRows(page).first()).toHaveAttribute('aria-selected', 'true')
 
-  // Enter picks the highlighted suggestion.
+  // Enter adds the highlighted (+ row) — immediate add, no dialogue.
   await input(page).press('Enter')
-  await expect(page.locator('[data-test=ingredient-suggestions]')).toHaveCount(0)
-  expect((await input(page).inputValue()).length).toBeGreaterThan(0)
+  await expect(page.getByTestId('custom-items')).toContainText('tom')
+  await expect(input(page)).toHaveValue('')
 
-  // Escape closes the dropdown.
+  // Escape collapses the dropdown...
   await input(page).fill('tomato paste')
   await expect(box).toBeVisible()
   await input(page).press('Escape')
   await expect(box).toHaveCount(0)
+
+  // ...and a second Escape empties the input (the form itself stays).
+  await input(page).press('Escape')
+  await expect(input(page)).toHaveValue('')
 })
 
 test('combobox semantics: aria-expanded tracks open state', async ({ page }) => {
@@ -164,7 +153,7 @@ test('the add flow also works from Shopping mode (ShopView)', async ({ page }) =
 
   await page.locator('[data-test=start-shopping]').click()
   await expect(page).toHaveURL(/\/shop$/)
-  await expect(page.locator('[data-test=ingredient-input]').first()).toBeVisible()
+  await expect(input(page).first()).toBeVisible()
   await input(page).fill('Spare fuses')
   await input(page).press('Enter')
   await expect(

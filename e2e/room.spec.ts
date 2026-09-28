@@ -225,7 +225,7 @@ test('room sync: remembered custom ingredients (customs) sync as household state
   await b.goto('/grocery')
   await b.getByLabel('Add a custom grocery item').fill('Qoruvva')
   await expect(
-    b.locator('[data-test=ingredient-suggestion]').filter({ has: b.locator('[data-test=mine-badge]') }),
+    b.locator('[data-test=add-suggestion-row]').filter({ has: b.locator('[data-test=mine-badge]') }),
   ).toContainText(unknown)
 
   await ctxA.close()
