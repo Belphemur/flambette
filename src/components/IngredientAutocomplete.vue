@@ -50,6 +50,7 @@ const activeIndex = ref(-1)
 /** Explicit category override for the NEXT add (empty = use row's own). */
 const category = ref<string>('')
 const wrapper = ref<HTMLElement | null>(null)
+const inputEl = ref<HTMLInputElement | null>(null)
 const listboxId = `ingredient-listbox-${Math.random().toString(36).slice(2, 8)}`
 
 const showCategory = computed(() => query.value.trim().length > 0)
@@ -142,6 +143,9 @@ function addRow(s: IngredientSuggestion) {
   suggestions.value = []
   open.value = false
   activeIndex.value = -1
+  // The input keeps focus after programmatic value changes so the
+  // bulk-add loop never loses the keyboard (ADR-0014).
+  inputEl.value?.focus()
 }
 
 function optionId(index: number): string {
@@ -204,6 +208,11 @@ function onBlurOut(event: FocusEvent) {
   }
 }
 
+/** Hand the keyboard back to the input after a surface swap. */
+defineExpose({
+  focus: () => inputEl.value?.focus(),
+})
+
 function onGlobalPointer(event: Event) {
   if (!wrapper.value?.contains(event.target as Node)) {
     open.value = false
@@ -226,6 +235,7 @@ const ariaLabel = 'Add a custom grocery item'
       @submit.prevent="onSubmit"
     >
       <input
+        ref="inputEl"
         :value="query"
         type="text"
         maxlength="80"

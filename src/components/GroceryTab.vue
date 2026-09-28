@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGroceryList } from '../lib/useGroceryList'
 import type { GroceryItem } from '../lib/grocery'
@@ -77,6 +77,19 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
 
 const customIngredients = useCustomIngredientsStore()
 
+/** Ref of the add form (for the emptyState→list focus handoff, ADR-0014). */
+const addForm = ref<InstanceType<typeof IngredientAutocomplete> | null>(null)
+/**
+ * The add form mounts as the compact empty-state variant first; the first
+ * add makes customItems non-empty so that instance unmounts. Hand the
+ * keyboard to the freshly mounted main-form instance instead of dropping
+ * focus (the bulk-add loop never loses the keyboard, ADR-0014).
+ */
+watch(
+  () => plan.customItems.length > 0 || plan.plan.length > 0,
+  () => void nextTick(() => addForm.value?.focus()),
+)
+
 /** Remembered store category for a custom row (undefined when unknown). */
 function customCategory(item: string): string | undefined {
   return customIngredients.find(item)?.category
@@ -99,7 +112,7 @@ function customCategory(item: string): string | undefined {
         Browse recipes
       </button>
 
-      <IngredientAutocomplete compact />
+      <IngredientAutocomplete ref="addForm" compact />
     </div>
 
     <template v-else-if="loading && items.length === 0">
@@ -159,7 +172,7 @@ function customCategory(item: string): string | undefined {
         </div>
       </template>
 
-      <IngredientAutocomplete />
+      <IngredientAutocomplete ref="addForm" />
 
       <div
         v-if="plan.customItems.length > 0"
