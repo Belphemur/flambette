@@ -17,6 +17,8 @@ function openDetail() {
 <template>
   <article
     class="group relative cursor-pointer overflow-hidden rounded-xl dark:bg-stone-900 shadow-sm ring-1 dark:ring-stone-700 transition-shadow hover:shadow-md"
+    data-test="recipe-card"
+    :data-variant-id="meta.id"
     @click="openDetail"
   >
     <div class="relative">

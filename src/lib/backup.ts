@@ -16,6 +16,7 @@
  */
 import type { PlanEntry, CookedEntry } from '../stores/plan'
 import type { CustomIngredient } from '../stores/customIngredients'
+import { DIET_IDS, type DietId } from './dietFilter'
 import { zipStore, unzipStore, type ZipEntry } from './zip'
 
 /** Backup schema version. Bump + add a migration when the shape evolves. */
@@ -195,13 +196,15 @@ export const STORE_SLICES: SliceDef<any>[] = [
       useCustomIngredientsStore().replaceAll(value as CustomIngredient[])
     },
   },
-  /* Persisted ui prefs (share setting + theme override). */
+  /* Persisted ui prefs (share setting + diet filters + household room + theme). */
   {
     file: 'settings.json',
-    label: 'settings (cooked-history room sharing + theme)',
+    label: 'settings (cooked-history room sharing + diet filters + household room + theme)',
     persistKeys: ['mealime-planner:v1:ui'],
     read: () => ({
       shareCookedHistory: useUiStore().shareCookedHistory,
+      dietFilters: [...useUiStore().dietFilters],
+      householdRoom: useUiStore().householdRoom,
       theme: readTheme(),
     }),
     validate(value) {
@@ -211,6 +214,17 @@ export const STORE_SLICES: SliceDef<any>[] = [
       const v = value as Record<string, unknown>
       if (v.shareCookedHistory !== undefined && typeof v.shareCookedHistory !== 'boolean') {
         return 'settings.json shareCookedHistory must be a boolean'
+      }
+      if (v.dietFilters !== undefined) {
+        if (
+          !Array.isArray(v.dietFilters) ||
+          v.dietFilters.some((d) => typeof d !== 'string' || !DIET_IDS.includes(d as DietId))
+        ) {
+          return `settings.json dietFilters must be an array of ${DIET_IDS.join('/')}`
+        }
+      }
+      if (v.householdRoom !== undefined && typeof v.householdRoom !== 'string') {
+        return 'settings.json householdRoom must be a string'
       }
       if (v.theme !== undefined) {
         if (typeof v.theme !== 'object' || v.theme === null || Array.isArray(v.theme)) {
@@ -224,8 +238,17 @@ export const STORE_SLICES: SliceDef<any>[] = [
       return null
     },
     write(value) {
-      const v = value as { shareCookedHistory?: boolean; theme?: { theme?: string } }
-      useUiStore().applySettings({ shareCookedHistory: v.shareCookedHistory })
+      const v = value as {
+        shareCookedHistory?: boolean
+        dietFilters?: DietId[]
+        householdRoom?: string
+        theme?: { theme?: string }
+      }
+      useUiStore().applySettings({
+        shareCookedHistory: v.shareCookedHistory,
+        dietFilters: v.dietFilters,
+        householdRoom: v.householdRoom,
+      })
       if (v.theme) writeTheme(v.theme.theme ?? '')
     },
   },
