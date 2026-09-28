@@ -15,9 +15,12 @@ export function useAddGroceryItem() {
   const ui = useUiStore()
 
   return function addGroceryItem(name: string, category: string): boolean {
-    if (!plan.addCustomItem(name)) return false
+    const added = plan.addCustomItem(name)
+    // Remember (or upgrade) the typed name + category even when the item
+    // is already on the list — re-adding with a different category is the
+    // user correcting the memory (ADR-0012/0014).
     customIngredients.remember(name, category)
-    ui.showToast(`Added to ${category}`, { kind: 'added' })
-    return true
+    if (added) ui.showToast(`Added to ${category}`, { kind: 'added' })
+    return added
   }
 }
