@@ -211,7 +211,7 @@ test('full round-trip: seed, export, fresh context, import — everything is res
   // Custom-ingredient memory restored: retyping shows the "mine" badge.
   await b.getByLabel('Add a custom grocery item').fill('Ziipie')
   await expect(
-    b.locator('[data-test=ingredient-suggestion]').filter({ has: b.locator('[data-test=mine-badge]') }),
+    b.locator('[data-test=add-suggestion-row]').filter({ has: b.locator('[data-test=mine-badge]') }),
   ).toContainText(seed.remembered)
   // Favourites restored (custom serializer → localStorage is a bare array).
   expect(
