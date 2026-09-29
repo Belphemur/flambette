@@ -24,13 +24,21 @@ describe('describeRelayError', () => {
     expect(describeRelayError('rate_limited').retry).toBe(true)
   })
 
-  test('frame-level rejections never tear the room down', () => {
-    // Our own frames were refused — the room itself is alive.
-    for (const code of ['bad_state', 'bad_json', 'unknown_type', 'not_in_room']) {
+  test('frame-level rejections never tear the room down (F6)', () => {
+    // Our own frames were refused — the room itself is alive, so the
+    // store must do NOTHING (not even a reconnect, which would send
+    // `leave` and, as the last peer, delete the live room).
+    for (const code of ['bad_state', 'bad_json', 'unknown_type']) {
       const outcome = describeRelayError(code)
-      expect(outcome.retry).toBe(true)
+      expect(outcome.retry).toBe('ignore')
       expect(outcome.message).toBeNull()
     }
+  })
+
+  test('not_in_room is a real loss of the room, so it retries', () => {
+    // Unlike a refused frame, the relay is saying this socket is not in
+    // a room: re-join and re-seed.
+    expect(describeRelayError('not_in_room')).toEqual({ message: null, retry: true })
   })
 
   test('code_taken is handed back to the store (it re-rolls)', () => {
