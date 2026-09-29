@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { applyBackup, backupFileName, buildBackupZip } from '../lib/backup'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
+import { useShareRoomLink } from '../composables/useShareRoomLink'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 
@@ -17,6 +18,7 @@ import { useUiStore } from '../stores/ui'
  */
 const ui = useUiStore()
 const room = useRoomStore()
+const { shareRoomLink, shareableCode } = useShareRoomLink()
 
 /* ---------- Household sync (ADR-0019) ---------- */
 
@@ -36,6 +38,9 @@ function newRoomCode() {
   roomInput.value = generateRoomCode()
 }
 
+/** The live room, else the saved setting — whichever we can share. */
+const shareableCodeText = computed(() => shareableCode())
+
 function saveHouseholdRoom(joinNow: boolean) {
   const code = normalizeRoomCode(roomInput.value)
   if (!code) {
@@ -46,7 +51,13 @@ function saveHouseholdRoom(joinNow: boolean) {
   roomInput.value = code
   if (joinNow) {
     room.join(code)
-    ui.showToast(`Joining household ${code}…`, { kind: 'household' })
+    // The toast carries the share action: joining and sharing are the
+    // same two-phone moment (ADR-0023).
+    ui.showToast(`Joining household ${code}…`, {
+      kind: 'household',
+      actions: [{ label: 'Share link', run: () => void shareRoomLink(code) }],
+      duration: 6000,
+    })
   } else {
     ui.showToast(`Household room ${code} saved — sync starts on next launch`)
   }
@@ -179,6 +190,15 @@ function cancelBackupImport(): void {
         </button>
       </div>
       <div class="flex flex-wrap gap-2">
+        <button
+          class="h-9 rounded-lg border px-3 text-xs font-medium dark:border-stone-700 dark:text-stone-300 disabled:opacity-50"
+          data-test="share-room"
+          :disabled="!shareableCodeText"
+          :aria-label="`Share the join link for household room ${shareableCodeText}`"
+          @click="shareRoomLink()"
+        >
+          🔗 Share room link
+        </button>
         <button
           class="h-9 rounded-lg border px-3 text-xs font-medium dark:border-stone-700 dark:text-stone-300"
           data-test="household-room-new"

@@ -5,6 +5,7 @@ import { useDark, useToggle } from '@vueuse/core'
 import { TABS, useUiStore } from './stores/ui'
 import { getCatalog } from './lib/catalog'
 import { decodePlan } from './lib/share'
+import { useShareRoomLink } from './composables/useShareRoomLink'
 import { usePlanStore } from './stores/plan'
 import { useRoomStore, type RoomStatus } from './stores/room'
 import { initFavourites } from './stores/favourites'
@@ -16,6 +17,7 @@ const router = useRouter()
 const ui = useUiStore()
 const plan = usePlanStore()
 const room = useRoomStore()
+const { shareAction } = useShareRoomLink()
 
 /** Dark mode: follows the system preference until the user overrides it
  *  (the override persists in localStorage via useDark). */
@@ -86,7 +88,13 @@ function autoJoinHousehold() {
   const code = ui.householdRoom
   if (!code || room.inRoom || room.status !== 'idle') return
   room.join(code)
-  ui.showToast(`Household sync active — ${code}`, { kind: 'household' })
+  // The toast doubles as the share affordance: the second phone gets the
+  // link straight from this confirmation (ADR-0023).
+  ui.showToast(`Household sync active — ${code}`, {
+    kind: 'household',
+    actions: [shareAction(code)],
+    duration: 6000,
+  })
 }
 
 // A room we can't reach (relay down, code expired after a relay restart)
