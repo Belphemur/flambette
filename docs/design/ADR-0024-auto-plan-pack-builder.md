@@ -1,7 +1,8 @@
 # ADR-0024: Auto-Plan — generating a meal plan from the frozen catalog
 
-**Status:** Accepted (2026-09-29) — index generator landed, planner itself
-still to build.
+**Status:** Shipped (2026-09-29) — planner `src/lib/packPlanner.ts`, wired
+through `src/composables/useAutoPlan.ts` + the Plan tab. Known deviation
+recorded in **Shipment notes** below.
 **Extends:** ADR-0003 (derived grocery merge keys), ADR-0017 (container
 units), ADR-0018 (diet rules), ADR-0022 (measured amounts). No catalog data
 changes.
@@ -107,3 +108,54 @@ essentially free at first paint.
   time `containers.ts` changes without the Python being updated.
 - ADR-0017's container model stops being a grocery-list detail and becomes
   load-bearing for planning. Changing `CONTAINER_NOUNS` now changes plans.
+
+## Shipment notes (phase 19)
+
+Deviations from the original sketch, each justified:
+
+- **No `category` field in the request.** The committed index carries no
+  category (it deliberately duplicates no builder_data metadata), so the
+  planner takes `excludeIds` only; `useAutoPlan` resolves the category
+  constraint, active diet chips (ADR-0018) and already-planned meals into
+  that set. The brief's fallback branch ("caller assembles the eligible id
+  set from builder_data") is what shipped.
+- **`ratings` ride on the request.** Same reason: the index has no recipe
+  metadata, so `PackPlanRequest.ratings` (Map variant id → rating) is
+  injected by the caller from `builder_data.variant_meta`.
+- **Measured packages differ from the prototype table.** The 0.25-vs-4.04
+  numbers above were measured with a different notion of "package" than the
+  shipped `Σ ceil(container total)` metric (the prototype merged the same
+  container across ingredients). On the shipped metric, measured live:
+  random 4-meal plan ≈ 19.1 packages, greedy waste-first ≈ 8, single-recipe
+  baseline ≈ 4.85/package-per-meal — a ~58 % package reduction, not the
+  prototype's -94 %. The greedy algorithm and scoring formula are unchanged;
+  only the table's unit definition was wrong.
+- **Relay: per-IP throttle budgets now key on the REAL peer address.**
+  `Server.requestIP(ws)` requires a Request object — called with a
+  ServerWebSocket it throws, so the throttle's `safeAddress` fallback
+  collapsed EVERY peer into the single `ip:unknown` bucket (30 attempts /
+  60 s shared across the whole suite). Late-suite room joins then got
+  `rate_limited` and their "Live" chip never appeared — CI showed 4 such
+  failures (local CI-mode: 9). Causally pinned: raising
+  `RELAY_ATTEMPT_LIMIT` made all 224 e2e pass. Fix (relay.mjs only —
+  `server/throttle.mjs` stays canonical): capture the IP at upgrade time
+  (`srv.requestIP(req)` inside fetch, where `req` IS a Request) into
+  `ws.data.ip` and key budgets on it. Same fix also restores the per-IP
+  half of the brute-force throttle, which could never distinguish IPs
+  under the fallback.
+- **Relay behind nginx: the forwarded client address is honored.** In the
+  deployed topology (`nginx.conf` /ws → relay) the socket address is
+  nginx's own container IP, so per-IP budgets — however correct the relay
+  code — would still be shared by every household. nginx now sets
+  `X-Forwarded-For`/`X-Real-IP` on the /ws pass-through and the relay keys
+  the throttle on the forwarded address when present (direct dev/LAN
+  connections fall back to the socket address). Trust trade-off recorded:
+  the relay is only reached through its own proxy, and a forged header on
+  a direct connection only shifts the client's OWN budget — acceptable
+  for household-grade hardening (it is not an ACL).
+- **Toast actions take an optional `testId`** (`stores/ui.ts`) so the undo
+  affordance can carry `data-test="auto-plan-undo"` without changing the
+  generic `toast-action-primary/secondary` contract.
+
+E2E pins (fresh profile, no diet chips, any protein): seed + 3 picks →
+`[4908, 6185, 6729, 12069]` (`e2e/auto-plan.spec.ts`).

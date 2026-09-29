@@ -17,6 +17,8 @@ export const TABS: { id: string; label: string; icon: string; to: string }[] = [
 export interface ToastAction {
   label: string
   run: () => void
+  /** Explicit test id (default: toast-action-primary/secondary). */
+  testId?: string
 }
 
 export interface Toast {

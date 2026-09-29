@@ -31,7 +31,13 @@ import { makeThrottle, MemoryAttemptBuckets } from './throttle.mjs'
  * Logic lives in ./throttle.mjs (unit-tested); the relay just wires it.
  */
 const throttle = makeThrottle({
-  peerAddress: (ws) => server?.requestIP?.(ws)?.address ?? 'unknown',
+  // The REAL peer IP, captured at upgrade time (see fetch below): per-IP
+  // budgets are meaningless if every peer collapses into one shared
+  // bucket — under the suite's own connection churn legitimate joins
+  // started receiving `rate_limited` (224-test e2e run failed 4-9
+  // room-join tests; raising RELAY_ATTEMPT_LIMIT made all of them pass,
+  // which pins the shared-bucket collapse as the cause).
+  peerAddress: (ws) => ws.data.ip ?? 'unknown',
 })
 
 
@@ -132,7 +138,20 @@ try {
     // load balancers) get a 200; WebSocket upgrades are handed to the
     // websocket handler below.
     fetch(req, srv) {
-      if (srv.upgrade(req, { data: { isAlive: true, roomCode: undefined } })) return
+      // Throttle key: the real CLIENT address. Behind the compose nginx
+      // (nginx.conf /ws) the socket address is nginx's own container IP,
+      // which would make every household share one 30/min budget — so the
+      // forwarded header wins when present. Direct connections (dev relay,
+      // LAN) carry no header and fall back to the socket address.
+      // Trade-off, recorded in ADR-0024: the header is only trusted
+      // because the relay is only ever reached through its own proxy;
+      // a forged header on a direct connection shifts your own budget,
+      // which is acceptable for household-grade anti-brute-force
+      // hardening (it is not an ACL).
+      const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      const ip =
+        (forwarded || srv.requestIP(req)?.address) ?? 'unknown'
+      if (srv.upgrade(req, { data: { isAlive: true, roomCode: undefined, ip } })) return
       return new Response('mealime relay\n', { headers: { 'content-type': 'text/plain' } })
     },
     websocket: {

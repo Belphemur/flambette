@@ -4,8 +4,10 @@ import { useRouter } from 'vue-router'
 import { useClipboard } from '@vueuse/core'
 import { catalog } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
+import { MAX_MEALS, MIN_MEALS, type PackPlan } from '../lib/packPlanner'
 import { planShareUrl } from '../lib/share'
 import type { VariantMeta } from '../lib/types'
+import { runAutoPlan } from '../composables/useAutoPlan'
 import { usePlanStore } from '../stores/plan'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
@@ -101,6 +103,98 @@ const totals = computed(() => ({
 function openRecipe(id: number) {
   void router.push({ name: 'recipe', params: { id: String(id) } })
 }
+
+/* ---------- Auto-Plan (ADR-0024) ---------- */
+
+const CATEGORIES = [
+  { value: '', label: 'Any protein' },
+  { value: 'meat', label: 'Meat' },
+  { value: 'fish', label: 'Fish' },
+  { value: 'vegetarian', label: 'Vegetarian' },
+] as const
+
+const autoPlanOpen = ref(false)
+const autoPlanCount = ref(4)
+const autoPlanCategory = ref<'' | 'meat' | 'fish' | 'vegetarian'>('')
+const autoPlanBusy = ref(false)
+/** After Generate: the pending result awaiting the confirm step. */
+const pendingPlan = ref<(PackPlan & { eligibleCount: number }) | null>(null)
+/** Exact pre-generation state for the undo toast (ids + servings + the
+ *  cleared-ingredient snapshots, so undo restores the whole grocery view). */
+const previousEntries = ref<{ variantId: number; servings: number }[]>([])
+const previousCleared = ref<Record<number, string[]>>({})
+
+function openAutoPlan() {
+  previousEntries.value = plan.plan.map((e) => ({ ...e }))
+  previousCleared.value = { ...plan.clearedIngredients }
+  pendingPlan.value = null
+  autoPlanOpen.value = true
+}
+
+function closeAutoPlan() {
+  autoPlanOpen.value = false
+  pendingPlan.value = null
+}
+
+// Changed choices invalidate the confirmable pack: the visible result
+// must always belong to the settings on screen (qodo thread 4).
+watch([autoPlanCount, autoPlanCategory], () => {
+  pendingPlan.value = null
+})
+
+async function generateAutoPlan() {
+  if (autoPlanBusy.value) return
+  autoPlanBusy.value = true
+  // Pin the choices this run was made with; a result coming back after
+  // the user changed count/category is stale and must not confirm.
+  const wanted = { count: autoPlanCount.value, category: autoPlanCategory.value }
+  try {
+    const result = await runAutoPlan({
+      count: wanted.count,
+      category: wanted.category || undefined,
+    })
+    if (wanted.count !== autoPlanCount.value || wanted.category !== autoPlanCategory.value) return
+    pendingPlan.value = result
+  } catch {
+    ui.showToast("Couldn't load the planner — try again")
+  } finally {
+    autoPlanBusy.value = false
+  }
+}
+
+/** Confirm step: replace the plan with the generated pack. */
+function confirmAutoPlan() {
+  const result = pendingPlan.value
+  if (!result) return
+  // Fresh planning = fresh ingredients: re-planning a meal must forget
+  // any cleared-ingredient snapshot (same rule as addToPlan, ADR v0.4
+  // clear semantics) or re-planned groceries stay hidden (qodo thread 2).
+  for (const variantId of result.variantIds) plan.restoreIngredients(variantId)
+  plan.replacePlan(
+    result.variantIds.map((variantId) => ({ variantId, servings: 6 })),
+    plan.customItems,
+  )
+  // Undo restores the EXACT pre-generation state (ids + servings + the
+  // cleared-ingredient map) from copies taken at confirm time — not from
+  // the mutable dialog refs a later dialog open would overwrite
+  // (qodo thread 3).
+  const undoEntries = previousEntries.value.map((e) => ({ ...e }))
+  const undoCleared = { ...previousCleared.value }
+  const undo = () => {
+    plan.replacePlan(undoEntries, plan.customItems)
+    plan.setClearedIngredients(undoCleared)
+  }
+  const warning = result.warnings?.[0]
+  ui.showToast(
+    warning ? `Plan generated — ${warning}` : `Plan generated: ${result.variantIds.length} meals`,
+    {
+      actions: undoEntries.length > 0 ? [{ label: 'Undo', run: undo, testId: 'auto-plan-undo' }] : undefined,
+      duration: 6000,
+      kind: 'autoplan-toast',
+    },
+  )
+  closeAutoPlan()
+}
 </script>
 <template>
   <section class="space-y-3">
@@ -108,12 +202,21 @@ function openRecipe(id: number) {
       <p class="text-4xl">🍽️</p>
       <p class="mt-2 font-medium">Your meal plan is empty</p>
       <p class="mt-1 text-sm">Add recipes from the Recipes tab to build your week.</p>
-      <button
-        class="mt-4 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white"
-        @click="router.push('/')"
-      >
-        Browse recipes
-      </button>
+      <div class="mt-4 flex items-center justify-center gap-2">
+        <button
+          class="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white"
+          @click="router.push('/')"
+        >
+          Browse recipes
+        </button>
+        <button
+          class="rounded-xl border border-primary px-4 py-2.5 text-sm font-semibold text-primary-dark dark:text-primary"
+          data-test="auto-plan-button"
+          @click="openAutoPlan"
+        >
+          Auto-Plan
+        </button>
+      </div>
     </div>
 
     <template v-else>
@@ -189,6 +292,14 @@ function openRecipe(id: number) {
           </button>
         </li>
       </ul>
+
+      <button
+        class="w-full rounded-xl border border-primary py-3 text-sm font-semibold text-primary-dark dark:text-primary"
+        data-test="auto-plan-button"
+        @click="openAutoPlan"
+      >
+        Auto-Plan
+      </button>
 
       <div class="flex gap-2">
         <button
@@ -332,6 +443,121 @@ function openRecipe(id: number) {
         </div>
 
       </div>
+      </div>
+    </Teleport>
+
+    <!-- Auto-Plan dialog (ADR-0024): popover with count + category, then an
+         explicit confirm step before REPLACING the (possibly hand-curated)
+         plan. Undo restores the exact previous entries. -->
+    <Teleport to="body">
+      <div
+        v-if="autoPlanOpen"
+        class="fixed inset-0 z-40 flex items-end justify-center bg-stone-900/50"
+        @click.self="closeAutoPlan"
+      >
+        <div
+          class="w-full max-w-2xl space-y-4 rounded-t-2xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl dark:bg-stone-900"
+          role="dialog"
+          aria-label="Generate an auto-plan"
+          data-test="auto-plan-dialog"
+        >
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold tracking-tight">Auto-Plan</h3>
+            <button
+              class="flex size-9 items-center justify-center rounded-full dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"
+              aria-label="Close auto-plan"
+              @click="closeAutoPlan"
+            >
+              ✕
+            </button>
+          </div>
+          <p class="text-xs dark:text-stone-400">
+            Picks meals that share whole packages so you throw less away.
+            Replaces the current plan — you can undo right after.
+          </p>
+
+          <div class="flex items-center justify-between gap-3">
+            <label class="text-sm font-medium" for="auto-plan-count">Meals</label>
+            <div class="flex items-center rounded-lg border dark:border-stone-700">
+              <button
+                class="flex size-10 items-center justify-center dark:text-stone-300 disabled:opacity-40"
+                :disabled="autoPlanCount <= MIN_MEALS"
+                aria-label="Fewer meals"
+                data-test="auto-plan-count-minus"
+                @click="autoPlanCount = Math.max(MIN_MEALS, autoPlanCount - 1)"
+              >
+                −
+              </button>
+              <input
+                id="auto-plan-count"
+                data-test="auto-plan-count"
+                class="w-10 bg-transparent text-center text-sm font-semibold focus:outline-none"
+                type="number"
+                min="1"
+                max="10"
+                :value="autoPlanCount"
+                aria-label="Number of meals"
+                @change="autoPlanCount = Math.min(MAX_MEALS, Math.max(MIN_MEALS, Number(($event.target as HTMLInputElement).value) || MIN_MEALS))"
+              />
+              <button
+                class="flex size-10 items-center justify-center dark:text-stone-300 disabled:opacity-40"
+                :disabled="autoPlanCount >= MAX_MEALS"
+                aria-label="More meals"
+                data-test="auto-plan-count-plus"
+                @click="autoPlanCount = Math.min(MAX_MEALS, autoPlanCount + 1)"
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between gap-3">
+            <label class="text-sm font-medium" for="auto-plan-category">Protein</label>
+            <select
+              id="auto-plan-category"
+              data-test="auto-plan-category"
+              class="h-10 rounded-lg border border-stone-200 bg-stone-50 px-2 text-sm dark:border-stone-700 dark:bg-stone-950"
+              v-model="autoPlanCategory"
+            >
+              <option v-for="c in CATEGORIES" :key="c.value" :value="c.value">{{ c.label }}</option>
+            </select>
+          </div>
+
+          <button
+            class="h-11 w-full rounded-xl bg-primary text-sm font-semibold text-white active:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
+            data-test="auto-plan-generate"
+            :disabled="autoPlanBusy"
+            @click="generateAutoPlan"
+          >
+            {{ autoPlanBusy ? 'Generating…' : pendingPlan ? 'Regenerate' : 'Generate' }}
+          </button>
+
+          <div v-if="pendingPlan" class="ring-1 dark:ring-stone-700 rounded-xl p-3 space-y-2">
+            <p class="text-xs dark:text-stone-400">
+              Found a {{ pendingPlan.variantIds.length }}-meal pack buying
+              {{ pendingPlan.packagesBought }}
+              {{ pendingPlan.packagesBought === 1 ? 'package' : 'packages' }}.
+              Replaces your current plan
+              <template v-if="previousEntries.length > 0">({{ previousEntries.length }} meals)</template>.
+            </p>
+            <div class="flex gap-2">
+              <button
+                class="h-10 flex-1 rounded-xl bg-primary text-sm font-semibold text-white active:bg-primary-dark"
+                data-test="auto-plan-confirm"
+                @click="confirmAutoPlan"
+              >
+                Use this plan
+              </button>
+              <button
+                class="h-10 flex-1 rounded-xl border dark:border-stone-700 text-sm font-medium dark:text-stone-300"
+                data-test="auto-plan-cancel"
+                @click="pendingPlan = null"
+              >
+                Keep editing
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </Teleport>
 

@@ -208,7 +208,7 @@ onMounted(async () => {
           :key="action.label"
           class="rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide"
           :class="i === 0 ? 'bg-primary text-white' : 'text-stone-300 hover:text-white'"
-          :data-test="`toast-action-${i === 0 ? 'primary' : 'secondary'}`"
+          :data-test="action.testId ?? (i === 0 ? 'toast-action-primary' : 'toast-action-secondary')"
           @click="action.run()"
         >
           {{ action.label }}
