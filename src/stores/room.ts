@@ -2,6 +2,13 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { describeRelayError } from '../lib/relayErrors'
+import {
+  mergeSharedFilters,
+  normalizeQuickFilters,
+  sameQuickFilters,
+  toSharedFilters,
+  type SharedQuickFilters,
+} from '../lib/quickFilters'
 import { useCustomIngredientsStore, type CustomIngredient } from './customIngredients'
 import { usePlanStore, type CookedEntry } from './plan'
 import { useGroceryStore } from './grocery'
@@ -25,6 +32,15 @@ interface SharedState {
    *  the shareCookedHistory setting (ADR-0011 addendum); otherwise a
    *  personal slice that must never cross the wire. */
   cookedHistory?: CookedEntry[]
+  /**
+   * Household half of the quick filters (ADR-0028). `favOnly` is
+   * deliberately NOT carried: the favourites set is personal, so sharing
+   * the switch would blank a peer's Recipes tab (see quickFilters.ts).
+   * OPTIONAL: a peer running older code sends no `filters` key, and
+   * receiving a payload WITHOUT it must leave the local selection
+   * untouched (never a wipe).
+   */
+  filters?: SharedQuickFilters
 }
 
 const PUSH_DEBOUNCE_MS = 300
@@ -103,6 +119,29 @@ export const useRoomStore = defineStore('room', () => {
   let keepaliveTimer: ReturnType<typeof setInterval> | null = null
   /** True while we're writing a remote snapshot into the local stores. */
   let applyingRemote = false
+  /**
+   * True from the moment a local edit is queued for push until that push
+   * has actually gone out.
+   *
+   * Without it, a 300ms debounce window loses local intent: A taps a
+   * filter, B's older snapshot arrives in that window, A adopts it, and
+   * the push A then sends (built from the now-remote state) re-broadcasts
+   * B's value — the household permanently converges on the WRONG answer
+   * even though A's tap was the newer fact. A queued local edit therefore
+   * outranks a snapshot that arrives before its push: our push is sent at
+   * a strictly higher rev, so the deferred snapshot is older by the time
+   * it would be applied and is dropped by the usual `rev >` test.
+   */
+  let localEditPending = false
+  /**
+   * True when a local edit could NOT be pushed because the socket was not
+   * live. Without it, tapping a filter during the ~1s a room takes to come
+   * up loses the edit SILENTLY: the join response then adopts the room's
+   * older snapshot over it, and nothing ever republishes. Holding the flag
+   * makes the edit outrank that snapshot — we are the only party that can
+   * prove our state is newer — and `sendState` clears it.
+   */
+  let unsentLocalEdit = false
   /** The three-word code we asked the relay to create with (ADR-0021). */
   let wantedCode: string | null = null
   let codeRerolls = 0
@@ -146,6 +185,8 @@ export const useRoomStore = defineStore('room', () => {
       cleared: { ...plan.clearedIngredients },
       // Household state (ADR-0012): remembered custom-ingredient names.
       customs: customIngredients.list.map((c) => ({ ...c })),
+      // Household state (ADR-0028): the shared half of the quick filters.
+      filters: toSharedFilters(ui.quickFilters),
     }
     // Personal history only crosses the wire when the sender opted in.
     if (ui.shareCookedHistory) {
@@ -171,6 +212,16 @@ export const useRoomStore = defineStore('room', () => {
       // addendum). Wipe-to-empty is intentional when a sharer with an
       // empty history pushes: whole-state LWW.
       if (state.cookedHistory) plan.replaceCookedHistory(state.cookedHistory)
+      // Quick filters (ADR-0028). ABSENCE means "don't touch": an older
+      // peer sends no `filters` key, and treating that as an empty
+      // selection would wipe the household's filters on every push. The
+      // personal `favOnly` half is re-applied from local, never from the
+      // wire.
+      const filters = normalizeQuickFilters(state.filters)
+      if (filters) {
+        const merged = mergeSharedFilters(filters, ui.quickFilters)
+        if (!sameQuickFilters(merged, ui.quickFilters)) ui.quickFilters = merged
+      }
     } finally {
       applyingRemote = false
     }
@@ -179,11 +230,29 @@ export const useRoomStore = defineStore('room', () => {
   /* ---------- push (debounced) ---------- */
 
   function schedulePush() {
-    if (applyingRemote || status.value !== 'live') return
+    if (applyingRemote) return
+    if (status.value !== 'live') {
+      // The edit is real and must survive the join that is still in
+      // flight: remember it, and let the join handler publish it.
+      //
+      // Only while we are actually ON OUR WAY INTO a room. With no room
+      // at all (status idle, code null) there is nothing to publish
+      // into, and carrying the flag would make a join much later skip
+      // adoption and push a stale local plan over the household's — the
+      // exact overwrite this flag exists to prevent.
+      if (code.value !== null) unsentLocalEdit = true
+      return
+    }
+    localEditPending = true
     if (pushTimer) clearTimeout(pushTimer)
     pushTimer = setTimeout(() => {
       pushTimer = null
-      if (status.value !== 'live' || !ws || ws.readyState !== WebSocket.OPEN) return
+      if (status.value !== 'live' || !ws || ws.readyState !== WebSocket.OPEN) {
+        // The socket went away inside the debounce window: the edit never
+        // reached the room and must be published on the next join.
+        if (code.value !== null) unsentLocalEdit = true
+        return
+      }
       localRev = Math.max(localRev, maxSeenRev) + 1
       sendState()
     }, PUSH_DEBOUNCE_MS)
@@ -192,8 +261,25 @@ export const useRoomStore = defineStore('room', () => {
   /** One place that writes a snapshot, so the rev floor (F4) is never missed. */
   function sendState() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return
+    // The queued edit is now on the wire; later snapshots may apply again.
+    localEditPending = false
+    unsentLocalEdit = false
     writeRevFloor(code.value, localRev)
     ws.send(JSON.stringify({ type: 'state', rev: localRev, state: snapshot() }))
+  }
+
+  /**
+   * Take delivery of an inbound snapshot. The REVISION is always absorbed
+   * — it is proof of ordering, and dropping it would let our next push
+   * reuse a rev the room has already passed, so peers would ignore it.
+   * Only the CONTENT is withheld while a local edit is still queued: our
+   * push is sent at a strictly higher rev and carries our whole state, so
+   * the withheld snapshot is older by the time it would have been applied.
+   */
+  function acceptRemote(rev: number, state: unknown) {
+    maxSeenRev = localRev = rev
+    if (localEditPending) return
+    applyRemote(state as SharedState)
   }
 
   /**
@@ -226,6 +312,7 @@ export const useRoomStore = defineStore('room', () => {
         grocery.map,
         plan.clearedIngredients,
         customIngredients.list,
+        ui.quickFilters, // quick filters are household state (ADR-0028)
         plan.cookedHistory, // only pushed when ui.shareCookedHistory — snapshot() gates it
         ui.shareCookedHistory, // flipping ON must trigger a retroactive push
       ] as const,
@@ -280,7 +367,8 @@ export const useRoomStore = defineStore('room', () => {
         reconnectAttempts = 0
         startKeepalive()
         absorbRevFloor(msg.rev)
-        if (msg.state != null) {
+        let adopted = false
+        if (msg.state != null && !unsentLocalEdit) {
           const rev = typeof msg.rev === 'number' ? msg.rev : localRev + 1
           // Newer than what we hold AND at least as new as anything this
           // session already proved for this code (review F4): a room
@@ -289,19 +377,30 @@ export const useRoomStore = defineStore('room', () => {
           if (rev > localRev && rev >= readRevFloor(code.value)) {
             maxSeenRev = localRev = rev
             applyRemote(msg.state as SharedState)
+            adopted = true
           }
         }
-        // After a reconnect our local state is at least as fresh as the
-        // relay's (which may even have restarted) — push to converge.
-        localRev = Math.max(localRev, maxSeenRev) + 1
-        sendState()
+        // Converge by pushing unless we just adopted the room's state, and
+        // ALWAYS when we hold edits that were never delivered.
+        //
+        // A joiner that echoes the snapshot it just applied re-publishes
+        // it at a HIGHER rev, and a snapshot can be stale by exactly the
+        // in-flight window: a peer whose edit has not reached the relay
+        // yet. The echo then wins the rev race and freezes the household
+        // on the OLD state, with nothing left to correct it (the peer's
+        // pending push is older). Adopting a snapshot leaves our state
+        // byte-identical to the room's, so that echo is never needed to
+        // converge — it only creates a way to lose a peer's newer edit.
+        if (!adopted || unsentLocalEdit) {
+          localRev = Math.max(localRev, maxSeenRev) + 1
+          sendState()
+        }
         break
       }
       case 'state': {
         const rev = typeof msg.rev === 'number' ? msg.rev : 0
         if (rev > localRev && msg.state && typeof msg.state === 'object') {
-          maxSeenRev = localRev = rev
-          applyRemote(msg.state as SharedState)
+          acceptRemote(rev, msg.state)
         }
         break
       }
@@ -424,6 +523,15 @@ export const useRoomStore = defineStore('room', () => {
     // Keepalive first: a leaked interval would keep sending into a dead
     // socket forever, and would keep a room alive that nobody is in.
     stopKeepalive()
+    // A queued edit cancelled here never reached the room: carry it as an
+    // UNSENT edit so the next join publishes it instead of adopting an
+    // older snapshot over it. Without this, a socket drop inside the
+    // 300ms debounce silently loses the tap.
+    if (localEditPending || pushTimer) unsentLocalEdit = true
+    // A queued edit can never reach the wire now; keeping the flag would
+    // make the re-join ignore the room's snapshot FOREVER (a stuck
+    // localEditPending is a permanent "don't apply remote state").
+    localEditPending = false
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
       reconnectTimer = null
@@ -457,6 +565,10 @@ export const useRoomStore = defineStore('room', () => {
    */
   function create(preferredCode?: string) {
     reconnectAttempts = 0
+    // A DELIBERATE new room: whatever the last one left unsent is not
+    // this room's business, and publishing it would overwrite the new
+    // room's state before it exists.
+    unsentLocalEdit = false
     wantedCode = preferredCode ? normalizeRoomCode(preferredCode) : generateRoomCode()
     codeRerolls = 0
     connect('create')
@@ -470,6 +582,10 @@ export const useRoomStore = defineStore('room', () => {
       status.value = 'error'
       return
     }
+    // A join into a DIFFERENT code starts clean: an undelivered edit
+    // belongs to the room we were in, not to this one. A re-join of the
+    // SAME code (resume, reconnect) keeps it — that is the case it is for.
+    if (code.value !== normalized) unsentLocalEdit = false
     code.value = normalized
     sessionStorage.setItem(ROOM_CODE_KEY, code.value)
     reconnectAttempts = 0
@@ -499,6 +615,11 @@ export const useRoomStore = defineStore('room', () => {
     roomGone = false
     sessionStorage.removeItem(ROOM_CODE_KEY)
     cleanupSocket()
+    // Leaving ends the room's business: the local state is simply this
+    // device's again, and a later join must adopt, not republish. After
+    // cleanupSocket, so a push cancelled by the teardown cannot set it.
+    unsentLocalEdit = false
+    localEditPending = false
   }
 
   return {

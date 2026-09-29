@@ -62,7 +62,7 @@ test('a preset starts one countdown that runs, stops and clears', async ({ page 
 
   // One tap stops it and freezes the remaining time.
   await timer.click()
-  await expect(timer).toContainText(/▶/)
+  await expect(timer).toHaveAttribute('aria-label', /^Start timer, /)
   const frozen = await timerSeconds(cooking)
   await page.waitForTimeout(1500)
   expect(await timerSeconds(cooking)).toBe(frozen)
@@ -114,7 +114,9 @@ test('a running timer survives step navigation and a reload', async ({ page }) =
   const reopened = page.getByRole('dialog', { name: /Cooking / })
   await expect(reopened).toBeVisible({ timeout: 15_000 })
   await expect.poll(() => timerSeconds(reopened), { timeout: 15_000 }).toBeLessThanOrEqual(before)
-  await expect(reopened.getByTestId('step-timer')).toContainText(/▶|⏸/)
+  // The play/pause state now lives on a Lucide icon; the accessible name
+  // is the contract (ADR-0027 icon stack).
+  await expect(reopened.getByTestId('step-timer')).toHaveAttribute('aria-label', /^(Pause|Start) timer, /)
   await expectZeroMealimeRequests(page)
 })
 
@@ -139,7 +141,7 @@ test('Finish asks before discarding a running timer', async ({ page }) => {
   page.once('dialog', (d) => void d.accept())
   await cooking.getByRole('button', { name: /Finish/ }).click()
   await expect(cooking).not.toBeVisible()
-  await expect(page.getByText('Enjoy! 🍽')).toBeVisible()
+  await expect(page.getByTestId('toast').getByText('Enjoy!')).toBeVisible()
   await expectZeroMealimeRequests(page)
 })
 
@@ -162,7 +164,7 @@ test('Finish prompts for a timer left on ANOTHER step (qodo 4128519620)', async 
   page.once('dialog', (d) => void d.accept())
   await cooking.getByRole('button', { name: /Finish/ }).click()
   await expect(cooking).not.toBeVisible()
-  await expect(page.getByText('Enjoy! 🍽')).toBeVisible()
+  await expect(page.getByTestId('toast').getByText('Enjoy!')).toBeVisible()
   await expectZeroMealimeRequests(page)
 })
 
@@ -187,17 +189,17 @@ test('an expired timer does not block Finish and offers Restart (qodo 4128519641
     .poll(() => timerSeconds(cooking), { timeout: 90_000, intervals: [1000, 2500, 2500, 5000] })
     .toBe(0)
   await expect(cooking.getByTestId('step-timer')).toContainText('0:00')
-  await expect(cooking.getByTestId('step-timer')).toContainText(/▶/)
+  await expect(cooking.getByTestId('step-timer')).toHaveAttribute('aria-label', /^Start timer, /)
   expect(await timerSeconds(cooking)).toBe(0)
 
   // Finish needs NO confirmation for an expired timer.
   await cooking.getByRole('button', { name: /Finish/ }).click()
   await expect(cooking).not.toBeVisible()
-  await expect(page.getByText('Enjoy! 🍽')).toBeVisible()
+  await expect(page.getByTestId('toast').getByText('Enjoy!')).toBeVisible()
   await expectZeroMealimeRequests(page)
 })
 
-test('the header close ✕ routes through the timer confirmation (qodo 4128519620)', async ({ page }) => {
+test('the header close button routes through the timer confirmation (qodo 4128519620)', async ({ page }) => {
   const cooking = await startCooking(page)
   await cooking.getByTestId('timer-preset-5').click()
   await expect(cooking.getByTestId('step-timer')).toContainText('5:00')
@@ -225,11 +227,11 @@ test('mark as cooked also asks before discarding a running timer', async ({ page
   page.once('dialog', (d) => void d.dismiss())
   await cooking.getByTestId('mark-cooked').click()
   await expect(cooking).toBeVisible()
-  await expect(page.getByText('Marked as cooked ✓')).toHaveCount(0)
+  await expect(page.getByText('Marked as cooked')).toHaveCount(0)
 
   page.once('dialog', (d) => void d.accept())
   await cooking.getByTestId('mark-cooked').click()
   await expect(cooking).not.toBeVisible()
-  await expect(page.getByText('Marked as cooked ✓')).toBeVisible()
+  await expect(page.getByText('Marked as cooked')).toBeVisible()
   await expectZeroMealimeRequests(page)
 })

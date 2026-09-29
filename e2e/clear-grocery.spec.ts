@@ -236,7 +236,7 @@ test('cooking view completion offers "Mark as cooked" and records it', async ({ 
 
   await cooking.locator('[data-test=mark-cooked]').click()
   await expect(cooking).not.toBeVisible()
-  await expect(page.getByText('Marked as cooked ✓')).toBeVisible()
+  await expect(page.getByText('Marked as cooked')).toBeVisible()
 
   // The meal left the plan.
   await gotoTab(page, 'Plan')

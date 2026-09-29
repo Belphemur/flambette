@@ -10,6 +10,17 @@ import { usePlanStore } from '../stores/plan'
 import { useFavouritesStore } from '../stores/favourites'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
 import { onMounted, onUnmounted } from 'vue'
+import {
+  ArrowLeft,
+  ChefHat,
+  Clock,
+  Droplet,
+  Flame,
+  Minus,
+  Plus,
+  Star,
+  Utensils,
+} from 'lucide-vue-next'
 
 const plan = usePlanStore()
 const favourites = useFavouritesStore()
@@ -137,16 +148,19 @@ function startCooking() {
         aria-label="Back"
         @click="close"
       >
-        ←
+        <ArrowLeft :size="20" aria-hidden="true" />
       </button>
       <button
         class="absolute top-3 right-3 flex size-11 items-center justify-center rounded-full dark:bg-stone-900/90 text-xl shadow"
         :aria-label="favourites.isFavourite(meta.id) ? 'Remove from favourites' : 'Add to favourites'"
         @click="favourites.toggleFavourite(meta.id)"
       >
-        <span :class="favourites.isFavourite(meta.id) ? 'text-amber-400' : 'text-stone-400'">
-          {{ favourites.isFavourite(meta.id) ? '★' : '☆' }}
-        </span>
+        <Star
+          :size="22"
+          aria-hidden="true"
+          :fill="favourites.isFavourite(meta.id) ? 'currentColor' : 'none'"
+          :class="favourites.isFavourite(meta.id) ? 'text-amber-400' : 'text-stone-400'"
+        />
       </button>
     </div>
 
@@ -158,10 +172,18 @@ function startCooking() {
         </div>
         <h2 class="text-2xl font-bold tracking-tight">{{ meta.name }}</h2>
         <p class="flex flex-wrap gap-3 text-sm dark:text-stone-400">
-          <span>🔥 {{ Math.round(meta.calories) }} kcal / serving</span>
-          <span>⏱ {{ meta.cooking_minutes }} min</span>
-          <span>🍽 serves {{ servings }}</span>
-          <span v-if="meta.sodium_mg">🧂 {{ Math.round(meta.sodium_mg) }} mg sodium</span>
+          <span class="flex items-center gap-1">
+            <Flame :size="14" aria-hidden="true" />{{ Math.round(meta.calories) }} kcal / serving
+          </span>
+          <span class="flex items-center gap-1">
+            <Clock :size="14" aria-hidden="true" />{{ meta.cooking_minutes }} min
+          </span>
+          <span class="flex items-center gap-1" data-test="serves-label">
+            <Utensils :size="14" aria-hidden="true" />serves {{ servings }}
+          </span>
+          <span v-if="meta.sodium_mg" class="flex items-center gap-1">
+            <Droplet :size="14" aria-hidden="true" />{{ Math.round(meta.sodium_mg) }} mg sodium
+          </span>
         </p>
         <p
           v-if="cookLine"
@@ -169,7 +191,7 @@ function startCooking() {
           :title="cookLastTitle"
           data-test="cook-history"
         >
-          🍳 {{ cookLine }}
+          <ChefHat :size="14" aria-hidden="true" class="mr-1 inline align-[-2px]" />{{ cookLine }}
         </p>
       </header>
 
@@ -185,7 +207,7 @@ function startCooking() {
                 aria-label="Fewer servings"
                 @click="servings--"
               >
-                −
+                <Minus :size="18" aria-hidden="true" />
               </button>
               <span class="w-8 text-center text-sm font-semibold">{{ servings }}</span>
               <button
@@ -193,7 +215,7 @@ function startCooking() {
                 :aria-label="`More servings`"
                 @click="servings++"
               >
-                +
+                <Plus :size="18" aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -208,7 +230,8 @@ function startCooking() {
           class="mt-2 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-4 text-sm font-semibold text-amber-300 shadow-sm active:bg-stone-800"
           @click="startCooking"
         >
-          🍳 Start cooking
+          <ChefHat :size="16" aria-hidden="true" class="mr-1 inline align-[-2px]" />
+          Start cooking
         </button>
       </div>
 

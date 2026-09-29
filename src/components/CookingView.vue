@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import {
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Ellipsis,
+  PartyPopper,
+  Pause,
+  Play,
+  X,
+} from 'lucide-vue-next'
 import { catalog, getRecipe } from '../lib/catalog'
 import { measuredChipsForLines, type MeasuredChip } from '../lib/measuredAmounts'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
@@ -213,7 +224,7 @@ function confirmTimerBeforeLeaving(): boolean {
 function finish() {
   if (!confirmTimerBeforeLeaving()) return
   close()
-  ui.showToast('Enjoy! 🍽')
+  ui.showToast('Enjoy!')
 }
 
 /** Finish cooking AND record the meal in the personal cooked history. */
@@ -221,7 +232,7 @@ function finishCooked() {
   if (!confirmTimerBeforeLeaving()) return
   if (meta.value) plan.markCooked(meta.value.id)
   close()
-  ui.showToast('Marked as cooked ✓')
+  ui.showToast('Marked as cooked')
 }
 
 function onKey(e: KeyboardEvent) {
@@ -322,8 +333,7 @@ function onTouchEnd(e: TouchEvent) {
           aria-label="Close cooking mode"
           @click="confirmTimerBeforeLeaving() && close()"
         >
-        >
-          ✕
+          <X :size="20" aria-hidden="true" />
         </button>
         <div class="min-w-0 flex-1 text-center">
           <p class="truncate text-sm font-bold tracking-tight">{{ meta.name }}</p>
@@ -371,7 +381,7 @@ function onTouchEnd(e: TouchEvent) {
             data-test="meanwhile-divider"
           >
             <span class="h-px flex-1 dark:bg-stone-700" aria-hidden="true"></span>
-            <span>⏳ Meanwhile</span>
+            <span>Meanwhile</span>
             <span class="h-px flex-1 dark:bg-stone-700" aria-hidden="true"></span>
           </div>
           <p
@@ -407,7 +417,8 @@ function onTouchEnd(e: TouchEvent) {
               :aria-label="`${measuredOpen ? 'Hide' : 'Show'} measured ingredient amounts`"
               @click="toggleMeasured"
             >
-              <span aria-hidden="true">{{ measuredOpen ? '▾' : '▸' }}</span>
+              <ChevronDown v-if="measuredOpen" :size="16" aria-hidden="true" />
+              <ChevronRight v-else :size="16" aria-hidden="true" />
               Ingredient amounts ({{ visibleMeasured[i]?.chips.length ?? 0 }})
             </button>
             <ul v-if="measuredOpen" class="space-y-1 pl-3">
@@ -442,7 +453,9 @@ function onTouchEnd(e: TouchEvent) {
           :aria-label="timerRunning ? `Pause timer, ${timerLabel} left` : `Start timer, ${timerLabel} left`"
           @click="toggleTimer"
         >
-          <span aria-hidden="true">{{ timerRunning ? '⏸' : '▶' }} {{ timerLabel }}</span>
+          <Pause v-if="timerRunning" :size="16" aria-hidden="true" />
+          <Play v-else :size="16" aria-hidden="true" />
+          <span>{{ timerLabel }}</span>
           <span class="sr-only">{{ timerAnnouncement }}</span>
         </button>
         <div v-else class="h-11 min-w-24 shrink-0"></div>
@@ -468,7 +481,8 @@ function onTouchEnd(e: TouchEvent) {
             :aria-label="`Set a timer for the recipe total cooking time of ${recipeTotalSuggestion} minutes`"
             @click="startTimer(recipeTotalSuggestion * 60)"
           >
-            ⋯ {{ recipeTotalSuggestion }}m total
+            <Ellipsis :size="14" aria-hidden="true" class="mr-0.5 inline align-[-2px]" />
+            {{ recipeTotalSuggestion }}m total
           </button>
           <button
             v-if="timer"
@@ -477,7 +491,7 @@ function onTouchEnd(e: TouchEvent) {
             aria-label="Clear this step timer"
             @click="clearTimer"
           >
-            ✕
+            <X :size="16" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -492,21 +506,24 @@ function onTouchEnd(e: TouchEvent) {
             :disabled="isFirst"
             @click="prev"
           >
-            ← Previous
+            <ChevronLeft :size="18" aria-hidden="true" class="mr-1 inline" />
+            Previous
           </button>
           <button
             v-if="!isLast"
             class="h-14 flex-[2] rounded-xl bg-primary text-base font-semibold text-white shadow-sm active:bg-primary-dark"
             @click="next"
           >
-            Next →
+            Next
+            <ChevronRight :size="18" aria-hidden="true" class="ml-1 inline" />
           </button>
           <button
             v-else
             class="h-14 flex-[2] rounded-xl bg-primary text-base font-semibold text-white shadow-sm active:bg-primary-dark"
             @click="finish"
           >
-            Finish 🎉
+            Finish
+            <PartyPopper :size="18" aria-hidden="true" class="ml-1 inline" />
           </button>
         </div>
         <button
@@ -515,7 +532,8 @@ function onTouchEnd(e: TouchEvent) {
           data-test="mark-cooked"
           @click="finishCooked"
         >
-          ✓ Mark as cooked
+          <Check :size="16" aria-hidden="true" class="mr-1 inline" />
+          Mark as cooked
         </button>
       </div>
     </footer>

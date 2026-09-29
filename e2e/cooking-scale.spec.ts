@@ -31,7 +31,7 @@ async function planRecipe(
   for (let i = 6; i < servings; i++) {
     await sheet.getByRole('button', { name: 'More servings' }).click()
   }
-  await expect(sheet.getByText(`🍽 serves ${servings}`)).toBeVisible()
+  await expect(sheet.getByTestId('serves-label')).toHaveText(`serves ${servings}`)
   await sheet.getByRole('button', { name: /Add to plan|Update in plan/ }).click()
   return sheet
 }

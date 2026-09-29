@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
+import { ArrowUpDown, Check, Ham, Salad, Shrimp, Drumstick, Star, Vegan, Beef, Fish, Sparkles, Wheat, SearchX } from 'lucide-vue-next'
+import type { Component } from 'vue'
 import { catalog } from '../lib/catalog'
 import {
   DIET_DESCRIPTIONS,
@@ -10,6 +12,16 @@ import {
   matchesAllDiets,
   type DietId,
 } from '../lib/dietFilter'
+import {
+  PROTEIN_OPTIONS,
+  SORT_OPTIONS,
+  defaultQuickFilters,
+  hasActiveFilters,
+  sortLabel,
+  type ProteinFilter,
+  type QuickFilters,
+  type SortBy,
+} from '../lib/quickFilters'
 import { popularityScore } from '../lib/quantity'
 import { searchVariantIds } from '../lib/search'
 import type { VariantMeta } from '../lib/types'
@@ -17,21 +29,23 @@ import { useFavouritesStore } from '../stores/favourites'
 import { useUiStore } from '../stores/ui'
 import RecipeCard from './RecipeCard.vue'
 
+/** The search box stays device-local: it is a question, not a household
+ *  preference (ADR-0027). Everything below it is shared. */
 const query = ref('')
-const category = ref('all')
-const favOnly = ref(false)
-const proOnly = ref(false)
-const maxTime = ref<number | null>(null)
-const sortBy = ref<
-  'rating' | 'time' | 'calories' | 'popularity' | 'latest'
->('rating')
 
 const favourites = useFavouritesStore()
 const ui = useUiStore()
 
-const categories = computed(() => catalog.value?.categories ?? [])
+/** The ONE filter object (ADR-0027): persisted, and synced in the room. */
+const filters = computed<QuickFilters>(() => ui.quickFilters)
 
-/* ---------- Diet filter chips (ADR-0018) ---------- */
+/** Replace part of the selection; always a fresh object so the store's
+ *  deep watcher (and the room push) sees a change. */
+function patchFilters(part: Partial<QuickFilters>) {
+  ui.quickFilters = { ...ui.quickFilters, ...part }
+}
+
+/* ---------- Diet filter chips (ADR-0018, unified in ADR-0027) ---------- */
 
 /** Whole-catalog verdicts + chip counts, classified once at load time. */
 const dietIndex = computed(() => {
@@ -40,7 +54,7 @@ const dietIndex = computed(() => {
 })
 
 /** Active diet rules, ANDed together. */
-const activeDiets = computed<DietId[]>(() => ui.dietFilters)
+const activeDiets = computed<DietId[]>(() => filters.value.diets)
 
 const dietCounts = computed(() => {
   const counts = {} as Record<DietId, number>
@@ -49,27 +63,152 @@ const dietCounts = computed(() => {
 })
 
 function toggleDiet(diet: DietId) {
-  const current = [...ui.dietFilters]
+  const current = [...filters.value.diets]
   const at = current.indexOf(diet)
   if (at === -1) current.push(diet)
   else current.splice(at, 1)
-  ui.dietFilters = current
+  patchFilters({ diets: current })
 }
+
+function setProtein(protein: ProteinFilter) {
+  patchFilters({ protein })
+}
+
+/* ---------- Sort menu (compact icon+label affordance, WS1/WS5) ---------- */
+
+const sortOpen = ref(false)
+
+function setSort(value: SortBy) {
+  patchFilters({ sortBy: value })
+  closeSort({ refocus: true })
+}
+
+/**
+ * Sort menu keyboard support. The popup advertises `role="listbox"` /
+ * `role="option"`, so it must behave like one: arrow keys move the
+ * selection focus, Home/End jump, Escape closes and returns focus to the
+ * trigger, and the active option is focused when the menu opens.
+ */
+const sortTriggerEl = ref<HTMLElement | null>(null)
+const sortOptionEls = ref<HTMLElement[]>([])
+
+/** Index of the option that has DOM focus while the menu is open. */
+const sortFocusIndex = ref(0)
+
+function setSortOptionEl(el: Element | null, index: number) {
+  if (el instanceof HTMLElement) sortOptionEls.value[index] = el
+}
+
+function openSort() {
+  sortOpen.value = true
+  sortFocusIndex.value = Math.max(
+    0,
+    SORT_OPTIONS.findIndex((o) => o.value === filters.value.sortBy),
+  )
+  // The listbox exists only after this tick.
+  void nextTick(() => focusSortOption(sortFocusIndex.value))
+}
+
+function closeSort({ refocus = false } = {}) {
+  sortOpen.value = false
+  if (refocus) void nextTick(() => sortTriggerEl.value?.focus())
+}
+
+function focusSortOption(index: number) {
+  const at = (index + SORT_OPTIONS.length) % SORT_OPTIONS.length
+  sortFocusIndex.value = at
+  sortOptionEls.value[at]?.focus()
+}
+
+function onSortMenuKeydown(e: KeyboardEvent) {
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault()
+      focusSortOption(sortFocusIndex.value + 1)
+      break
+    case 'ArrowUp':
+      e.preventDefault()
+      focusSortOption(sortFocusIndex.value - 1)
+      break
+    case 'Home':
+      e.preventDefault()
+      focusSortOption(0)
+      break
+    case 'End':
+      e.preventDefault()
+      focusSortOption(SORT_OPTIONS.length - 1)
+      break
+    case 'Escape':
+      e.preventDefault()
+      e.stopPropagation()
+      closeSort({ refocus: true })
+      break
+    case 'Tab':
+      // Tabbing out ends the interaction rather than stranding focus.
+      closeSort()
+      break
+  }
+}
+
+/** Click-away closes; the button itself is inside the wrapper. */
+function onDocumentPointerDown(e: PointerEvent) {
+  if (!sortOpen.value) return
+  const target = e.target as Node | null
+  if (target && sortWrapEl.value?.contains(target)) return
+  closeSort()
+}
+
+function onDocumentKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && sortOpen.value) closeSort({ refocus: true })
+}
+
+const sortWrapEl = ref<HTMLElement | null>(null)
+onMounted(() => {
+  document.addEventListener('pointerdown', onDocumentPointerDown)
+  document.addEventListener('keydown', onDocumentKeydown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
+  document.removeEventListener('keydown', onDocumentKeydown)
+})
+
+/** The active sort mode's label, shown on the closed button. */
+const sortText = computed(() => sortLabel(filters.value.sortBy))
+
+/* ---------- Icon maps (WS5: one Lucide icon per filter) ---------- */
+
+/** Protein chips carry the food icon; "Any" is a neutral sparkle. */
+const PROTEIN_ICONS: Record<ProteinFilter, Component> = {
+  '': Sparkles,
+  fish: Fish,
+  meat: Beef,
+  vegetarian: Wheat,
+}
+
+const DIET_ICONS: Record<DietId, Component> = {
+  'no-pork': Ham,
+  'no-shellfish': Shrimp,
+  'no-meat': Drumstick,
+  vegetarian: Salad,
+  vegan: Vegan,
+}
+
+/* ---------- Result pipeline ---------- */
 
 const results = computed<VariantMeta[]>(() => {
   const c = catalog.value
   if (!c) return []
-  const maxT = maxTime.value
+  const f = filters.value
   const q = query.value.trim()
-  const diets = activeDiets.value
+  const diets = f.diets
   const index = dietIndex.value
 
   const facets = (meta: VariantMeta): boolean => {
-    if (favOnly.value && !favourites.ids.has(meta.id)) return false
-    if (proOnly.value && !meta.is_pro) return false
-    if (category.value !== 'all' && c.dataById.get(meta.id)?.category_name !== category.value)
+    if (f.favOnly && !favourites.ids.has(meta.id)) return false
+    if (f.proOnly && !meta.is_pro) return false
+    if (f.protein !== '' && c.dataById.get(meta.id)?.category_name !== f.protein)
       return false
-    if (maxT !== null && meta.cooking_minutes > maxT) return false
+    if (f.maxTime !== null && meta.cooking_minutes > f.maxTime) return false
     if (diets.length > 0) {
       const verdict = index?.verdictById.get(meta.id)
       if (!verdict || !matchesAllDiets(verdict, diets)) return false
@@ -88,7 +227,7 @@ const results = computed<VariantMeta[]>(() => {
   }
 
   list = [...list]
-  switch (sortBy.value) {
+  switch (f.sortBy) {
     case 'rating':
       list.sort(
         (a, b) => b.rating - a.rating || b.rating_count - a.rating_count,
@@ -111,23 +250,11 @@ const results = computed<VariantMeta[]>(() => {
   return list
 })
 
-const filtersActive = computed(
-  () =>
-    query.value ||
-    favOnly.value ||
-    proOnly.value ||
-    category.value !== 'all' ||
-    maxTime.value !== null ||
-    ui.dietFilters.length > 0,
-)
+const filtersActive = computed(() => query.value !== '' || hasActiveFilters(filters.value))
 
 function clearFilters() {
   query.value = ''
-  category.value = 'all'
-  favOnly.value = false
-  proOnly.value = false
-  maxTime.value = null
-  ui.dietFilters = []
+  ui.quickFilters = defaultQuickFilters()
 }
 
 /* ---------- Incremental rendering ---------- */
@@ -170,83 +297,150 @@ onUnmounted(() => observer?.disconnect())
       aria-label="Search recipes or ingredients"
     />
 
-    <div class="flex flex-wrap items-center gap-2">
+    <!-- WS1: a 2-column GRID on phones, a wrapping flex row from `sm` up.
+         Grid cells never orphan a control on a line of its own, which is
+         what `ml-auto` used to do to the sort control on a ~390px screen. -->
+    <div
+      class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center"
+      data-test="filter-bar"
+    >
       <select
-        v-model="category"
-        class="h-11 rounded-lg border dark:border-stone-700 dark:bg-stone-900 px-2 text-sm"
-        aria-label="Filter by category"
-      >
-        <option value="all">All diets</option>
-        <option v-for="c in categories" :key="c" :value="c" class="capitalize">
-          {{ c }}
-        </option>
-      </select>
-
-      <select
-        v-model.number="maxTime"
-        class="h-11 rounded-lg border dark:border-stone-700 dark:bg-stone-900 px-2 text-sm"
+        :value="filters.maxTime ?? ''"
+        class="h-11 w-full rounded-lg border px-2 text-sm dark:border-stone-700 dark:bg-stone-900 sm:w-auto"
         aria-label="Filter by max cook time"
+        data-test="cook-time-filter"
+        @change="patchFilters({ maxTime: ($event.target as HTMLSelectElement).value === '' ? null : Number(($event.target as HTMLSelectElement).value) })"
       >
-        <option :value="null">Any cook time</option>
+        <option value="">Any cook time</option>
         <option :value="20">≤ 20 min</option>
         <option :value="30">≤ 30 min</option>
         <option :value="45">≤ 45 min</option>
       </select>
 
       <button
-        class="h-11 rounded-lg border px-3 text-sm font-medium transition-colors"
-        :class="favOnly ? 'border-amber-400 dark:bg-amber-950 dark:text-amber-300' : 'dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'"
-        :aria-pressed="favOnly"
-        @click="favOnly = !favOnly"
+        class="flex h-11 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors"
+        :class="filters.favOnly ? 'border-amber-400 dark:bg-amber-950 dark:text-amber-300' : 'dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'"
+        :aria-pressed="filters.favOnly"
+        aria-label="Favourites only"
+        data-test="favourites-filter"
+        @click="patchFilters({ favOnly: !filters.favOnly })"
       >
-        ★ Favourites
+        <Star :size="16" :fill="filters.favOnly ? 'currentColor' : 'none'" aria-hidden="true" />
+        <span class="truncate">Favourites</span>
       </button>
 
       <button
-        class="h-11 rounded-lg border px-3 text-sm font-medium transition-colors"
-        :class="proOnly ? 'border-stone-900 bg-stone-900 text-amber-300' : 'dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'"
-        :aria-pressed="proOnly"
-        @click="proOnly = !proOnly"
+        class="h-11 rounded-lg border px-3 text-sm font-bold tracking-wide transition-colors"
+        :class="filters.proOnly ? 'border-stone-900 bg-stone-900 text-amber-300' : 'dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'"
+        :aria-pressed="filters.proOnly"
+        aria-label="PRO recipes only"
+        data-test="pro-filter"
+        @click="patchFilters({ proOnly: !filters.proOnly })"
       >
         PRO
       </button>
 
-      <select
-        v-model="sortBy"
-        class="ml-auto h-11 rounded-lg border dark:border-stone-700 dark:bg-stone-900 px-2 text-sm"
-        aria-label="Sort recipes"
-      >
-        <option value="rating">Sort: Top rated</option>
-        <option value="latest">Sort: Latest</option>
-        <option value="popularity">Sort: Most popular</option>
-        <option value="time">Sort: Quickest</option>
-        <option value="calories">Sort: Fewest calories</option>
-      </select>
+      <!-- Compact sort affordance: icon + current label, never a wide
+           native select with "Sort: …" options. -->
+      <div ref="sortWrapEl" class="relative">
+        <button
+          ref="sortTriggerEl"
+          class="flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300"
+          aria-haspopup="listbox"
+          :aria-expanded="sortOpen"
+          aria-label="Sort recipes"
+          data-test="sort-button"
+          @click="sortOpen ? closeSort({ refocus: true }) : openSort()"
+        >
+          <ArrowUpDown :size="16" aria-hidden="true" />
+          <span class="truncate">{{ sortText }}</span>
+        </button>
+        <ul
+          v-if="sortOpen"
+          class="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 dark:bg-stone-800 dark:ring-stone-700"
+          role="listbox"
+          aria-label="Sort recipes"
+          data-test="sort-menu"
+          @keydown="onSortMenuKeydown"
+        >
+          <li v-for="(option, index) in SORT_OPTIONS" :key="option.value" role="none">
+            <button
+              :ref="(el) => setSortOptionEl(el as Element | null, index)"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm dark:text-stone-200"
+              role="option"
+              :tabindex="index === sortFocusIndex ? 0 : -1"
+              :aria-selected="filters.sortBy === option.value"
+              :aria-label="`Sort by ${option.label}`"
+              :data-test="`sort-option-${option.value}`"
+              @click="setSort(option.value)"
+            >
+              <Check
+                v-if="filters.sortBy === option.value"
+                :size="16"
+                class="shrink-0 text-primary"
+                aria-hidden="true"
+              />
+              <span v-else class="w-4 shrink-0" aria-hidden="true" />
+              <span class="truncate">{{ option.label }}</span>
+            </button>
+          </li>
+        </ul>
+      </div>
     </div>
 
+    <!-- WS2: ONE filter surface. The former "All diets" dropdown is gone;
+         the protein slice it used to own is the first chip group here, and
+         the diet rules follow in the same group. -->
     <div
       class="flex flex-wrap items-center gap-2"
       role="group"
-      aria-label="Diet filters"
-      data-test="diet-filters"
+      aria-label="Quick filters"
+      data-test="quick-filters"
     >
       <button
-        v-for="d in DIET_IDS"
-        :key="d"
+        v-for="p in PROTEIN_OPTIONS"
+        :key="p.value || 'any'"
         type="button"
-        :data-test="`diet-chip-${d}`"
-        class="h-9 rounded-full border px-3 text-xs font-medium transition-colors"
+        :data-test="`protein-chip-${p.value || 'any'}`"
+        class="flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors"
         :class="
-          activeDiets.includes(d)
+          filters.protein === p.value
             ? 'border-primary bg-primary text-white'
             : 'dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'
         "
-        :aria-pressed="activeDiets.includes(d)"
-        :aria-label="`${DIET_LABELS[d]}: ${DIET_DESCRIPTIONS[d]}`"
-        @click="toggleDiet(d)"
+        :aria-pressed="filters.protein === p.value"
+        :aria-label="`Protein: ${p.label}`"
+        @click="setProtein(p.value)"
       >
-        {{ dietChipLabel(d, dietCounts[d]) }}
+        <component :is="PROTEIN_ICONS[p.value]" :size="14" aria-hidden="true" />
+        {{ p.label }}
       </button>
+
+      <div
+        class="flex flex-wrap items-center gap-2"
+        role="group"
+        aria-label="Diet filters"
+        data-test="diet-filters"
+      >
+        <button
+          v-for="d in DIET_IDS"
+          :key="d"
+          type="button"
+          :data-test="`diet-chip-${d}`"
+          class="flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors"
+          :class="
+            activeDiets.includes(d)
+              ? 'border-primary bg-primary text-white'
+              : 'dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'
+          "
+          :aria-pressed="activeDiets.includes(d)"
+          :aria-label="`${DIET_LABELS[d]}: ${DIET_DESCRIPTIONS[d]}`"
+          @click="toggleDiet(d)"
+        >
+          <component :is="DIET_ICONS[d]" :size="14" aria-hidden="true" />
+          {{ dietChipLabel(d, dietCounts[d]) }}
+        </button>
+      </div>
     </div>
 
     <p class="text-xs text-stone-400">
@@ -274,7 +468,7 @@ onUnmounted(() => observer?.disconnect())
     </div>
 
     <div v-if="results.length === 0" class="py-16 text-center text-stone-400">
-      <p class="text-4xl">🔍</p>
+      <SearchX :size="40" class="mx-auto" aria-hidden="true" />
       <p class="mt-2 font-medium">No recipes match your filters</p>
     </div>
   </section>

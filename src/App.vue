@@ -1,7 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import type { Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDark, useToggle } from '@vueuse/core'
+import {
+  CircleAlert,
+  CircleDashed,
+  CircleDot,
+  Moon,
+  Salad,
+  Sun,
+  TriangleAlert,
+} from 'lucide-vue-next'
 import { TABS, useUiStore } from './stores/ui'
 import { getCatalog } from './lib/catalog'
 import { decodePlan } from './lib/share'
@@ -38,16 +48,34 @@ const isShopping = computed(() => route.name === 'shop')
 const isFullscreenMode = computed(() => isCooking.value || isShopping.value)
 
 /** Room status chip shown in the header while sharing a live room. */
+const ROOM_STATUS_ICONS: Record<RoomStatus, Component> = {
+  live: CircleDot,
+  connecting: CircleDashed,
+  error: TriangleAlert,
+  idle: TriangleAlert,
+}
+const ROOM_STATUS_CLS: Record<RoomStatus, string> = {
+  live: 'text-green-600 dark:text-green-400',
+  connecting: 'text-stone-400',
+  error: 'text-amber-600 dark:text-amber-400',
+  idle: 'text-amber-600 dark:text-amber-400',
+}
+
 const roomChip = computed(() => {
   if (!room.inRoom) return null
-  const map: Record<RoomStatus, { icon: string; label: string; cls: string } | null> = {
-    live: { icon: '●', label: 'Live', cls: 'text-green-600 dark:text-green-400' },
-    connecting: { icon: '◌', label: 'Connecting', cls: 'text-stone-400' },
-    error: { icon: '⚠', label: 'Offline', cls: 'text-amber-600 dark:text-amber-400' },
-    idle: { icon: '⚠', label: 'Offline', cls: 'text-amber-600 dark:text-amber-400' },
+  const status = room.status
+  const labels: Record<RoomStatus, string> = {
+    live: 'Live',
+    connecting: 'Connecting',
+    error: 'Offline',
+    idle: 'Offline',
   }
-  const chip = map[room.status]
-  return chip ? { ...chip, code: room.code } : null
+  return {
+    icon: ROOM_STATUS_ICONS[status],
+    label: labels[status],
+    cls: ROOM_STATUS_CLS[status],
+    code: room.code,
+  }
 })
 
 /** The recipe detail view is full-bleed (edge-to-edge hero image). */
@@ -143,8 +171,9 @@ onMounted(async () => {
       class="sticky top-0 z-20 border-b border-stone-200 bg-white/90 backdrop-blur dark:border-stone-700 dark:bg-stone-900/90"
     >
       <div class="flex items-center justify-between px-4 py-2">
-        <h1 class="py-1 text-lg font-bold tracking-tight text-primary-dark dark:text-primary">
-          🥗 Mealime Planner
+        <h1 class="flex items-center gap-2 py-1 text-lg font-bold tracking-tight text-primary-dark dark:text-primary">
+          <Salad :size="22" aria-hidden="true" />
+          Mealime Planner
         </h1>
         <div class="flex items-center gap-2">
           <span
@@ -154,7 +183,7 @@ onMounted(async () => {
             :title="roomChip.code ? `Live room ${roomChip.code}` : room.error ?? undefined"
             data-test="room-chip"
           >
-            <span aria-hidden="true">{{ roomChip.icon }}</span>
+            <component :is="roomChip.icon" :size="14" aria-hidden="true" />
             {{ roomChip.label }}
           </span>
           <button
@@ -162,14 +191,19 @@ onMounted(async () => {
             :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
             @click="toggleDark()"
           >
-            <span aria-hidden="true">{{ isDark ? '☀️' : '🌙' }}</span>
+            <!-- The icon shows the mode you would switch TO, so it always
+                 agrees with the aria-label below, exactly as the emoji
+                 pair it replaced did: sun while dark ("Switch to light
+                 mode"). -->
+            <Sun v-if="isDark" :size="20" aria-hidden="true" />
+            <Moon v-else :size="20" aria-hidden="true" />
           </button>
         </div>
       </div>
     </header>
 
     <main v-if="loadError" class="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-      <p class="text-4xl">😵</p>
+      <CircleAlert :size="40" class="mx-auto" aria-hidden="true" />
       <p class="font-semibold">Couldn't load the recipe catalog</p>
       <p class="text-sm text-stone-500">{{ loadError }}</p>
       <button class="mt-2 rounded-lg bg-primary px-4 py-2 font-semibold text-white" @click="reload()">
@@ -230,7 +264,12 @@ onMounted(async () => {
           :aria-current="route.path === tab.to ? 'page' : undefined"
           @click="router.push(tab.to)"
         >
-          <span class="text-xl leading-none">{{ tab.icon }}</span>
+          <component
+            :is="tab.icon"
+            :size="22"
+            aria-hidden="true"
+            class="leading-none"
+          />
           {{ tab.label }}
         </button>
       </div>

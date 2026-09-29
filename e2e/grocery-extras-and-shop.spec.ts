@@ -251,7 +251,9 @@ test.describe('ShopView auto-collapse (ADR-0008 addendum)', () => {
     await expect(toggle).toHaveAttribute('aria-expanded', 'false')
     await expect(produce.getByTestId('section-count-pill')).toHaveText(`${total}/${total}`)
     await expect(toggle).toHaveAttribute('aria-label', `Produce: ${total} of ${total} checked`)
-    await expect(toggle).toContainText('▸')
+    // Chevron icon, not a ▸ glyph: the collapsed state is pinned by
+    // aria-expanded above, and the icon must not report text content.
+    await expect(toggle.locator('svg')).toHaveCount(1)
 
     // Other sections are untouched.
     await expect(page.locator('[data-test=shop-section]').locator('[data-test=shop-section-rows]').first()).toBeVisible()

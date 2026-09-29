@@ -1,16 +1,25 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { DIET_IDS, type DietId } from '../lib/dietFilter'
+import type { Component } from 'vue'
+import { BookOpen, CalendarDays, History, Settings, ShoppingCart } from 'lucide-vue-next'
+import {
+  defaultQuickFilters,
+  migrateLegacyUiFilters,
+  normalizeQuickFilters,
+  type QuickFilters,
+} from '../lib/quickFilters'
 import { isRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { clampSeconds, isStepTimer, type StepTimer } from '../lib/stepTimer'
 
-/** Bottom-nav entries, in display order. `to` is the route path. */
-export const TABS: { id: string; label: string; icon: string; to: string }[] = [
-  { id: 'recipes', label: 'Recipes', icon: '📖', to: '/' },
-  { id: 'plan', label: 'Plan', icon: '📅', to: '/plan' },
-  { id: 'grocery', label: 'Grocery', icon: '🛒', to: '/grocery' },
-  { id: 'history', label: 'History', icon: '🕓', to: '/history' },
-  { id: 'settings', label: 'Settings', icon: '⚙️', to: '/settings' },
+/** Bottom-nav entries, in display order. `to` is the route path; `icon` is
+ *  a Lucide component (WS5), not an emoji or a hand-rolled path — the
+ *  five labels keep their measured Pixel 7 fit (ADR-0016). */
+export const TABS: { id: string; label: string; icon: Component; to: string }[] = [
+  { id: 'recipes', label: 'Recipes', icon: BookOpen, to: '/' },
+  { id: 'plan', label: 'Plan', icon: CalendarDays, to: '/plan' },
+  { id: 'grocery', label: 'Grocery', icon: ShoppingCart, to: '/grocery' },
+  { id: 'history', label: 'History', icon: History, to: '/history' },
+  { id: 'settings', label: 'Settings', icon: Settings, to: '/settings' },
 ]
 
 /** An inline button on a toast (e.g. [Clear] [Cancel]). */
@@ -60,8 +69,14 @@ export const useUiStore = defineStore(
     /** Share personal cooked history with the live room (off by default —
      *  history is personal data; see ADR-0011 addendum). Part of backups. */
     const shareCookedHistory = ref(false)
-    /** Active diet-filter chips on the Recipes tab (AND, ADR-0018). */
-    const dietFilters = ref<DietId[]>([])
+    /**
+     * The unified quick-filter selection (ADR-0027): diet chips, protein
+     * chip, cook-time bucket, sort mode and the favourites/PRO toggles in
+     * ONE object. Persisted (survives a reload) and carried in the room
+     * payload as optional `filters` (ADR-0028), so every household member
+     * browses the same slice of the catalog.
+     */
+    const quickFilters = ref<QuickFilters>(defaultQuickFilters())
     /** Persistent household room code the app auto-joins on start (ADR-0019). */
     const householdRoom = ref('')
     /**
@@ -125,20 +140,60 @@ export const useUiStore = defineStore(
       stepTimers.value = next
     }
 
-    /** Replace persisted ui prefs wholesale (backup import). */
+    /**
+     * Replace persisted ui prefs wholesale (backup import).
+     *
+     * `quickFilters` accepts the whole unified object; a LEGACY
+     * `dietFilters` array (backup written before ADR-0027) is still
+     * accepted and folded into the diets half, so an old backup restores
+     * the user's diet chips instead of silently dropping them.
+     */
     function applySettings(prefs: {
       shareCookedHistory?: boolean
-      dietFilters?: DietId[]
+      quickFilters?: unknown
+      dietFilters?: unknown
       householdRoom?: string
       stepTimers?: unknown
     }): void {
       if (typeof prefs.shareCookedHistory === 'boolean') shareCookedHistory.value = prefs.shareCookedHistory
-      if (Array.isArray(prefs.dietFilters)) {
-        // Unknown ids are dropped rather than trusted (frozen rule set).
-        dietFilters.value = prefs.dietFilters.filter((d): d is DietId => DIET_IDS.includes(d as DietId))
-      }
+      const filters =
+        normalizeQuickFilters(prefs.quickFilters) ??
+        (Array.isArray(prefs.quickFilters)
+          ? normalizeQuickFilters({ diets: prefs.quickFilters })
+          : null) ??
+        (Array.isArray(prefs.dietFilters) ? normalizeQuickFilters({ diets: prefs.dietFilters }) : null)
+      if (filters) quickFilters.value = filters
       if (typeof prefs.householdRoom === 'string') setHouseholdRoom(prefs.householdRoom)
       if (prefs.stepTimers !== undefined) stepTimers.value = sanitizeStepTimers(prefs.stepTimers)
+    }
+
+    /**
+     * Seed the unified filters from state persisted before ADR-0027 (a
+     * v0.12 localStorage blob holds `dietFilters` and no `quickFilters`),
+     * and repair anything the hydrated value got wrong.
+     *
+     * Runs once, after persistence hydration. Hydration is a raw
+     * `$patch` of whatever was in localStorage, so a hand-edited,
+     * half-written or older-build value reaches the store verbatim;
+     * without this the Recipes tab would read a malformed `diets` array
+     * and could fail while iterating it. A non-object (or a legacy
+     * `dietFilters` array) falls back to the migration, then to defaults.
+     */
+    function migrateLegacyFilters(): void {
+      let raw: string | null = null
+      try {
+        raw = localStorage.getItem('mealime-planner:v1:ui')
+      } catch {
+        return // storage unavailable: nothing to migrate
+      }
+      const migrated = migrateLegacyUiFilters(raw)
+      if (migrated) {
+        quickFilters.value = migrated
+        return
+      }
+      const normalized = normalizeQuickFilters(quickFilters.value)
+      if (normalized) quickFilters.value = normalized
+      else quickFilters.value = defaultQuickFilters()
     }
 
     /**
@@ -207,7 +262,7 @@ export const useUiStore = defineStore(
     return {
       cookingStepIndex,
       shareCookedHistory,
-      dietFilters,
+      quickFilters,
       householdRoom,
       stepTimers,
       toast,
@@ -219,18 +274,25 @@ export const useUiStore = defineStore(
       pauseStepTimer,
       clearStepTimer,
       applySettings,
+      migrateLegacyFilters,
       setHouseholdRoom,
       showToast,
       dismissToast,
     }
   },
   {
-    // Only the share/diet/room prefs + step timers persist (ADR-0020, so a
-    // reload mid-cook resumes honestly); cookingStepIndex stays
-    // session-scoped.
+    // The quick filters (ADR-0027), the share/diet/room prefs and the step
+    // timers (ADR-0020, so a reload mid-cook resumes honestly) persist;
+    // cookingStepIndex stays session-scoped.
     persist: {
       key: 'mealime-planner:v1:ui',
-      pick: ['shareCookedHistory', 'dietFilters', 'householdRoom', 'stepTimers'],
+      pick: ['shareCookedHistory', 'quickFilters', 'householdRoom', 'stepTimers'],
+      // Hydration has already run when this fires, so a v0.12 blob (which
+      // has no `quickFilters` and therefore patched nothing) can still be
+      // migrated from its legacy `dietFilters` array.
+      afterHydrate: (context) => {
+        ;(context.store as unknown as { migrateLegacyFilters: () => void }).migrateLegacyFilters()
+      },
     },
   },
 )

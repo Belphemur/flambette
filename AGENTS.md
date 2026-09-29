@@ -10,7 +10,8 @@ host** — this is enforced by e2e (`blockExternalRequests` +
 - Vue 3 (`<script setup>`) + Vite + TypeScript + Tailwind CSS v4
 - Pinia + `pinia-plugin-persistedstate` (keys: `mealime-planner:v1:*`)
 - vue-router 4: `/`, `/plan`, `/grocery`, `/history`, `/settings`, `/shop`, `/recipe/:id`, `/cooking/:id` — five bottom tabs (Recipes, Plan, Grocery, History, Settings). All five keep visible labels: the fit was measured at Pixel 7 (82px/tab, widest label 49px, no overflow) and is pinned by e2e, so a 6th tab needs a re-measure (ADR-0016).
-- MiniSearch (search), `@vueuse/core` (`useDark`, `useClipboard({ legacy: true })`)
+- MiniSearch (search), `@vueuse/core` (`useDark`, `useClipboard({ legacy: true })`),
+  `lucide-vue-next` (icons, bundled — ADR-0029)
 - WebSocket relay (`server/relay.mjs`, zero-dep Bun-native WebSocket)
   for live room sync
 - Bun 1.x toolchain (`bun.lock`); docker bases `oven/bun:1-alpine`
@@ -65,6 +66,27 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   diet metadata), token-boundary matched and memoized per variant id.
   Treat its verdicts as a suggestion lens, never a guarantee; the
   keyword tables are the tunable part.
+- **Quick filters (ADR-0027/0028)**: the WHOLE Recipes-tab filter
+  surface is ONE object, `QuickFilters` in `src/lib/quickFilters.ts`
+  (`diets`, `protein`, `maxTime`, `sortBy`, `favOnly`, `proOnly`),
+  persisted in the existing `mealime-planner:v1:ui` slice. There is no
+  "All diets" dropdown and no per-control local ref — the protein slice
+  it used to own is a chip (`data-test="protein-chip-*"`), and the diet
+  chips keep `data-test="diet-chip-*"` under `data-test="quick-filters"`.
+  Every inbound value (backup, room payload) goes through
+  `normalizeQuickFilters`, which drops unknown diet ids and defaults
+  out-of-range members. The search box is deliberately NOT in the object
+  (a search is a question, not a household preference). The control row
+  is a 2-column grid on phones so no control can be orphaned on its own
+  line (WS1) — keep it a grid, don't reintroduce `ml-auto`.
+- **Icons (ADR-0029)**: the icon stack is `lucide-vue-next`, imported
+  per component and BUNDLED (no CDN, no icon font — a runtime icon
+  fetch fails e2e by design). No glyph characters (`✕ ★ − ✓ ▸ 🛒 …`) and
+  no hand-rolled `<svg>` in `src/`; the one exception is the 1×1 recipe
+  placeholder data URL in `src/lib/images.ts`. Decorative icons are
+  `aria-hidden`; an icon that carries state must also be queryable
+  (`aria-label` / `aria-expanded`), because that is what the specs
+  assert.
 - **Household room (ADR-0019)**: `ui.householdRoom` is a persisted
   default join target; the app auto-joins it after config load unless a
   session resume or `?room=` link already won. Room failures toast and
@@ -126,7 +148,7 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   `containerContribution` + `formatContainerQuantity`; linear/seasoning
   via `scaleQuantity`). NEVER invent a quantity: no line-item match means
   no chip. Step/recipe prose stays verbatim.
-- **Auto-Plan (ADR-0024)**: the plan generator is `src/lib/packPlanner.ts` —
+- **Auto-Plan (ADR-0024/0030)**: the plan generator is `src/lib/packPlanner.ts` —
   a PURE lib (no Vue/Pinia/fetch) over the committed
   `public/data/pack_index.json` footprint. Deterministic greedy packing,
   score = marginal whole-package cost (`Σ ceil(container total)`, containers
@@ -139,7 +161,10 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   dialog: confirm before replacing a hand-curated plan, undo toast restores
   the exact previous entries. e2e pins the default 4-pack
   `[4908, 6185, 6729, 12069]` — any catalog or scoring change breaks those
-  pins loudly.
+  pins loudly. The dialog's confirm step PREVIEWS the pack (image +
+  title per meal, `data-test="auto-plan-preview"`, resolved through
+  `imageSrc`/`onImgError` like every other tile) before it replaces
+  anything.
 - **Nutrition**: `meta.calories`/`sodium_mg` are PER-SERVING — never scale
   them by servings; only totals scale.
 - **Share/rooms**: `?p=` is the one-time gzip+base64url export (v1 bare
@@ -152,7 +177,18 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   `cookedHistory` is personal and must stay out of the room payload
   UNLESS the sender opted in via the `shareCookedHistory` setting
   (default off; ADR-0011 addendum) — then the payload may carry it and
-  peers apply it.
+  peers apply it. The opt-in is surfaced in Settings → Household sync
+  (ADR-0028); do not flip the default without amending ADR-0011.
+- **Join reconciliation (ADR-0028)**: a `joined` that ADOPTED the
+  room's snapshot does NOT push afterwards (the echo re-published a
+  possibly stale snapshot at a higher rev and could freeze the household
+  on old state); a join that did not adopt (empty room, or the
+  `ROOM_REV_KEY` floor rejected the snapshot) still pushes. A local edit
+  queued inside the 300ms push debounce outranks a snapshot that arrives
+  before its push, and an edit that could not be sent because the socket
+  was not live is published on join instead of being silently adopted
+  over. New `SharedState` members are OPTIONAL and absence means "don't
+  touch", never "wipe".
 - **Backup registry (standing rule, ADR-0013)**: every persisted store
   slice MUST be registered in `STORE_SLICES` (src/lib/backup.ts) in the
   same change that adds the store — export, import and validation all
@@ -185,7 +221,9 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   (offline catalog, derived grocery, per-serving nutrition, clear
   semantics, rooms, Bun toolchain, auto-collapse, extras pilling,
   settings tab, diet rules, household room, step timers, measured
-  amounts, three-word room codes, share-room link). Skim them before
+  amounts, three-word room codes, share-room link, room lifecycle,
+  unified quick filters, filter sync + join reconciliation, the Lucide
+  icon stack, Auto-Plan preview). Skim them before
   proposing changes; new lasting decisions get a new
   `ADR-NNNN-slug.md` (never rewrite an accepted one in place).
 

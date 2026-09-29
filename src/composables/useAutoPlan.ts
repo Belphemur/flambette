@@ -73,7 +73,7 @@ export async function runAutoPlan(options: AutoPlanOptions): Promise<AutoPlanRes
   const planStore = usePlanStore()
   const ui = useUiStore()
   const dietIndex = dietIndexFor(catalog.data.variant_meta)
-  const diets = ui.dietFilters
+  const diets = ui.quickFilters.diets
 
   // Eligible = catalog minus (wrong category, diet-failing, planned).
   // Everything NOT eligible goes into excludeIds — the planner only sees
