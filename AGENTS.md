@@ -56,6 +56,34 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   session resume or `?room=` link already won. Room failures toast and
   never block the UI (retry next launch) — never `await` a room
   operation on a render path.
+- **Room codes are three words (ADR-0021)**: the accepted format is the
+  UNION — `amber-falcon-lantern` (`WORD_ROOM_CODE_RE`) or a legacy
+  `ZZ9ZZZ` (`LEGACY_ROOM_CODE_RE`) — and everything that touches a code
+  goes through `normalizeRoomCode()` in `src/lib/roomWords.ts` (forgiving
+  in, canonical out; a PARTIAL word code is refused, never coerced).
+  Codes are rolled CLIENT-side and the relay refuses a taken one with
+  `code_taken` (the client re-rolls; collisions are tolerated by
+  design). The relay's `normalizeCode` mirrors the client helper — keep
+  them in step.
+- **Share room = one tap to the clipboard (ADR-0023)**: use
+  `useShareRoomLink()` (`src/composables/useShareRoomLink.ts`), never
+  `navigator.share` (no Web Share on plain-HTTP LAN) and never a raw
+  clipboard call. It verifies the write by reading back and always says
+  something — a share affordance must never fail silently.
+- **Step timers (ADR-0020)**: ONE timer per step VIEW (a Meanwhile pair
+  is one view, ADR-0010), stored as `{remaining, running, startedAt}` in
+  `ui.stepTimers[variantId][viewKey]` — derive the countdown from
+  `startedAt`, never re-arm a counter, so a reload mid-cook resumes
+  honestly. The countdown NEVER uses the toast surface; minute ticks go
+  through `announceCountdown()` in the polite live region only. Finishing
+  a cook with a timer running must ask first.
+- **Measured amounts under step text (ADR-0022)**: chips come from
+  `src/lib/measuredAmounts.ts` — only for detail lines whose own leading
+  quantity is unparseable, matched through `nameKey` at word boundaries,
+  and scaled by importing the grocery split (`parseContainerQuantity` +
+  `containerContribution` + `formatContainerQuantity`; linear/seasoning
+  via `scaleQuantity`). NEVER invent a quantity: no line-item match means
+  no chip. Step/recipe prose stays verbatim.
 - **Nutrition**: `meta.calories`/`sodium_mg` are PER-SERVING — never scale
   them by servings; only totals scale.
 - **Share/rooms**: `?p=` is the one-time gzip+base64url export (v1 bare
@@ -100,7 +128,8 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
 - **Design ADRs**: `docs/design/` holds ADR-style decision records
   (offline catalog, derived grocery, per-serving nutrition, clear
   semantics, rooms, Bun toolchain, auto-collapse, extras pilling,
-  settings tab). Skim them before
+  settings tab, diet rules, household room, step timers, measured
+  amounts, three-word room codes, share-room link). Skim them before
   proposing changes; new lasting decisions get a new
   `ADR-NNNN-slug.md` (never rewrite an accepted one in place).
 
