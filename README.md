@@ -33,6 +33,17 @@ neutral placeholder.
   Full-screen detail view with presentation image, macro split, cookware,
   ingredients and instructions, plus a servings stepper that scales
   quantities (per-serving nutrition stays fixed; only totals scale).
+- **Diet filters** — chips for no-pork, no-shellfish, no-meat, vegetarian and
+  vegan, applied across search, browse and Auto-Plan. The catalog ships no
+  diet metadata, so this is a transparent keyword heuristic over each
+  recipe's ingredient list: a fast suggestion lens, not a guarantee.
+- **Auto-Plan** — generate a whole week of meals in one tap. A deterministic
+  pack builder scores recipes by *marginal package cost* (how many extra
+  supermarket packages each pick would force you to buy, counting a
+  container as bought whole), weighted slightly against rating, and skips
+  pantry staples you already have. Pick a pack size, optionally exclude
+  categories or diets, confirm, and undo if you don't like the result.
+  Same inputs always produce the same plan — no model, no randomness.
 - **Plan** — add recipes with per-meal serving counts; totals for kcal, cook
   time and meal count. Persisted to `localStorage`.
 - **Grocery** — aggregates ingredient line items across the whole plan:
@@ -42,24 +53,44 @@ neutral placeholder.
   canonical grocery-store sections via a keyword heuristic (fallback:
   "Other"). Ingredients shared between several planned meals get a
   "N recipes" badge (hover/focus shows which). Free-form items not in any
-  recipe can be added ("Extra items") and are included in shares.
-  Checkboxes, progress bar and "clear checked" persist to `localStorage`.
+  recipe can be added as **Extra items** — they render in their own group at
+  the top, tagged with a category pill when one applies. Checkboxes, progress
+  bar and "clear checked" persist to `localStorage`.
+- **Waste-aware quantities** — container-shaped amounts (`½ (142 g) pkg`,
+  `1 small bunch`, `1 head`) are treated as *purchased units* and merged
+  with a ceiling, so two recipes sharing a pack of cheese cost one package,
+  not two. Spoon/measure amounts stay linear, and seasonings scale
+  sub-linearly (doubling a recipe does not double the salt). Recipe and
+  cooking-step text is always left exactly as written.
 - **Cooking mode** — a full-screen, distraction-free step-by-step view
   (`/cooking/:id`) with one step at a time, per-step scaled ingredients,
-  progress (Step N / M) and keyboard/swipe navigation.
-- **Live room sync** — the plan tab's share sheet can start a *live room*:
-  one person creates it, anyone opening `/plan?room=CODE` joins, and every
-  change to the plan, custom grocery items and grocery checkmarks
-  propagates instantly both ways (last-write-wins per revision). A status
-  chip in the header shows Live / Connecting / Offline; the room code is
-  kept for the browser session so page reloads re-join automatically. The
-  classic one-time `?p=` share link is still available for offline
-  sharing.
+  measured-amount chips where a step needs the quantity, progress
+  (Step N / M) and keyboard/swipe navigation. Each step can carry its own
+  **timer**; a countdown survives a page reload rather than silently
+  restarting, and finishing with a timer still running asks first.
+- **Cooking history** — what you actually cooked, how often, and when,
+  browsable on its own **History** tab with per-recipe stats. Personal by
+  default: it is only shared with a room if you explicitly opt in.
+- **Live room sync** — the Plan tab can start a *live room*: one person
+  creates it, anyone opening `/plan?room=CODE` joins, and every change to the
+  plan, custom grocery items, grocery checkmarks and cleared ingredients
+  propagates instantly both ways (last-write-wins per revision). Room codes
+  are three readable words (`amber-falcon-lantern`), rolled on the client
+  and shareable with one tap. A **household room** can be saved in Settings
+  and is re-joined automatically on every launch. A status chip shows
+  Live / Connecting / Offline; the code is kept for the browser session so
+  reloads re-join automatically. The classic one-time `?p=` share link is
+  still available for offline sharing.
 - **Shopping mode** — a full-screen, big-target checklist of the grocery
   list, optimized for in-store use: one collapsible section per store
   section, large tap rows with big custom checkboxes, checked items fade
   and sink within their section, and a sticky progress bar with an Exit
-  button. Entered from the grocery tab's "Start shopping" button.
+  button. Finished sections collapse themselves. Entered from the grocery
+  tab's "Start shopping" button.
+- **Backup & restore** — export everything (plan, checks, favourites,
+  settings, cooked history) to a single JSON file and restore it on another
+  device. Restore validates the whole file before applying anything, so a
+  bad backup can never leave you half-imported.
 - **Dark mode** — follows the OS preference on first load; the header
   toggle overrides it and the choice persists.
 
@@ -80,6 +111,20 @@ Stop with `docker compose down`. The relay keeps room state in memory —
 restarting it drops live rooms (plans/checklists live in each browser's
 `localStorage` and are never lost).
 
+## Run with the published images
+
+Every release publishes both images to GitHub Container Registry, so you can
+run the app without cloning or building anything:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Tags follow the release version (`0.11.1`), plus `0.11` and `latest`. Note
+that the `v` from the git tag (`v0.11.1`) is **stripped** in the registry —
+pull `0.11.1`, not `v0.11.1`.
+
 ## Run with plain Docker
 
 No volume is needed — the full offline catalog, images and app bundle are
@@ -92,7 +137,7 @@ docker run -d -p 8080:80 mealime-planner
 # open http://localhost:8080
 ```
 
-Build is multi-stage (`node:22-alpine` → `nginx:alpine`) with gzip, an SPA
+Build is multi-stage (`oven/bun:1-alpine` → `nginx:alpine`) with gzip, an SPA
 fallback and cache headers (immutable 1y for `/assets/` and `/img/`, no-cache
 for `index.html`).
 
@@ -105,7 +150,7 @@ service in your compose file:
 ```yaml
 services:
   web:
-    build: .
+    image: ghcr.io/belphemur/mealime-planner:latest
     networks: [traefik, internal]   # internal carries web→relay /ws traffic
     labels:
       - traefik.enable=true
@@ -119,7 +164,7 @@ services:
       - traefik.docker.network=traefik
 
   relay:
-    build: ./server
+    image: ghcr.io/belphemur/mealime-planner-relay:latest
     networks: [internal]
     # no ports:, no traefik.enable — reachable only from web
 
@@ -128,6 +173,9 @@ networks:
     external: true   # the network your Traefik instance is attached to
   internal:
 ```
+
+Use `build: .` / `build: ./server` instead of `image:` if you want to run
+unreleased code from a checkout.
 
 Replace `mealime.example.com` and `le` with your hostname and certificate
 resolver. Serve over **HTTPS**: browsers only expose the native share
@@ -144,6 +192,7 @@ bun run dev                      # dev server (proxies /ws to the relay)
 bun server/relay.mjs             # relay on :8081 (dev/e2e)
 bun run build                    # type-check + production build into dist/
 bun run preview                  # serve the production build locally
+bun run test:unit                # unit specs for the pure libs
 bunx playwright test             # e2e suite (starts the relay itself)
 ```
 
@@ -157,14 +206,18 @@ WebSocket API, in-memory only — rooms expire after 12h idle);
 - Tailwind CSS v4 (via `@tailwindcss/vite`), class-based dark mode via
   `useDark` from `@vueuse/core` (system preference by default, manual
   override persisted)
-- Vue Router 4 for deep-linkable routes (`/`, `/plan`, `/grocery`,
-  `/shop`, `/recipe/:id`, `/cooking/:id`)
+- Vue Router 4 for deep-linkable routes — five bottom tabs (`/`,
+  `/plan`, `/grocery`, `/history`, `/settings`) plus `/shop`,
+  `/recipe/:id`, `/cooking/:id`
 - State via Pinia stores in `src/stores/`, persisted to
   localStorage under the `mealime-planner:v1:*` keys
   (`mealime-planner:v1:favourites`, `mealime-planner:v1:plan`,
   `mealime-planner:v1:checked`); the live-room code is kept in
   sessionStorage (`mealime-planner:v1` scope, `room` store)
-- No runtime dependencies besides Vue, Pinia and MiniSearch (search)
+- Bun as the toolchain and runtime (`bun.lock`); Docker base images are
+  `oven/bun:1-alpine` (build) and `nginx:alpine` (serve)
+- No runtime dependencies besides Vue, Pinia, MiniSearch (search) and
+  `@vueuse/core`
 
 ## Data provenance
 

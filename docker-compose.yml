@@ -1,11 +1,32 @@
+# Mealime Planner — two-service deployment.
+#
+#   web   nginx serving the built SPA (the whole offline catalog + image
+#         archive is baked into the image; no volumes, no runtime fetches)
+#   relay zero-dependency Bun WebSocket relay backing live room sync
+#
+# Both images are published per release to GitHub Container Registry, so the
+# default path pulls rather than builds. Tag = release version WITHOUT the
+# leading `v` (git tag `v0.11.1` → image tag `0.11.1`), plus `X.Y` and
+# `latest`. Bump the two tags below together when upgrading.
+#
+# To run unreleased code from a checkout instead, swap each `image:` for its
+# `build:` (they are commented out below) and run:
+#     docker compose up -d --build
 services:
   web:
-    build: .
+    image: ghcr.io/belphemur/mealime-planner:0.11.1
+    # build: .
     ports:
+      # host:container — nginx listens on 80 inside the image.
       - '8097:80'
     depends_on:
       - relay
+    restart: unless-stopped
 
   relay:
-    build: ./server
+    image: ghcr.io/belphemur/mealime-planner-relay:0.11.1
+    # build: ./server
+    # Rooms are held in memory only: restarting the relay drops live rooms,
+    # while each browser's plan and checklist survive untouched in
+    # localStorage.
     restart: unless-stopped
