@@ -39,9 +39,17 @@ async function loadIndex(): Promise<PackIndex> {
   return parsed
 }
 
-/** The memoized index loader — resolves the committed pack_index.json. */
+/** The memoized index loader — resolves the committed pack_index.json.
+ *  Shares the in-flight promise across callers; a REJECTED load resets
+ *  the memo so the next call retries instead of failing forever
+ *  (qodo thread 5). */
 export function getPackIndex(): Promise<PackIndex> {
-  indexPromise ??= loadIndex()
+  if (!indexPromise) {
+    indexPromise = loadIndex().catch((err) => {
+      indexPromise = null
+      throw err
+    })
+  }
   return indexPromise
 }
 
@@ -80,10 +88,11 @@ export async function runAutoPlan(options: AutoPlanOptions): Promise<AutoPlanRes
   }
 
   const ratings = new Map(catalog.data.variant_meta.map((m) => [m.id, m.rating ?? 0]))
-  const result = buildAutoPlan(index, {
-    count: options.count,
-    excludeIds: eligible.size === 0 ? undefined : [...catalog.dataById.keys()].filter((id) => !eligible.has(id)),
-    ratings,
-  })
+  // The complement of the eligible set ALWAYS excludes — even when the
+  // eligible set is empty (otherwise buildAutoPlan would interpret a
+  // missing excludeIds as "exclude nothing" and pick recipes that fail
+  // the active constraints; qodo thread 1).
+  const excludeIds = [...catalog.dataById.keys()].filter((id) => !eligible.has(id))
+  const result = buildAutoPlan(index, { count: options.count, excludeIds, ratings })
   return { ...result, eligibleCount: eligible.size }
 }

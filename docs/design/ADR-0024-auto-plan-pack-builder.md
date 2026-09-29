@@ -143,6 +143,16 @@ Deviations from the original sketch, each justified:
   `ws.data.ip` and key budgets on it. Same fix also restores the per-IP
   half of the brute-force throttle, which could never distinguish IPs
   under the fallback.
+- **Relay behind nginx: the forwarded client address is honored.** In the
+  deployed topology (`nginx.conf` /ws → relay) the socket address is
+  nginx's own container IP, so per-IP budgets — however correct the relay
+  code — would still be shared by every household. nginx now sets
+  `X-Forwarded-For`/`X-Real-IP` on the /ws pass-through and the relay keys
+  the throttle on the forwarded address when present (direct dev/LAN
+  connections fall back to the socket address). Trust trade-off recorded:
+  the relay is only reached through its own proxy, and a forged header on
+  a direct connection only shifts the client's OWN budget — acceptable
+  for household-grade hardening (it is not an ACL).
 - **Toast actions take an optional `testId`** (`stores/ui.ts`) so the undo
   affordance can carry `data-test="auto-plan-undo"` without changing the
   generic `toast-action-primary/secondary` contract.

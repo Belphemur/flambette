@@ -242,6 +242,21 @@ test('room sync: generated plan reaches the second context', async ({ browser })
   await expectZeroMealimeRequests(b)
 })
 
+test('changed choices invalidate the generated pack', async ({ page }) => {
+  await page.goto('/plan')
+  await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
+
+  await page.getByTestId('auto-plan-button').first().click()
+  await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+  await page.getByTestId('auto-plan-generate').click()
+  await expect(page.getByTestId('auto-plan-confirm')).toBeVisible({ timeout: 15_000 })
+
+  // Changing the protein after Generate must clear the stale result.
+  await page.getByTestId('auto-plan-category').selectOption('vegetarian')
+  await expect(page.getByTestId('auto-plan-confirm')).toBeHidden()
+  await expectZeroMealimeRequests(page)
+})
+
 test('diet chip active → generated plan respects it', async ({ page }) => {
   await page.goto('/')
   await waitForCatalog(page)

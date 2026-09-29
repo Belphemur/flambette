@@ -119,11 +119,14 @@ const autoPlanCategory = ref<'' | 'meat' | 'fish' | 'vegetarian'>('')
 const autoPlanBusy = ref(false)
 /** After Generate: the pending result awaiting the confirm step. */
 const pendingPlan = ref<(PackPlan & { eligibleCount: number }) | null>(null)
-/** Exact pre-generation entries (ids + servings) for the undo toast. */
+/** Exact pre-generation state for the undo toast (ids + servings + the
+ *  cleared-ingredient snapshots, so undo restores the whole grocery view). */
 const previousEntries = ref<{ variantId: number; servings: number }[]>([])
+const previousCleared = ref<Record<number, string[]>>({})
 
 function openAutoPlan() {
   previousEntries.value = plan.plan.map((e) => ({ ...e }))
+  previousCleared.value = { ...plan.clearedIngredients }
   pendingPlan.value = null
   autoPlanOpen.value = true
 }
@@ -133,14 +136,24 @@ function closeAutoPlan() {
   pendingPlan.value = null
 }
 
+// Changed choices invalidate the confirmable pack: the visible result
+// must always belong to the settings on screen (qodo thread 4).
+watch([autoPlanCount, autoPlanCategory], () => {
+  pendingPlan.value = null
+})
+
 async function generateAutoPlan() {
   if (autoPlanBusy.value) return
   autoPlanBusy.value = true
+  // Pin the choices this run was made with; a result coming back after
+  // the user changed count/category is stale and must not confirm.
+  const wanted = { count: autoPlanCount.value, category: autoPlanCategory.value }
   try {
     const result = await runAutoPlan({
-      count: autoPlanCount.value,
-      category: autoPlanCategory.value || undefined,
+      count: wanted.count,
+      category: wanted.category || undefined,
     })
+    if (wanted.count !== autoPlanCount.value || wanted.category !== autoPlanCategory.value) return
     pendingPlan.value = result
   } catch {
     ui.showToast("Couldn't load the planner — try again")
@@ -153,28 +166,34 @@ async function generateAutoPlan() {
 function confirmAutoPlan() {
   const result = pendingPlan.value
   if (!result) return
+  // Fresh planning = fresh ingredients: re-planning a meal must forget
+  // any cleared-ingredient snapshot (same rule as addToPlan, ADR v0.4
+  // clear semantics) or re-planned groceries stay hidden (qodo thread 2).
+  for (const variantId of result.variantIds) plan.restoreIngredients(variantId)
   plan.replacePlan(
     result.variantIds.map((variantId) => ({ variantId, servings: 6 })),
     plan.customItems,
   )
+  // Undo restores the EXACT pre-generation state (ids + servings + the
+  // cleared-ingredient map) from copies taken at confirm time — not from
+  // the mutable dialog refs a later dialog open would overwrite
+  // (qodo thread 3).
+  const undoEntries = previousEntries.value.map((e) => ({ ...e }))
+  const undoCleared = { ...previousCleared.value }
+  const undo = () => {
+    plan.replacePlan(undoEntries, plan.customItems)
+    plan.setClearedIngredients(undoCleared)
+  }
   const warning = result.warnings?.[0]
   ui.showToast(
     warning ? `Plan generated — ${warning}` : `Plan generated: ${result.variantIds.length} meals`,
     {
-      // Undo restores the exact pre-generation plan (ids + servings).
-      actions:
-        previousEntries.value.length > 0
-          ? [{ label: 'Undo', run: undoAutoPlan, testId: 'auto-plan-undo' }]
-          : undefined,
+      actions: undoEntries.length > 0 ? [{ label: 'Undo', run: undo, testId: 'auto-plan-undo' }] : undefined,
       duration: 6000,
       kind: 'autoplan-toast',
     },
   )
   closeAutoPlan()
-}
-
-function undoAutoPlan() {
-  plan.replacePlan(previousEntries.value, plan.customItems)
 }
 </script>
 <template>
