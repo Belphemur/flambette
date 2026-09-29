@@ -209,6 +209,14 @@ export const useRoomStore = defineStore('room', () => {
             wantedCode = null
             ws.send(JSON.stringify({ type: 'create' }))
           }
+        } else {
+          // Unknown error (rate_limited, banned code shape, ...): surface it
+          // instead of spinning in 'connecting' forever. A CI relay under a
+          // throttle hung every room spec exactly this way — the chip sat at
+          // "◌ Connecting" for the full timeout with nothing in the logs.
+          error.value = `Room error — ${String(msg.code ?? 'unknown')}`
+          status.value = 'error'
+          cleanupSocket()
         }
         break
       }
