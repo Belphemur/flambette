@@ -301,8 +301,21 @@ test('share-history toggle: OFF by default, ON streams cooked events to peers', 
   await ctxB.close()
 })
 
-test('joining an unknown room surfaces an error state', async ({ page }) => {
+test('joining a code the relay does not know yet CREATES the room (ADR-0026)', async ({ page }) => {
+  // This is the reported bug verbatim: `join` used to be a lookup and
+  // answered not_found, so a share link / household code was a dead end
+  // after any relay restart. Whoever arrives first now establishes it.
   await blockExternalRequests(page)
-  await page.goto('/plan?room=ZZZZZZ')
-  await expect(page.getByTestId('room-chip')).toContainText('Offline', { timeout: 10_000 })
+  await page.goto('/plan?room=ember-willow-quartz')
+  const chip = page.getByTestId('room-chip')
+  await expect(chip).toContainText('Live', { timeout: 10_000 })
+  await expect(chip).toHaveAttribute('title', 'Live room ember-willow-quartz')
+
+  // A second device joining that same code lands in the same live room.
+  const ctxB = await page.context().browser()!.newContext()
+  const b = await ctxB.newPage()
+  await blockExternalRequests(b)
+  await b.goto('/plan?room=ember-willow-quartz')
+  await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 10_000 })
+  await ctxB.close()
 })

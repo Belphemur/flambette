@@ -262,18 +262,34 @@ test.describe('household room', () => {
     await expectZeroMealimeRequests(page)
   })
 
-  test('an unusable code only warns and never blocks the app', async ({ page }) => {
+  test('a household code the relay does not know yet CREATES the room (ADR-0026)', async ({ page }) => {
     test.setTimeout(90_000)
+    // The owner's dead end: a saved household code, a relay that never saw
+    // it (fresh process / restarted container), and "Room not found". A join
+    // now establishes the room instead.
     await page.goto('/settings')
     await waitForApp(page)
-    await page.getByTestId('household-room-input').fill('ZZ9ZZZ')
+    const code = 'jade-otter-lantern'
+    await page.getByTestId('household-room-input').fill(code)
     await page.getByTestId('household-room-save').click()
-    await expect(page.getByTestId('household-room-status')).toContainText('ZZ9ZZZ')
+    await expect(page.getByTestId('household-room-status')).toContainText(code)
 
     await restartFresh(page)
-    await expect(page.getByTestId('household-toast')).toContainText(/unavailable|not found/i, {
-      timeout: 20_000,
-    })
+    await expect(page.getByTestId('household-toast')).toContainText(code, { timeout: 20_000 })
+    await expect(page.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+    await expect(page.getByTestId('room-chip')).toHaveAttribute('title', `Live room ${code}`)
+    await expectZeroMealimeRequests(page)
+  })
+
+  test('an unusable code only warns and never blocks the app', async ({ page }) => {
+    await page.goto('/settings')
+    await waitForApp(page)
+    // A PARTIAL word code never normalizes (ADR-0021 refuses to coerce it),
+    // so the field cannot be saved at all and nothing is ever joined.
+    await page.getByTestId('household-room-input').fill('mauve-peacock')
+    await expect(page.getByTestId('household-room-save')).toBeDisabled()
+    await expect(page.getByTestId('household-room-join')).toBeDisabled()
+    await expect(page.getByTestId('household-room-status')).toHaveCount(0)
 
     // The app stays fully usable: browse, plan, groceries.
     await gotoTab(page, 'Recipes')

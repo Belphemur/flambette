@@ -109,7 +109,9 @@ docker compose up -d --build
 
 Stop with `docker compose down`. The relay keeps room state in memory —
 restarting it drops live rooms (plans/checklists live in each browser's
-`localStorage` and are never lost).
+`localStorage` and are never lost). Any client back in afterwards simply
+re-establishes the room: `join` creates a code the relay does not know
+yet (ADR-0026).
 
 ## Run with the published images
 
@@ -197,7 +199,9 @@ bunx playwright test             # e2e suite (starts the relay itself)
 ```
 
 The relay is a zero-dependency Bun service (`server/`, Bun's native
-WebSocket API, in-memory only — rooms expire after 12h idle);
+WebSocket API, in-memory only — a room is created by whichever client
+arrives first, deleted when its last peer leaves, and expires after 1h
+with no keepalive and no activity, 12h idle being the backstop);
 `server/README.md` documents the wire protocol.
 
 ## Stack
