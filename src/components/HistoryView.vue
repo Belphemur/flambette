@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { ChefHat } from 'lucide-vue-next'
 import { catalog } from '../lib/catalog'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
 import { imageSrc, onImgError } from '../lib/images'
@@ -43,8 +44,10 @@ function addToPlan(row: Row) {
 
 <template>
   <section class="space-y-3" aria-label="Cooking history">
-    <p class="text-xs text-stone-500 dark:text-stone-400">
-      Personal to this device — leaves the device only if the room owner opts in from the Plan tab.
+    <p class="text-xs text-stone-500 dark:text-stone-400" data-test="history-sync-note">
+      Personal to this device by default (ADR-0011). Turn on
+      <strong>“Also sync cooked history”</strong> in Settings → Household sync to share it with the room — history then
+      syncs both ways, last write wins.
     </p>
 
     <div
@@ -52,7 +55,7 @@ function addToPlan(row: Row) {
       class="py-16 text-center text-stone-400"
       data-test="history-empty"
     >
-      <p class="text-4xl">🍳</p>
+      <ChefHat :size="40" class="mx-auto" aria-hidden="true" />
       <p class="mt-2 font-medium">Nothing cooked yet</p>
       <p class="mt-1 text-sm">Mark meals as cooked when you finish them.</p>
       <button

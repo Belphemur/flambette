@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { Plus } from 'lucide-vue-next'
 import { STORE_SECTIONS } from '../lib/sections'
 import { nameKey } from '../lib/grocery'
 import {
@@ -296,9 +297,9 @@ const ariaLabel = 'Add a custom grocery item'
         @click="addRow(rowAt(i)!)"
       >
         <span
-          class="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary-dark dark:bg-primary/20 dark:text-primary"
+          class="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary-dark dark:bg-primary/20 dark:text-primary"
           aria-hidden="true"
-          >＋</span
+          ><Plus :size="14" /></span
         >
         <span class="min-w-0 flex-1 truncate font-medium">{{ row.name }}</span>
         <span

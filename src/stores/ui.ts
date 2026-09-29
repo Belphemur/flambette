@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import type { Component } from 'vue'
+import { BookOpen, CalendarDays, History, Settings, ShoppingCart } from 'lucide-vue-next'
 import {
   defaultQuickFilters,
   migrateLegacyUiFilters,
@@ -9,13 +11,15 @@ import {
 import { isRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { clampSeconds, isStepTimer, type StepTimer } from '../lib/stepTimer'
 
-/** Bottom-nav entries, in display order. `to` is the route path. */
-export const TABS: { id: string; label: string; icon: string; to: string }[] = [
-  { id: 'recipes', label: 'Recipes', icon: '📖', to: '/' },
-  { id: 'plan', label: 'Plan', icon: '📅', to: '/plan' },
-  { id: 'grocery', label: 'Grocery', icon: '🛒', to: '/grocery' },
-  { id: 'history', label: 'History', icon: '🕓', to: '/history' },
-  { id: 'settings', label: 'Settings', icon: '⚙️', to: '/settings' },
+/** Bottom-nav entries, in display order. `to` is the route path; `icon` is
+ *  a Lucide component (WS5), not an emoji or a hand-rolled path — the
+ *  five labels keep their measured Pixel 7 fit (ADR-0016). */
+export const TABS: { id: string; label: string; icon: Component; to: string }[] = [
+  { id: 'recipes', label: 'Recipes', icon: BookOpen, to: '/' },
+  { id: 'plan', label: 'Plan', icon: CalendarDays, to: '/plan' },
+  { id: 'grocery', label: 'Grocery', icon: ShoppingCart, to: '/grocery' },
+  { id: 'history', label: 'History', icon: History, to: '/history' },
+  { id: 'settings', label: 'Settings', icon: Settings, to: '/settings' },
 ]
 
 /** An inline button on a toast (e.g. [Clear] [Cancel]). */

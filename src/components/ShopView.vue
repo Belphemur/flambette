@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { Check, ChevronDown, ChevronRight, ShoppingCart, X } from 'lucide-vue-next'
 import { useGroceryList } from '../lib/useGroceryList'
 import IngredientAutocomplete from './IngredientAutocomplete.vue'
 
@@ -115,7 +116,8 @@ function exitShopping() {
           data-test="exit-shopping"
           @click="exitShopping"
         >
-          ✕ Exit
+          <X :size="16" aria-hidden="true" class="mr-1 inline" />
+          Exit
         </button>
         <div class="min-w-0 flex-1">
           <div class="flex items-center justify-between text-xs">
@@ -174,8 +176,9 @@ function exitShopping() {
             @click="toggleSection('Extra items')"
           >
             <span class="text-lg font-bold tracking-tight">Extra items</span>
-            <span class="text-lg dark:text-stone-400" aria-hidden="true">
-              {{ collapsed.has('Extra items') ? '▸' : '▾' }}
+            <span class="text-lg dark:text-stone-400">
+              <ChevronRight v-if="collapsed.has('Extra items')" :size="20" aria-hidden="true" />
+              <ChevronDown v-else :size="20" aria-hidden="true" />
             </span>
           </button>
           <ul v-if="!collapsed.has('Extra items')" class="divide-y dark:divide-stone-800">
@@ -191,7 +194,10 @@ function exitShopping() {
                   :class="checked.map[`custom||${item.toLowerCase()}`] ? 'border-primary bg-primary text-white' : ''"
                   aria-hidden="true"
                 >
-                  {{ checked.map[`custom||${item.toLowerCase()}`] ? '✓' : '' }}
+                  <Check
+                    v-if="checked.map[`custom||${item.toLowerCase()}`]"
+                    :size="18"
+                  />
                 </span>
                 <span
                   class="min-w-0 flex-1 truncate"
@@ -224,8 +230,9 @@ function exitShopping() {
                 class="rounded-full bg-stone-100 px-2 py-px text-[10px] font-semibold text-stone-500 dark:bg-stone-800 dark:text-stone-400"
                 data-test="section-count-pill"
               >{{ sectionDoneCount(section) }}/{{ sectionTotalCount(section) }}</span>
-              <span class="text-lg dark:text-stone-400" aria-hidden="true">
-                {{ isCollapsed(section.name) ? '▸' : '▾' }}
+              <span class="text-lg dark:text-stone-400">
+                <ChevronRight v-if="isCollapsed(section.name)" :size="20" aria-hidden="true" />
+                <ChevronDown v-else :size="20" aria-hidden="true" />
               </span>
             </span>
           </button>
@@ -249,7 +256,7 @@ function exitShopping() {
                     :class="checked.map[entry.line.key] ? 'border-primary bg-primary text-white' : ''"
                     aria-hidden="true"
                   >
-                    {{ checked.map[entry.line.key] ? '✓' : '' }}
+                    <Check v-if="checked.map[entry.line.key]" :size="18" />
                   </span>
                   <span class="min-w-0 flex-1 truncate">
                     <span
@@ -272,7 +279,7 @@ function exitShopping() {
           class="py-16 text-center text-stone-400"
           :data-test="plan.plan.length > 0 ? 'cleared-empty' : 'shop-empty'"
         >
-          <span class="text-4xl">🛒</span>
+          <ShoppingCart :size="40" class="mx-auto" aria-hidden="true" />
           <span class="mt-2 block font-medium">{{
             plan.plan.length > 0
               ? "All ingredients cleared. They'll come back when you plan new recipes."

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { ChevronDown, ChevronRight, ShoppingCart, X } from 'lucide-vue-next'
 import { useGroceryList } from '../lib/useGroceryList'
 import type { GroceryItem } from '../lib/grocery'
 import { usePlanStore } from '../stores/plan'
@@ -106,7 +107,7 @@ function customCategory(item: string): string | undefined {
       v-if="plan.plan.length === 0 && plan.customItems.length === 0"
       class="py-16 text-center text-stone-400"
     >
-      <p class="text-4xl">🛒</p>
+      <ShoppingCart :size="40" class="mx-auto" aria-hidden="true" />
       <p class="mt-2 font-medium">Nothing to buy yet</p>
       <p class="mt-1 text-sm">Add meals to your plan and the grocery list builds itself.</p>
       <button
@@ -149,7 +150,8 @@ function customCategory(item: string): string | undefined {
           data-test="start-shopping"
           @click="router.push('/shop')"
         >
-          🛒 Start shopping
+          <ShoppingCart :size="20" aria-hidden="true" />
+          Start shopping
         </button>
 
         <div
@@ -226,7 +228,7 @@ function customCategory(item: string): string | undefined {
               :aria-label="`Remove ${item} from the grocery list`"
               @click="plan.removeCustomItem(item)"
             >
-              ✕
+              <X :size="16" aria-hidden="true" />
             </button>
           </li>
         </ul>
@@ -257,9 +259,8 @@ function customCategory(item: string): string | undefined {
                 class="rounded-full bg-stone-100 px-2 py-px text-[10px] font-semibold text-stone-500 dark:bg-stone-800 dark:text-stone-400"
                 data-test="section-count-pill"
               >{{ sectionDoneCount(section) }}/{{ sectionTotalCount(section) }}</span>
-              <span class="text-xs text-stone-400" aria-hidden="true">
-                {{ isCollapsed(section.name) ? '▸' : '▾' }}
-              </span>
+              <ChevronRight v-if="isCollapsed(section.name)" :size="16" aria-hidden="true" />
+              <ChevronDown v-else :size="16" aria-hidden="true" />
             </span>
           </button>
         </h3>

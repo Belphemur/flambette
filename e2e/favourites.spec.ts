@@ -45,7 +45,7 @@ test('favourites-only filter shows the starred recipe', async ({ page }) => {
   await page.reload()
   await waitForCatalog(page)
 
-  await page.getByRole('button', { name: '★ Favourites' }).click()
+  await page.getByRole('button', { name: 'Favourites only' }).click()
   const visible = recipeCards(page).filter({ has: page.getByRole('heading', { name, exact: true }) })
   await expect(visible.first()).toBeVisible()
   expect(await recipeCards(page).count()).toBeGreaterThanOrEqual(1)

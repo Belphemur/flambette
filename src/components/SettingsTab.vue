@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { Download, Link, Dices, Upload } from 'lucide-vue-next'
 import { applyBackup, backupFileName, buildBackupZip } from '../lib/backup'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
@@ -199,7 +200,7 @@ function cancelBackupImport(): void {
     <div class="space-y-2 rounded-xl bg-stone-50 p-3 dark:bg-stone-950" data-test="household-card">
       <span class="text-sm font-bold tracking-tight">Household sync</span>
       <p class="text-xs dark:text-stone-400">
-        Sync your plan, grocery checks and extras with the other phone. Set the room code once — this device joins it automatically every time the app opens.
+        Sync your plan, grocery checks, extras and recipe filters with the other phone. Set the room code once — this device joins it automatically every time the app opens.
       </p>
       <p
         v-if="householdCode"
@@ -208,6 +209,28 @@ function cancelBackupImport(): void {
       >
         Household sync active — {{ householdCode }}
       </p>
+      <div
+        v-if="householdCode"
+        class="flex items-center gap-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 dark:border-amber-700/60 dark:bg-amber-950/40"
+        data-test="history-sharing-row"
+      >
+        <label class="flex min-w-0 flex-1 items-start gap-2 text-xs dark:text-stone-300">
+          <input
+            v-model="ui.shareCookedHistory"
+            type="checkbox"
+            class="mt-0.5 size-4 shrink-0"
+            aria-label="Share cooked history with the household room"
+            data-test="share-cooked-history"
+          />
+          <span>
+            Also sync <strong>cooked history</strong> with the household.
+            <span class="block dark:text-stone-400">
+              Off by default — what you cook is personal (ADR-0011). Turning it on sends this device's history to the
+              room and applies the other phones' history here.
+            </span>
+          </span>
+        </label>
+      </div>
       <div class="flex gap-2">
         <input
           v-model="roomInput"
@@ -248,7 +271,8 @@ function cancelBackupImport(): void {
           :aria-label="`Share the join link for household room ${shareableCodeText}`"
           @click="shareRoomLink()"
         >
-          🔗 Share room link
+          <Link :size="14" aria-hidden="true" class="mr-1 inline" />
+          Share room link
         </button>
         <button
           class="h-9 rounded-lg border px-3 text-xs font-medium dark:border-stone-700 dark:text-stone-300"
@@ -256,7 +280,8 @@ function cancelBackupImport(): void {
           aria-label="Generate a new three-word room code"
           @click="newRoomCode"
         >
-          🎲 New code
+          <Dices :size="14" aria-hidden="true" class="mr-1 inline" />
+          New code
         </button>
         <button
           v-if="adoptableRoom"
@@ -293,7 +318,8 @@ function cancelBackupImport(): void {
           aria-label="Download backup file"
           @click="downloadBackup"
         >
-          ⬇ Export backup
+          <Download :size="16" aria-hidden="true" class="mr-1 inline" />
+          Export backup
         </button>
         <button
           class="flex h-11 flex-1 items-center justify-center rounded-xl border dark:border-stone-700 px-4 text-sm font-medium dark:text-stone-300 dark:hover:bg-stone-800"
@@ -301,7 +327,8 @@ function cancelBackupImport(): void {
           aria-label="Choose a backup file to restore"
           @click="backupInput?.click()"
         >
-          ⬆ Import backup
+          <Upload :size="16" aria-hidden="true" class="mr-1 inline" />
+          Import backup
         </button>
       </div>
       <input

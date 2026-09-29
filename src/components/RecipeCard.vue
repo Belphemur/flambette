@@ -3,6 +3,7 @@ import { imageSrc, onImgError } from '../lib/images'
 import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
 import { useRouter } from 'vue-router'
+import { Clock, Flame, Star } from 'lucide-vue-next'
 
 const props = defineProps<{ meta: VariantMeta }>()
 
@@ -40,16 +41,23 @@ function openDetail() {
         :aria-label="favourites.isFavourite(meta.id) ? 'Remove from favourites' : 'Add to favourites'"
         @click.stop="favourites.toggleFavourite(meta.id)"
       >
-        <span :class="favourites.isFavourite(meta.id) ? 'text-amber-400' : 'text-white/80'">
-          {{ favourites.isFavourite(meta.id) ? '★' : '☆' }}
-        </span>
+        <Star
+          :size="22"
+          :fill="favourites.isFavourite(meta.id) ? 'currentColor' : 'none'"
+          :class="favourites.isFavourite(meta.id) ? 'text-amber-400' : 'text-white/80'"
+          aria-hidden="true"
+        />
       </button>
     </div>
     <div class="p-3">
       <h3 class="line-clamp-2 min-h-10 text-sm leading-5 font-semibold">{{ meta.name }}</h3>
       <p class="mt-1.5 flex items-center gap-3 text-xs dark:text-stone-400">
-        <span class="flex items-center gap-1">🔥 {{ meta.calories }} kcal</span>
-        <span class="flex items-center gap-1">⏱ {{ meta.cooking_minutes }} min</span>
+        <span class="flex items-center gap-1">
+          <Flame :size="14" aria-hidden="true" />{{ meta.calories }} kcal
+        </span>
+        <span class="flex items-center gap-1">
+          <Clock :size="14" aria-hidden="true" />{{ meta.cooking_minutes }} min
+        </span>
       </p>
     </div>
   </article>
