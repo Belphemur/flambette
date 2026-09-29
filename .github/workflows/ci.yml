@@ -99,13 +99,12 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-      # Hard gate: e2e and unit jobs must BOTH have succeeded. `if:` at
-      # the job granular level makes this an explicit require-able check.
+      # Hard gate: e2e and unit jobs must BOTH have succeeded.
       - name: Enforce green
         run: |
-          for j in e2e unit; do
-            [[ "${{ needs.${j}.result }}" == "success" ]] || { echo "$j failed"; exit 1; }
-          done
+          e2e="${{ needs.e2e.result }}"
+          unit="${{ needs.unit.result }}"
+          [[ "$e2e" == "success" && "$unit" == "success" ]] || { echo "e2e=$e2e unit=$unit"; exit 1; }
 
   docker:
     needs: merge-gate
