@@ -30,6 +30,20 @@ bunx playwright test e2e/x.spec.ts   # single spec
 docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
 ```
 
+## Docker packaging (ADR-0025)
+
+- The relay image must stay runnable, not just buildable. `server/Dockerfile`
+  uses `COPY *.mjs ./` — **never enumerate the relay's modules one by one**.
+  A hand-picked `COPY` list meant adding `throttle.mjs` shipped an image that
+  crash-looped on `Cannot find module './throttle.mjs'` (issue #6).
+- CI's `docker` job **smoke-runs** the relay image and requires an HTTP 200
+  within 30s (dumping container logs on failure). A green `docker build`
+  proves the image assembles, never that the entrypoint starts — do not weaken
+  that step back to a bare build.
+- When you add a relay module, no packaging change should be needed. If you
+  ever find yourself editing `server/Dockerfile` to add a filename, that is the
+  bug, not the fix.
+
 ## Conventions (do not break)
 
 - **Test selectors**: components use `data-test="..."`; Playwright config

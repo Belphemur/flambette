@@ -116,4 +116,39 @@ jobs:
         run: docker build .
 
       - name: Build relay Docker image
-        run: docker build ./server
+        run: docker build -t mealime-relay:ci ./server
+
+      # A successful build proves nothing about startup: the relay image once
+      # shipped without ./throttle.mjs, so it crash-looped on `bun relay.mjs`
+      # while `docker build` stayed green (issue #6). Run it and require a real
+      # HTTP 200 off the health endpoint before the image is considered good.
+      - name: Smoke-run relay image
+        run: |
+          docker run -d --name relay-smoke -p 18081:8081 mealime-relay:ci
+          # Relay answers plain HTTP on non-upgrade requests, so poll it.
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:18081/ >/dev/null 2>&1; then
+              echo "relay responded after ${i}s"
+              break
+            fi
+            if ! docker inspect -f '{{.State.Running}}' relay-smoke 2>/dev/null | grep -q true; then
+              echo "relay container exited before serving:" >&2
+              docker logs relay-smoke >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          curl -fsS http://localhost:18081/ || {
+            echo "relay never served HTTP within 30s:" >&2
+            docker logs relay-smoke >&2
+            exit 1
+          }
+          echo "relay image serves HTTP"
+
+      - name: Relay image smoke logs
+        if: always()
+        run: docker logs relay-smoke || true
+
+      - name: Remove smoke container
+        if: always()
+        run: docker rm -f relay-smoke || true
