@@ -1,6 +1,6 @@
-# ADR-0026: A room is created by whoever arrives first, and dies when nobody is
+# ADR-0026: A room is created by whoever arrives first, and dies when nobody is there
 
-**Status:** Accepted (2026-10-01)
+**Status:** Accepted (2026-09-29)
 **Extends:** ADR-0004 (`?room=` deep links), ADR-0006 (rooms), ADR-0019
 (household room), ADR-0021 (three-word room codes), ADR-0023 (share-room
 link). Changes the `join` semantics of the relay wire protocol and adds one
@@ -77,11 +77,21 @@ and tell client to disconnect."*
 
 4. **Two expiry clocks, and expiry is announced.**
    - *Inactivity* (1h, `RELAY_INACTIVITY_TTL_MS`): no `keepalive` and no
-     `state` traffic. On firing, the room closes and every peer gets
-     `{"type":"error","code":"room_expired","reason":"inactive"}`.
+     `state` traffic.
    - *Idle backstop* (12h, `RELAY_IDLE_TTL_MS`): the pre-existing
-     long TTL, kept for peers that vanished without a `leave`; same
-     reply with `reason:"idle"`.
+     long TTL, kept for peers that vanished without a `leave`.
+   **Every liveness signal refreshes BOTH clocks, keepalive included.** A
+   connected peer that keepalives is, by definition, not an idle room, and
+   the 12h backstop must never be the thing that closes a household that
+   has been connected all day (this was the CRITICAL review finding:
+   refreshing only the 1h clock made a healthy, keepaliving room die at
+   12h — and the client treats `room_expired` as terminal, so the
+   household was simply gone). With both clocks refreshed by the same
+   events, the 12h timer is redundant defence in depth that only matters
+   if the 1h path ever breaks: **the promise is "1h of silence closes the
+   room"**, and the 12h is the floor under that promise, not a second
+   policy. On firing, the room closes and every peer gets
+   `{"type":"error","code":"room_expired","reason":"inactive"|"idle"}`.
    The client treats `room_expired` (and `not_found`) as **terminal**: it
    latches a `roomGone` flag that disables the reconnect loop, surfaces
    the message, and forgets the stored code. The decision is pure and
@@ -91,20 +101,63 @@ and tell client to disconnect."*
    The code itself is kept (not nulled) so the header chip and the
    household toast can still name it; only retrying stops.
 
-5. **The lifecycle rules live in `server/roomLifecycle.mjs`.** Code
-   normalization, the room registry, both clocks and the peer/room
-   bookkeeping are extracted from `relay.mjs` so they are unit-testable
-   without a socket — the pattern `server/throttle.mjs` already set. The
-   relay keeps its `COPY *.mjs` packaging (ADR-0025), so adding a module
-   needed no Dockerfile change.
+5. **A socket belongs to at most one room, and expiry cleans up after
+   itself.** `attachPeer` detaches a socket from its previous room before
+   putting it in a new one, so a peer can never linger in a room it left —
+   which, with the rule below, is what stops a client from being told
+   `room_expired` for a room it is no longer in. On expiry the relay
+   notifies **only** the sockets whose current `roomCode` still matches the
+   expiring room, and it **clears** that code for each of them. A stale
+   socket therefore cannot write state into (or `leave`/close and thereby
+   delete) a room re-created under the same code by somebody else. `state`
+   additionally requires real membership, not just a matching code.
+
+6. **`rev` is monotone per CODE, not per room instance.** Deleting a room
+   discards its `rev`, so without help a re-created room restarts at 0: a
+   returning member — whose in-memory counter also restarts, on every page
+   load — can be handed a stale snapshot as if it were newer, or can seed
+   the room at rev 1 while its peers are already past that. The relay
+   therefore keeps the highest `rev` a code ever reached (pruned after the
+   idle TTL, so it cannot grow without bound) and hands it back in
+   `created`/`joined` as `rev`; the client seeds strictly above it and also
+   remembers its own high-water mark per code in `sessionStorage`. The
+   honesty of the model is unchanged — this is still whole-state
+   last-write-wins — but a room that was deleted and re-created can no
+   longer be a lower revision pretending to be a newer one.
+
+7. **The client tears down as little as possible.** Two rules, both from
+   the review:
+   - A frame the relay refused because *it* was malformed
+     (`bad_state` / `bad_json` / `unknown_type`) leaves the client **live
+     and untouched**. Recycling the socket sent `leave`, and for a
+     single-peer room that deleted the very room the client was standing
+     in. The pure decision table gained a third answer, `'ignore'`
+     (`src/lib/relayErrors.ts`).
+   - There is never more than one pending reconnect, and it re-checks the
+     `roomGone` latch when it *fires*, not only when it was scheduled: an
+     orphaned timer used to be able to resurrect a room the relay had
+     already closed. Recycling a socket for a genuine reconnect no longer
+     announces a `leave` either — the socket close already detaches us,
+     and the re-join re-seeds from our own persisted stores.
+
+8. **The lifecycle rules live in `server/roomLifecycle.mjs`.** Code
+   normalization, the room registry, both clocks, the per-code `rev` floor
+   and the peer/room bookkeeping are extracted from `relay.mjs` so they
+   are unit-testable without a socket — the pattern `server/throttle.mjs`
+   already set. The relay keeps its `COPY *.mjs` packaging (ADR-0025), so
+   adding a module needed no Dockerfile change. The relay's HTTP health
+   response echoes its lifecycle configuration, so a test (or an operator)
+   can tell two relays apart without guessing.
 
 ## Consequences
 
 - A share link, a `?room=` deep link and the ADR-0019 household auto-join
   all work again after any relay restart, with no host action.
 - Rooms are cheap and self-healing; they are also *ephemeral by design*:
-  a room whose last peer leaves loses its state. A household that is
-  entirely offline for the length of a 12h TTL also loses it, exactly as
+  a room whose last peer leaves loses its state — but not its revision
+  history, so a re-created room cannot overwrite what the household has
+  with something it believes is newer. A household that is entirely
+  offline for the length of the idle TTL also loses its state, exactly as
   before this ADR.
 - `not_found` is now rare on the wire: only a malformed code, or a peer
   talking to a pre-ADR-0026 relay. The client keeps handling both codes,
@@ -130,3 +183,8 @@ and tell client to disconnect."*
 - **One TTL (12h) and no keepalive.** It cannot satisfy the ask, and it
   cannot distinguish "idle household" from "broken peer" — the keepalive
   is the signal that makes the shorter window safe.
+- **Refresh only the 1h clock on keepalive** (the first cut of this ADR,
+  caught in review). It reads like a refinement and is in fact a trap: the
+  12h backstop then becomes the effective lifetime of a *connected* room,
+  and because `room_expired` is terminal on the client, a household that
+  simply left the app open all day was disconnected with no way back.

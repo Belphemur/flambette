@@ -79,15 +79,25 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   that returns re-joins, which re-creates it. The client sends
   `{type:'keepalive'}` once a minute while live (one interval per
   socket, cleared on every end path) and the relay closes a room after
-  1h of no keepalive AND no state activity (12h idle TTL kept as the
-  backstop), telling peers `room_expired`. The client treats
-  `room_expired`/`not_found` as TERMINAL (latched `roomGone`, no
-  reconnect) — re-joining would join-or-create an empty room and read as
-  silent household data loss; the pure retry decision lives in
-  `src/lib/relayErrors.ts`. Keepalive is NEVER throttled; only
-  create/join spend the throttle budget. The rules live in
-  `server/roomLifecycle.mjs` (mirrors `throttle.mjs`, unit-tested) —
-  keep the relay's `normalizeCode` in step with the client helper.
+  1h of no keepalive AND no state activity; the 12h idle TTL is a
+  redundant backstop refreshed by the SAME signals (keepalive included —
+  a connected peer is not an idle room), and either clock firing tells
+  the peers `room_expired` and clears their room code so a stale socket
+  can never write into, or delete, a room re-created under that code. A
+  socket belongs to at most one room: join/create detaches it from the
+  previous one, so a client that moved on is never notified about the
+  room it left. `rev` is monotone per CODE (the floor survives the room
+  deletion, pruned at the idle TTL) and is handed back in `created` /
+  `joined`, so a re-created room never passes a stale snapshot off as
+  newer. The client treats `room_expired`/`not_found` as TERMINAL
+  (latched `roomGone`, no reconnect) — re-joining would join-or-create
+  an empty room and read as silent household data loss; the pure retry
+  decision lives in `src/lib/relayErrors.ts`, whose third answer
+  `'ignore'` means "our frame was refused, the room is fine, do
+  nothing". Keepalive is NEVER throttled; only create/join spend the
+  throttle budget. The rules live in `server/roomLifecycle.mjs` (mirrors
+  `throttle.mjs`, unit-tested) — keep the relay's `normalizeCode` in
+  step with the client helper.
 - **Room codes are three words (ADR-0021)**: the accepted format is the
   UNION — `amber-falcon-lantern` (`WORD_ROOM_CODE_RE`) or a legacy
   `ZZ9ZZZ` (`LEGACY_ROOM_CODE_RE`) — and everything that touches a code

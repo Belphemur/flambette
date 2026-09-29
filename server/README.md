@@ -15,6 +15,10 @@ Run it directly:
 bun relay.mjs      # listens on :8081 (override with PORT)
 ```
 
+Env knobs (defaults in brackets): `PORT` [8081], `RELAY_ATTEMPT_LIMIT`
+[30 per minute per socket/IP], `RELAY_INACTIVITY_TTL_MS` [1h],
+`RELAY_IDLE_TTL_MS` [12h].
+
 Or via Docker / from the repo root:
 
 ```sh
@@ -30,9 +34,9 @@ JSON text frames, both directions.
 
 | Client → relay | Relay → client |
 | --- | --- |
-| `{"type":"create"}` | `{"type":"created","code":"…"}` |
-| `{"type":"create","code":"<three words>"}` | `{"type":"created","code":"amber-falcon-lantern"}`, or `{"type":"error","code":"code_taken"}` when that code is live |
-| `{"type":"join","code":"ABC123"}` | `{"type":"joined","code":"ABC123","rev":<int\|0>,"state":<obj\|null>}` |
+| `{"type":"create"}` | `{"type":"created","code":"…","rev":<int>}` — `rev` is the per-code floor (see Expiry) |
+| `{"type":"create","code":"<three words>"}` | `{"type":"created","code":"amber-falcon-lantern","rev":<int>}`, or `{"type":"error","code":"code_taken"}` when that code is live |
+| `{"type":"join","code":"ABC123"}` | `{"type":"joined","code":"ABC123","rev":<int\|0>,"state":<obj\|null>}` — for a code the relay does not know: `{"type":"created","code":"…","rev":<int>}` |
 | `{"type":"keepalive"}` | `{"type":"keepalive_ack"}` — refreshes the room's 1h inactivity clock. Not throttled. `{"type":"error","code":"not_in_room"}` when the socket is not in a room |
 | `{"type":"state","rev":<int>,"state":<obj>}` | fan-out to every *other* peer in the room: `{"type":"state","rev":<int>,"state":<obj>,"from":"<peerId>"}` |
 | `{"type":"leave"}` (or socket close) | `{"type":"left"}` |
@@ -64,21 +68,37 @@ all find the same room.
 - **Empty rooms die immediately (ADR-0026)**: the last peer leaving (or
   its socket closing) deletes the room, state included. A peer that comes
   back re-joins, which re-creates the room.
-- **Expiry (ADR-0026)**: two clocks per room.
+- **Expiry (ADR-0026)**: two clocks per room, BOTH refreshed by every
+  liveness signal — `keepalive` included, because a connected peer that
+  keepalives is not an idle room.
   - *Inactivity*: 1h with no `keepalive` and no `state` traffic
-    (`RELAY_INACTIVITY_TTL_MS`) → the room closes and every peer gets
-    `{"type":"error","code":"room_expired","reason":"inactive"}` so the
-    client stops reconnecting.
+    (`RELAY_INACTIVITY_TTL_MS`).
   - *Idle backstop*: 12h since the last interaction of any kind
-    (`RELAY_IDLE_TTL_MS`) → the same close, with `reason:"idle"`. It
-    exists for peers that vanished without a `leave`.
+    (`RELAY_IDLE_TTL_MS`) — redundant defence in depth for peers that
+    vanished without a `leave`.
+  On firing, the room closes and every peer gets
+  `{"type":"error","code":"room_expired","reason":"inactive"|"idle"}`. The
+  relay then CLEARS each peer's room code, so a socket left over from the
+  dead room can neither write state into, nor `leave` away, a room that
+  somebody else has since re-created under the same code. A socket
+  belongs to at most one room: joining or creating detaches it from the
+  previous one first, so a client that moved on is never notified about
+  (or killed by) the room it left.
+- **Revisions**: `rev` is monotone per CODE, not per room instance. The
+  highest `rev` a code reached survives the room's deletion (pruned after
+  the idle TTL) and is handed back in `created`/`joined`, so a re-created
+  room continues the household's history instead of restarting at 0 and
+  passing a stale snapshot off as newer.
 - **Keepalive**: `{"type":"keepalive"}` is the *application* heartbeat —
-  it refreshes the inactivity clock only. It is deliberately NOT
-  throttled and never touches the create/join budget.
+  it refreshes both room clocks and is deliberately NOT throttled: a
+  liveness frame must never be able to spend the create/join budget.
 - **Liveness**: heartbeat ping/pong every 30s; a socket that misses a
   pong is terminated and removed from its room. This is transport-level
   only and deliberately does **not** refresh room activity — a client
   behind a half-open socket is exactly what the 1h clock is for.
+- **Health**: the HTTP response is a JSON echo of the running
+  configuration (`inactivityTtlMs`, `idleTtlMs`, `attemptLimit`) so two
+  relays can be told apart without guessing.
 - **Persistence**: none. Restarting the relay empties all rooms; clients
   re-create/re-join via their reconnect logic (a `join` re-creates the
   room, so a relay restart is self-healing for the first peer back).
