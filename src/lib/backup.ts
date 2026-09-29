@@ -17,6 +17,7 @@
 import type { PlanEntry, CookedEntry } from '../stores/plan'
 import type { CustomIngredient } from '../stores/customIngredients'
 import { DIET_IDS, type DietId } from './dietFilter'
+import { normalizeQuickFilters, type QuickFilters } from './quickFilters'
 import { isStepTimer } from './stepTimer'
 import { zipStore, unzipStore, type ZipEntry } from './zip'
 
@@ -197,18 +198,26 @@ export const STORE_SLICES: SliceDef<any>[] = [
       useCustomIngredientsStore().replaceAll(value as CustomIngredient[])
     },
   },
-  /* Persisted ui prefs (share setting + diet filters + household room + theme + step timers). */
+  /* Persisted ui prefs (history-sharing opt-in + quick filters + household
+     room + theme + step timers). ADR-0027 unified the Recipes-tab filters
+     into one `quickFilters` object; the legacy `dietFilters` array is still
+     EMITTED (mirrored) so a backup restores the diet chips on an install
+     that predates the unified model, and still ACCEPTED on import. */
   {
     file: 'settings.json',
-    label: 'settings (cooked-history room sharing + diet filters + household room + step timers + theme)',
+    label: 'settings (cooked-history room sharing + quick filters + household room + step timers + theme)',
     persistKeys: ['mealime-planner:v1:ui'],
-    read: () => ({
-      shareCookedHistory: useUiStore().shareCookedHistory,
-      dietFilters: [...useUiStore().dietFilters],
-      householdRoom: useUiStore().householdRoom,
-      stepTimers: useUiStore().stepTimers,
-      theme: readTheme(),
-    }),
+    read: () => {
+      const ui = useUiStore()
+      return {
+        shareCookedHistory: ui.shareCookedHistory,
+        quickFilters: { ...ui.quickFilters, diets: [...ui.quickFilters.diets] },
+        dietFilters: [...ui.quickFilters.diets],
+        householdRoom: ui.householdRoom,
+        stepTimers: ui.stepTimers,
+        theme: readTheme(),
+      }
+    },
     validate(value) {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) {
         return 'settings.json must be an object'
@@ -216,6 +225,9 @@ export const STORE_SLICES: SliceDef<any>[] = [
       const v = value as Record<string, unknown>
       if (v.shareCookedHistory !== undefined && typeof v.shareCookedHistory !== 'boolean') {
         return 'settings.json shareCookedHistory must be a boolean'
+      }
+      if (v.quickFilters !== undefined && !isQuickFilters(v.quickFilters)) {
+        return 'settings.json quickFilters must be the unified filter object'
       }
       if (v.dietFilters !== undefined) {
         if (
@@ -245,6 +257,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
     write(value) {
       const v = value as {
         shareCookedHistory?: boolean
+        quickFilters?: unknown
         dietFilters?: DietId[]
         householdRoom?: string
         stepTimers?: unknown
@@ -255,8 +268,9 @@ export const STORE_SLICES: SliceDef<any>[] = [
         // Explicit defaults for fields absent from OLDER backups (qodo
         // 4128519628): applySettings otherwise leaves the device's current
         // values in place even though the restore claims settings are
-        // overwritten. [] / '' / {} are valid values for applySettings.
-        dietFilters: v.dietFilters ?? [],
+        // overwritten. {} / '' / [] are valid values for applySettings.
+        quickFilters:
+          v.quickFilters ?? (Array.isArray(v.dietFilters) ? { diets: v.dietFilters } : {}),
         householdRoom: v.householdRoom ?? '',
         stepTimers: v.stepTimers ?? {},
       })
@@ -281,8 +295,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
   },
 ]
 
-function isStepTimersMap(value: unknown): boolean {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+function isStepTimersMap(value: unknown): boolean {  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   return Object.entries(value as Record<string, unknown>).every(([variant, views]) => {
     if (!/^\d+$/.test(variant)) return false
     if (typeof views !== 'object' || views === null || Array.isArray(views)) return false
@@ -290,6 +303,16 @@ function isStepTimersMap(value: unknown): boolean {
       ([view, timer]) => /^\d+$/.test(view) && isStepTimer(timer),
     )
   })
+}
+
+/**
+ * A settings.json `quickFilters` member is accepted when it normalizes to a
+ * COMPLETE filter set (ADR-0027). `null` only for shapes that cannot be a
+ * filter object at all — the normalizer itself repairs partial/unknown
+ * members, which is what keeps older peers and hand-edited files usable.
+ */
+function isQuickFilters(value: unknown): value is QuickFilters {
+  return normalizeQuickFilters(value) !== null
 }
 
 function isClearedMap(value: unknown): boolean {
