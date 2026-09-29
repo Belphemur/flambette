@@ -36,6 +36,9 @@ function tokenize(name: string): string[] {
 function singular(t: string): string {
   if (/(ches|shes|sses|xes|zes)$/.test(t) && t.length > 4) return t.slice(0, -2)
   if (/oes$/.test(t) && t.length > 4) return t.slice(0, -2)
+  // -ies → -y BEFORE the generic -s strip: "anchovies" are "anchovy",
+  // not "anchovie" (qodo 4128519626).
+  if (/ies$/.test(t) && t.length > 4) return `${t.slice(0, -3)}y`
   if (t.endsWith('s') && !t.endsWith('ss') && !t.endsWith('us') && t.length > 3) return t.slice(0, -1)
   return t
 }
@@ -104,8 +107,6 @@ const SHELLFISH_WORDS: KeywordTable = [
   ['crayfish', SHELLFISH],
   ['squid', SHELLFISH],
   ['octopus', SHELLFISH],
-  ['anchovy', SHELLFISH | FISH],
-  ['caviar', SHELLFISH | FISH],
 ]
 
 const MEAT_WORDS: KeywordTable = [
@@ -154,6 +155,10 @@ const FISH_WORDS: KeywordTable = [
   ['monkfish', FISH],
   ['dashi', FISH | HIDDEN],
   ['worcestershire', FISH | HIDDEN],
+  // Fish products, not shellfish (qodo 4128519626) — they belong to
+  // no-meat/vegetarian/vegan but never to no-shellfish.
+  ['anchovy', FISH],
+  ['caviar', FISH],
 ]
 
 const DAIRY_WORDS: KeywordTable = [
@@ -219,6 +224,14 @@ const DAIRY_EXEMPTIONS: ReadonlyArray<readonly string[]> = [
   // contain the word.
   ['butter', 'bean'],
   ['apple', 'butter'],
+  // Nut butters and peanut butter are plant spreads, not dairy
+  // (qodo 4128519626).
+  ['peanut', 'butter'],
+  ['nut', 'butter'],
+  ['almond', 'butter'],
+  ['cashew', 'butter'],
+  // "butter lettuce" is a lettuce variety, not a dairy product.
+  ['butter', 'lettuce'],
   ['oat', 'milk'],
   ['almond', 'milk'],
   ['soy', 'milk'],
@@ -291,6 +304,20 @@ function matchesAt(tokens: readonly string[], offset: number, pattern: readonly 
 }
 
 /**
+ * In-order (non-contiguous) match — exemption patterns must survive a
+ * parenthetical between their words: "butter (boston) lettuce" is still
+ * the butter-lettuce exemption (qodo 4128519626).
+ */
+function matchesInOrder(tokens: readonly string[], pattern: readonly string[]): boolean {
+  let at = 0
+  for (const token of tokens) {
+    if (token === pattern[at]) at += 1
+    if (at === pattern.length) return true
+  }
+  return false
+}
+
+/**
  * Bitmask of ingredient groups present in `names`. DAIRY is suppressed
  * for plant milks/creams.
  */
@@ -301,11 +328,8 @@ export function ingredientGroups(names: readonly string[]): number {
     if (tokens.length === 0) continue
     let exempt = 0
     for (const { tokens: pattern, mask } of EXEMPTION_INDEX) {
-      for (let i = 0; i + pattern.length <= tokens.length; i += 1) {
-        if (matchesAt(tokens, i, pattern)) {
-          exempt |= mask
-          break
-        }
+      if (matchesInOrder(tokens, pattern)) {
+        exempt |= mask
       }
     }
     for (const { tokens: pattern, mask: keywordMask } of KEYWORD_INDEX) {

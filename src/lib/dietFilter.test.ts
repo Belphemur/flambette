@@ -83,4 +83,32 @@ describe('diet rules (ADR-0018)', () => {
     resetDietVerdictCache()
     expect(dietVerdictFor(7, chicken)['no-pork']).toBe(true)
   })
+
+  test('anchovy and caviar are fish, not shellfish (qodo 4128519626)', () => {
+    // No-shellfish recipes keep fish products that merely LOOK like
+    // shellfish keywords in name only.
+    expect(matchesDiet(['anchovies', 'lemon', 'parsley'], 'no-shellfish')).toBe(true)
+    expect(matchesDiet(['caviar', 'blini'], 'no-shellfish')).toBe(true)
+    // Plural must singularize through the new -ies → -y rule.
+    expect(matchesDiet(['cig kofte with anchovies'], 'no-shellfish')).toBe(true)
+    // …but they are still animal products: vegetarian/vegan drop them
+    // (no-meat explicitly allows fish).
+    expect(matchesDiet(['anchovy', 'pasta'], 'vegetarian')).toBe(false)
+    expect(matchesDiet(['caviar'], 'vegan')).toBe(false)
+    // Shellfish verdicts are unchanged.
+    expect(matchesDiet(shrimpRecipe, 'no-shellfish')).toBe(false)
+  })
+
+  test('nut butters and butter lettuce are vegan-safe (qodo 4128519626)', () => {
+    expect(matchesDiet(['natural peanut butter', 'oats'], 'vegan')).toBe(true)
+    expect(matchesDiet(['almond butter', 'toast'], 'vegan')).toBe(true)
+    expect(matchesDiet(['nut butter'], 'vegan')).toBe(true)
+    expect(matchesDiet(['butter (boston) lettuce', 'tomato'], 'vegan')).toBe(true)
+    // Real dairy still trips the rule.
+    expect(matchesDiet(['butter', 'toast'], 'vegan')).toBe(false)
+    // The existing exemptions keep working.
+    expect(matchesDiet(['butter beans', 'apple butter'], 'vegan')).toBe(true)
+    // Pluralized exemptions too.
+    expect(matchesDiet(['peanut butters'], 'vegan')).toBe(true)
+  })
 })
