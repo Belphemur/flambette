@@ -262,37 +262,45 @@ export const useUiStore = defineStore(
     }
 
     /**
-     * Apply ADR-0032's new default exactly once per install.
+    /**
+     * Apply the ADR-0032 default (sharing ON) to a pre-ADR-0032 install,
+     * and mark EVERY install as migrated so the default can never re-run.
      *
-     * Runs after persistence hydration. If the persisted blob predates
-     * ADR-0032 (no migration flag), its `shareCookedHistory` cannot be
-     * trusted to be a user decision — it is just the old default, written
-     * by the plugin before anyone looked at the setting — so the value is
-     * adopted from the new default (ON) and the flag is recorded. Any
-     * toggle AFTER this is an explicit choice and is never overridden.
+     * Called from `afterHydrate`: at that point the persisted blob has loaded,
+     * so we can inspect what actually landed. Two cases:
      *
-     * Trade-off, stated plainly: a user who had deliberately opted OUT is
-     * re-enabled once by this upgrade, and one tap turns it back off for
-     * good. The alternative (trusting the stored `false`) would leave
-     * every existing install permanently opted out, which is the exact
-     * outcome the owner ruled against.
+     * - **Pre-ADR-0031 install**: the blob carries `shareCookedHistory: false`
+     *   (the old default) and NO `historyShareDefaultMigrated` flag. We adopt
+     *   ON — the owner ruled that a silent `false` is not a user choice.
+     *
+     * - **Fresh install**: nothing has been toggled, so the persisted blob has
+     *   NEITHER key. We leave `shareCookedHistory` at its in-memory default
+     *   (`true` from the `ref(true)`) untouched — there is no `false` to
+     *   override — and mark migrated so a later opt-OUT is honoured.
+     *
+     * That split is the whole fix for the bug where a fresh install that
+     * opted out before the first reload re-awakened sharing on the next
+     * hydrate: the old version ran the default unconditionally whenever
+     * `migrated` was false, and a fresh install looks identical to a legacy
+     * blob at that point.
      */
-    function migrateHistoryShareDefault(): void {
+    function adoptHistoryShareDefault(): void {
       if (historyShareDefaultMigrated.value) return
-      let legacy: unknown
+
+      let hasLegacyBlob = false
       try {
         const raw = localStorage.getItem('mealime-planner:v1:ui')
-        if (raw) legacy = (JSON.parse(raw) as Record<string, unknown>).historyShareDefaultMigrated
+        if (raw) {
+          const blob = JSON.parse(raw) as Record<string, unknown>
+          hasLegacyBlob =
+            Object.prototype.hasOwnProperty.call(blob, 'shareCookedHistory') &&
+            !Object.prototype.hasOwnProperty.call(blob, 'historyShareDefaultMigrated')
+        }
       } catch {
-        legacy = undefined // unreadable blob: treat as pre-migration
+        hasLegacyBlob = true // unreadable blob: adopt the default once
       }
-      // A blob that already carries the flag means a previous launch of
-      // this build already ran the migration.
-      if (legacy === true) {
-        historyShareDefaultMigrated.value = true
-        return
-      }
-      shareCookedHistory.value = true
+
+      if (hasLegacyBlob) shareCookedHistory.value = true
       historyShareDefaultMigrated.value = true
     }
 
@@ -381,7 +389,7 @@ export const useUiStore = defineStore(
       clearStepTimer,
       applySettings,
       migrateLegacyFilters,
-      migrateHistoryShareDefault,
+      adoptHistoryShareDefault,
       setHouseholdRoom,
       showToast,
       dismissToast,
@@ -396,7 +404,12 @@ export const useUiStore = defineStore(
       pick: [
         'shareCookedHistory',
         // Not a setting: the once-only marker for ADR-0032's default
-        // migration. Persisted so the migration cannot run twice.
+        // migration. Persisted so the migration cannot run twice on a
+        // genuinely pre-ADR-0032 install. It is set to TRUE on first launch
+        // of this build for EVERY install (fresh or migrated), so that a
+        // fresh install that has not opted out is never mistaken for a
+        // legacy blob and never has its toggle reset back to the default
+        // (issue: opt-out on a fresh install was re-enabled after reload).
         'historyShareDefaultMigrated',
         'quickFilters',
         'householdRoom',
@@ -412,10 +425,10 @@ export const useUiStore = defineStore(
       afterHydrate: (context) => {
         const store = context.store as unknown as {
           migrateLegacyFilters: () => void
-          migrateHistoryShareDefault: () => void
+          adoptHistoryShareDefault: () => void
         }
         store.migrateLegacyFilters()
-        store.migrateHistoryShareDefault()
+        store.adoptHistoryShareDefault()
       },
     },
   },

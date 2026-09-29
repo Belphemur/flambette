@@ -63,7 +63,7 @@ describe('the one-time default migration', () => {
     // cannot tell, and the owner's ruling is that history syncs.
     const ui = hydratedFrom({ shareCookedHistory: false, householdRoom: 'amber-falcon-lantern' })
     expect(ui.shareCookedHistory).toBe(false) // hydrated verbatim…
-    ui.migrateHistoryShareDefault()
+    ui.adoptHistoryShareDefault()
     expect(ui.shareCookedHistory).toBe(true) // …then migrated
     expect(ui.historyShareDefaultMigrated).toBe(true)
   })
@@ -71,15 +71,15 @@ describe('the one-time default migration', () => {
   test('a blob that already carries the marker is left alone', () => {
     // The user opted out AFTER the upgrade: an explicit, permanent choice.
     const ui = hydratedFrom({ shareCookedHistory: false, historyShareDefaultMigrated: true })
-    ui.migrateHistoryShareDefault()
+    ui.adoptHistoryShareDefault()
     expect(ui.shareCookedHistory).toBe(false)
   })
 
   test('running it twice is a no-op (it cannot flip the user back on)', () => {
     const ui = hydratedFrom({ shareCookedHistory: false })
-    ui.migrateHistoryShareDefault()
+    ui.adoptHistoryShareDefault()
     ui.shareCookedHistory = false // the user taps the opt-out
-    ui.migrateHistoryShareDefault()
+    ui.adoptHistoryShareDefault()
     expect(ui.shareCookedHistory).toBe(false)
   })
 
@@ -93,7 +93,7 @@ describe('the one-time default migration', () => {
     }
     const ui = useUiStore()
     expect(ui.shareCookedHistory).toBe(true)
-    ui.migrateHistoryShareDefault()
+    ui.adoptHistoryShareDefault()
     expect(ui.shareCookedHistory).toBe(true)
     expect(ui.historyShareDefaultMigrated).toBe(true)
   })
@@ -102,7 +102,7 @@ describe('the one-time default migration', () => {
     const ui = hydratedFrom({ shareCookedHistory: false })
     ui.applySettings({ shareCookedHistory: false })
     expect(ui.historyShareDefaultMigrated).toBe(true)
-    ui.migrateHistoryShareDefault()
+    ui.adoptHistoryShareDefault()
     expect(ui.shareCookedHistory).toBe(false)
   })
 })

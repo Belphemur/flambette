@@ -152,12 +152,21 @@ export const STORE_SLICES: SliceDef<any>[] = [
       grocery.map = map
     },
   },
-  /* Personal cooked history (plan store, personal slice — always in backups). */
+  /* Personal cooked history (plan store, personal slice — always in backups).
+   * The per-device `id` (ADR-0031) is NOT exported: it disambiguates cooks
+   * on this device and is meaningless to a restored install, whose
+   * `markCooked` will mint its own fresh ids. Carrying it would make
+   * re-exports differ from freshly-cooked rows and leak a counter that
+   * has no stable cross-device meaning. */
   {
     file: 'cooked-history.json',
     label: 'cooked-meal history',
     persistKeys: ['mealime-planner:v1:plan'],
-    read: () => usePlanStore().cookedHistory.map((h) => ({ ...h })),
+    read: () =>
+      usePlanStore().cookedHistory.map((h) => ({
+        variantId: h.variantId,
+        cookedAt: h.cookedAt,
+      })),
     validate(value) {
       if (!Array.isArray(value)) return 'cooked-history.json must be an array'
       for (const r of value) {

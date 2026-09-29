@@ -362,6 +362,57 @@ describe('cooked history is household state by default (ADR-0032)', () => {
     const optedOut = socket.frames('state').at(-1)!
     expect('cookedHistory' in (optedOut.state as object)).toBe(false)
   })
+
+  test('two cooks of the same recipe in the same millisecond stay distinct (id disambiguates the pair)', () => {
+    // qodo #4: (variantId, cookedAt) collides when two phones cook the same
+    // recipe in the same ms; the merge must dedupe on the per-device id, not
+    // the pair, or one cook silently vanishes.
+    const plan = usePlanStore()
+    plan.replaceCookedHistory([
+      { variantId: 1, cookedAt: 1000, id: 'a' },
+      { variantId: 1, cookedAt: 1000, id: 'b' },
+    ])
+    const added = plan.mergeCookedHistory([
+      { variantId: 1, cookedAt: 1000, id: 'c' },
+      // same pair but a different id — must NOT count as a duplicate.
+    ])
+    expect(added).toBe(true)
+    expect(plan.cookedHistory).toHaveLength(3)
+  })
+
+  test('a joiner that already has local cooks republishes them to the room', async () => {
+    // qodo #2: a joining phone with its own cook events must push them so
+    // later peers receive them — adopting the snapshot silently would leave
+    // the household's raw snapshot incomplete.
+    const plan = usePlanStore()
+    const ui = useUiStore()
+    ui.shareCookedHistory = true
+    // Local cooks the relay does NOT yet hold.
+    plan.replaceCookedHistory([{ variantId: 5, cookedAt: 50, id: 'local' }])
+    const { socket } = await startRoom('rose-thistle-moss')
+    await sleep(5)
+    // Peer's snapshot arrives, UNIONing its history onto ours.
+    socket.receive({
+      type: 'state',
+      rev: 60,
+      state: {
+        plan: [],
+        customItems: [],
+        checked: {},
+        cookedHistory: [{ variantId: 8, cookedAt: 80, id: 'peer' }],
+      },
+    })
+    // The inbound union pulled in a new row (applyRemote's finally
+    // reconciliation) → the device republishes at a higher rev.
+    await sleep(5)
+    const outbound = socket.frames('state').at(-1)!
+    expect(outbound.rev).toBeGreaterThan(60)
+    const shared = (outbound.state as { cookedHistory?: unknown[] }).cookedHistory
+    expect(shared).toBeDefined()
+    expect(
+      (shared as { variantId: number }[]).map((h) => h.variantId).sort(),
+    ).toEqual([5, 8])
+  })
 })
 
 describe('room store — quick filters are household state (ADR-0028)', () => {

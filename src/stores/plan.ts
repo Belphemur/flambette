@@ -15,11 +15,22 @@ export interface PlanEntry {
 export interface CookedEntry {
   variantId: number
   cookedAt: number
+  /**
+   * Per-device unique id for this cook event. Two phones can cook the same
+   * recipe in the same millisecond; (variantId, cookedAt) alone then collides
+   * and a merge would drop one. `id` disambiguates them (ADR-0011/0031).
+   * Backward-compatible: older rows imported via backup or received from an
+   * older peer lack it, and mergeCookedHistory falls back to the pair.
+   */
+  id?: string
 }
 
 /** cookedHistory keeps at most this many entries, newest first. */
 const COOKED_HISTORY_CAP = 200
 const COOKED_RECENT_MS = 30 * 24 * 60 * 60 * 1000
+
+/** Monotonic counter backing CookedEntry.id (per-device). */
+let cookIdSeq = 0
 
 /**
  * Meal plan: list of {variantId, servings}. Persisted to localStorage under
@@ -126,7 +137,7 @@ export const usePlanStore = defineStore(
       removeFromPlan(variantId)
       restoreIngredients(variantId)
       cookedHistory.value = [
-        { variantId, cookedAt: Date.now() },
+        { variantId, cookedAt: Date.now(), id: `${cookIdSeq++}` },
         ...cookedHistory.value,
       ].slice(0, COOKED_HISTORY_CAP)
     }
@@ -156,18 +167,32 @@ export const usePlanStore = defineStore(
      * whoever pushed last erase the other phones' cooks. Deduplicated on
      * (variantId, cookedAt), newest first, same cap.
      */
-    function mergeCookedHistory(rows: CookedEntry[]): void {
+    function mergeCookedHistory(rows: CookedEntry[]): boolean {
       const seen = new Set<string>()
       const merged: CookedEntry[] = []
-      for (const row of [...rows, ...cookedHistory.value]) {
+      // Seed with the CURRENT household view so inbound rows that duplicate
+      // what we already hold don't count as "added" and don't get republished.
+      for (const row of [...cookedHistory.value]) {
+        const key = row.id ?? `${row.variantId}@${row.cookedAt}`
+        seen.add(key)
+        merged.push({ variantId: row.variantId, cookedAt: row.cookedAt, id: row.id })
+      }
+      let added = 0
+      for (const row of rows) {
         if (!Number.isFinite(row.variantId) || !Number.isFinite(row.cookedAt)) continue
-        const key = `${row.variantId}@${row.cookedAt}`
+        // Prefer the per-device unique id when present (disambiguates two
+        // same-recipe cooks on different phones in the same millisecond,
+        // which the pair alone collides on). Fall back to (variantId, cookedAt)
+        // for rows from older peers / imports that lack it.
+        const key = row.id ?? `${row.variantId}@${row.cookedAt}`
         if (seen.has(key)) continue
         seen.add(key)
-        merged.push({ variantId: row.variantId, cookedAt: row.cookedAt })
+        merged.push({ variantId: row.variantId, cookedAt: row.cookedAt, id: row.id })
+        added++
       }
       merged.sort((a, b) => b.cookedAt - a.cookedAt)
       cookedHistory.value = merged.slice(0, COOKED_HISTORY_CAP)
+      return added > 0
     }
 
     /** Replace the whole plan (used when importing a shared plan). */

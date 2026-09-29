@@ -233,6 +233,10 @@ export const useRoomStore = defineStore('room', () => {
 
   function applyRemote(state: SharedState) {
     applyingRemote = true
+    // Finding #2 (qodo): did an inbound merge add cooked-history rows we
+    // now need to reconcile to the room? Declared in scope so the finally
+    // block can read it.
+    let inboundAdded = false
     try {
       plan.replacePlan(state.plan ?? [], state.customItems ?? [])
       const checked: Record<string, boolean> = {}
@@ -250,7 +254,7 @@ export const useRoomStore = defineStore('room', () => {
       // once, a replace would let whoever pushed last erase the other
       // phones' cooks. An empty inbound list is a peer that cooked
       // nothing, not a request to wipe ours.
-      if (state.cookedHistory) plan.mergeCookedHistory(state.cookedHistory)
+      if (state.cookedHistory) inboundAdded = plan.mergeCookedHistory(state.cookedHistory)
       // Quick filters (ADR-0028). ABSENCE means "don't touch": an older
       // peer sends no `filters` key, and treating that as an empty
       // selection would wipe the household's filters on every push. The
@@ -277,6 +281,19 @@ export const useRoomStore = defineStore('room', () => {
       if (state.ratings != null) ratings.mergeRemote(state.ratings)
     } finally {
       applyingRemote = false
+      // Finding #2 (qodo): an inbound merge can pull cook events the relay
+      // does not yet hold (disjoint histories, or a joiner keeping local
+      // cooks). The watch on cookedHistory is muted by `applyingRemote`, so
+      // those rows would never reach later peers. Reconcile them here:
+      // republish the household snapshot — BUT only when no local plan edit
+      // is pending, so we never clobber another peer's uncommitted edit.
+      // We are the device that just absorbed the missing rows, so our
+      // snapshot now carries them at a strictly higher rev; peers that adopt
+      // it converge on the full union.
+      if (inboundAdded && !localEditPending && ui.shareCookedHistory) {
+        localRev = Math.max(localRev, maxSeenRev) + 1
+        sendState()
+      }
     }
   }
 

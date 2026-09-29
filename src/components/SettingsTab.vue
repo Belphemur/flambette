@@ -230,7 +230,7 @@ function cancelBackupImport(): void {
             Sync <strong>cooked history</strong> with the household.
             <span class="block dark:text-stone-400">
               On by default — everyone in the room shares one cooking log, and histories merge rather than replace.
-              Turn this off to keep this device's history strictly private; the choice sticks.
+              Turn this off to stop sharing new cooks: this device will no longer send its history to the room, and future snapshots won't include it. Cooks shared earlier stay in the room — sharing only controls what goes out from here.
             </span>
           </span>
         </label>
