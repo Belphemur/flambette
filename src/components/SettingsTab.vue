@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { applyBackup, backupFileName, buildBackupZip } from '../lib/backup'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
@@ -24,6 +24,32 @@ const { shareRoomLink, shareableCode } = useShareRoomLink()
 
 /** Draft code, seeded from the persisted setting. */
 const roomInput = ref(ui.householdRoom)
+/**
+ * True while the user is editing the field: Settings lives under
+ * KeepAlive, so a backup import can change ui.householdRoom without a
+ * remount. The store→draft echo is suppressed while typing so an import
+ * never stomps an in-progress edit (qodo 4128519632); the flag resets on
+ * blur and on every save path.
+ */
+let roomTyping = false
+
+watch(
+  () => ui.householdRoom,
+  (code) => {
+    if (roomTyping) return
+    roomInput.value = code
+  },
+)
+
+/** @input on the room field: mark the draft as user-owned until blur. */
+function onRoomInput() {
+  roomTyping = true
+}
+
+/** @blur on the room field: resume following the store on future changes. */
+function onRoomBlur() {
+  roomTyping = false
+}
 
 const householdCode = computed(() => ui.householdRoom)
 /** Both shapes normalize (ADR-0021): three words, or a legacy code. */
@@ -35,6 +61,7 @@ const adoptableRoom = computed(() =>
 
 /** Roll a fresh three-word code into the field (ADR-0021). */
 function newRoomCode() {
+  roomTyping = false
   roomInput.value = generateRoomCode()
 }
 
@@ -42,6 +69,7 @@ function newRoomCode() {
 const shareableCodeText = computed(() => shareableCode())
 
 function saveHouseholdRoom(joinNow: boolean) {
+  roomTyping = false
   const code = normalizeRoomCode(roomInput.value)
   if (!code) {
     ui.showToast('Room codes look like amber-falcon-lantern', { kind: 'error' })
@@ -67,12 +95,14 @@ function saveHouseholdRoom(joinNow: boolean) {
 function adoptCurrentRoom() {
   const code = adoptableRoom.value
   if (!code) return
+  roomTyping = false
   roomInput.value = code
   ui.setHouseholdRoom(code)
   ui.showToast(`Household sync active — ${code}`, { kind: 'household' })
 }
 
 function clearHouseholdRoom() {
+  roomTyping = false
   ui.setHouseholdRoom('')
   roomInput.value = ''
   ui.showToast('Household sync turned off')
@@ -168,6 +198,8 @@ function cancelBackupImport(): void {
           placeholder="amber-falcon-lantern"
           aria-label="Household room code"
           data-test="household-room-input"
+          @input="onRoomInput"
+          @blur="onRoomBlur"
           class="h-11 min-w-0 flex-1 rounded-xl border bg-white px-3 text-sm outline-none focus:border-primary dark:border-stone-700 dark:bg-stone-900"
         />
         <button

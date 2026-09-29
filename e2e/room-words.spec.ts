@@ -6,6 +6,27 @@ import {
   openFirstRecipeDetail,
   waitForCatalog,
 } from './helpers'
+import { zipStore } from '../src/lib/zip'
+
+const encoder = new TextEncoder()
+
+/** A minimal VALID backup zip whose settings carry `householdRoom`. */
+function backupWithRoom(code: string): Uint8Array {
+  return zipStore([
+    {
+      name: 'meta.json',
+      data: encoder.encode(
+        JSON.stringify({ app: 'mealime-planner', schema: 1, exportedAt: new Date().toISOString() }),
+      ),
+    },
+    {
+      name: 'settings.json',
+      data: encoder.encode(
+        JSON.stringify({ shareCookedHistory: false, dietFilters: [], householdRoom: code }),
+      ),
+    },
+  ])
+}
 
 /**
  * Phase 18 — three-word room codes (ADR-0021).
@@ -152,4 +173,34 @@ test('a nonsense code is refused rather than silently coerced', async ({ page })
   await expect(page.getByTestId('household-room-save')).toBeDisabled()
   await page.getByTestId('household-room-input').fill('amber falcon lantern')
   await expect(page.getByTestId('household-room-save')).toBeEnabled()
+})
+
+test('a backup restore re-syncs the room draft; Save keeps the restored code (qodo 4128519632)', async ({
+  page,
+}) => {
+  await gotoTab(page, 'Settings')
+
+  // Start with room A saved through the UI (types into the field first).
+  await page.getByTestId('household-room-input').fill('amber-falcon-lantern')
+  await page.getByTestId('household-room-save').click()
+  await expect(page.getByTestId('household-room-status')).toContainText('amber-falcon-lantern')
+
+  // Restore a backup carrying a DIFFERENT household room — no remount
+  // happens (KeepAlive), so the draft must follow the store.
+  await page.setInputFiles('[data-test=import-settings-input]', {
+    name: 'backup.zip',
+    mimeType: 'application/zip',
+    buffer: Buffer.from(backupWithRoom('pine-otter-meadow')),
+  })
+  await page.getByTestId('import-settings-confirm').click()
+  await expect(page.getByTestId('toast')).toContainText('Backup restored', { timeout: 10_000 })
+
+  // The field shows the restored code — not the stale draft.
+  await expect(page.getByTestId('household-room-input')).toHaveValue('pine-otter-meadow')
+
+  // Saving keeps the restored code (the old bug wrote the stale draft back).
+  await page.getByTestId('household-room-save').click()
+  await expect(page.getByTestId('household-room-status')).toContainText('pine-otter-meadow')
+  await expect(page.getByTestId('household-room-input')).toHaveValue('pine-otter-meadow')
+  await expectZeroMealimeRequests(page)
 })
