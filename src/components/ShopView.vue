@@ -29,13 +29,18 @@ function isCollapsed(name: string): boolean {
 }
 
 function toggleSection(name: string) {
-  // A header click always wins over the auto state (it clears both sets,
-  // exactly like the Grocery tab): clicking an auto-collapsed header
-  // re-opens it and pins it open until the category is done again.
+  // A header click always wins over the auto state (like the Grocery
+  // tab): clicking an auto-collapsed header re-opens ONLY that category
+  // and pins it open until it is done again — other auto-collapsed
+  // categories keep their state (qodo 4128519637).
   const next = new Set(collapsed.value)
   if (isCollapsed(name)) {
     next.delete(name)
-    autoCollapsed.value = new Set<string>()
+    if (autoCollapsed.value.has(name)) {
+      const auto = new Set(autoCollapsed.value)
+      auto.delete(name)
+      autoCollapsed.value = auto
+    }
   } else {
     next.add(name)
   }
