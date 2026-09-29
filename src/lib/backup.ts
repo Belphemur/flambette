@@ -252,9 +252,13 @@ export const STORE_SLICES: SliceDef<any>[] = [
       }
       useUiStore().applySettings({
         shareCookedHistory: v.shareCookedHistory,
-        dietFilters: v.dietFilters,
-        householdRoom: v.householdRoom,
-        stepTimers: v.stepTimers,
+        // Explicit defaults for fields absent from OLDER backups (qodo
+        // 4128519628): applySettings otherwise leaves the device's current
+        // values in place even though the restore claims settings are
+        // overwritten. [] / '' / {} are valid values for applySettings.
+        dietFilters: v.dietFilters ?? [],
+        householdRoom: v.householdRoom ?? '',
+        stepTimers: v.stepTimers ?? {},
       })
       if (v.theme) writeTheme(v.theme.theme ?? '')
     },
