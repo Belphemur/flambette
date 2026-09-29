@@ -104,10 +104,17 @@ watch(
   () => [room.status, room.error] as const,
   ([status, error]) => {
     if (status !== 'error' || !error) return
-    ui.showToast(`Household sync unavailable — ${error}. Will retry next launch.`, {
-      kind: 'household',
-      duration: 6000,
-    })
+    // A household sync failure is only meaningful when the failing room IS
+    // the household room (qodo phase 18); a bad ?room= link or a Plan-tab
+    // room gets the generic live-room message instead.
+    if (ui.householdRoom && room.code === ui.householdRoom) {
+      ui.showToast(`Household sync unavailable — ${error}. Will retry next launch.`, {
+        kind: 'household',
+        duration: 6000,
+      })
+    } else {
+      ui.showToast(`Live room unavailable — ${error}.`, { duration: 6000 })
+    }
   },
 )
 
