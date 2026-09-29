@@ -153,7 +153,12 @@ let tickHandle: ReturnType<typeof setInterval> | undefined
 
 const timer = computed(() => ui.stepTimer(variantId.value, viewKey.value))
 const timerRemaining = computed(() => remainingSeconds(timer.value, now.value))
-const timerRunning = computed(() => !!timer.value?.running)
+/**
+ * Derived, not trusted from the persisted `running` flag (qodo
+ * 4128519641): a timer whose countdown has reached zero is finished, no
+ * matter what the flag claims — its button offers Restart, not Pause.
+ */
+const timerRunning = computed(() => remainingSeconds(timer.value, now.value) > 0 && !!timer.value?.running)
 const timerLabel = computed(() => formatCountdown(timerRemaining.value))
 /** Only changes on minute boundaries → the live region stays quiet. */
 const timerAnnouncement = computed(() => announceCountdown(timerRemaining.value))
@@ -187,13 +192,22 @@ function clearTimer() {
 
 /**
  * Leaving the cook session must not silently kill a running timer: the
- * user is asked once (Cancel keeps the timer running).
+ * user is asked once (Cancel keeps the timer running). EVERY step view
+ * of this recipe is checked, not just the visible one (qodo
+ * 4128519620), and a timer is "running" only while its derived
+ * countdown is above zero (qodo 4128519641) — an expired timer leaves
+ * silently.
  */
 function confirmTimerBeforeLeaving(): boolean {
-  if (!timerRunning.value) return true
-  return window.confirm(
-    `A timer is still running (${formatCountdown(timerRemaining.value)} left). Leave anyway?`,
-  )
+  const timers = ui.stepTimers[variantId.value] ?? {}
+  for (const state of Object.values(timers)) {
+    if (remainingSeconds(state, now.value) > 0 && state.running) {
+      return window.confirm(
+        `A timer is still running (${formatCountdown(remainingSeconds(state, now.value))} left). Leave anyway?`,
+      )
+    }
+  }
+  return true
 }
 
 function finish() {
@@ -219,7 +233,7 @@ function onKey(e: KeyboardEvent) {
     prev()
   } else if (e.key === 'Escape') {
     e.preventDefault()
-    close()
+    if (confirmTimerBeforeLeaving()) close()
   }
 }
 
@@ -306,7 +320,8 @@ function onTouchEnd(e: TouchEvent) {
         <button
           class="flex size-11 shrink-0 items-center justify-center rounded-full text-lg dark:text-stone-400 dark:hover:bg-stone-800"
           aria-label="Close cooking mode"
-          @click="close"
+          @click="confirmTimerBeforeLeaving() && close()"
+        >
         >
           ✕
         </button>

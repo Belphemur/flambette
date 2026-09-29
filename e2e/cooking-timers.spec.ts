@@ -143,6 +143,76 @@ test('Finish asks before discarding a running timer', async ({ page }) => {
   await expectZeroMealimeRequests(page)
 })
 
+test('Finish prompts for a timer left on ANOTHER step (qodo 4128519620)', async ({ page }) => {
+  const cooking = await startCooking(page)
+
+  // Timer on step 1, then navigate to the LAST step and finish there.
+  await cooking.getByTestId('timer-preset-5').click()
+  await expect(cooking.getByTestId('step-timer')).toContainText('5:00')
+  const progress = await cooking.getByText(/Step 1 \/ (\d+)/).textContent()
+  const total = Number(progress!.match(/Step 1 \/ (\d+)/)![1])
+  const next = cooking.getByRole('button', { name: /Next/ })
+  for (let i = 1; i < total; i++) await next.click()
+  await expect(cooking.getByText(new RegExp(`Step ${total} \\/ ${total}`))).toBeVisible()
+
+  page.once('dialog', (d) => void d.dismiss())
+  await cooking.getByRole('button', { name: /Finish/ }).click()
+  await expect(cooking).toBeVisible()
+
+  page.once('dialog', (d) => void d.accept())
+  await cooking.getByRole('button', { name: /Finish/ }).click()
+  await expect(cooking).not.toBeVisible()
+  await expect(page.getByText('Enjoy! 🍽')).toBeVisible()
+  await expectZeroMealimeRequests(page)
+})
+
+test('an expired timer does not block Finish and offers Restart (qodo 4128519641)', async ({ page }) => {
+  // The 1-minute preset must genuinely run out.
+  test.setTimeout(120_000)
+  const cooking = await startCooking(page)
+
+  // Finish lives on the LAST step — go there first, then let the timer
+  // run out on the step Finish is on.
+  const progress = await cooking.getByText(/Step 1 \/ (\d+)/).textContent()
+  const total = Number(progress!.match(/Step 1 \/ (\d+)/)![1])
+  const next = cooking.getByRole('button', { name: /Next/ })
+  for (let i = 1; i < total; i++) await next.click()
+  await expect(cooking.getByText(new RegExp(`Step ${total} \\/ ${total}`))).toBeVisible()
+
+  // Shortest preset, then outlast it. At 0:00 the timer button offers a
+  // restart — pausing a finished countdown made no sense.
+  await cooking.getByTestId('timer-preset-1').click()
+  await expect(cooking.getByTestId('step-timer')).toContainText('1:00')
+  await expect
+    .poll(() => timerSeconds(cooking), { timeout: 90_000, intervals: [1000, 2500, 2500, 5000] })
+    .toBe(0)
+  await expect(cooking.getByTestId('step-timer')).toContainText('0:00')
+  await expect(cooking.getByTestId('step-timer')).toContainText(/▶/)
+  expect(await timerSeconds(cooking)).toBe(0)
+
+  // Finish needs NO confirmation for an expired timer.
+  await cooking.getByRole('button', { name: /Finish/ }).click()
+  await expect(cooking).not.toBeVisible()
+  await expect(page.getByText('Enjoy! 🍽')).toBeVisible()
+  await expectZeroMealimeRequests(page)
+})
+
+test('the header close ✕ routes through the timer confirmation (qodo 4128519620)', async ({ page }) => {
+  const cooking = await startCooking(page)
+  await cooking.getByTestId('timer-preset-5').click()
+  await expect(cooking.getByTestId('step-timer')).toContainText('5:00')
+
+  page.once('dialog', (d) => void d.dismiss())
+  await cooking.getByRole('button', { name: 'Close cooking mode' }).click()
+  await expect(cooking).toBeVisible()
+
+  page.once('dialog', (d) => void d.accept())
+  await cooking.getByRole('button', { name: 'Close cooking mode' }).click()
+  await expect(cooking).not.toBeVisible()
+  await expectZeroMealimeRequests(page)
+})
+
+
 test('mark as cooked also asks before discarding a running timer', async ({ page }) => {
   const cooking = await startCooking(page)
   const progress = await cooking.getByText(/Step 1 \/ (\d+)/).textContent()
