@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChevronDown, ChevronRight, ShoppingCart, X } from 'lucide-vue-next'
+import { ChevronDown, ChevronRight, Eraser, ShoppingCart, Sparkles, X } from 'lucide-vue-next'
 import { useGroceryList } from '../lib/useGroceryList'
 import type { GroceryItem } from '../lib/grocery'
 import { usePlanStore } from '../stores/plan'
@@ -139,7 +139,7 @@ function customCategory(item: string): string | undefined {
         class="py-16 text-center text-stone-400"
         data-test="cleared-empty"
       >
-        <p class="text-4xl">🧹</p>
+        <Sparkles :size="40" class="mx-auto" aria-hidden="true" />
         <p class="mt-2 font-medium">All ingredients cleared.</p>
         <p class="mt-1 text-sm">They'll come back when you plan new recipes.</p>
       </div>
@@ -173,7 +173,8 @@ function customCategory(item: string): string | undefined {
             aria-label="Clear grocery list"
             @click="confirmAndClearGrocery()"
           >
-            ♻️ Clear list
+            <Eraser :size="16" aria-hidden="true" class="mr-1 inline" />
+            Clear list
           </button>
         </div>
       </template>

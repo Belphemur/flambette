@@ -184,6 +184,16 @@ const pendingMeals = computed(() => {
   })
 })
 
+/**
+ * A preview tile is missing for a variant the catalog cannot resolve.
+ * Confirming would then replace the plan with a meal the user never saw,
+ * so the confirm button stays disabled until the preview is complete
+ * (the counts line still reports the planner's own number).
+ */
+const previewComplete = computed(
+  () => !!pendingPlan.value && pendingMeals.value.length === pendingPlan.value.variantIds.length,
+)
+
 /** Confirm step: replace the plan with the generated pack. */
 function confirmAutoPlan() {
   const result = pendingPlan.value
@@ -565,6 +575,10 @@ function confirmAutoPlan() {
               Replaces your current plan
               <template v-if="previousEntries.length > 0">({{ previousEntries.length }} meals)</template>.
             </p>
+            <p v-if="!previewComplete" class="text-xs text-amber-700 dark:text-amber-400">
+              Showing {{ pendingMeals.length }} of {{ pendingPlan.variantIds.length }} meals — the rest are still
+              loading, so this plan cannot be confirmed yet.
+            </p>
             <ul class="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Meals in this auto-plan">
               <li
                 v-for="meal in pendingMeals"
@@ -589,6 +603,8 @@ function confirmAutoPlan() {
               <button
                 class="h-10 flex-1 rounded-xl bg-primary text-sm font-semibold text-white active:bg-primary-dark"
                 data-test="auto-plan-confirm"
+                :disabled="!previewComplete"
+                :title="previewComplete ? undefined : 'Waiting for the preview to load'"
                 @click="confirmAutoPlan"
               >
                 Use this plan

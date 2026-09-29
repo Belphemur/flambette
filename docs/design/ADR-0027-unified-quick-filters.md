@@ -1,6 +1,6 @@
 # ADR-0027: One quick-filter object, one filter surface, no orphan controls
 
-**Status:** Accepted (2026-09-30)
+**Status:** Accepted (2026-09-29)
 **Extends:** ADR-0018 (diet chips), ADR-0013 (backup registry). Changes the
 Recipes-tab filter UI and the persisted `ui` slice's shape; ADR-0018's
 keyword rules and verdicts are untouched.

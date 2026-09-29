@@ -1,6 +1,6 @@
 # ADR-0029: One bundled icon stack (Lucide), no glyph characters
 
-**Status:** Accepted (2026-09-30)
+**Status:** Accepted (2026-09-29)
 **Extends:** ADR-0016 (settings tab / five-tab nav fit). First icon
 decision in the project; it did not previously have one.
 

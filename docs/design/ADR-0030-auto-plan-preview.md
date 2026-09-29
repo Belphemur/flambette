@@ -1,6 +1,6 @@
 # ADR-0030: Auto-Plan previews the pack before it replaces the plan
 
-**Status:** Accepted (2026-09-30)
+**Status:** Accepted (2026-09-29)
 **Extends:** ADR-0024 (Auto-Plan pack builder). Adds a preview to the
 confirm step; the planner, its scoring and its determinism are untouched.
 

@@ -1,6 +1,6 @@
 # ADR-0028: The quick filters are household state, and adoption is the join
 
-**Status:** Accepted (2026-09-30)
+**Status:** Accepted (2026-09-29)
 **Extends:** ADR-0006 (rooms), ADR-0004 (share), ADR-0011 addendum
 (cooked history is personal), ADR-0019 (household room), ADR-0026 (join
 or create), ADR-0027 (unified filters). Adds one OPTIONAL member to the

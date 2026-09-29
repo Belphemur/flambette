@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Ellipsis,
   PartyPopper,
   Pause,
   Play,
@@ -480,7 +481,8 @@ function onTouchEnd(e: TouchEvent) {
             :aria-label="`Set a timer for the recipe total cooking time of ${recipeTotalSuggestion} minutes`"
             @click="startTimer(recipeTotalSuggestion * 60)"
           >
-            ⋯ {{ recipeTotalSuggestion }}m total
+            <Ellipsis :size="14" aria-hidden="true" class="mr-0.5 inline align-[-2px]" />
+            {{ recipeTotalSuggestion }}m total
           </button>
           <button
             v-if="timer"

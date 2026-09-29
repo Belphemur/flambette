@@ -192,8 +192,9 @@ onMounted(async () => {
             @click="toggleDark()"
           >
             <!-- The icon shows the mode you would switch TO, so it always
-                 agrees with the aria-label below (as the old ☀️/🌙 pair
-                 did): sun while dark ("Switch to light mode"). -->
+                 agrees with the aria-label below, exactly as the emoji
+                 pair it replaced did: sun while dark ("Switch to light
+                 mode"). -->
             <Sun v-if="isDark" :size="20" aria-hidden="true" />
             <Moon v-else :size="20" aria-hidden="true" />
           </button>

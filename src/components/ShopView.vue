@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Check, ChevronDown, ChevronRight, ShoppingCart, X } from 'lucide-vue-next'
+import { Check, ChevronDown, ChevronRight, Eraser, ShoppingCart, X } from 'lucide-vue-next'
 import { useGroceryList } from '../lib/useGroceryList'
 import IngredientAutocomplete from './IngredientAutocomplete.vue'
 
@@ -140,7 +140,8 @@ function exitShopping() {
           aria-label="Clear grocery list"
           @click="confirmAndClearGrocery()"
         >
-          ♻️ Clear list
+          <Eraser :size="16" aria-hidden="true" class="mr-1 inline" />
+          Clear list
         </button>
       </div>
     </div>
