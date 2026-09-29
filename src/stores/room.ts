@@ -2,7 +2,13 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { describeRelayError } from '../lib/relayErrors'
-import { normalizeQuickFilters, sameQuickFilters, type QuickFilters } from '../lib/quickFilters'
+import {
+  mergeSharedFilters,
+  normalizeQuickFilters,
+  sameQuickFilters,
+  toSharedFilters,
+  type SharedQuickFilters,
+} from '../lib/quickFilters'
 import { useCustomIngredientsStore, type CustomIngredient } from './customIngredients'
 import { usePlanStore, type CookedEntry } from './plan'
 import { useGroceryStore } from './grocery'
@@ -27,12 +33,14 @@ interface SharedState {
    *  personal slice that must never cross the wire. */
   cookedHistory?: CookedEntry[]
   /**
-   * Unified quick-filter selection (ADR-0028) — HOUSEHOLD state, so both
-   * phones browse the same slice of the catalog. OPTIONAL: a peer running
-   * older code sends no `filters` key, and receiving a payload WITHOUT it
-   * must leave the local selection untouched (never a wipe).
+   * Household half of the quick filters (ADR-0028). `favOnly` is
+   * deliberately NOT carried: the favourites set is personal, so sharing
+   * the switch would blank a peer's Recipes tab (see quickFilters.ts).
+   * OPTIONAL: a peer running older code sends no `filters` key, and
+   * receiving a payload WITHOUT it must leave the local selection
+   * untouched (never a wipe).
    */
-  filters?: QuickFilters
+  filters?: SharedQuickFilters
 }
 
 const PUSH_DEBOUNCE_MS = 300
@@ -177,8 +185,8 @@ export const useRoomStore = defineStore('room', () => {
       cleared: { ...plan.clearedIngredients },
       // Household state (ADR-0012): remembered custom-ingredient names.
       customs: customIngredients.list.map((c) => ({ ...c })),
-      // Household state (ADR-0028): the unified quick filters.
-      filters: { ...ui.quickFilters, diets: [...ui.quickFilters.diets] },
+      // Household state (ADR-0028): the shared half of the quick filters.
+      filters: toSharedFilters(ui.quickFilters),
     }
     // Personal history only crosses the wire when the sender opted in.
     if (ui.shareCookedHistory) {
@@ -206,10 +214,13 @@ export const useRoomStore = defineStore('room', () => {
       if (state.cookedHistory) plan.replaceCookedHistory(state.cookedHistory)
       // Quick filters (ADR-0028). ABSENCE means "don't touch": an older
       // peer sends no `filters` key, and treating that as an empty
-      // selection would wipe the household's filters on every push.
+      // selection would wipe the household's filters on every push. The
+      // personal `favOnly` half is re-applied from local, never from the
+      // wire.
       const filters = normalizeQuickFilters(state.filters)
-      if (filters && !sameQuickFilters(filters, ui.quickFilters)) {
-        ui.quickFilters = filters
+      if (filters) {
+        const merged = mergeSharedFilters(filters, ui.quickFilters)
+        if (!sameQuickFilters(merged, ui.quickFilters)) ui.quickFilters = merged
       }
     } finally {
       applyingRemote = false
@@ -223,14 +234,25 @@ export const useRoomStore = defineStore('room', () => {
     if (status.value !== 'live') {
       // The edit is real and must survive the join that is still in
       // flight: remember it, and let the join handler publish it.
-      unsentLocalEdit = true
+      //
+      // Only while we are actually ON OUR WAY INTO a room. With no room
+      // at all (status idle, code null) there is nothing to publish
+      // into, and carrying the flag would make a join much later skip
+      // adoption and push a stale local plan over the household's — the
+      // exact overwrite this flag exists to prevent.
+      if (code.value !== null) unsentLocalEdit = true
       return
     }
     localEditPending = true
     if (pushTimer) clearTimeout(pushTimer)
     pushTimer = setTimeout(() => {
       pushTimer = null
-      if (status.value !== 'live' || !ws || ws.readyState !== WebSocket.OPEN) return
+      if (status.value !== 'live' || !ws || ws.readyState !== WebSocket.OPEN) {
+        // The socket went away inside the debounce window: the edit never
+        // reached the room and must be published on the next join.
+        if (code.value !== null) unsentLocalEdit = true
+        return
+      }
       localRev = Math.max(localRev, maxSeenRev) + 1
       sendState()
     }, PUSH_DEBOUNCE_MS)
@@ -501,6 +523,11 @@ export const useRoomStore = defineStore('room', () => {
     // Keepalive first: a leaked interval would keep sending into a dead
     // socket forever, and would keep a room alive that nobody is in.
     stopKeepalive()
+    // A queued edit cancelled here never reached the room: carry it as an
+    // UNSENT edit so the next join publishes it instead of adopting an
+    // older snapshot over it. Without this, a socket drop inside the
+    // 300ms debounce silently loses the tap.
+    if (localEditPending || pushTimer) unsentLocalEdit = true
     // A queued edit can never reach the wire now; keeping the flag would
     // make the re-join ignore the room's snapshot FOREVER (a stuck
     // localEditPending is a permanent "don't apply remote state").
@@ -538,6 +565,10 @@ export const useRoomStore = defineStore('room', () => {
    */
   function create(preferredCode?: string) {
     reconnectAttempts = 0
+    // A DELIBERATE new room: whatever the last one left unsent is not
+    // this room's business, and publishing it would overwrite the new
+    // room's state before it exists.
+    unsentLocalEdit = false
     wantedCode = preferredCode ? normalizeRoomCode(preferredCode) : generateRoomCode()
     codeRerolls = 0
     connect('create')
@@ -551,6 +582,10 @@ export const useRoomStore = defineStore('room', () => {
       status.value = 'error'
       return
     }
+    // A join into a DIFFERENT code starts clean: an undelivered edit
+    // belongs to the room we were in, not to this one. A re-join of the
+    // SAME code (resume, reconnect) keeps it — that is the case it is for.
+    if (code.value !== normalized) unsentLocalEdit = false
     code.value = normalized
     sessionStorage.setItem(ROOM_CODE_KEY, code.value)
     reconnectAttempts = 0
@@ -580,6 +615,11 @@ export const useRoomStore = defineStore('room', () => {
     roomGone = false
     sessionStorage.removeItem(ROOM_CODE_KEY)
     cleanupSocket()
+    // Leaving ends the room's business: the local state is simply this
+    // device's again, and a later join must adopt, not republish. After
+    // cleanupSocket, so a push cancelled by the teardown cannot set it.
+    unsentLocalEdit = false
+    localEditPending = false
   }
 
   return {

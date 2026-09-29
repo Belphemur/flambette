@@ -191,8 +191,11 @@ onMounted(async () => {
             :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
             @click="toggleDark()"
           >
-            <Moon v-if="isDark" :size="20" aria-hidden="true" />
-            <Sun v-else :size="20" aria-hidden="true" />
+            <!-- The icon shows the mode you would switch TO, so it always
+                 agrees with the aria-label below (as the old ☀️/🌙 pair
+                 did): sun while dark ("Switch to light mode"). -->
+            <Sun v-if="isDark" :size="20" aria-hidden="true" />
+            <Moon v-else :size="20" aria-hidden="true" />
           </button>
         </div>
       </div>

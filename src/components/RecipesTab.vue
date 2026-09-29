@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ArrowUpDown, Check, Ham, Salad, Shrimp, Drumstick, Star, Vegan, Beef, Fish, Sparkles, Wheat, SearchX } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { catalog } from '../lib/catalog'
@@ -80,19 +80,86 @@ const sortOpen = ref(false)
 
 function setSort(value: SortBy) {
   patchFilters({ sortBy: value })
-  sortOpen.value = false
+  closeSort({ refocus: true })
 }
 
-/** Click-away + Escape close; the button itself stops propagation. */
+/**
+ * Sort menu keyboard support. The popup advertises `role="listbox"` /
+ * `role="option"`, so it must behave like one: arrow keys move the
+ * selection focus, Home/End jump, Escape closes and returns focus to the
+ * trigger, and the active option is focused when the menu opens.
+ */
+const sortTriggerEl = ref<HTMLElement | null>(null)
+const sortOptionEls = ref<HTMLElement[]>([])
+
+/** Index of the option that has DOM focus while the menu is open. */
+const sortFocusIndex = ref(0)
+
+function setSortOptionEl(el: Element | null, index: number) {
+  if (el instanceof HTMLElement) sortOptionEls.value[index] = el
+}
+
+function openSort() {
+  sortOpen.value = true
+  sortFocusIndex.value = Math.max(
+    0,
+    SORT_OPTIONS.findIndex((o) => o.value === filters.value.sortBy),
+  )
+  // The listbox exists only after this tick.
+  void nextTick(() => focusSortOption(sortFocusIndex.value))
+}
+
+function closeSort({ refocus = false } = {}) {
+  sortOpen.value = false
+  if (refocus) void nextTick(() => sortTriggerEl.value?.focus())
+}
+
+function focusSortOption(index: number) {
+  const at = (index + SORT_OPTIONS.length) % SORT_OPTIONS.length
+  sortFocusIndex.value = at
+  sortOptionEls.value[at]?.focus()
+}
+
+function onSortMenuKeydown(e: KeyboardEvent) {
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault()
+      focusSortOption(sortFocusIndex.value + 1)
+      break
+    case 'ArrowUp':
+      e.preventDefault()
+      focusSortOption(sortFocusIndex.value - 1)
+      break
+    case 'Home':
+      e.preventDefault()
+      focusSortOption(0)
+      break
+    case 'End':
+      e.preventDefault()
+      focusSortOption(SORT_OPTIONS.length - 1)
+      break
+    case 'Escape':
+      e.preventDefault()
+      e.stopPropagation()
+      closeSort({ refocus: true })
+      break
+    case 'Tab':
+      // Tabbing out ends the interaction rather than stranding focus.
+      closeSort()
+      break
+  }
+}
+
+/** Click-away closes; the button itself is inside the wrapper. */
 function onDocumentPointerDown(e: PointerEvent) {
   if (!sortOpen.value) return
   const target = e.target as Node | null
   if (target && sortWrapEl.value?.contains(target)) return
-  sortOpen.value = false
+  closeSort()
 }
 
 function onDocumentKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') sortOpen.value = false
+  if (e.key === 'Escape' && sortOpen.value) closeSort({ refocus: true })
 }
 
 const sortWrapEl = ref<HTMLElement | null>(null)
@@ -277,12 +344,13 @@ onUnmounted(() => observer?.disconnect())
            native select with "Sort: …" options. -->
       <div ref="sortWrapEl" class="relative">
         <button
+          ref="sortTriggerEl"
           class="flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300"
           aria-haspopup="listbox"
           :aria-expanded="sortOpen"
           aria-label="Sort recipes"
           data-test="sort-button"
-          @click="sortOpen = !sortOpen"
+          @click="sortOpen ? closeSort({ refocus: true }) : openSort()"
         >
           <ArrowUpDown :size="16" aria-hidden="true" />
           <span class="truncate">{{ sortText }}</span>
@@ -293,11 +361,14 @@ onUnmounted(() => observer?.disconnect())
           role="listbox"
           aria-label="Sort recipes"
           data-test="sort-menu"
+          @keydown="onSortMenuKeydown"
         >
-          <li v-for="option in SORT_OPTIONS" :key="option.value" role="none">
+          <li v-for="(option, index) in SORT_OPTIONS" :key="option.value" role="none">
             <button
+              :ref="(el) => setSortOptionEl(el as Element | null, index)"
               class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm dark:text-stone-200"
               role="option"
+              :tabindex="index === sortFocusIndex ? 0 : -1"
               :aria-selected="filters.sortBy === option.value"
               :aria-label="`Sort by ${option.label}`"
               :data-test="`sort-option-${option.value}`"

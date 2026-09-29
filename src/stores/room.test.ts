@@ -296,8 +296,26 @@ describe('room store — quick filters are household state (ADR-0028)', () => {
     expect(ui.quickFilters.diets).toEqual(['vegan'])
     expect(ui.quickFilters.protein).toBe('fish')
     expect(ui.quickFilters.sortBy).toBe('time')
-    expect(ui.quickFilters.favOnly).toBe(true)
+    // …but `favOnly` is PERSONAL: a peer's switch must not be adopted
+    // (it would blank a device whose favourites differ).
+    expect(ui.quickFilters.favOnly).toBe(false)
     expect(ui.quickFilters.proOnly).toBe(false)
+  })
+
+  test('favOnly stays local even when it is already on here', async () => {
+    const ui = useUiStore()
+    ui.quickFilters = { ...ui.quickFilters, favOnly: true }
+    const { socket } = await startRoom()
+    // The wire never carries it…
+    const seeded = socket.frames('state')[0]
+    expect('favOnly' in ((seeded.state as { filters?: object }).filters ?? {})).toBe(false)
+    // …and an inbound payload cannot switch it off.
+    socket.receive({
+      type: 'state',
+      rev: 99,
+      state: { plan: [], customItems: [], checked: {}, filters: { favOnly: false } },
+    })
+    expect(ui.quickFilters.favOnly).toBe(true)
   })
 
   test('a payload WITHOUT filters (older peer) leaves the local selection alone', async () => {
@@ -347,10 +365,10 @@ describe('room store — quick filters are household state (ADR-0028)', () => {
   test('an edit made while the socket is not live is published, not silently dropped', async () => {
     const ui = useUiStore()
     const room = useRoomStore()
-    // The room store is created but not live yet (status 'idle'): a filter
-    // tap in that window has nowhere to go…
-    ui.quickFilters = { ...ui.quickFilters, diets: ['vegan'] }
+    // The join is in flight (connecting, code set — the ~1s a room takes
+    // to come up): a filter tap in that window has nowhere to go…
     room.join('amber-falcon-lantern')
+    ui.quickFilters = { ...ui.quickFilters, diets: ['vegan'] }
     await sleep(5)
     const socket = sockets[sockets.length - 1]
     // …and the join response carries the room's OLDER state. Silently
@@ -367,11 +385,92 @@ describe('room store — quick filters are household state (ADR-0028)', () => {
     expect(pushed.rev as number).toBeGreaterThan(4)
   })
 
+  test('an edit made with NO room at all never claims a pending publish', async () => {
+    // The flag exists to protect a join in flight. With no room, there is
+    // no join to protect: carrying the flag would make a join much later
+    // skip the household's snapshot and push a stale local plan over it
+    // (qodo 2).
+    const ui = useUiStore()
+    const plan = usePlanStore()
+    plan.replacePlan([{ variantId: 7, servings: 6 }], [])
+    ui.quickFilters = { ...ui.quickFilters, diets: ['vegan'] }
+    const room = useRoomStore()
+    room.join('amber-falcon-lantern')
+    await sleep(5)
+    const socket = sockets[sockets.length - 1]
+    // The household has its own plan: it must win.
+    socket.receive({
+      type: 'joined',
+      code: 'amber-falcon-lantern',
+      rev: 4,
+      state: { plan: [{ variantId: 42, servings: 6 }], customItems: [], checked: {} },
+    })
+    expect(plan.plan[0].variantId).toBe(42)
+    // The household payload carried no `filters` at all, so the local
+    // selection is left alone (absence = "don't touch", ADR-0028).
+    expect(ui.quickFilters.diets).toEqual(['vegan'])
+    // A payload that DOES carry filters still wins.
+    socket.receive({
+      type: 'state',
+      rev: 6,
+      state: { plan: [], customItems: [], checked: {}, filters: { diets: [] } },
+    })
+    expect(ui.quickFilters.diets).toEqual([])
+  })
+
+  test('a socket dropped inside the debounce keeps the edit for the next join', async () => {
+    const ui = useUiStore()
+    const { room, socket } = await startRoom()
+    ui.quickFilters = { ...ui.quickFilters, diets: ['vegan'] }
+    // The socket dies before the 300ms push fires.
+    socket.receive({ type: 'error', code: 'rate_limited' })
+    expect(socket.frames('state').at(-1)!.state).toBeDefined()
+    await sleep(BACKOFF_MS + 400) // reconnected
+    expect(sockets.length).toBeGreaterThan(1)
+    const rejoined = sockets[sockets.length - 1]
+    // The relay answers the re-join with an EMPTY room (no state).
+    rejoined.receive({ type: 'joined', code: 'mauve-peacock-candle', rev: 1 })
+    expect(ui.quickFilters.diets).toEqual(['vegan'])
+    // The re-join republished our edit rather than dropping it.
+    const pushed = rejoined.frames('state').at(-1)!
+    expect((pushed.state as { filters?: { diets?: string[] } }).filters?.diets).toEqual(['vegan'])
+  })
+
+  test('leaving a room clears the undelivered-edit state', async () => {
+    const ui = useUiStore()
+    const room = useRoomStore()
+    ui.quickFilters = { ...ui.quickFilters, diets: ['vegan'] }
+    room.join('amber-falcon-lantern')
+    await sleep(5)
+    sockets[sockets.length - 1].receive({ type: 'created', code: 'amber-falcon-lantern', rev: 0 })
+    ui.quickFilters = { ...ui.quickFilters, diets: ['no-meat'] }
+    room.leave()
+    // A later join into a DIFFERENT room must adopt, not republish.
+    room.join('rose-thistle-moss')
+    await sleep(5)
+    const socket = sockets[sockets.length - 1]
+    socket.receive({
+      type: 'joined',
+      code: 'rose-thistle-moss',
+      rev: 9,
+      state: { plan: [{ variantId: 42, servings: 6 }], customItems: [], checked: {}, filters: { diets: ['vegan'] } },
+    })
+    expect(ui.quickFilters.diets).toEqual(['vegan'])
+    expect(usePlanStore().plan[0].variantId).toBe(42)
+  })
+
   test('the filters travel in the snapshot, and a change is pushed', async () => {
     const ui = useUiStore()
     const { socket } = await startRoom()
     const seeded = socket.frames('state')[0]
-    expect((seeded.state as { filters?: unknown }).filters).toEqual(ui.quickFilters)
+    // Everything except the personal `favOnly` half (ADR-0028).
+    expect((seeded.state as { filters?: unknown }).filters).toEqual({
+      diets: ui.quickFilters.diets,
+      protein: ui.quickFilters.protein,
+      maxTime: ui.quickFilters.maxTime,
+      sortBy: ui.quickFilters.sortBy,
+      proOnly: ui.quickFilters.proOnly,
+    })
 
     ui.quickFilters = { ...ui.quickFilters, sortBy: 'latest' }
     await sleep(500) // PUSH_DEBOUNCE_MS

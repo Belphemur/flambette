@@ -209,8 +209,12 @@ function cancelBackupImport(): void {
       >
         Household sync active — {{ householdCode }}
       </p>
+      <!-- Always rendered, never behind a saved-room condition: the note
+           on the History tab points here, and a member in a Plan-tab
+           room (or with no household code yet) must still be able to
+           opt in. The control only means anything once a room exists,
+           which the surrounding card says out loud. -->
       <div
-        v-if="householdCode"
         class="flex items-center gap-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 dark:border-amber-700/60 dark:bg-amber-950/40"
         data-test="history-sharing-row"
       >

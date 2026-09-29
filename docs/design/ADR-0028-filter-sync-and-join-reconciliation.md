@@ -21,8 +21,15 @@ predate the filters — they are the reason this ADR exists.
 
 ### 1. `filters` is household state, carried optionally
 
-`SharedState` gains `filters?: QuickFilters`. It is a snapshot member
+`SharedState` gains `filters?: SharedQuickFilters`. It is a snapshot member
 like `plan`, pushed by every sender.
+
+**It is the SHARED half only.** `favOnly` is deliberately excluded
+(`toSharedFilters`): the favourites set itself is personal and never
+crosses the wire, so sharing the "favourites only" switch would impose
+one device's taste on a device with a different — or empty — set and
+render its Recipes tab blank. On receive, `mergeSharedFilters` re-applies
+the local `favOnly`, so the switch persists but never travels.
 
 **Optional means "don't touch".** A peer running older code sends no
 `filters` key, and a payload WITHOUT it must leave the local selection
@@ -71,6 +78,14 @@ older snapshot over the edit, and nothing ever republished it. Such an
 edit is now remembered and makes the join skip adoption and push
 instead: we are the only party that can prove our state is newer.
 
+The flag is deliberately narrow, because a broad one is its own bug: it
+is set ONLY while a join or reconnect is in flight for a room we are
+actually in (`code !== null`, status `connecting`, or a socket that died
+inside the debounce), never for an edit made with no room at all, and
+`leave()`, `create()` and a join into a *different* code clear it. A
+sticky flag would make a join much later skip the household's snapshot
+and push a stale local plan over everyone.
+
 Together, 2–4 give the reconciliation contract:
 
 > On join, a device with no undelivered edits **adopts the room's state
@@ -95,9 +110,10 @@ sheet.
 - The household shares: plan, servings, custom items, grocery checks,
   cleared ingredients, custom-ingredient memory, quick filters, and —
   only for opted-in senders — cooked history.
-- Still personal: favourites (a private taste signal), step timers (they
-  belong to the cook in progress), the search box (ADR-0027), the
-  theme override (per-device display) and the room code itself.
+- Still personal: favourites (a private taste signal) — **including the
+  `favOnly` filter switch that rides with them**, step timers (they
+  belong to the cook in progress), the search box (ADR-0027), the theme
+  override (per-device display) and the room code itself.
 - Whole-state LWW means a device that has been offline long enough to
   be adopted loses its offline edits by design. Rule 4 narrows that
   window to "edits this session could not deliver", which is the most

@@ -104,6 +104,33 @@ test.describe('unified quick filters (WS2)', () => {
     await expectZeroMealimeRequests(page)
   })
 
+  test('the sort menu is keyboard operable (listbox contract)', async ({ page }) => {
+    const trigger = page.getByTestId('sort-button')
+    await trigger.focus()
+    await page.keyboard.press('Enter')
+    const menu = page.getByTestId('sort-menu')
+    await expect(menu).toBeVisible()
+    // Opening focuses the CURRENT option (roving tabindex), not the body.
+    await expect(page.getByTestId('sort-option-rating')).toBeFocused()
+    // ArrowDown moves the option focus, Enter selects it.
+    await page.keyboard.press('ArrowDown')
+    await expect(page.getByTestId('sort-option-latest')).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(menu).toBeHidden()
+    await expect(trigger).toBeFocused() // focus returns to the trigger
+    await expect(trigger).toContainText('Latest')
+
+    // Escape closes and returns focus; ArrowUp wraps.
+    await page.keyboard.press('Enter')
+    await expect(menu).toBeVisible()
+    await page.keyboard.press('ArrowUp')
+    await expect(page.getByTestId('sort-option-rating')).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(menu).toBeHidden()
+    await expect(trigger).toBeFocused()
+    await expectZeroMealimeRequests(page)
+  })
+
   test('the compact sort menu reorders the list and survives a reload', async ({ page }) => {
     await page.getByTestId('sort-button').click()
     const menu = page.getByTestId('sort-menu')
@@ -234,15 +261,21 @@ test.describe('filter sync and join reconciliation (WS3 + WS4)', () => {
     await b.goto(`/?room=${code}`)
     await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
 
-    // Household wins: B converges to A's selection.
+    // Household wins: B converges to A's selection on every SHARED
+    // member. `favOnly` is the documented exception (ADR-0028): the
+    // favourites set is personal, so the switch never travels — B keeps
+    // the one it was seeded with.
     await expect
       .poll(async () => quickFilters(b), { timeout: 20_000 })
-      .toEqual(household)
+      .toEqual({ ...household, favOnly: true })
     await b.goto('/')
     await waitForCatalog(b)
     await expect(b.getByTestId('diet-chip-vegan')).toHaveAttribute('aria-pressed', 'true')
     await expect(b.getByTestId('protein-chip-any')).toHaveAttribute('aria-pressed', 'true')
     await expect(b.getByTestId('sort-button')).toContainText('Latest')
+
+    // B's personal switch did not overwrite A's.
+    expect((await quickFilters(a)).favOnly).toBe(false)
 
     // …and B's own changes flow back, so the household stays one thing.
     await b.getByTestId('diet-chip-no-pork').click()

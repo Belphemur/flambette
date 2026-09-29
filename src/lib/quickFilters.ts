@@ -51,6 +51,35 @@ export const PROTEIN_VALUES: readonly ProteinFilter[] = PROTEIN_OPTIONS.map((o) 
 /** Cook-time buckets offered by the filter bar (minutes; null = any). */
 export const TIME_OPTIONS: readonly (number | null)[] = [null, 20, 30, 45]
 
+/**
+ * The HALF of the quick filters that is household state (ADR-0028).
+ *
+ * `favOnly` is deliberately absent. The favourites set itself is PERSONAL
+ * (it lives in the favourites store and never crosses the wire), so
+ * sharing the switch would impose one device's "show only my
+ * favourites" on a device that has a different — or empty — set and
+ * render its Recipes tab blank. The switch persists locally; it does not
+ * travel.
+ */
+export type SharedQuickFilters = Omit<QuickFilters, 'favOnly'>
+
+/** Strip the personal half for the room payload. */
+export function toSharedFilters(f: QuickFilters): SharedQuickFilters {
+  const { favOnly: _personal, ...shared } = f
+  return shared
+}
+
+/**
+ * Fold an inbound household selection onto the local one, keeping the
+ * personal members (`favOnly`) untouched.
+ */
+export function mergeSharedFilters(
+  incoming: QuickFilters,
+  local: QuickFilters,
+): QuickFilters {
+  return { ...incoming, favOnly: local.favOnly }
+}
+
 export interface QuickFilters {
   /** ANDed diet keyword rules (ADR-0018). */
   diets: DietId[]
@@ -102,7 +131,10 @@ export function normalizeQuickFilters(value: unknown): QuickFilters | null {
     protein: PROTEIN_VALUES.includes(v.protein as ProteinFilter)
       ? (v.protein as ProteinFilter)
       : base.protein,
-    maxTime: typeof v.maxTime === 'number' && Number.isFinite(v.maxTime) ? v.maxTime : null,
+    // Only the VALUES the control actually offers. A payload carrying
+    // `maxTime: -1` would otherwise pass normalization and make the
+    // facet reject every recipe, with no select option to reset it.
+    maxTime: TIME_OPTIONS.includes(v.maxTime as number | null) ? (v.maxTime as number | null) : null,
     sortBy: SORT_VALUES.includes(v.sortBy as SortBy) ? (v.sortBy as SortBy) : base.sortBy,
     favOnly: typeof v.favOnly === 'boolean' ? v.favOnly : base.favOnly,
     proOnly: typeof v.proOnly === 'boolean' ? v.proOnly : base.proOnly,

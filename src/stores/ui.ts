@@ -169,8 +169,15 @@ export const useUiStore = defineStore(
 
     /**
      * Seed the unified filters from state persisted before ADR-0027 (a
-     * v0.12 localStorage blob holds `dietFilters` and no `quickFilters`).
-     * Runs once, after persistence hydration, and is a no-op afterwards.
+     * v0.12 localStorage blob holds `dietFilters` and no `quickFilters`),
+     * and repair anything the hydrated value got wrong.
+     *
+     * Runs once, after persistence hydration. Hydration is a raw
+     * `$patch` of whatever was in localStorage, so a hand-edited,
+     * half-written or older-build value reaches the store verbatim;
+     * without this the Recipes tab would read a malformed `diets` array
+     * and could fail while iterating it. A non-object (or a legacy
+     * `dietFilters` array) falls back to the migration, then to defaults.
      */
     function migrateLegacyFilters(): void {
       let raw: string | null = null
@@ -180,7 +187,13 @@ export const useUiStore = defineStore(
         return // storage unavailable: nothing to migrate
       }
       const migrated = migrateLegacyUiFilters(raw)
-      if (migrated) quickFilters.value = migrated
+      if (migrated) {
+        quickFilters.value = migrated
+        return
+      }
+      const normalized = normalizeQuickFilters(quickFilters.value)
+      if (normalized) quickFilters.value = normalized
+      else quickFilters.value = defaultQuickFilters()
     }
 
     /**
