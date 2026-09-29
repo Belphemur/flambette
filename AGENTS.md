@@ -84,6 +84,20 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   `containerContribution` + `formatContainerQuantity`; linear/seasoning
   via `scaleQuantity`). NEVER invent a quantity: no line-item match means
   no chip. Step/recipe prose stays verbatim.
+- **Auto-Plan (ADR-0024)**: the plan generator is `src/lib/packPlanner.ts` —
+  a PURE lib (no Vue/Pinia/fetch) over the committed
+  `public/data/pack_index.json` footprint. Deterministic greedy packing,
+  score = marginal whole-package cost (`Σ ceil(container total)`, containers
+  per ADR-0017) `+ 0.25·(1−rating)`; seed = highest rating (ties → lowest
+  id); staples in the index's `pantryStaples` are present-but-free. Category
+  / diet / already-planned exclusions are resolved OUTSIDE the lib by
+  `useAutoPlan` into `excludeIds`, and ratings come from
+  `builder_data.variant_meta` (the index carries no recipe metadata — same
+  rule as the pack index bullet in Generated data). UI lives in a Plan-tab
+  dialog: confirm before replacing a hand-curated plan, undo toast restores
+  the exact previous entries. e2e pins the default 4-pack
+  `[4908, 6185, 6729, 12069]` — any catalog or scoring change breaks those
+  pins loudly.
 - **Nutrition**: `meta.calories`/`sodium_mg` are PER-SERVING — never scale
   them by servings; only totals scale.
 - **Share/rooms**: `?p=` is the one-time gzip+base64url export (v1 bare

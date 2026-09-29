@@ -1,7 +1,8 @@
 # ADR-0024: Auto-Plan — generating a meal plan from the frozen catalog
 
-**Status:** Accepted (2026-09-29) — index generator landed, planner itself
-still to build.
+**Status:** Shipped (2026-09-29) — planner `src/lib/packPlanner.ts`, wired
+through `src/composables/useAutoPlan.ts` + the Plan tab. Known deviation
+recorded in **Shipment notes** below.
 **Extends:** ADR-0003 (derived grocery merge keys), ADR-0017 (container
 units), ADR-0018 (diet rules), ADR-0022 (measured amounts). No catalog data
 changes.
@@ -107,3 +108,35 @@ essentially free at first paint.
   time `containers.ts` changes without the Python being updated.
 - ADR-0017's container model stops being a grocery-list detail and becomes
   load-bearing for planning. Changing `CONTAINER_NOUNS` now changes plans.
+
+## Shipment notes (phase 19)
+
+Deviations from the original sketch, each justified:
+
+- **No `category` field in the request.** The committed index carries no
+  category (it deliberately duplicates no builder_data metadata), so the
+  planner takes `excludeIds` only; `useAutoPlan` resolves the category
+  constraint, active diet chips (ADR-0018) and already-planned meals into
+  that set. The brief's fallback branch ("caller assembles the eligible id
+  set from builder_data") is what shipped.
+- **`ratings` ride on the request.** Same reason: the index has no recipe
+  metadata, so `PackPlanRequest.ratings` (Map variant id → rating) is
+  injected by the caller from `builder_data.variant_meta`.
+- **Measured packages differ from the prototype table.** The 0.25-vs-4.04
+  numbers above were measured with a different notion of "package" than the
+  shipped `Σ ceil(container total)` metric (the prototype merged the same
+  container across ingredients). On the shipped metric, measured live:
+  random 4-meal plan ≈ 19.1 packages, greedy waste-first ≈ 8, single-recipe
+  baseline ≈ 4.85/package-per-meal — a ~58 % package reduction, not the
+  prototype's -94 %. The greedy algorithm and scoring formula are unchanged;
+  only the table's unit definition was wrong.
+- **The relay gained an IP-capture fix** (peer IP is read from `ws.data` set
+  at upgrade instead of `Server.requestIP(ws)`, which throws on a WebSocket
+  in Bun 1.4 and crashed the relay on every create/join). Found while
+  wiring the room-sync e2e; see commit `phase19: fix relay crash`.
+- **Toast actions take an optional `testId`** (`stores/ui.ts`) so the undo
+  affordance can carry `data-test="auto-plan-undo"` without changing the
+  generic `toast-action-primary/secondary` contract.
+
+E2E pins (fresh profile, no diet chips, any protein): seed + 3 picks →
+`[4908, 6185, 6729, 12069]` (`e2e/auto-plan.spec.ts`).
