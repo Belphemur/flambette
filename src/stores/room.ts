@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
+import { describeRelayError } from '../lib/relayErrors'
 import { useCustomIngredientsStore, type CustomIngredient } from './customIngredients'
 import { usePlanStore, type CookedEntry } from './plan'
 import { useGroceryStore } from './grocery'
@@ -29,6 +30,14 @@ interface SharedState {
 const PUSH_DEBOUNCE_MS = 300
 const RECONNECT_MIN_MS = 1000
 const RECONNECT_MAX_MS = 30_000
+/**
+ * Application-level keepalive (ADR-0026). The relay closes a room after
+ * 1h with no keepalive and no state activity, and tells its peers
+ * `room_expired`. 60s is a wide margin on a 1h window while costing one
+ * tiny frame a minute; it is NOT throttled server-side, so a long-lived
+ * room can never spend its create/join budget on liveness.
+ */
+const KEEPALIVE_MS = 60_000
 /** Re-rolls of a taken three-word code before falling back to a relay-minted one. */
 const CODE_REROLL_LIMIT = 3
 
@@ -56,11 +65,21 @@ export const useRoomStore = defineStore('room', () => {
   let reconnectAttempts = 0
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let pushTimer: ReturnType<typeof setTimeout> | null = null
+  let keepaliveTimer: ReturnType<typeof setInterval> | null = null
   /** True while we're writing a remote snapshot into the local stores. */
   let applyingRemote = false
   /** The three-word code we asked the relay to create with (ADR-0021). */
   let wantedCode: string | null = null
   let codeRerolls = 0
+  /**
+   * Set when the relay told us the room is gone for good (`room_expired`,
+   * `not_found`, or an unknown error). The code is KEPT — the header chip
+   * and the household toast both read it (App.vue) — but every reconnect
+   * path is disabled: re-joining would join-or-create a brand-new EMPTY
+   * room and look like silent household data loss. A deliberate
+   * create/join/resume clears it.
+   */
+  let roomGone = false
 
   const inRoom = computed(() => code.value !== null)
 
@@ -153,6 +172,28 @@ export const useRoomStore = defineStore('room', () => {
     { deep: true, flush: 'sync' },
   )
 
+  /* ---------- keepalive (ADR-0026) ---------- */
+
+  /** One interval per live socket; stopped on every end path in cleanupSocket. */
+  function startKeepalive() {
+    if (keepaliveTimer) clearInterval(keepaliveTimer)
+    keepaliveTimer = setInterval(() => {
+      if (status.value !== 'live' || !ws || ws.readyState !== WebSocket.OPEN) return
+      try {
+        ws.send(JSON.stringify({ type: 'keepalive' }))
+      } catch {
+        // Socket is on its way out; onclose drives the reconnect.
+        stopKeepalive()
+      }
+    }, KEEPALIVE_MS)
+  }
+
+  function stopKeepalive() {
+    if (!keepaliveTimer) return
+    clearInterval(keepaliveTimer)
+    keepaliveTimer = null
+  }
+
   /* ---------- connection ---------- */
 
   function handleMessage(msg: Record<string, unknown>) {
@@ -162,7 +203,11 @@ export const useRoomStore = defineStore('room', () => {
         if (code.value) sessionStorage.setItem(ROOM_CODE_KEY, code.value)
         status.value = 'live'
         reconnectAttempts = 0
-        // Seed the room with our current state.
+        startKeepalive()
+        // Seed the room with our current state. Also reached from the
+        // JOIN path: a join for a code the relay does not know yet
+        // answers `created` (join-or-create, ADR-0026), so the first
+        // client to arrive establishes the room and seeds it itself.
         localRev = maxSeenRev + 1
         ws?.send(JSON.stringify({ type: 'state', rev: localRev, state: snapshot() }))
         break
@@ -170,6 +215,7 @@ export const useRoomStore = defineStore('room', () => {
       case 'joined': {
         status.value = 'live'
         reconnectAttempts = 0
+        startKeepalive()
         if (msg.state != null) {
           const rev = typeof msg.rev === 'number' ? msg.rev : localRev + 1
           if (rev > localRev) {
@@ -192,12 +238,7 @@ export const useRoomStore = defineStore('room', () => {
         break
       }
       case 'error': {
-        if (msg.code === 'not_found') {
-          error.value = 'Room not found — it may have expired'
-          status.value = 'error'
-          sessionStorage.removeItem(ROOM_CODE_KEY)
-          cleanupSocket()
-        } else if (msg.code === 'code_taken' && ws && wantedCode !== null) {
+        if (msg.code === 'code_taken' && ws && wantedCode !== null) {
           // The rolled code is live on the relay already: re-roll (a
           // handful of times), then let the relay mint one. Collisions are
           // tolerated by design — ADR-0021.
@@ -210,13 +251,28 @@ export const useRoomStore = defineStore('room', () => {
             ws.send(JSON.stringify({ type: 'create' }))
           }
         } else {
-          // Unknown error (rate_limited, banned code shape, ...): surface it
-          // instead of spinning in 'connecting' forever. A CI relay under a
-          // throttle hung every room spec exactly this way — the chip sat at
-          // "◌ Connecting" for the full timeout with nothing in the logs.
-          error.value = `Room error — ${String(msg.code ?? 'unknown')}`
-          status.value = 'error'
-          cleanupSocket()
+          // Every other relay error, including `room_expired` (ADR-0026)
+          // and `not_in_room`. The decision is pure + unit-tested in
+          // src/lib/relayErrors.ts; the store only applies it.
+          const outcome = describeRelayError(msg.code)
+          if (outcome.retry === false) {
+            // The room is gone for good: drop the stored code and stop.
+            // Retrying would join-or-create a brand-new EMPTY room and
+            // look like silent data loss to the household.
+            if (outcome.message) error.value = outcome.message
+            status.value = 'error'
+            roomGone = true
+            sessionStorage.removeItem(ROOM_CODE_KEY)
+            cleanupSocket()
+          } else if (code.value) {
+            // Transient (rate_limited, or a keepalive that raced a room
+            // teardown): stay in the backoff loop and re-join by code.
+            scheduleReconnect(code.value)
+          } else {
+            error.value = outcome.message ?? 'Room error'
+            status.value = 'error'
+            cleanupSocket()
+          }
         }
         break
       }
@@ -224,6 +280,9 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   function connect(role: 'create' | 'join', joinCode?: string) {
+    // A deliberate connect clears the "room is gone" latch — including
+    // the join-or-create path, where re-joining re-establishes the room.
+    roomGone = false
     cleanupSocket()
     status.value = 'connecting'
     error.value = null
@@ -248,6 +307,8 @@ export const useRoomStore = defineStore('room', () => {
     socket.onclose = () => {
       if (ws !== socket) return // superseded by a newer connection
       ws = null
+      stopKeepalive()
+      if (roomGone) return // the room is gone: no reconnect loop
       if (!code.value) {
         // Room never established (initial connect dropped / join rejected).
         status.value = 'error'
@@ -261,7 +322,7 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   function scheduleReconnect(joinCode: string) {
-    if (!code.value) return
+    if (!code.value || roomGone) return
     status.value = 'connecting'
     const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_MIN_MS * 2 ** reconnectAttempts)
     reconnectAttempts++
@@ -272,6 +333,9 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   function cleanupSocket() {
+    // Keepalive first: a leaked interval would keep sending into a dead
+    // socket forever, and would keep a room alive that nobody is in.
+    stopKeepalive()
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
       reconnectTimer = null
@@ -339,6 +403,7 @@ export const useRoomStore = defineStore('room', () => {
     error.value = null
     reconnectAttempts = 0
     wantedCode = null
+    roomGone = false
     sessionStorage.removeItem(ROOM_CODE_KEY)
     cleanupSocket()
   }
