@@ -78,9 +78,11 @@ function saveHouseholdRoom(joinNow: boolean) {
     ui.showToast('Room codes look like amber-falcon-lantern', { kind: 'error' })
     return
   }
-  // Capture before clearing: a freshly ROLLED code must be CREATED on the
-  // relay — joining it answers not_found, the room exists nowhere (qodo
-  // 4128519644). A typed code keeps join-first: someone else's live room.
+  // Capture before clearing: a freshly ROLLED code is CREATED on the
+  // relay, not joined. Since ADR-0026 a join would establish the room
+  // too — but it would also silently ADOPT an existing room if the
+  // rolled code collided with a live one, whereas `create` answers
+  // `code_taken` and we re-roll (qodo 4128519644).
   const isNewCode = rolledNewCode.value
   rolledNewCode.value = false
   ui.setHouseholdRoom(code)
