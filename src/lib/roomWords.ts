@@ -79,12 +79,31 @@ export function formatRoomCode(words: readonly string[]): string {
 }
 
 /**
- * Roll a fresh code. Uses `crypto.getRandomValues` when available so the
- * words are not correlated with anything observable; `Math.random` is a
- * perfectly fine fallback (the code is a join key, not a secret).
+ * Uniform random index in [0, bound) — crypto.getRandomValues with
+ * rejection sampling (no modulo bias), Math.random only as a fallback
+ * for environments without it. The comment used to claim crypto while
+ * calling Math.random (qodo 4128519648).
+ */
+function randomIndex(bound: number): number {
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const limit = Math.floor(0x100000000 / bound) * bound
+    const buf = new Uint32Array(1)
+    do {
+      crypto.getRandomValues(buf)
+    } while (buf[0] >= limit)
+    return buf[0] % bound
+  }
+  return Math.floor(Math.random() * bound)
+}
+
+/**
+ * Roll a fresh code. Uses `crypto.getRandomValues` (via randomIndex) so
+ * the words are not correlated with anything observable; `Math.random`
+ * is a fallback (the code is a join key, not a secret — enumeration is
+ * mitigated at the relay by create/join throttling).
  */
 export function generateRoomCode(): string {
-  const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)]
+  const pick = <T>(list: readonly T[]): T => list[randomIndex(list.length)]
   return formatRoomCode(ROOM_WORD_LISTS.map(pick))
 }
 

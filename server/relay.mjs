@@ -13,9 +13,23 @@
  * Run: `bun server/relay.mjs` (listens on :8081, override with PORT env).
  */
 
+import { randomInt } from 'node:crypto'
+
 const PORT = Number(process.env.PORT ?? 8081)
 const IDLE_TTL_MS = 12 * 60 * 60 * 1000 // rooms expire after 12h idle
 const HEARTBEAT_MS = 30_000
+
+/**
+ * Brute-force throttle (qodo 4128519648): create/join attempts are
+ * limited per socket AND per IP — an enumerated or guessed-code flood
+ * burns the budget within one window and gets `rate_limited`. Applied
+ * ONLY to create/join: ordinary state fan-out between joined peers is
+ * never throttled. 30/min/IP still lets a household re-join freely
+ * (and the e2e suite run its room scenarios) while capping blind
+ * enumeration of the 262k word-code space at ~43k codes/day.
+ */
+const ATTEMPT_LIMIT = Number(process.env.RELAY_ATTEMPT_LIMIT ?? 30)
+const ATTEMPT_WINDOW_MS = 60_000
 
 /**
  * Room codes have two accepted shapes (ADR-0021):
@@ -54,10 +68,41 @@ const sockets = new Set()
 /** Monotonic peer id for attribution on fan-out (informational only). */
 let nextPeerId = 0
 
+/** key ("sock:<peerId>" | "ip:<addr>") -> { start, count } attempt budget. */
+const attemptBuckets = new Map()
+
+/**
+ * One create/join attempt against BOTH the per-socket and per-IP
+ * budgets. True when the attempt may proceed.
+ */
+function allowAttempt(ws) {
+  const now = Date.now()
+  const ip = server?.requestIP?.(ws)?.address ?? 'unknown'
+  for (const key of [`sock:${ws.data.peerId}`, `ip:${ip}`]) {
+    const bucket = attemptBuckets.get(key)
+    if (!bucket || now - bucket.start > ATTEMPT_WINDOW_MS) {
+      attemptBuckets.set(key, { start: now, count: 1 })
+    } else if (bucket.count >= ATTEMPT_LIMIT) {
+      return false
+    } else {
+      bucket.count += 1
+    }
+  }
+  // Occasional prune so the map cannot grow without bound.
+  if (attemptBuckets.size > 4096) {
+    for (const [key, bucket] of attemptBuckets) {
+      if (now - bucket.start > ATTEMPT_WINDOW_MS) attemptBuckets.delete(key)
+    }
+  }
+  return true
+}
+
 function makeCode() {
+  // crypto.randomInt, not Math.random (qodo 4128519648): uniform and
+  // unpredictable — a comment elsewhere already claimed this.
   let code = ''
   for (let i = 0; i < CODE_LENGTH; i++) {
-    code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]
+    code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]
   }
   return code
 }
@@ -124,6 +169,10 @@ try {
 
         switch (msg.type) {
           case 'create': {
+            if (!allowAttempt(ws)) {
+              send(ws, { type: 'error', code: 'rate_limited' })
+              return
+            }
             // ADR-0021: the client rolls the three-word code itself so it
             // can show the user what to share. An already-taken code is
             // refused so the client can re-roll rather than silently
@@ -145,6 +194,10 @@ try {
           }
 
           case 'join': {
+            if (!allowAttempt(ws)) {
+              send(ws, { type: 'error', code: 'rate_limited' })
+              return
+            }
             const code = normalizeCode(msg.code)
             const room = code ? rooms.get(code) : undefined
             if (!room) {
