@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { DIET_IDS, type DietId } from '../lib/dietFilter'
+import { isRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { clampSeconds, isStepTimer, type StepTimer } from '../lib/stepTimer'
 
 /** Bottom-nav entries, in display order. `to` is the route path. */
@@ -163,12 +164,17 @@ export const useUiStore = defineStore(
     }
 
     /**
-     * Persist (or clear) the household room code. Normalized to upper
-     * case; anything that is not a plausible code clears the setting.
+     * Persist (or clear) the household room code (ADR-0021).
+     *
+     * Input is normalized to canonical form — three hyphenated lowercase
+     * words (`amber-falcon-lantern`) or a legacy 4–12 char uppercase
+     * alphanumeric code, both still accepted (ADR-0019 households).
+     * Anything else clears the setting rather than storing a code that
+     * can never join.
      */
     function setHouseholdRoom(code: string) {
-      const cleaned = code.trim().toUpperCase()
-      householdRoom.value = /^[A-Z0-9]{4,12}$/.test(cleaned) ? cleaned : ''
+      const normalized = normalizeRoomCode(code)
+      householdRoom.value = isRoomCode(normalized) ? normalized : ''
     }
 
     /** End the current toast (if any) and fire its onDismiss exactly once. */

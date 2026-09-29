@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { applyBackup, backupFileName, buildBackupZip } from '../lib/backup'
+import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 
@@ -23,16 +24,22 @@ const room = useRoomStore()
 const roomInput = ref(ui.householdRoom)
 
 const householdCode = computed(() => ui.householdRoom)
-const canSaveRoom = computed(() => /^[A-Za-z0-9]{4,12}$/.test(roomInput.value.trim()))
+/** Both shapes normalize (ADR-0021): three words, or a legacy code. */
+const canSaveRoom = computed(() => normalizeRoomCode(roomInput.value) !== '')
 /** The live room differs from the saved one, so adopting it is meaningful. */
 const adoptableRoom = computed(() =>
   room.inRoom && room.code && room.code !== ui.householdRoom ? room.code : null,
 )
 
+/** Roll a fresh three-word code into the field (ADR-0021). */
+function newRoomCode() {
+  roomInput.value = generateRoomCode()
+}
+
 function saveHouseholdRoom(joinNow: boolean) {
-  const code = roomInput.value.trim().toUpperCase()
-  if (!canSaveRoom.value) {
-    ui.showToast('Room codes are 4–12 letters or digits', { kind: 'error' })
+  const code = normalizeRoomCode(roomInput.value)
+  if (!code) {
+    ui.showToast('Room codes look like amber-falcon-lantern', { kind: 'error' })
     return
   }
   ui.setHouseholdRoom(code)
@@ -146,11 +153,11 @@ function cancelBackupImport(): void {
           v-model="roomInput"
           type="text"
           inputmode="text"
-          maxlength="12"
-          placeholder="Room code"
+          maxlength="40"
+          placeholder="amber-falcon-lantern"
           aria-label="Household room code"
           data-test="household-room-input"
-          class="h-11 min-w-0 flex-1 rounded-xl border bg-white px-3 text-sm uppercase outline-none focus:border-primary dark:border-stone-700 dark:bg-stone-900"
+          class="h-11 min-w-0 flex-1 rounded-xl border bg-white px-3 text-sm outline-none focus:border-primary dark:border-stone-700 dark:bg-stone-900"
         />
         <button
           class="h-11 rounded-xl bg-primary px-3 text-sm font-semibold text-white active:bg-primary-dark disabled:opacity-50"
@@ -172,6 +179,14 @@ function cancelBackupImport(): void {
         </button>
       </div>
       <div class="flex flex-wrap gap-2">
+        <button
+          class="h-9 rounded-lg border px-3 text-xs font-medium dark:border-stone-700 dark:text-stone-300"
+          data-test="household-room-new"
+          aria-label="Generate a new three-word room code"
+          @click="newRoomCode"
+        >
+          🎲 New code
+        </button>
         <button
           v-if="adoptableRoom"
           class="h-9 rounded-lg border px-3 text-xs font-medium dark:border-stone-700 dark:text-stone-300"

@@ -201,7 +201,7 @@ async function startLiveRoom(page: Page): Promise<string> {
   await page.getByTestId('start-room').click()
   const chip = page.getByTestId('room-chip')
   await expect(chip).toContainText('Live', { timeout: 15_000 })
-  return (await chip.getAttribute('title'))!.match(/Live room (\w+)/)![1]
+  return (await chip.getAttribute('title'))!.match(/Live room ([a-z0-9-]+)/)![1]
 }
 
 /** Simulate a fresh app start: same profile, new session (no room code). */
