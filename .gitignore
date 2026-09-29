@@ -6,9 +6,16 @@ dist/
 .DS_Store
 test-results/
 playwright-report/
+blob-report/
+
+# Vercel CLI: holds a live VERCEL_OIDC_TOKEN. Never commit.
+.vercel
+.env*.local
 
 # Raw scrape archives live outside the repo (~/workspace/mealime-media)
 raw_recipes/
 raw_images/
 scrape_recipes.py
 scrape_images.py
+.vercel
+.env*
