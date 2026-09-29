@@ -69,7 +69,25 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   default join target; the app auto-joins it after config load unless a
   session resume or `?room=` link already won. Room failures toast and
   never block the UI (retry next launch) — never `await` a room
-  operation on a render path.
+  operation on a render path. The auto-join is a JOIN, and a join
+  creates the room when the relay doesn't know the code (ADR-0026), so a
+  relay restart no longer strands the household.
+- **Room lifecycle (ADR-0026)**: `join` is join-or-create (first peer
+  ESTABLISHES the room, answered `created`; a known room answers
+  `joined`); `create` is unchanged and still the host path. A room whose
+  LAST peer leaves is deleted immediately (state included) — the peer
+  that returns re-joins, which re-creates it. The client sends
+  `{type:'keepalive'}` once a minute while live (one interval per
+  socket, cleared on every end path) and the relay closes a room after
+  1h of no keepalive AND no state activity (12h idle TTL kept as the
+  backstop), telling peers `room_expired`. The client treats
+  `room_expired`/`not_found` as TERMINAL (latched `roomGone`, no
+  reconnect) — re-joining would join-or-create an empty room and read as
+  silent household data loss; the pure retry decision lives in
+  `src/lib/relayErrors.ts`. Keepalive is NEVER throttled; only
+  create/join spend the throttle budget. The rules live in
+  `server/roomLifecycle.mjs` (mirrors `throttle.mjs`, unit-tested) —
+  keep the relay's `normalizeCode` in step with the client helper.
 - **Room codes are three words (ADR-0021)**: the accepted format is the
   UNION — `amber-falcon-lantern` (`WORD_ROOM_CODE_RE`) or a legacy
   `ZZ9ZZZ` (`LEGACY_ROOM_CODE_RE`) — and everything that touches a code
@@ -77,8 +95,8 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   in, canonical out; a PARTIAL word code is refused, never coerced).
   Codes are rolled CLIENT-side and the relay refuses a taken one with
   `code_taken` (the client re-rolls; collisions are tolerated by
-  design). The relay's `normalizeCode` mirrors the client helper — keep
-  them in step.
+  design). The relay's `normalizeCode` (in `server/roomLifecycle.mjs`)
+  mirrors the client helper — keep them in step.
 - **Share room = one tap to the clipboard (ADR-0023)**: use
   `useShareRoomLink()` (`src/composables/useShareRoomLink.ts`), never
   `navigator.share` (no Web Share on plain-HTTP LAN) and never a raw
