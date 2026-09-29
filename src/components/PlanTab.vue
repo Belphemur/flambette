@@ -2,6 +2,15 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useClipboard } from '@vueuse/core'
+import {
+  Check,
+  CircleDot,
+  Minus,
+  Plus,
+  Salad,
+  UtensilsCrossed,
+  X,
+} from 'lucide-vue-next'
 import { catalog } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
 import { MAX_MEALS, MIN_MEALS, type PackPlan } from '../lib/packPlanner'
@@ -162,6 +171,19 @@ async function generateAutoPlan() {
   }
 }
 
+/** Auto-Plan preview (WS6): the picked meals resolved to title + image so
+ *  the user SEES the pack before replacing a hand-curated plan. Same
+ *  catalog + image helpers the recipe cards use (offline, no new fetches). */
+const pendingMeals = computed(() => {
+  const ids = pendingPlan.value?.variantIds ?? []
+  const c = catalog.value
+  if (!c) return []
+  return ids.flatMap((id) => {
+    const meta = c.byId.get(id)
+    return meta ? [{ id, name: meta.name, image: meta.thumbnail_image_url, minutes: meta.cooking_minutes }] : []
+  })
+})
+
 /** Confirm step: replace the plan with the generated pack. */
 function confirmAutoPlan() {
   const result = pendingPlan.value
@@ -199,7 +221,7 @@ function confirmAutoPlan() {
 <template>
   <section class="space-y-3">
     <div v-if="meals.length === 0" class="py-16 text-center text-stone-400">
-      <p class="text-4xl">🍽️</p>
+      <UtensilsCrossed :size="40" class="mx-auto" aria-hidden="true" />
       <p class="mt-2 font-medium">Your meal plan is empty</p>
       <p class="mt-1 text-sm">Add recipes from the Recipes tab to build your week.</p>
       <div class="mt-4 flex items-center justify-center gap-2">
@@ -214,6 +236,7 @@ function confirmAutoPlan() {
           data-test="auto-plan-button"
           @click="openAutoPlan"
         >
+          <Salad :size="16" aria-hidden="true" class="mr-1 inline" />
           Auto-Plan
         </button>
       </div>
@@ -264,7 +287,7 @@ function confirmAutoPlan() {
               :aria-label="`Fewer servings of ${meal.meta.name}`"
               @click="plan.setServings(meal.meta.id, meal.servings - 1)"
             >
-              −
+              <Minus :size="16" aria-hidden="true" />
             </button>
             <span class="w-6 text-center text-xs font-semibold" aria-label="Servings">{{ meal.servings }}</span>
             <button
@@ -272,7 +295,7 @@ function confirmAutoPlan() {
               :aria-label="`More servings of ${meal.meta.name}`"
               @click="plan.setServings(meal.meta.id, meal.servings + 1)"
             >
-              +
+              <Plus :size="16" aria-hidden="true" />
             </button>
           </div>
           <button
@@ -281,14 +304,14 @@ function confirmAutoPlan() {
             data-test="mark-cooked"
             @click="plan.markCooked(meal.meta.id)"
           >
-            ✓
+            <Check :size="18" aria-hidden="true" />
           </button>
           <button
             class="flex size-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:text-rose-600"
             :aria-label="`Remove ${meal.meta.name} from plan`"
             @click="plan.removeFromPlan(meal.meta.id)"
           >
-            ✕
+            <X :size="18" aria-hidden="true" />
           </button>
         </li>
       </ul>
@@ -298,6 +321,7 @@ function confirmAutoPlan() {
         data-test="auto-plan-button"
         @click="openAutoPlan"
       >
+        <Salad :size="16" aria-hidden="true" class="mr-1 inline" />
         Auto-Plan
       </button>
 
@@ -342,7 +366,7 @@ function confirmAutoPlan() {
               aria-label="Close share sheet"
               @click="closeShareSheet"
             >
-              ✕
+              <X :size="18" aria-hidden="true" />
             </button>
           </div>
           <p class="text-xs dark:text-stone-400">
@@ -363,7 +387,7 @@ function confirmAutoPlan() {
               data-test="copy-share-link"
               @click="copyShareUrl"
             >
-              {{ copied ? '✓ Copied' : 'Copy one-time link' }}
+              {{ copied ? 'Copied' : 'Copy one-time link' }}
             </button>
             <button
               v-if="nativeShareSupported"
@@ -387,7 +411,7 @@ function confirmAutoPlan() {
             >
           </div>
           <p class="text-xs dark:text-stone-400">
-            Share your plan live: everyone sees plan and grocery changes instantly, both ways.
+            Share your plan live: everyone sees plan, grocery and recipe-filter changes instantly, both ways.
           </p>
           <label
             class="flex items-start gap-2.5 py-1"
@@ -402,7 +426,7 @@ function confirmAutoPlan() {
             />
             <span class="text-sm leading-tight">
               Share cooked history with room
-              <span class="block text-xs dark:text-stone-400">Off by default — opt in to sync your “cooked” log with everyone.</span>
+              <span class="block text-xs dark:text-stone-400">Off by default — opt in to sync your “cooked” log with everyone. Also in Settings → Household sync.</span>
             </span>
           </label>
           <template v-if="room.inRoom">
@@ -420,7 +444,7 @@ function confirmAutoPlan() {
                 data-test="copy-room-link"
                 @click="copyRoomLink"
               >
-                {{ copied ? '✓ Copied' : 'Copy room link' }}
+                {{ copied ? 'Copied' : 'Copy room link' }}
               </button>
               <button
                 class="h-11 rounded-xl border dark:border-stone-700 px-4 text-sm font-medium dark:text-stone-300 dark:hover:bg-stone-800"
@@ -438,7 +462,8 @@ function confirmAutoPlan() {
             :disabled="room.status === 'connecting'"
             @click="startLiveRoom"
           >
-            {{ room.status === 'connecting' ? 'Starting…' : '⏺ Start live room' }}
+            <CircleDot v-if="room.status !== 'connecting'" :size="16" aria-hidden="true" />
+            {{ room.status === 'connecting' ? 'Starting…' : 'Start live room' }}
           </button>
         </div>
 
@@ -468,7 +493,7 @@ function confirmAutoPlan() {
               aria-label="Close auto-plan"
               @click="closeAutoPlan"
             >
-              ✕
+              <X :size="18" aria-hidden="true" />
             </button>
           </div>
           <p class="text-xs dark:text-stone-400">
@@ -486,7 +511,7 @@ function confirmAutoPlan() {
                 data-test="auto-plan-count-minus"
                 @click="autoPlanCount = Math.max(MIN_MEALS, autoPlanCount - 1)"
               >
-                −
+                <Minus :size="18" aria-hidden="true" />
               </button>
               <input
                 id="auto-plan-count"
@@ -506,7 +531,7 @@ function confirmAutoPlan() {
                 data-test="auto-plan-count-plus"
                 @click="autoPlanCount = Math.min(MAX_MEALS, autoPlanCount + 1)"
               >
-                +
+                <Plus :size="18" aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -532,7 +557,7 @@ function confirmAutoPlan() {
             {{ autoPlanBusy ? 'Generating…' : pendingPlan ? 'Regenerate' : 'Generate' }}
           </button>
 
-          <div v-if="pendingPlan" class="ring-1 dark:ring-stone-700 rounded-xl p-3 space-y-2">
+          <div v-if="pendingPlan" class="ring-1 dark:ring-stone-700 rounded-xl p-3 space-y-2" data-test="auto-plan-preview">
             <p class="text-xs dark:text-stone-400">
               Found a {{ pendingPlan.variantIds.length }}-meal pack buying
               {{ pendingPlan.packagesBought }}
@@ -540,6 +565,26 @@ function confirmAutoPlan() {
               Replaces your current plan
               <template v-if="previousEntries.length > 0">({{ previousEntries.length }} meals)</template>.
             </p>
+            <ul class="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Meals in this auto-plan">
+              <li
+                v-for="meal in pendingMeals"
+                :key="meal.id"
+                class="overflow-hidden rounded-lg ring-1 dark:ring-stone-700"
+                :data-test="`auto-plan-meal-${meal.id}`"
+              >
+                <img
+                  :src="imageSrc(meal.image)"
+                  :alt="meal.name"
+                  loading="lazy"
+                  @error="onImgError"
+                  class="aspect-[4/3] w-full object-cover dark:bg-stone-800"
+                />
+                <p class="line-clamp-2 px-1.5 py-1 text-[11px] leading-tight font-medium" :title="meal.name">
+                  {{ meal.name }}
+                </p>
+                <p class="px-1.5 pb-1 text-[10px] dark:text-stone-400">{{ meal.minutes }} min</p>
+              </li>
+            </ul>
             <div class="flex gap-2">
               <button
                 class="h-10 flex-1 rounded-xl bg-primary text-sm font-semibold text-white active:bg-primary-dark"
