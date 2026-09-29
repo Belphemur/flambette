@@ -12,7 +12,11 @@ export default defineConfig({
   retries: 0,
   testTimeout: 60_000,
   workers: process.env.CI ? 2 : undefined,
-  reporter: process.env.CI ? [['html', { open: 'never' }]] : [['list']],
+  // CI runs sharded (--shard=N/T) so the blob reporter is required — each
+  // shard writes a blob the merge-gate job combines. Local runs keep list.
+  reporter: process.env.CI
+    ? [['blob']]
+    : [['list']],
   use: {
     baseURL: 'http://localhost:4173',
     trace: 'retain-on-failure',
@@ -32,8 +36,12 @@ export default defineConfig({
     },
     {
       // Live-room relay (zero-dep, Bun native WebSocket): the app talks to it
-      // through the /ws proxy.
-      command: 'bun server/relay.mjs',
+      // through the /ws proxy. The brute-force throttle is server-side state,
+      // keyed per IP — and every parallel Playwright worker shares ONE IP, so
+      // the 30/min default starves the suite (32 failures on main, v0.12.0
+      // CI). Tests are not the threat model: lift the cap for the spawned
+      // instance only (prod default 30 stands).
+      command: 'RELAY_ATTEMPT_LIMIT=100000 bun server/relay.mjs',
       url: 'http://localhost:8081',
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
