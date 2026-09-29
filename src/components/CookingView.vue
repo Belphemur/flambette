@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
+import { measuredChipsForLines, type MeasuredChip } from '../lib/measuredAmounts'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
 import {
   TIMER_PRESETS_MIN,
@@ -108,7 +109,32 @@ function close() {
   else void router.replace('/plan')
 }
 
-/* ---------- Per-step timers (ADR-0020) ----------
+/* ---------- Measured amounts under the step text (ADR-0022) ----------
+ *
+ * Step text is authored prose: when its own quantity cannot be parsed
+ * ("juice of ¾ lemon"), the MEASURED quantity lives in `line_items` and
+ * is surfaced as a subdued, collapsed-by-default chip — never invented.
+ * Chips are per detail line, in step order, scaled by the current factor
+ * with the SAME container/linear split the grocery list uses.
+ */
+const measuredOpen = ref(false)
+
+const visibleMeasured = computed(() =>
+  visibleSteps.value.map((vs) => ({
+    partner: vs.partner,
+    chips: doc.value ? measuredChipsForLines(doc.value, vs.step.details, factor.value) : [],
+  })),
+)
+
+function toggleMeasured() {
+  measuredOpen.value = !measuredOpen.value
+}
+
+function chipKey(index: number, chip: MeasuredChip) {
+  return `${index}:${chip.lineIndex}:${chip.label}`
+}
+
+/* ---------- Step timers (ADR-0020) ----------
  *
  * ONE timer per step VIEW (a "Meanwhile" pair is a single view and shares
  * one timer), keyed by the view leader's raw step index. State lives in the
@@ -352,6 +378,34 @@ function onTouchEnd(e: TouchEvent) {
               <span class="leading-relaxed">{{ d }}</span>
             </li>
           </ul>
+          <!-- Measured amounts (ADR-0022): only when an imprecise step line
+               names an ingredient whose measured quantity is known. -->
+          <div
+            v-if="visibleMeasured[i]?.chips.length"
+            class="mt-2 space-y-1 text-xs"
+            data-test="measured-amounts"
+          >
+            <button
+              class="flex items-center gap-1 rounded-lg px-2 py-1 font-medium dark:text-stone-400"
+              data-test="measured-toggle"
+              :aria-expanded="measuredOpen"
+              :aria-label="`${measuredOpen ? 'Hide' : 'Show'} measured ingredient amounts`"
+              @click="toggleMeasured"
+            >
+              <span aria-hidden="true">{{ measuredOpen ? '▾' : '▸' }}</span>
+              Ingredient amounts ({{ visibleMeasured[i]?.chips.length ?? 0 }})
+            </button>
+            <ul v-if="measuredOpen" class="space-y-1 pl-3">
+              <li
+                v-for="chip in visibleMeasured[i]?.chips ?? []"
+                :key="chipKey(i, chip)"
+                class="rounded-lg px-2 py-1 text-stone-500 dark:bg-stone-900 dark:text-stone-400"
+                data-test="measured-chip"
+              >
+                {{ chip.label }}
+              </li>
+            </ul>
+          </div>
         </template>
       </div>
     </div>
