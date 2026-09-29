@@ -232,7 +232,11 @@ test('room sync: remembered custom ingredients (customs) sync as household state
   await ctxB.close()
 })
 
-test('share-history toggle: OFF by default, ON streams cooked events to peers', async ({ browser }) => {
+// ADR-0032 flipped this default: cooked history is shared BY DEFAULT and the
+// toggle is a permanent opt-out. The case used to assert the old opt-in
+// contract ("OFF by default, ON streams"), so it is deliberately inverted
+// here: unchecked + not sharing, then checked + sharing.
+test('share-history toggle: ON by default, the opt-out keeps events off the wire', async ({ browser }) => {
   const ctxA = await browser.newContext()
   const a = await ctxA.newPage()
   await blockExternalRequests(a)
@@ -246,8 +250,10 @@ test('share-history toggle: OFF by default, ON streams cooked events to peers', 
   await a.getByRole('button', { name: 'Back' }).click()
   const roomUrl = await startLiveRoom(a)
 
-  // Default OFF: the toggle (still-open share sheet) is unchecked.
+  // Opt OUT before the room exists: unchecked, and a deliberate choice.
   const toggle = a.getByTestId('share-history-toggle')
+  await expect(toggle).toBeChecked() // ADR-0032: on by default
+  await toggle.click()
   await expect(toggle).not.toBeChecked()
   await a.getByRole('button', { name: 'Close share sheet' }).click()
   await expect(a.getByRole('dialog', { name: 'Share your meal plan' })).toHaveCount(0)
@@ -258,7 +264,7 @@ test('share-history toggle: OFF by default, ON streams cooked events to peers', 
   await b.goto(roomUrl)
   await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 10_000 })
 
-  // A cooks recipe 2 while sharing is OFF.
+  // A cooks recipe 2 while sharing is OFF (opted out).
   await gotoTab(a, 'Plan')
   await a.getByRole('button', { name: `Mark ${cooked} as cooked` }).click()
   await expect
@@ -272,7 +278,7 @@ test('share-history toggle: OFF by default, ON streams cooked events to peers', 
     )
     .toBe('[]') // OFF: never crosses the wire
 
-  // Flip the toggle ON (in the share sheet's room panel) → retroactive
+  // Flip the toggle back ON (in the share sheet's room panel) → retroactive
   // push within the debounced push window carries the history.
   await gotoTab(a, 'Plan')
   await a.getByRole('button', { name: 'Share', exact: true }).click()

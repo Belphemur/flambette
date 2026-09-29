@@ -278,6 +278,92 @@ describe('room store — revisions never restart (F4)', () => {
   })
 })
 
+describe('cooked history is household state by default (ADR-0032)', () => {
+  test('DEFAULT: the payload carries cookedHistory', async () => {
+    const plan = usePlanStore()
+    const ui = useUiStore()
+    expect(ui.shareCookedHistory).toBe(true) // the flipped default
+    const { socket } = await startRoom()
+    plan.replaceCookedHistory([{ variantId: 7, cookedAt: 1000 }])
+    await sleep(500) // debounce
+    const pushed = socket.frames('state').at(-1)!
+    expect((pushed.state as { cookedHistory?: unknown[] }).cookedHistory).toEqual([
+      { variantId: 7, cookedAt: 1000 },
+    ])
+  })
+
+  test('an explicit OPT-OUT keeps it off the wire, and a peer payload still merges in', async () => {
+    const plan = usePlanStore()
+    const ui = useUiStore()
+    const { socket } = await startRoom()
+    ui.shareCookedHistory = false
+    plan.replaceCookedHistory([{ variantId: 7, cookedAt: 1000 }])
+    await sleep(500)
+    const pushed = socket.frames('state').at(-1)!
+    // The key must be ABSENT, not empty: absence is what an older peer
+    // reads as "this device shares nothing".
+    expect('cookedHistory' in (pushed.state as object)).toBe(false)
+
+    // …and history still ARRIVES from a peer that shares (an opt-out is
+    // about sending, not about being cut off).
+    socket.receive({
+      type: 'state',
+      rev: 40,
+      state: {
+        plan: [],
+        customItems: [],
+        checked: {},
+        cookedHistory: [{ variantId: 9, cookedAt: 2000 }],
+      },
+    })
+    expect(plan.cookedHistory).toEqual([
+      { variantId: 9, cookedAt: 2000 },
+      { variantId: 7, cookedAt: 1000 },
+    ])
+  })
+
+  test('applying a peer history UNIONS it (a shorter peer never erases ours)', async () => {
+    const plan = usePlanStore()
+    const { socket } = await startRoom()
+    plan.replaceCookedHistory([
+      { variantId: 1, cookedAt: 10 },
+      { variantId: 2, cookedAt: 20 },
+      { variantId: 3, cookedAt: 30 },
+    ])
+    socket.receive({
+      type: 'state',
+      rev: 50,
+      state: {
+        plan: [],
+        customItems: [],
+        checked: {},
+        // A phone that has cooked less, plus one row we already have.
+        cookedHistory: [
+          { variantId: 3, cookedAt: 30 },
+          { variantId: 9, cookedAt: 90 },
+        ],
+      },
+    })
+    // Whole-state replace would have dropped 1 and 2; the union keeps them.
+    expect(plan.cookedHistory.map((h) => h.variantId).sort()).toEqual([1, 2, 3, 9])
+  })
+
+  test('flipping the opt-out OFF afterwards sends a retroactive push without history', async () => {
+    const plan = usePlanStore()
+    const ui = useUiStore()
+    const { socket } = await startRoom()
+    plan.replaceCookedHistory([{ variantId: 7, cookedAt: 1000 }])
+    await sleep(500)
+    const withHistory = socket.frames('state').at(-1)!
+    expect('cookedHistory' in (withHistory.state as object)).toBe(true)
+
+    ui.shareCookedHistory = false
+    await sleep(500)
+    const optedOut = socket.frames('state').at(-1)!
+    expect('cookedHistory' in (optedOut.state as object)).toBe(false)
+  })
+})
+
 describe('room store — quick filters are household state (ADR-0028)', () => {
   test('a payload WITH filters is applied, unknown members are repaired', async () => {
     const { socket } = await startRoom()

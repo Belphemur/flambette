@@ -9,11 +9,14 @@ import {
 } from './helpers'
 
 /**
- * Personal cooking history (ADR-0011): cookedHistory is written by
- * markCooked, shown on the recipe detail line and in the /history tab.
- * It is room-excluded by DEFAULT: the shareCookedHistory setting
- * (ADR-0011 addendum) is off, so the payload carries no cookedHistory
- * unless the sender opted in.
+ * Cooking history (ADR-0011, shared with the room BY DEFAULT since
+ * ADR-0032): cookedHistory is written by markCooked, shown on the recipe
+ * detail line and in the /history tab, and travels in the room payload
+ * unless the SENDER has opted out via shareCookedHistory.
+ *
+ * The "room-excluded by default" case below is the deliberate update of a
+ * spec that encoded the old policy: it now opts OUT on the sender and
+ * proves the payload carries no cookedHistory.
  */
 
 async function planAndCook(page: Page): Promise<string> {
@@ -92,7 +95,7 @@ test('empty state before anything is cooked', async ({ page }) => {
   await expect(page.getByTestId('history-row')).toHaveCount(0)
 })
 
-test('cooked history is personal: B in the room does not see A cooked meals', async ({ browser }) => {
+test('cooked history is shared by default: B in the room sees A cooked meals', async ({ browser }) => {
   const ctxA = await browser.newContext()
   const a = await ctxA.newPage()
   await blockExternalRequests(a)
@@ -110,7 +113,41 @@ test('cooked history is personal: B in the room does not see A cooked meals', as
   await b.goto(roomUrl)
   await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 10_000 })
 
-  // B got the SHARED plan state but NOT the personal cooked history.
+  // B got the SHARED plan state AND the cooked history (ADR-0032).
+  await b.goto('/history')
+  await expect(b.getByTestId('history-row').first()).toContainText(name, { timeout: 15_000 })
+  const stored = await b.evaluate(() =>
+    JSON.parse(localStorage.getItem('mealime-planner:v1:plan') ?? '{}'),
+  )
+  expect((stored.cookedHistory ?? []).length).toBeGreaterThan(0)
+
+  // Sanity: A still sees the row in their own history.
+  await a.goto('/history')
+  await expect(a.getByTestId('history-row').first()).toContainText(name)
+})
+
+test('an explicit opt-out keeps cooked history off the wire (ADR-0032)', async ({ browser }) => {
+  const ctxA = await browser.newContext()
+  const a = await ctxA.newPage()
+  await blockExternalRequests(a)
+  const name = await planAndCook(a)
+  // Keep a (shared) plan entry so the Plan tab shows the Share button.
+  await a.goto('/')
+  await openRecipeDetail(a, name)
+  await a.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
+
+  // The opt-out is a per-device choice: take it BEFORE joining the room.
+  await a.goto('/settings')
+  await a.getByTestId('share-cooked-history').uncheck()
+  const roomUrl = await startLiveRoom(a)
+
+  const ctxB = await browser.newContext()
+  const b = await ctxB.newPage()
+  await blockExternalRequests(b)
+  await b.goto(roomUrl)
+  await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 10_000 })
+
+  // The shared plan arrived; the opted-out history did NOT.
   await b.goto('/history')
   await expect(b.getByTestId('history-empty')).toContainText('Nothing cooked yet')
   await expect(b.getByTestId('history-row')).toHaveCount(0)
@@ -119,7 +156,7 @@ test('cooked history is personal: B in the room does not see A cooked meals', as
   )
   expect(stored.cookedHistory ?? []).toEqual([])
 
-  // Sanity: A still sees the row in their own history.
+  // A's own history is untouched by the choice.
   await a.goto('/history')
   await expect(a.getByTestId('history-row').first()).toContainText(name)
 })

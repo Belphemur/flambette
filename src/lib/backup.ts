@@ -199,11 +199,15 @@ export const STORE_SLICES: SliceDef<any>[] = [
       useCustomIngredientsStore().replaceAll(value as CustomIngredient[])
     },
   },
-  /* Persisted ui prefs (history-sharing opt-in + quick filters + household
+  /* Persisted ui prefs (history-sharing opt-OUT + quick filters + household
      room + theme + step timers). ADR-0027 unified the Recipes-tab filters
      into one `quickFilters` object; the legacy `dietFilters` array is still
      EMITTED (mirrored) so a backup restores the diet chips on an install
-     that predates the unified model, and still ACCEPTED on import. */
+     that predates the unified model, and still ACCEPTED on import.
+     ADR-0032 flipped `shareCookedHistory` to on-by-default: the member is
+     the device's opt-OUT choice, and a restore that carries it counts as
+     explicit (it also marks the one-time default migration as done, so
+     importing an old backup is not re-flipped on the next launch). */
   {
     file: 'settings.json',
     label: 'settings (cooked-history room sharing + quick filters + household room + step timers + theme)',

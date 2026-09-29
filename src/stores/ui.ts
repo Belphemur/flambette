@@ -76,9 +76,27 @@ export const useUiStore = defineStore(
   () => {
     /** Cooking step index, keyed by variant id (survives tab switches). */
     const cookingStepIndex = ref<Record<number, number>>({})
-    /** Share personal cooked history with the live room (off by default —
-     *  history is personal data; see ADR-0011 addendum). Part of backups. */
-    const shareCookedHistory = ref(false)
+    /**
+     * Share cooked history with the live room. ON by default
+     * (ADR-0032 supersedes ADR-0011's opt-in): a household wants ONE
+     * shared cooking log. The opt-out is real and permanent — a user who
+     * turns it off keeps it off. Part of backups.
+     */
+    const shareCookedHistory = ref(true)
+    /**
+     * "The history-sharing default has already been applied to this
+     * install" (ADR-0032).
+     *
+     * `shareCookedHistory` is persisted, so an install that has been
+     * running the pre-ADR-0032 build carries a `false` that is
+     * INDISTINGUISHABLE from "the user never touched it" — the boolean
+     * alone cannot say which. This flag is the honest fix: on the first
+     * launch after the upgrade the stored value is treated as unset and
+     * the new default is adopted, and the flag is written immediately.
+     * From then on any toggle the user makes is an explicit choice that
+     * no later default change may override.
+     */
+    const historyShareDefaultMigrated = ref(false)
     /** Auto-Plan settings (ADR-0027): last ruleset choice + mode, and the
      *  rotating seed generation (incremented on every successful
      *  generate). All persisted + carried in backups. */
@@ -182,7 +200,13 @@ export const useUiStore = defineStore(
       autoPlanMode?: unknown
       autoPlanGeneration?: unknown
     }): void {
-      if (typeof prefs.shareCookedHistory === 'boolean') shareCookedHistory.value = prefs.shareCookedHistory
+      if (typeof prefs.shareCookedHistory === 'boolean') {
+        shareCookedHistory.value = prefs.shareCookedHistory
+        // A restore that carries the value is an EXPLICIT choice (the
+        // dialog says settings are overwritten): the one-time default
+        // migration must not re-apply over it on the next launch.
+        historyShareDefaultMigrated.value = true
+      }
       if (
         typeof prefs.autoPlanRuleset === 'string' &&
         (AUTO_PLAN_RULESETS as readonly string[]).includes(prefs.autoPlanRuleset)
@@ -235,6 +259,41 @@ export const useUiStore = defineStore(
       const normalized = normalizeQuickFilters(quickFilters.value)
       if (normalized) quickFilters.value = normalized
       else quickFilters.value = defaultQuickFilters()
+    }
+
+    /**
+     * Apply ADR-0032's new default exactly once per install.
+     *
+     * Runs after persistence hydration. If the persisted blob predates
+     * ADR-0032 (no migration flag), its `shareCookedHistory` cannot be
+     * trusted to be a user decision — it is just the old default, written
+     * by the plugin before anyone looked at the setting — so the value is
+     * adopted from the new default (ON) and the flag is recorded. Any
+     * toggle AFTER this is an explicit choice and is never overridden.
+     *
+     * Trade-off, stated plainly: a user who had deliberately opted OUT is
+     * re-enabled once by this upgrade, and one tap turns it back off for
+     * good. The alternative (trusting the stored `false`) would leave
+     * every existing install permanently opted out, which is the exact
+     * outcome the owner ruled against.
+     */
+    function migrateHistoryShareDefault(): void {
+      if (historyShareDefaultMigrated.value) return
+      let legacy: unknown
+      try {
+        const raw = localStorage.getItem('mealime-planner:v1:ui')
+        if (raw) legacy = (JSON.parse(raw) as Record<string, unknown>).historyShareDefaultMigrated
+      } catch {
+        legacy = undefined // unreadable blob: treat as pre-migration
+      }
+      // A blob that already carries the flag means a previous launch of
+      // this build already ran the migration.
+      if (legacy === true) {
+        historyShareDefaultMigrated.value = true
+        return
+      }
+      shareCookedHistory.value = true
+      historyShareDefaultMigrated.value = true
     }
 
     /**
@@ -303,6 +362,7 @@ export const useUiStore = defineStore(
     return {
       cookingStepIndex,
       shareCookedHistory,
+      historyShareDefaultMigrated,
       quickFilters,
       householdRoom,
       stepTimers,
@@ -321,19 +381,23 @@ export const useUiStore = defineStore(
       clearStepTimer,
       applySettings,
       migrateLegacyFilters,
+      migrateHistoryShareDefault,
       setHouseholdRoom,
       showToast,
       dismissToast,
     }
   },
   {
-    // The quick filters (ADR-0027), the share/diet/room prefs and the step
+    // The quick filters (ADR-0027), the share/room prefs and the step
     // timers (ADR-0020, so a reload mid-cook resumes honestly) persist;
     // cookingStepIndex stays session-scoped.
     persist: {
       key: 'mealime-planner:v1:ui',
       pick: [
         'shareCookedHistory',
+        // Not a setting: the once-only marker for ADR-0032's default
+        // migration. Persisted so the migration cannot run twice.
+        'historyShareDefaultMigrated',
         'quickFilters',
         'householdRoom',
         'stepTimers',
@@ -343,9 +407,15 @@ export const useUiStore = defineStore(
       ],
       // Hydration has already run when this fires, so a v0.12 blob (which
       // has no `quickFilters` and therefore patched nothing) can still be
-      // migrated from its legacy `dietFilters` array.
+      // migrated from its legacy `dietFilters` array — and a pre-ADR-0032
+      // blob can still have the new history default applied to it.
       afterHydrate: (context) => {
-        ;(context.store as unknown as { migrateLegacyFilters: () => void }).migrateLegacyFilters()
+        const store = context.store as unknown as {
+          migrateLegacyFilters: () => void
+          migrateHistoryShareDefault: () => void
+        }
+        store.migrateLegacyFilters()
+        store.migrateHistoryShareDefault()
       },
     },
   },

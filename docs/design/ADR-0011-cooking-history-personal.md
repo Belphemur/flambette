@@ -2,6 +2,13 @@
 
 Date: 2026-09-28 · Status: Accepted
 
+> **Partially superseded (2026-09-29):** the **default** below is reversed by
+> [ADR-0032](ADR-0032-cooked-history-shared-by-default.md) — cooked history is
+> now shared BY DEFAULT and the setting is a permanent opt-out, with a one-time
+> migration and merge-on-apply. The decision *shape* in this record (one
+> append-only per-event list, aggregated per recipe in `src/lib/history.ts`,
+> excluded from grocery aggregation) still stands. The body is left unedited.
+
 ## Context
 
 Phase 7 added a personal `cookedHistory` to the plan store

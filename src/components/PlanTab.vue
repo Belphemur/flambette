@@ -498,18 +498,18 @@ function confirmAutoPlan() {
           </p>
           <label
             class="flex items-start gap-2.5 py-1"
-            title="Off by default — your cooked history stays personal unless you opt in"
+            title="On by default — turn it off to keep this device's cooked history private"
           >
             <input
               type="checkbox"
               data-test="share-history-toggle"
               class="mt-0.5 size-4 accent-[color:var(--color-primary,#16a34a)]"
-              :aria-label="`Share cooked history with room (${ui.shareCookedHistory ? 'on' : 'off, default'})`"
+              :aria-label="`Share cooked history with room (${ui.shareCookedHistory ? 'on, default' : 'off, opt-out'})`"
               v-model="ui.shareCookedHistory"
             />
             <span class="text-sm leading-tight">
               Share cooked history with room
-              <span class="block text-xs dark:text-stone-400">Off by default — opt in to sync your “cooked” log with everyone. Also in Settings → Household sync.</span>
+              <span class="block text-xs dark:text-stone-400">On by default — the room keeps one merged cooking log. Turn it off to keep this device's history private. Also in Settings → Household sync.</span>
             </span>
           </label>
           <template v-if="room.inRoom">

@@ -197,11 +197,6 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   non-empty, and there is ONE push writer — `schedulePush(immediate?)`,
   guarded by `applyingRemote`; preference edits pass `immediate` and skip
   the debounce, everything else keeps it.
-  `cookedHistory` is personal and must stay out of the room payload
-  UNLESS the sender opted in via the `shareCookedHistory` setting
-  (default off; ADR-0011 addendum) — then the payload may carry it and
-  peers apply it. The opt-in is surfaced in Settings → Household sync
-  (ADR-0028); do not flip the default without amending ADR-0011.
 - **Favourites + ratings (ADR-0031)**: the favourites store seeds from
   the user's own Mealime snapshot on FIRST RUN and is never re-seeded or
   cleared — never change that seeding (`seedFrom` only ADDS, so a peer
@@ -220,6 +215,17 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   (prior weight 1 vs the catalog's 10) and `favoriteIds` pay
   `FAVORITE_BONUS` (0.05) off a candidate's score — a weight only, never
   a command over waste.
+- **Cooked history (ADR-0032, supersedes ADR-0011's opt-in)**:
+  `cookedHistory` is HOUSEHOLD state by default: the payload carries it
+  unless the SENDER has opted out via `shareCookedHistory` (default ON,
+  and the opt-out is permanent — `ui.historyShareDefaultMigrated` is the
+  one-time default migration marker). Peers apply it with
+  `plan.mergeCookedHistory` (a UNION, never a replace: history is
+  append-only and every device pushes at once, so a replace would let
+  the last writer erase the other phones' cooks). A backup import is the
+  one exception and keeps `replaceCookedHistory`. The toggle is surfaced
+  in Settings → Household sync and the Plan tab's room sheet; changing
+  the default again needs a new ADR, not an edit to ADR-0032.
 - **Join reconciliation (ADR-0028)**: a `joined` that ADOPTED the
   room's snapshot does NOT push afterwards (the echo re-published a
   possibly stale snapshot at a higher rev and could freeze the household
@@ -269,7 +275,8 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   settings tab, diet rules, household room, step timers, measured
   amounts, three-word room codes, share-room link, room lifecycle,
   unified quick filters, filter sync + join reconciliation, the Lucide
-  icon stack, Auto-Plan preview, household favourites + ratings). Skim them before
+  icon stack, Auto-Plan preview, household favourites + ratings, cooked
+  history shared by default). Skim them before
   proposing changes; new lasting decisions get a new
   `ADR-NNNN-slug.md` (never rewrite an accepted one in place).
 

@@ -51,8 +51,11 @@ able to tell.
 A local edit that is queued for push is now withheld-proof: an inbound
 snapshot's **revision is still absorbed** (it is proof of ordering, and
 dropping it would make our next push reuse a rev the room has already
-passed) but its **content is not applied**. Our push then goes out at
-`maxSeenRev + 1` with our whole state and wins on its own merits.
+passed) but its **last-write-wins content is not applied**. Our push then
+goes out at `maxSeenRev + 1` with our whole state and wins on its own
+merits. **Append-only members are the exception** — an inbound
+`cookedHistory` is merged even inside the guard window, because refusing it
+would lose those cook events permanently (see ADR-0032 rule 4).
 
 ### 3. Adoption ends a join; a joiner does not echo
 
@@ -94,16 +97,18 @@ Together, 2–4 give the reconciliation contract:
 > dust settles every device holds the same state, and the newest fact
 > anyone can prove wins.
 
-### 5. Cooked history stays personal, and the opt-in is discoverable
+### 5. Cooked history is shared by default (moved to ADR-0032)
 
-`cookedHistory` is still excluded from the payload unless the sender
-opted in via `shareCookedHistory` (ADR-0011 addendum), and **the
-default was deliberately not flipped** — see the report and the PR body
-for the policy question raised for the owner. What changed is
-discoverability: the opt-in is now a labelled toggle in the Settings
-household card (with the reason it is off by default), pointed at from
-the History tab, instead of a checkbox buried in the Plan tab's share
-sheet.
+At the time this ADR was written, `cookedHistory` was excluded from the
+payload unless the sender opted in, and flipping that default was held back as
+a policy question for the owner. **The owner has since ruled the other way:
+history is shared by default** — see
+[ADR-0032](ADR-0032-cooked-history-shared-by-default.md), which supersedes
+ADR-0011's default, adds the one-time migration marker, and makes the
+room-apply path a MERGE rather than a whole-state replace (with every device
+pushing at once, a replace would let the last writer erase the other phones'
+cooks). The setting survives as a permanent opt-out, surfaced in the Settings
+household card and the Plan tab's room sheet.
 
 ## Consequences
 

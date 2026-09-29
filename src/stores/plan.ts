@@ -31,7 +31,9 @@ export const usePlanStore = defineStore(
     const plan = ref<PlanEntry[]>([])
     /** Free-form extra grocery items (not tied to any recipe). */
     const customItems = ref<string[]>([])
-    /** Personal cooked-meal history — NOT part of the shared room state. */
+    /** Cooked history (ADR-0032): shared with the room by default, still
+     *  opt-out per device. Part of the shared room state when the user
+     *  has the sharing on. */
     const cookedHistory = ref<CookedEntry[]>([])
     /** variantId -> nameKey-normalized ingredient keys cleared from the
      *  grocery list for that meal. Stays until the meal is cooked or
@@ -143,6 +145,31 @@ export const usePlanStore = defineStore(
         .slice(0, COOKED_HISTORY_CAP)
     }
 
+    /**
+     * Union an inbound household history into ours (ADR-0032).
+     *
+     * History is append-only and there is no delete feature, so a
+     * peer's SHORTER list is never a statement that our rows should
+     * disappear — it only means that peer has cooked less. Since
+     * history now syncs by default, every device in a household pushes
+     * its own list at once, and the old whole-state replace would let
+     * whoever pushed last erase the other phones' cooks. Deduplicated on
+     * (variantId, cookedAt), newest first, same cap.
+     */
+    function mergeCookedHistory(rows: CookedEntry[]): void {
+      const seen = new Set<string>()
+      const merged: CookedEntry[] = []
+      for (const row of [...rows, ...cookedHistory.value]) {
+        if (!Number.isFinite(row.variantId) || !Number.isFinite(row.cookedAt)) continue
+        const key = `${row.variantId}@${row.cookedAt}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        merged.push({ variantId: row.variantId, cookedAt: row.cookedAt })
+      }
+      merged.sort((a, b) => b.cookedAt - a.cookedAt)
+      cookedHistory.value = merged.slice(0, COOKED_HISTORY_CAP)
+    }
+
     /** Replace the whole plan (used when importing a shared plan). */
     function replacePlan(entries: PlanEntry[], custom: string[] = []): void {
       plan.value = entries.map((e) => ({
@@ -167,6 +194,7 @@ export const usePlanStore = defineStore(
       restoreIngredients,
       setClearedIngredients,
       replaceCookedHistory,
+      mergeCookedHistory,
       markCooked,
       isCookedRecently,
       replacePlan,
