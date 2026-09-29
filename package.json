@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test:unit": "bun test src",
     "test:e2e": "playwright test",
+    "screenshots": "bun scripts/screenshots.mjs",
     "data:pack": "python3 scripts/build_pack_index.py",
     "data:verify": "bun run scripts/verify_pack_index_parity.ts"
   },

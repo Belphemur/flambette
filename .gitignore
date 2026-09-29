@@ -6,6 +6,10 @@ dist/
 .DS_Store
 test-results/
 playwright-report/
+blob-report/
+
+# Local output of `bun run screenshots` (PR visual-QA captures).
+screenshots/
 
 # Raw scrape archives live outside the repo (~/workspace/mealime-media)
 raw_recipes/

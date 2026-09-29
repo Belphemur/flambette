@@ -1,0 +1,5 @@
+# Cloudflare Pages SPA fallback (mirrors the nginx `try_files $uri $uri/
+# /index.html` in nginx.conf). Without this, a deep link like /plan or a
+# reload on /settings 404s on a static host, because no such file exists.
+# First match wins: existing static assets are served as-is.
+/*  /index.html  200
