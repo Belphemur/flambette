@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDark, useToggle } from '@vueuse/core'
 import { TABS, useUiStore } from './stores/ui'
 import { getCatalog } from './lib/catalog'
 import { decodePlan } from './lib/share'
+import { useShareRoomLink } from './composables/useShareRoomLink'
 import { usePlanStore } from './stores/plan'
 import { useRoomStore, type RoomStatus } from './stores/room'
 import { initFavourites } from './stores/favourites'
@@ -16,6 +17,7 @@ const router = useRouter()
 const ui = useUiStore()
 const plan = usePlanStore()
 const room = useRoomStore()
+const { shareAction } = useShareRoomLink()
 
 /** Dark mode: follows the system preference until the user overrides it
  *  (the override persists in localStorage via useDark). */
@@ -76,6 +78,46 @@ async function joinRoomFromLink() {
   void router.replace({ query: {} })
 }
 
+/**
+ * ADR-0019: the saved household room joins itself on every start, so the
+ * daily two-phone flow needs no share link. A session resume (room store)
+ * or an explicit `?room=` link wins; a failed join only toasts and never
+ * blocks the app — the retry happens on the next launch.
+ */
+function autoJoinHousehold() {
+  const code = ui.householdRoom
+  if (!code || room.inRoom || room.status !== 'idle') return
+  room.join(code)
+  // The toast doubles as the share affordance: the second phone gets the
+  // link straight from this confirmation (ADR-0023).
+  ui.showToast(`Household sync active — ${code}`, {
+    kind: 'household',
+    actions: [shareAction(code)],
+    duration: 6000,
+  })
+}
+
+// A room we can't reach (relay down, code expired after a relay restart)
+// is reported, never fatal: the UI keeps working offline and the next app
+// start retries.
+watch(
+  () => [room.status, room.error] as const,
+  ([status, error]) => {
+    if (status !== 'error' || !error) return
+    // A household sync failure is only meaningful when the failing room IS
+    // the household room (qodo phase 18); a bad ?room= link or a Plan-tab
+    // room gets the generic live-room message instead.
+    if (ui.householdRoom && room.code === ui.householdRoom) {
+      ui.showToast(`Household sync unavailable — ${error}. Will retry next launch.`, {
+        kind: 'household',
+        duration: 6000,
+      })
+    } else {
+      ui.showToast(`Live room unavailable — ${error}.`, { duration: 6000 })
+    }
+  },
+)
+
 onMounted(async () => {
   await router.isReady()
   // Resume a room from a previous page load; a fresh ?room= link wins.
@@ -88,6 +130,9 @@ onMounted(async () => {
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
   }
+  // Config is loaded: re-join the household room unless this launch is
+  // already in one (session resume / ?room= link).
+  autoJoinHousehold()
 })
 </script>
 

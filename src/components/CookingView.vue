@@ -2,7 +2,14 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
+import { measuredChipsForLines, type MeasuredChip } from '../lib/measuredAmounts'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
+import {
+  TIMER_PRESETS_MIN,
+  announceCountdown,
+  formatCountdown,
+  remainingSeconds,
+} from '../lib/stepTimer'
 import type { RecipeDoc } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
@@ -102,13 +109,116 @@ function close() {
   else void router.replace('/plan')
 }
 
+/* ---------- Measured amounts under the step text (ADR-0022) ----------
+ *
+ * Step text is authored prose: when its own quantity cannot be parsed
+ * ("juice of ¾ lemon"), the MEASURED quantity lives in `line_items` and
+ * is surfaced as a subdued, collapsed-by-default chip — never invented.
+ * Chips are per detail line, in step order, scaled by the current factor
+ * with the SAME container/linear split the grocery list uses.
+ */
+const measuredOpen = ref(false)
+
+const visibleMeasured = computed(() =>
+  visibleSteps.value.map((vs) => ({
+    partner: vs.partner,
+    chips: doc.value ? measuredChipsForLines(doc.value, vs.step.details, factor.value) : [],
+  })),
+)
+
+function toggleMeasured() {
+  measuredOpen.value = !measuredOpen.value
+}
+
+function chipKey(index: number, chip: MeasuredChip) {
+  return `${index}:${chip.lineIndex}:${chip.label}`
+}
+
+/* ---------- Step timers (ADR-0020) ----------
+ *
+ * ONE timer per step VIEW (a "Meanwhile" pair is a single view and shares
+ * one timer), keyed by the view leader's raw step index. State lives in the
+ * ui store keyed by variant id, so it survives a reload honestly: a
+ * running timer keeps counting from `startedAt`, it is never re-armed.
+ * No toast is fired by the countdown — the wake lock already keeps the
+ * screen on and the polite live region announces minute ticks only.
+ */
+
+const variantId = computed(() => meta.value?.id ?? 0)
+const viewKey = computed(() => currentView.value?.leader ?? 0)
+
+/** Ticking clock (500 ms keeps the countdown honest without work). */
+const now = ref(Date.now())
+let tickHandle: ReturnType<typeof setInterval> | undefined
+
+const timer = computed(() => ui.stepTimer(variantId.value, viewKey.value))
+const timerRemaining = computed(() => remainingSeconds(timer.value, now.value))
+/**
+ * Derived, not trusted from the persisted `running` flag (qodo
+ * 4128519641): a timer whose countdown has reached zero is finished, no
+ * matter what the flag claims — its button offers Restart, not Pause.
+ */
+const timerRunning = computed(() => remainingSeconds(timer.value, now.value) > 0 && !!timer.value?.running)
+const timerLabel = computed(() => formatCountdown(timerRemaining.value))
+/** Only changes on minute boundaries → the live region stays quiet. */
+const timerAnnouncement = computed(() => announceCountdown(timerRemaining.value))
+/** The recipe's own total cooking time, offered on the FIRST view only. */
+const recipeTotalSuggestion = computed(() => {
+  if (viewKey.value !== 0) return null
+  const minutes = meta.value?.cooking_minutes ?? doc.value?.cooking_minutes ?? 0
+  return minutes > 0 ? minutes : null
+})
+
+/** Start a preset, or restart the current countdown when re-tapped. */
+function startTimer(seconds: number) {
+  if (!meta.value) return
+  ui.startStepTimer(meta.value.id, viewKey.value, seconds)
+}
+
+/** One tap start / stop. Stopping freezes the remaining seconds. */
+function toggleTimer() {
+  if (!meta.value || !timer.value) return
+  if (timerRunning.value) {
+    ui.pauseStepTimer(meta.value.id, viewKey.value, timerRemaining.value)
+  } else {
+    ui.startStepTimer(meta.value.id, viewKey.value, timerRemaining.value || 300)
+  }
+}
+
+function clearTimer() {
+  if (!meta.value) return
+  ui.clearStepTimer(meta.value.id, viewKey.value)
+}
+
+/**
+ * Leaving the cook session must not silently kill a running timer: the
+ * user is asked once (Cancel keeps the timer running). EVERY step view
+ * of this recipe is checked, not just the visible one (qodo
+ * 4128519620), and a timer is "running" only while its derived
+ * countdown is above zero (qodo 4128519641) — an expired timer leaves
+ * silently.
+ */
+function confirmTimerBeforeLeaving(): boolean {
+  const timers = ui.stepTimers[variantId.value] ?? {}
+  for (const state of Object.values(timers)) {
+    if (remainingSeconds(state, now.value) > 0 && state.running) {
+      return window.confirm(
+        `A timer is still running (${formatCountdown(remainingSeconds(state, now.value))} left). Leave anyway?`,
+      )
+    }
+  }
+  return true
+}
+
 function finish() {
+  if (!confirmTimerBeforeLeaving()) return
   close()
   ui.showToast('Enjoy! 🍽')
 }
 
 /** Finish cooking AND record the meal in the personal cooked history. */
 function finishCooked() {
+  if (!confirmTimerBeforeLeaving()) return
   if (meta.value) plan.markCooked(meta.value.id)
   close()
   ui.showToast('Marked as cooked ✓')
@@ -123,7 +233,7 @@ function onKey(e: KeyboardEvent) {
     prev()
   } else if (e.key === 'Escape') {
     e.preventDefault()
-    close()
+    if (confirmTimerBeforeLeaving()) close()
   }
 }
 
@@ -168,10 +278,14 @@ async function loadDoc() {
 onMounted(() => {
   void loadDoc()
   void acquireWakeLock()
+  tickHandle = setInterval(() => {
+    now.value = Date.now()
+  }, 500)
   window.addEventListener('keydown', onKey)
   document.addEventListener('visibilitychange', onVisibility)
 })
 onUnmounted(() => {
+  if (tickHandle) clearInterval(tickHandle)
   window.removeEventListener('keydown', onKey)
   document.removeEventListener('visibilitychange', onVisibility)
   void releaseWakeLock()
@@ -206,7 +320,8 @@ function onTouchEnd(e: TouchEvent) {
         <button
           class="flex size-11 shrink-0 items-center justify-center rounded-full text-lg dark:text-stone-400 dark:hover:bg-stone-800"
           aria-label="Close cooking mode"
-          @click="close"
+          @click="confirmTimerBeforeLeaving() && close()"
+        >
         >
           ✕
         </button>
@@ -278,7 +393,93 @@ function onTouchEnd(e: TouchEvent) {
               <span class="leading-relaxed">{{ d }}</span>
             </li>
           </ul>
+          <!-- Measured amounts (ADR-0022): only when an imprecise step line
+               names an ingredient whose measured quantity is known. -->
+          <div
+            v-if="visibleMeasured[i]?.chips.length"
+            class="mt-2 space-y-1 text-xs"
+            data-test="measured-amounts"
+          >
+            <button
+              class="flex items-center gap-1 rounded-lg px-2 py-1 font-medium dark:text-stone-400"
+              data-test="measured-toggle"
+              :aria-expanded="measuredOpen"
+              :aria-label="`${measuredOpen ? 'Hide' : 'Show'} measured ingredient amounts`"
+              @click="toggleMeasured"
+            >
+              <span aria-hidden="true">{{ measuredOpen ? '▾' : '▸' }}</span>
+              Ingredient amounts ({{ visibleMeasured[i]?.chips.length ?? 0 }})
+            </button>
+            <ul v-if="measuredOpen" class="space-y-1 pl-3">
+              <li
+                v-for="chip in visibleMeasured[i]?.chips ?? []"
+                :key="chipKey(i, chip)"
+                class="rounded-lg px-2 py-1 text-stone-500 dark:bg-stone-900 dark:text-stone-400"
+                data-test="measured-chip"
+              >
+                {{ chip.label }}
+              </li>
+            </ul>
+          </div>
         </template>
+      </div>
+    </div>
+
+    <!-- Step timers (ADR-0020): one per step view, collapsed to a strip
+         above the nav buttons so the step text keeps the screen. -->
+    <div
+      v-if="doc"
+      class="border-t px-4 py-2 dark:border-stone-700 dark:bg-stone-900"
+      data-test="step-timer-bar"
+    >
+      <div class="mx-auto flex max-w-2xl items-center gap-2">
+        <button
+          v-if="timer"
+          class="flex h-11 min-w-24 shrink-0 items-center justify-center gap-1 rounded-xl border px-3 font-mono text-base font-semibold tabular-nums dark:border-stone-600 dark:bg-stone-950"
+          :class="timerRunning ? 'text-primary-dark dark:text-primary' : 'dark:text-stone-200'"
+          data-test="step-timer"
+          aria-live="polite"
+          :aria-label="timerRunning ? `Pause timer, ${timerLabel} left` : `Start timer, ${timerLabel} left`"
+          @click="toggleTimer"
+        >
+          <span aria-hidden="true">{{ timerRunning ? '⏸' : '▶' }} {{ timerLabel }}</span>
+          <span class="sr-only">{{ timerAnnouncement }}</span>
+        </button>
+        <div v-else class="h-11 min-w-24 shrink-0"></div>
+
+        <!-- Presets: one tap each. The recipe's own cooking time is
+             offered once, on the first view, explicitly labelled as the
+             RECIPE TOTAL so it is not read as this step's time. -->
+        <div class="flex min-w-0 flex-1 flex-wrap gap-1">
+          <button
+            v-for="m in TIMER_PRESETS_MIN"
+            :key="m"
+            class="h-9 rounded-lg border px-2 text-xs font-medium dark:border-stone-700 dark:text-stone-300"
+            :data-test="`timer-preset-${m}`"
+            :aria-label="`Set a ${m} minute timer`"
+            @click="startTimer(m * 60)"
+          >
+            {{ m }}m
+          </button>
+          <button
+            v-if="recipeTotalSuggestion"
+            class="h-9 rounded-lg border border-dashed px-2 text-xs font-medium dark:border-stone-700 dark:text-stone-300"
+            data-test="timer-preset-recipe"
+            :aria-label="`Set a timer for the recipe total cooking time of ${recipeTotalSuggestion} minutes`"
+            @click="startTimer(recipeTotalSuggestion * 60)"
+          >
+            ⋯ {{ recipeTotalSuggestion }}m total
+          </button>
+          <button
+            v-if="timer"
+            class="h-9 rounded-lg border px-2 text-xs font-medium dark:border-stone-700 dark:text-stone-400"
+            data-test="timer-clear"
+            aria-label="Clear this step timer"
+            @click="clearTimer"
+          >
+            ✕
+          </button>
+        </div>
       </div>
     </div>
 

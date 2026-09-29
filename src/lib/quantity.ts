@@ -71,6 +71,36 @@ export function formatAmount(amount: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
 }
 
+/** Denominators tried when rendering a fractional amount (ADR-0017). */
+const FRACTION_DENOMINATORS = [2, 3, 4, 6, 8] as const
+
+/** Tolerance when snapping a remainder onto an eighth/third/etc. */
+const FRACTION_TOLERANCE = 0.02
+
+/**
+ * Format a count as a mixed fraction: `1`, `3/2`, `2 1/4`, `7/8`.
+ * Grocery container sums keep their exact fraction (`½ (142 g) pkg` twice
+ * is a whole package, but a 3-recipe sum may be `3/2 small bunch`), so this
+ * complements `formatAmount`, which flattens everything to 1 decimal.
+ */
+export function formatFraction(amount: number): string {
+  if (!Number.isFinite(amount)) return formatAmount(amount)
+  const negative = amount < 0
+  const abs = Math.abs(amount)
+  const whole = Math.floor(abs + 1e-9)
+  const frac = abs - whole
+  if (frac < FRACTION_TOLERANCE) return formatAmount(negative ? -whole : whole)
+  for (const d of FRACTION_DENOMINATORS) {
+    const num = Math.round(frac * d)
+    if (num <= 0 || num >= d) continue
+    if (Math.abs(num / d - frac) < FRACTION_TOLERANCE) {
+      const sign = negative ? '-' : ''
+      return `${sign}${whole > 0 ? `${whole} ` : ''}${num}/${d}`
+    }
+  }
+  return formatAmount(amount)
+}
+
 /**
  * Scale a display quantity by a factor. Non-parseable quantities pass
  * through verbatim.

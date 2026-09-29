@@ -13,16 +13,52 @@
  * Run: `bun server/relay.mjs` (listens on :8081, override with PORT env).
  */
 
+import { randomInt } from 'node:crypto'
+
 const PORT = Number(process.env.PORT ?? 8081)
 const IDLE_TTL_MS = 12 * 60 * 60 * 1000 // rooms expire after 12h idle
 const HEARTBEAT_MS = 30_000
 
 /**
- * Room codes: 6 chars, Crockford base32 minus vowels (no A/E/I/L/O/U)
- * so codes never accidentally spell or contain words.
+ * Brute-force throttle (qodo 4128519648): create/join attempts are
+ * limited per socket AND per IP — an enumerated or guessed-code flood
+ * burns the budget within one window and gets `rate_limited`. Applied
+ * ONLY to create/join: ordinary state fan-out between joined peers is
+ * never throttled. 30/min/IP still lets a household re-join freely
+ * (and the e2e suite run its room scenarios) while capping blind
+ * enumeration of the 262k word-code space at ~43k codes/day.
+ */
+const ATTEMPT_LIMIT = Number(process.env.RELAY_ATTEMPT_LIMIT ?? 30)
+const ATTEMPT_WINDOW_MS = 60_000
+
+/**
+ * Room codes have two accepted shapes (ADR-0021):
+ * - the current one: three lowercase words, `amber-falcon-lantern`,
+ *   rolled CLIENT-side so the user can read it before joining. The relay
+ *   accepts it on `create` when the code is free, and answers
+ *   `code_taken` otherwise (the client then re-rolls).
+ * - the legacy one: 6 chars from Crockford base32 minus vowels (no
+ *   A/E/I/L/O/U) so codes never accidentally spell or contain words.
+ *   Still accepted for join, and still what `create` mints when the
+ *   client asks for no particular code (older clients).
  */
 const CODE_ALPHABET = '0123456789BCDFGHJKLMNPQRSTVWXZ'
 const CODE_LENGTH = 6
+const WORD_CODE_RE = /^[a-z]{3,10}-[a-z]{3,10}-[a-z]{3,10}$/
+
+/**
+ * Canonicalize any accepted code so `join` finds the room whichever
+ * shape/spelling the peer used. Mirrors `normalizeRoomCode` in
+ * src/lib/roomWords.ts: a 3-word code lowercased, anything else
+ * alphanumeric compacted and upper-cased (the legacy storage shape).
+ */
+function normalizeCode(raw) {
+  if (typeof raw !== 'string') return ''
+  const tokens = raw.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+  if (tokens.length === 3 && tokens.every((t) => /^[a-z]{3,10}$/.test(t))) return tokens.join('-')
+  if (tokens.length === 1 && /^[a-z0-9]{4,12}$/.test(tokens[0])) return tokens[0].toUpperCase()
+  return ''
+}
 
 const rooms = new Map()
 
@@ -32,10 +68,41 @@ const sockets = new Set()
 /** Monotonic peer id for attribution on fan-out (informational only). */
 let nextPeerId = 0
 
+/** key ("sock:<peerId>" | "ip:<addr>") -> { start, count } attempt budget. */
+const attemptBuckets = new Map()
+
+/**
+ * One create/join attempt against BOTH the per-socket and per-IP
+ * budgets. True when the attempt may proceed.
+ */
+function allowAttempt(ws) {
+  const now = Date.now()
+  const ip = server?.requestIP?.(ws)?.address ?? 'unknown'
+  for (const key of [`sock:${ws.data.peerId}`, `ip:${ip}`]) {
+    const bucket = attemptBuckets.get(key)
+    if (!bucket || now - bucket.start > ATTEMPT_WINDOW_MS) {
+      attemptBuckets.set(key, { start: now, count: 1 })
+    } else if (bucket.count >= ATTEMPT_LIMIT) {
+      return false
+    } else {
+      bucket.count += 1
+    }
+  }
+  // Occasional prune so the map cannot grow without bound.
+  if (attemptBuckets.size > 4096) {
+    for (const [key, bucket] of attemptBuckets) {
+      if (now - bucket.start > ATTEMPT_WINDOW_MS) attemptBuckets.delete(key)
+    }
+  }
+  return true
+}
+
 function makeCode() {
+  // crypto.randomInt, not Math.random (qodo 4128519648): uniform and
+  // unpredictable — a comment elsewhere already claimed this.
   let code = ''
   for (let i = 0; i < CODE_LENGTH; i++) {
-    code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]
+    code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]
   }
   return code
 }
@@ -44,7 +111,12 @@ function scheduleExpiry(code) {
   return setTimeout(() => rooms.delete(code), IDLE_TTL_MS)
 }
 
-function createRoom() {
+function createRoom(forcedCode = '') {
+  if (forcedCode) {
+    const room = { code: forcedCode, peers: new Set(), idleTimer: scheduleExpiry(forcedCode) }
+    rooms.set(forcedCode, room)
+    return room
+  }
   let code = makeCode()
   while (rooms.has(code)) code = makeCode()
   const room = { code, peers: new Set(), idleTimer: scheduleExpiry(code) }
@@ -97,7 +169,23 @@ try {
 
         switch (msg.type) {
           case 'create': {
-            const room = createRoom()
+            if (!allowAttempt(ws)) {
+              send(ws, { type: 'error', code: 'rate_limited' })
+              return
+            }
+            // ADR-0021: the client rolls the three-word code itself so it
+            // can show the user what to share. An already-taken code is
+            // refused so the client can re-roll rather than silently
+            // joining someone else's room.
+            const wanted =
+              typeof msg.code === 'string' && WORD_CODE_RE.test(msg.code.trim())
+                ? msg.code.trim()
+                : ''
+            if (wanted && rooms.has(wanted)) {
+              send(ws, { type: 'error', code: 'code_taken' })
+              return
+            }
+            const room = createRoom(wanted)
             room.peers.add(ws)
             ws.data.roomCode = room.code
             touchRoom(room)
@@ -106,8 +194,12 @@ try {
           }
 
           case 'join': {
-            const code = typeof msg.code === 'string' ? msg.code.trim().toUpperCase() : ''
-            const room = rooms.get(code)
+            if (!allowAttempt(ws)) {
+              send(ws, { type: 'error', code: 'rate_limited' })
+              return
+            }
+            const code = normalizeCode(msg.code)
+            const room = code ? rooms.get(code) : undefined
             if (!room) {
               send(ws, { type: 'error', code: 'not_found' })
               return

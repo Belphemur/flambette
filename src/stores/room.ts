@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
+import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { useCustomIngredientsStore, type CustomIngredient } from './customIngredients'
 import { usePlanStore, type CookedEntry } from './plan'
 import { useGroceryStore } from './grocery'
@@ -28,6 +29,8 @@ interface SharedState {
 const PUSH_DEBOUNCE_MS = 300
 const RECONNECT_MIN_MS = 1000
 const RECONNECT_MAX_MS = 30_000
+/** Re-rolls of a taken three-word code before falling back to a relay-minted one. */
+const CODE_REROLL_LIMIT = 3
 
 /** Session-scoped storage of the room code: survives reloads, not tab closes. */
 const ROOM_CODE_KEY = 'mealime-planner:v1:room-code'
@@ -55,13 +58,24 @@ export const useRoomStore = defineStore('room', () => {
   let pushTimer: ReturnType<typeof setTimeout> | null = null
   /** True while we're writing a remote snapshot into the local stores. */
   let applyingRemote = false
+  /** The three-word code we asked the relay to create with (ADR-0021). */
+  let wantedCode: string | null = null
+  let codeRerolls = 0
 
   const inRoom = computed(() => code.value !== null)
 
   /** Live room link for this client's room (null when not in a room). */
   function roomLink(): string | null {
-    if (!code.value) return null
-    return `${location.origin}${import.meta.env.BASE_URL}plan?room=${code.value}`
+    return code.value ? roomLinkFor(code.value) : null
+  }
+
+  /**
+   * The join URL for a specific code — usable before this device has
+   * actually joined (the household setting may name a room the relay has
+   * not re-created yet), which is what "Share room" copies.
+   */
+  function roomLinkFor(target: string): string {
+    return `${location.origin}${import.meta.env.BASE_URL}plan?room=${target}`
   }
 
   /* ---------- state conversion ---------- */
@@ -183,6 +197,18 @@ export const useRoomStore = defineStore('room', () => {
           status.value = 'error'
           sessionStorage.removeItem(ROOM_CODE_KEY)
           cleanupSocket()
+        } else if (msg.code === 'code_taken' && ws && wantedCode !== null) {
+          // The rolled code is live on the relay already: re-roll (a
+          // handful of times), then let the relay mint one. Collisions are
+          // tolerated by design — ADR-0021.
+          codeRerolls++
+          if (codeRerolls <= CODE_REROLL_LIMIT) {
+            wantedCode = generateRoomCode()
+            ws.send(JSON.stringify({ type: 'create', code: wantedCode }))
+          } else {
+            wantedCode = null
+            ws.send(JSON.stringify({ type: 'create' }))
+          }
         }
         break
       }
@@ -199,7 +225,7 @@ export const useRoomStore = defineStore('room', () => {
 
     socket.onopen = () => {
       if (role === 'create') {
-        socket.send(JSON.stringify({ type: 'create' }))
+        socket.send(JSON.stringify(wantedCode ? { type: 'create', code: wantedCode } : { type: 'create' }))
       } else {
         socket.send(JSON.stringify({ type: 'join', code: joinCode }))
       }
@@ -259,15 +285,27 @@ export const useRoomStore = defineStore('room', () => {
     }
   }
 
-  /** Create a new room (host role). */
-  function create() {
+  /**
+   * Create a new room (host role). ADR-0021: the CODE is rolled here, on
+   * the client, so the user can read it out before anyone joins; the relay
+   * honours a free three-word code and refuses a taken one (we re-roll).
+   */
+  function create(preferredCode?: string) {
     reconnectAttempts = 0
+    wantedCode = preferredCode ? normalizeRoomCode(preferredCode) : generateRoomCode()
+    codeRerolls = 0
     connect('create')
   }
 
-  /** Join an existing room by code. */
+  /** Join an existing room by code (legacy or three-word, any spelling). */
   function join(codeToJoin: string) {
-    code.value = codeToJoin.toUpperCase()
+    const normalized = normalizeRoomCode(codeToJoin)
+    if (!normalized) {
+      error.value = 'That is not a room code'
+      status.value = 'error'
+      return
+    }
+    code.value = normalized
     sessionStorage.setItem(ROOM_CODE_KEY, code.value)
     reconnectAttempts = 0
     connect('join', code.value)
@@ -292,6 +330,7 @@ export const useRoomStore = defineStore('room', () => {
     status.value = 'idle'
     error.value = null
     reconnectAttempts = 0
+    wantedCode = null
     sessionStorage.removeItem(ROOM_CODE_KEY)
     cleanupSocket()
   }
@@ -305,6 +344,7 @@ export const useRoomStore = defineStore('room', () => {
     inRoom,
     // actions
     roomLink,
+    roomLinkFor,
     create,
     join,
     resume,

@@ -24,6 +24,7 @@ bun install                    # install deps (bun.lock is the lockfile)
 bun run dev                    # dev server (proxies /ws → localhost:8081)
 bun server/relay.mjs           # relay for dev
 bun run build                  # type-check + production build — MUST be green
+bun run test:unit              # bun-test unit specs for src/lib (scoped to src)
 bunx playwright test           # full e2e suite (starts its own relay)
 bunx playwright test e2e/x.spec.ts   # single spec
 docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
@@ -37,6 +38,52 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   `src/lib/useGroceryList.ts` / `grocery.ts`. Never duplicate aggregation
   logic in a view. Names merge by singularized key (`nameKey`), units by
   `unitKey` (`2 cloves` + `1 clove` → `3 cloves`).
+- **Container units are purchased, not divided (ADR-0017)**: line items
+  phrased in purchasable containers (`½ (142 g) pkg`, `1 small bunch`,
+  `1 head`) are parsed by `src/lib/containers.ts` and CEIL-merged per
+  (container, annotation) — never linearly scaled (spoon/measure units
+  keep ADR-0009's linear rule). One meal at its own servings keeps the
+  authored text; merges render whole (`1 (142 g) pkg`) or fractional
+  (`1 1/2 small bunches`). Grocery display is the only thing that
+  changes: recipe/cooking step text stays authentic.
+- **Diet chips (ADR-0018)**: `src/lib/dietFilter.ts` is a keyword
+  heuristic over `variant_meta.ingredient_names` (the catalog has NO
+  diet metadata), token-boundary matched and memoized per variant id.
+  Treat its verdicts as a suggestion lens, never a guarantee; the
+  keyword tables are the tunable part.
+- **Household room (ADR-0019)**: `ui.householdRoom` is a persisted
+  default join target; the app auto-joins it after config load unless a
+  session resume or `?room=` link already won. Room failures toast and
+  never block the UI (retry next launch) — never `await` a room
+  operation on a render path.
+- **Room codes are three words (ADR-0021)**: the accepted format is the
+  UNION — `amber-falcon-lantern` (`WORD_ROOM_CODE_RE`) or a legacy
+  `ZZ9ZZZ` (`LEGACY_ROOM_CODE_RE`) — and everything that touches a code
+  goes through `normalizeRoomCode()` in `src/lib/roomWords.ts` (forgiving
+  in, canonical out; a PARTIAL word code is refused, never coerced).
+  Codes are rolled CLIENT-side and the relay refuses a taken one with
+  `code_taken` (the client re-rolls; collisions are tolerated by
+  design). The relay's `normalizeCode` mirrors the client helper — keep
+  them in step.
+- **Share room = one tap to the clipboard (ADR-0023)**: use
+  `useShareRoomLink()` (`src/composables/useShareRoomLink.ts`), never
+  `navigator.share` (no Web Share on plain-HTTP LAN) and never a raw
+  clipboard call. It verifies the write by reading back and always says
+  something — a share affordance must never fail silently.
+- **Step timers (ADR-0020)**: ONE timer per step VIEW (a Meanwhile pair
+  is one view, ADR-0010), stored as `{remaining, running, startedAt}` in
+  `ui.stepTimers[variantId][viewKey]` — derive the countdown from
+  `startedAt`, never re-arm a counter, so a reload mid-cook resumes
+  honestly. The countdown NEVER uses the toast surface; minute ticks go
+  through `announceCountdown()` in the polite live region only. Finishing
+  a cook with a timer running must ask first.
+- **Measured amounts under step text (ADR-0022)**: chips come from
+  `src/lib/measuredAmounts.ts` — only for detail lines whose own leading
+  quantity is unparseable, matched through `nameKey` at word boundaries,
+  and scaled by importing the grocery split (`parseContainerQuantity` +
+  `containerContribution` + `formatContainerQuantity`; linear/seasoning
+  via `scaleQuantity`). NEVER invent a quantity: no line-item match means
+  no chip. Step/recipe prose stays verbatim.
 - **Nutrition**: `meta.calories`/`sodium_mg` are PER-SERVING — never scale
   them by servings; only totals scale.
 - **Share/rooms**: `?p=` is the one-time gzip+base64url export (v1 bare
@@ -81,7 +128,8 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
 - **Design ADRs**: `docs/design/` holds ADR-style decision records
   (offline catalog, derived grocery, per-serving nutrition, clear
   semantics, rooms, Bun toolchain, auto-collapse, extras pilling,
-  settings tab). Skim them before
+  settings tab, diet rules, household room, step timers, measured
+  amounts, three-word room codes, share-room link). Skim them before
   proposing changes; new lasting decisions get a new
   `ADR-NNNN-slug.md` (never rewrite an accepted one in place).
 
@@ -95,9 +143,43 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   intercept hover on the Pixel 7 viewport); the grocery provenance pill
   must stay a flex sibling OUTSIDE the truncating name span, else its
   tooltip gets clipped.
-- Full suite (126 tests × 2 projects: Desktop Chrome + Pixel 7) must pass
+- Full suite (135 tests × 2 projects: Desktop Chrome + Pixel 7) must pass
   before any merge. Run `bun run build` first — vite serve hides some
   bugs.
+
+## Generated data (build-time scripts)
+
+`public/data/*.json` artifacts are generated by stdlib-only Python scripts in
+`scripts/`, run from the repo root. Re-run only when the frozen catalog
+changes; the outputs ARE committed (the app is offline-first, so a missing
+artifact is a broken build).
+
+| Script | Output | Purpose |
+| --- | --- | --- |
+| `extract_ingredients.py` | `public/data/ingredients.json` | autocomplete index (ADR-0012) |
+| `build_pack_index.py` | `public/data/pack_index.json` | planner ingredient footprint (ADR-0024) |
+| `verify_pack_index_parity.ts` | — | gates the Python builder against the TS it mirrors |
+
+```bash
+bun run data:pack     # rebuild pack_index.json
+bun run data:verify   # assert Python == src/lib/containers.ts + quantity.ts
+```
+
+Parity rules for anything mirroring TS into Python:
+- `nameKey` / `unitKey` / `parseQuantity` / `parseContainerQuantity` must stay
+  in lockstep with `src/lib/grocery.ts`, `quantity.ts` and `containers.ts`.
+  `data:verify` enforces this for the pack index — extend it when you add a
+  mirrored helper, and run it before committing either side.
+- `pack_index.json` deliberately stores ONLY the ingredient footprint. Recipe
+  metadata (name, rating, cooking_minutes, tags) already ships in
+  `builder_data.json`; duplicating it doubled the payload for nothing.
+- Ingredient nameKeys and unit strings are interned into two string tables
+  (338 and 53 distinct values) and referenced by integer. That keeps the file
+  at ~540 KB raw / ~73 KB gzip. Measured: brotli-11 saves a further ~8 KB and
+  zstd-19 ~15 KB, but neither justifies changing the nginx image for a file
+  this small — stock gzip wins.
+- All 2,730 recipes are authored `serving_count = 6`; index amounts are at
+  the authored servings and scale at read time, never baked.
 
 ## Known pitfalls
 

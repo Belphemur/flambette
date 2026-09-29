@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { applyBackup, backupFileName, buildBackupZip } from '../lib/backup'
+import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
+import { useShareRoomLink } from '../composables/useShareRoomLink'
+import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 
 /**
@@ -14,6 +17,113 @@ import { useUiStore } from '../stores/ui'
  * only the host surface moved.
  */
 const ui = useUiStore()
+const room = useRoomStore()
+const { shareRoomLink, shareableCode } = useShareRoomLink()
+
+/* ---------- Household sync (ADR-0019) ---------- */
+
+/** Draft code, seeded from the persisted setting. */
+const roomInput = ref(ui.householdRoom)
+/**
+ * True while the user is editing the field: Settings lives under
+ * KeepAlive, so a backup import can change ui.householdRoom without a
+ * remount. The store→draft echo is suppressed while typing so an import
+ * never stomps an in-progress edit (qodo 4128519632); the flag resets on
+ * blur and on every save path.
+ */
+let roomTyping = false
+
+watch(
+  () => ui.householdRoom,
+  (code) => {
+    if (roomTyping) return
+    roomInput.value = code
+  },
+)
+
+/** @input on the room field: mark the draft as user-owned until blur. */
+function onRoomInput() {
+  roomTyping = true
+}
+
+/** @blur on the room field: resume following the store on future changes. */
+function onRoomBlur() {
+  roomTyping = false
+}
+
+const householdCode = computed(() => ui.householdRoom)
+/** Both shapes normalize (ADR-0021): three words, or a legacy code. */
+const canSaveRoom = computed(() => normalizeRoomCode(roomInput.value) !== '')
+/** The live room differs from the saved one, so adopting it is meaningful. */
+const adoptableRoom = computed(() =>
+  room.inRoom && room.code && room.code !== ui.householdRoom ? room.code : null,
+)
+
+/** Roll a fresh three-word code into the field (ADR-0021). */
+function newRoomCode() {
+  roomTyping = false
+  roomInput.value = generateRoomCode()
+  // The rolled code exists NOWHERE yet: Join must CREATE it on the relay
+  // instead of joining (qodo 4128519644).
+  rolledNewCode.value = true
+}
+
+/** The live room, else the saved setting — whichever we can share. */
+const shareableCodeText = computed(() => shareableCode())
+
+function saveHouseholdRoom(joinNow: boolean) {
+  roomTyping = false
+  const code = normalizeRoomCode(roomInput.value)
+  if (!code) {
+    ui.showToast('Room codes look like amber-falcon-lantern', { kind: 'error' })
+    return
+  }
+  // Capture before clearing: a freshly ROLLED code must be CREATED on the
+  // relay — joining it answers not_found, the room exists nowhere (qodo
+  // 4128519644). A typed code keeps join-first: someone else's live room.
+  const isNewCode = rolledNewCode.value
+  rolledNewCode.value = false
+  ui.setHouseholdRoom(code)
+  roomInput.value = code
+  if (joinNow) {
+    if (isNewCode) room.create(code)
+    else room.join(code)
+    // The toast carries the share action: joining and sharing are the
+    // same two-phone moment (ADR-0023).
+    ui.showToast(`Joining household ${code}…`, {
+      kind: 'household',
+      actions: [{ label: 'Share link', run: () => void shareRoomLink(code) }],
+      duration: 6000,
+    })
+  } else {
+    ui.showToast(`Household room ${code} saved — sync starts on next launch`)
+  }
+}
+
+/** Point the persistent setting at the room we're already in. */
+/**
+ * True while roomInput holds a freshly ROLLED (not typed) code — see
+ * newRoomCode / saveHouseholdRoom (qodo 4128519644).
+ */
+const rolledNewCode = ref(false)
+
+function adoptCurrentRoom() {
+  const code = adoptableRoom.value
+  if (!code) return
+  roomTyping = false
+  rolledNewCode.value = false
+  roomInput.value = code
+  ui.setHouseholdRoom(code)
+  ui.showToast(`Household sync active — ${code}`, { kind: 'household' })
+}
+
+function clearHouseholdRoom() {
+  roomTyping = false
+  rolledNewCode.value = false
+  ui.setHouseholdRoom('')
+  roomInput.value = ''
+  ui.showToast('Household sync turned off')
+}
 
 /* ---------- Backup & restore (ADR-0013) ---------- */
 
@@ -79,6 +189,93 @@ function cancelBackupImport(): void {
 <template>
   <section class="space-y-4 pb-4">
     <h2 class="text-lg font-bold tracking-tight">Settings</h2>
+
+    <!-- Household sync: set a room code once and this device re-joins it
+         on every launch, so the other phone needs no share link. The room
+         itself is unchanged (ephemeral relay, LWW state, ADR-0006/0011) —
+         this is only a persisted default join target (ADR-0019). -->
+    <div class="space-y-2 rounded-xl bg-stone-50 p-3 dark:bg-stone-950" data-test="household-card">
+      <span class="text-sm font-bold tracking-tight">Household sync</span>
+      <p class="text-xs dark:text-stone-400">
+        Sync your plan, grocery checks and extras with the other phone. Set the room code once — this device joins it automatically every time the app opens.
+      </p>
+      <p
+        v-if="householdCode"
+        class="text-xs font-semibold text-green-700 dark:text-green-400"
+        data-test="household-room-status"
+      >
+        Household sync active — {{ householdCode }}
+      </p>
+      <div class="flex gap-2">
+        <input
+          v-model="roomInput"
+          type="text"
+          inputmode="text"
+          maxlength="40"
+          placeholder="amber-falcon-lantern"
+          aria-label="Household room code"
+          data-test="household-room-input"
+          @input="onRoomInput"
+          @blur="onRoomBlur"
+          class="h-11 min-w-0 flex-1 rounded-xl border bg-white px-3 text-sm outline-none focus:border-primary dark:border-stone-700 dark:bg-stone-900"
+        />
+        <button
+          class="h-11 rounded-xl bg-primary px-3 text-sm font-semibold text-white active:bg-primary-dark disabled:opacity-50"
+          data-test="household-room-save"
+          aria-label="Save household room code"
+          :disabled="!canSaveRoom"
+          @click="saveHouseholdRoom(false)"
+        >
+          Save
+        </button>
+        <button
+          class="h-11 rounded-xl border dark:border-stone-700 px-3 text-sm font-medium dark:text-stone-300 dark:hover:bg-stone-800 disabled:opacity-50"
+          data-test="household-room-join"
+          aria-label="Save household room code and join now"
+          :disabled="!canSaveRoom"
+          @click="saveHouseholdRoom(true)"
+        >
+          Join now
+        </button>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button
+          class="h-9 rounded-lg border px-3 text-xs font-medium dark:border-stone-700 dark:text-stone-300 disabled:opacity-50"
+          data-test="share-room"
+          :disabled="!shareableCodeText"
+          :aria-label="`Share the join link for household room ${shareableCodeText}`"
+          @click="shareRoomLink()"
+        >
+          🔗 Share room link
+        </button>
+        <button
+          class="h-9 rounded-lg border px-3 text-xs font-medium dark:border-stone-700 dark:text-stone-300"
+          data-test="household-room-new"
+          aria-label="Generate a new three-word room code"
+          @click="newRoomCode"
+        >
+          🎲 New code
+        </button>
+        <button
+          v-if="adoptableRoom"
+          class="h-9 rounded-lg border px-3 text-xs font-medium dark:border-stone-700 dark:text-stone-300"
+          data-test="household-room-adopt"
+          :aria-label="`Use live room ${adoptableRoom} as the household room`"
+          @click="adoptCurrentRoom"
+        >
+          Sync with live room {{ adoptableRoom }}
+        </button>
+        <button
+          v-if="householdCode"
+          class="h-9 rounded-lg border px-3 text-xs font-medium dark:border-stone-700 dark:text-stone-300"
+          data-test="household-room-clear"
+          aria-label="Turn off household sync"
+          @click="clearHouseholdRoom"
+        >
+          Turn off
+        </button>
+      </div>
+    </div>
 
     <!-- Backup & restore: ALWAYS rendered (restoring a backup is precisely
          what a fresh device needs, and this view is reachable on one). -->

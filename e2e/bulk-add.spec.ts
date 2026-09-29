@@ -149,7 +149,7 @@ test('suggestion row mirrors room-synced customs from another context', async ({
   const chip = a.getByTestId('room-chip')
   await expect(chip).toContainText('Live', { timeout: 10_000 })
   const title = await chip.getAttribute('title')
-  const code = title!.match(/Live room (\w+)/)![1]
+  const code = title!.match(/Live room ([a-z0-9-]+)/)![1]
   const roomUrl = `${a.url().replace(/\/plan.*$/, '')}/plan?room=${code}`
 
   // B joins in a FRESH context and gets A's remembered customs.

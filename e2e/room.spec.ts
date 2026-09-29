@@ -38,7 +38,7 @@ async function startLiveRoom(page: Page): Promise<string> {
   await expect(chip).toContainText('Live', { timeout: 10_000 })
   // The chip title carries the room code; rebuild the share link.
   const title = await chip.getAttribute('title')
-  const code = title!.match(/Live room (\w+)/)![1]
+  const code = title!.match(/Live room ([a-z0-9-]+)/)![1]
   return `${page.url().replace(/\/plan.*$/, '')}/plan?room=${code}`
 }
 

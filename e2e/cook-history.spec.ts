@@ -35,7 +35,7 @@ async function startLiveRoom(page: Page): Promise<string> {
   const chip = page.getByTestId('room-chip')
   await expect(chip).toContainText('Live', { timeout: 10_000 })
   const title = await chip.getAttribute('title')
-  const code = title!.match(/Live room (\w+)/)![1]
+  const code = title!.match(/Live room ([a-z0-9-]+)/)![1]
   return `${page.url().replace(/\/plan.*$/, '')}/plan?room=${code}`
 }
 
