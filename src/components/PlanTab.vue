@@ -162,8 +162,10 @@ function confirmAutoPlan() {
     warning ? `Plan generated — ${warning}` : `Plan generated: ${result.variantIds.length} meals`,
     {
       // Undo restores the exact pre-generation plan (ids + servings).
-      // Safe even after the toast ends: replacePlan is idempotent.
-      actions: previousEntries.value.length > 0 ? [{ label: 'Undo', run: undoAutoPlan }] : undefined,
+      actions:
+        previousEntries.value.length > 0
+          ? [{ label: 'Undo', run: undoAutoPlan, testId: 'auto-plan-undo' }]
+          : undefined,
       duration: 6000,
       kind: 'autoplan-toast',
     },
