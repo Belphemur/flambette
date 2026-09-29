@@ -175,6 +175,24 @@ test('a nonsense code is refused rather than silently coerced', async ({ page })
   await expect(page.getByTestId('household-room-save')).toBeEnabled()
 })
 
+test('a newly rolled code CREATES its room on Join (qodo 4128519644)', async ({ page }) => {
+  test.setTimeout(90_000)
+  await planARecipe(page)
+
+  await gotoTab(page, 'Settings')
+  await page.getByTestId('household-room-new').click()
+  const rolled = await page.getByTestId('household-room-input').inputValue()
+  expect(rolled).toMatch(WORD_CODE)
+
+  // Join now: the code is fresh — the relay must CREATE the room, not
+  // answer not_found (the old join-first path). "Room not found" would
+  // also poison every later auto-join.
+  await page.getByTestId('household-room-join').click()
+  await expect(page.getByTestId('household-toast')).toContainText(rolled, { timeout: 20_000 })
+  await expect(page.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+  await expectZeroMealimeRequests(page)
+})
+
 test('a backup restore re-syncs the room draft; Save keeps the restored code (qodo 4128519632)', async ({
   page,
 }) => {

@@ -63,6 +63,9 @@ const adoptableRoom = computed(() =>
 function newRoomCode() {
   roomTyping = false
   roomInput.value = generateRoomCode()
+  // The rolled code exists NOWHERE yet: Join must CREATE it on the relay
+  // instead of joining (qodo 4128519644).
+  rolledNewCode.value = true
 }
 
 /** The live room, else the saved setting — whichever we can share. */
@@ -75,10 +78,16 @@ function saveHouseholdRoom(joinNow: boolean) {
     ui.showToast('Room codes look like amber-falcon-lantern', { kind: 'error' })
     return
   }
+  // Capture before clearing: a freshly ROLLED code must be CREATED on the
+  // relay — joining it answers not_found, the room exists nowhere (qodo
+  // 4128519644). A typed code keeps join-first: someone else's live room.
+  const isNewCode = rolledNewCode.value
+  rolledNewCode.value = false
   ui.setHouseholdRoom(code)
   roomInput.value = code
   if (joinNow) {
-    room.join(code)
+    if (isNewCode) room.create(code)
+    else room.join(code)
     // The toast carries the share action: joining and sharing are the
     // same two-phone moment (ADR-0023).
     ui.showToast(`Joining household ${code}…`, {
@@ -92,10 +101,17 @@ function saveHouseholdRoom(joinNow: boolean) {
 }
 
 /** Point the persistent setting at the room we're already in. */
+/**
+ * True while roomInput holds a freshly ROLLED (not typed) code — see
+ * newRoomCode / saveHouseholdRoom (qodo 4128519644).
+ */
+const rolledNewCode = ref(false)
+
 function adoptCurrentRoom() {
   const code = adoptableRoom.value
   if (!code) return
   roomTyping = false
+  rolledNewCode.value = false
   roomInput.value = code
   ui.setHouseholdRoom(code)
   ui.showToast(`Household sync active — ${code}`, { kind: 'household' })
@@ -103,6 +119,7 @@ function adoptCurrentRoom() {
 
 function clearHouseholdRoom() {
   roomTyping = false
+  rolledNewCode.value = false
   ui.setHouseholdRoom('')
   roomInput.value = ''
   ui.showToast('Household sync turned off')
