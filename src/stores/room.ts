@@ -200,14 +200,19 @@ export const useRoomStore = defineStore('room', () => {
    * Raise `maxSeenRev` to the highest revision anyone can prove for this
    * code: the relay's reply (the per-code floor, which outlives an
    * empty-room delete) and our own session high-water mark. Everything we
-   * seed or push from here on is strictly newer than both, so a room that
-   * was deleted and re-created cannot present a stale snapshot as a newer
-   * one (review F4).
+   * PUSH from here on is strictly newer than both, so a room that was
+   * deleted and re-created cannot present a stale snapshot as a newer one
+   * (review F4).
+   *
+   * `localRev` is deliberately NOT raised here: it is "the revision of
+   * the state I am holding", and on a fresh page load that is 0 — which
+   * is exactly what lets an incoming room snapshot still be recognised as
+   * newer than local. What a snapshot must clear instead is the session
+   * floor (see the `joined` branch).
    */
   function absorbRevFloor(relayRev: unknown) {
     const fromRelay = typeof relayRev === 'number' && Number.isFinite(relayRev) ? relayRev : 0
     maxSeenRev = Math.max(maxSeenRev, fromRelay, readRevFloor(code.value))
-    localRev = Math.max(localRev, maxSeenRev)
   }
 
   // Any local change to plan or checked groceries is pushed to the room.
@@ -277,7 +282,11 @@ export const useRoomStore = defineStore('room', () => {
         absorbRevFloor(msg.rev)
         if (msg.state != null) {
           const rev = typeof msg.rev === 'number' ? msg.rev : localRev + 1
-          if (rev > localRev) {
+          // Newer than what we hold AND at least as new as anything this
+          // session already proved for this code (review F4): a room
+          // re-created after a restart must not talk a member that has
+          // been at revision 9 back down to an empty plan at 2.
+          if (rev > localRev && rev >= readRevFloor(code.value)) {
             maxSeenRev = localRev = rev
             applyRemote(msg.state as SharedState)
           }

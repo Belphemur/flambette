@@ -218,6 +218,27 @@ describe('room store — revisions never restart (F4)', () => {
     socket.receive({ type: 'created', code: 'rose-thistle-moss', rev: 0 })
     expect(socket.frames('state')[0].rev).toBe(1)
   })
+
+  test('a FRESH tab still applies the state of the room it joins (F4 regression)', async () => {
+    // The floor must never become a reason to IGNORE the room's current
+    // state: a second device that has never been in this room has no
+    // local state to protect, and its own localRev starts at 0.
+    const plan = usePlanStore()
+    const room = useRoomStore()
+    room.join('amber-falcon-lantern')
+    await sleep(5)
+    const socket = sockets[sockets.length - 1]
+    socket.receive({
+      type: 'joined',
+      code: 'amber-falcon-lantern',
+      rev: 3,
+      state: { plan: [{ variantId: 42, servings: 6 }], customItems: [], checked: {} },
+    })
+    expect(plan.plan).toHaveLength(1)
+    expect(plan.plan[0].variantId).toBe(42)
+    // …and what it then pushes is newer than the snapshot it took.
+    expect(socket.frames('state').at(-1)!.rev as number).toBeGreaterThan(3)
+  })
 })
 
 describe('room store — terminal errors stop the loop', () => {
