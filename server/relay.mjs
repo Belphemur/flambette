@@ -7,19 +7,28 @@
  * stores and fans out).
  *
  * Zero dependencies: runs on Bun's native WebSocket support (Bun.serve).
- * No database, no persistence: rooms expire after 12h of inactivity.
- * Heartbeat ping/pong every 30s prunes dead sockets.
+ * No database, no persistence. Room lifecycle (ADR-0026) lives in
+ * ./roomLifecycle.mjs (unit-tested):
+ * - `join` is join-or-create: the first client to arrive ESTABLISHES the
+ *   room under the code it asked for, so a room is creatable by whoever
+ *   shows up first instead of failing `not_found`.
+ * - a room whose last peer leaves is deleted immediately.
+ * - a room closes after 1h with no application-level `keepalive` and no
+ *   state activity; the peers are told `room_expired` so they stop
+ *   reconnecting. A 12h idle TTL is the backstop for peers that vanished
+ *   without a `leave`.
+ *
+ * Heartbeat ping/pong every 30s prunes dead SOCKETS — that is transport
+ * liveness only and deliberately does NOT refresh room activity.
  *
  * Run: `bun server/relay.mjs` (listens on :8081, override with PORT env).
  */
 
-import { randomInt } from 'node:crypto'
-
 const PORT = Number(process.env.PORT ?? 8081)
-const IDLE_TTL_MS = 12 * 60 * 60 * 1000 // rooms expire after 12h idle
 const HEARTBEAT_MS = 30_000
 
 import { makeThrottle, MemoryAttemptBuckets } from './throttle.mjs'
+import { createRoomRegistry, INACTIVITY_TTL_MS, IDLE_TTL_MS, WORD_CODE_RE } from './roomLifecycle.mjs'
 
 /**
  * Brute-force throttle (qodo 4128519648): create/join attempts are
@@ -42,35 +51,19 @@ const throttle = makeThrottle({
 
 
 /**
- * Room codes have two accepted shapes (ADR-0021):
- * - the current one: three lowercase words, `amber-falcon-lantern`,
- *   rolled CLIENT-side so the user can read it before joining. The relay
- *   accepts it on `create` when the code is free, and answers
- *   `code_taken` otherwise (the client then re-rolls).
- * - the legacy one: 6 chars from Crockford base32 minus vowels (no
- *   A/E/I/L/O/U) so codes never accidentally spell or contain words.
- *   Still accepted for join, and still what `create` mints when the
- *   client asks for no particular code (older clients).
+ * Room codes (both accepted shapes) and the whole room lifecycle —
+ * see ./roomLifecycle.mjs and ADR-0021 / ADR-0026.
  */
-const CODE_ALPHABET = '0123456789BCDFGHJKLMNPQRSTVWXZ'
-const CODE_LENGTH = 6
-const WORD_CODE_RE = /^[a-z]{3,10}-[a-z]{3,10}-[a-z]{3,10}$/
-
-/**
- * Canonicalize any accepted code so `join` finds the room whichever
- * shape/spelling the peer used. Mirrors `normalizeRoomCode` in
- * src/lib/roomWords.ts: a 3-word code lowercased, anything else
- * alphanumeric compacted and upper-cased (the legacy storage shape).
- */
-function normalizeCode(raw) {
-  if (typeof raw !== 'string') return ''
-  const tokens = raw.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
-  if (tokens.length === 3 && tokens.every((t) => /^[a-z]{3,10}$/.test(t))) return tokens.join('-')
-  if (tokens.length === 1 && /^[a-z0-9]{4,12}$/.test(tokens[0])) return tokens[0].toUpperCase()
-  return ''
-}
-
-const rooms = new Map()
+const registry = createRoomRegistry({
+  onExpire(room, reason) {
+    // Tell every peer the room is gone BEFORE it is dropped, so the
+    // client can stop reconnecting instead of rejoining a corpse.
+    for (const peer of room.peers) {
+      send(peer, { type: 'error', code: 'room_expired', reason })
+    }
+  },
+})
+const { rooms } = registry
 
 /** All live sockets (Bun has no iterable server.clients — track manually). */
 const sockets = new Set()
@@ -86,45 +79,7 @@ function allowAttempt(ws) {
   return throttle.allow(ws)
 }
 
-function makeCode() {
-  // crypto.randomInt, not Math.random (qodo 4128519648): uniform and
-  // unpredictable — a comment elsewhere already claimed this.
-  let code = ''
-  for (let i = 0; i < CODE_LENGTH; i++) {
-    code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]
-  }
-  return code
-}
-
-function scheduleExpiry(code) {
-  return setTimeout(() => rooms.delete(code), IDLE_TTL_MS)
-}
-
-function createRoom(forcedCode = '') {
-  if (forcedCode) {
-    const room = { code: forcedCode, peers: new Set(), idleTimer: scheduleExpiry(forcedCode) }
-    rooms.set(forcedCode, room)
-    return room
-  }
-  let code = makeCode()
-  while (rooms.has(code)) code = makeCode()
-  const room = { code, peers: new Set(), idleTimer: scheduleExpiry(code) }
-  rooms.set(code, room)
-  return room
-}
-
-/** Reset the idle clock for a room (called on any room activity). */
-function touchRoom(room) {
-  clearTimeout(room.idleTimer)
-  room.idleTimer = scheduleExpiry(room.code)
-}
-
-function removePeer(ws, room) {
-  room.peers.delete(ws)
-  ws.data.roomCode = undefined
-  // State deliberately stays in memory even when the room empties —
-  // a returning peer can still join until idle expiry.
-}
+const removePeer = registry.removePeer
 
 function send(ws, payload) {
   if (ws.readyState === 1 /* OPEN */) ws.send(JSON.stringify(payload))
@@ -187,10 +142,10 @@ try {
               send(ws, { type: 'error', code: 'code_taken' })
               return
             }
-            const room = createRoom(wanted)
+            const room = registry.createRoom(wanted)
             room.peers.add(ws)
             ws.data.roomCode = room.code
-            touchRoom(room)
+            registry.touchRoom(room)
             send(ws, { type: 'created', code: room.code })
             break
           }
@@ -200,16 +155,43 @@ try {
               send(ws, { type: 'error', code: 'rate_limited' })
               return
             }
-            const code = normalizeCode(msg.code)
-            const room = code ? rooms.get(code) : undefined
+            // ADR-0026 join-or-create: whoever arrives first ESTABLISHES
+            // the room under the code they asked for. This is what makes
+            // a household room startable by any peer, and it is why the
+            // "Room not found" dead end is gone. An unusable code shape
+            // (partial word code, empty) still answers not_found.
+            const { room, created } = registry.joinOrCreate(msg.code)
             if (!room) {
               send(ws, { type: 'error', code: 'not_found' })
               return
             }
             room.peers.add(ws)
             ws.data.roomCode = room.code
-            touchRoom(room)
-            send(ws, { type: 'joined', code: room.code, rev: room.rev ?? 0, state: room.state ?? null })
+            registry.touchRoom(room)
+            if (created) {
+              // Fresh room: nothing shared yet, so `created` (the same
+              // reply shape as the host path) makes the client seed it.
+              send(ws, { type: 'created', code: room.code })
+            } else {
+              send(ws, { type: 'joined', code: room.code, rev: room.rev ?? 0, state: room.state ?? null })
+            }
+            break
+          }
+
+          case 'keepalive': {
+            // Application-level liveness (ADR-0026). NOT throttled: it
+            // carries no guessable input and must never be able to burn
+            // a create/join budget. Distinct from the 30s socket ping,
+            // which only prunes dead transports and deliberately does
+            // not touch room activity. The answer is deliberately NOT
+            // named 'pong': that name belongs to the socket-level beat.
+            const room = ws.data.roomCode ? registry.get(ws.data.roomCode) : undefined
+            if (!room) {
+              send(ws, { type: 'error', code: 'not_in_room' })
+              return
+            }
+            registry.touchActivity(room)
+            send(ws, { type: 'keepalive_ack' })
             break
           }
 
@@ -228,7 +210,7 @@ try {
             }
             room.rev = rev
             room.state = msg.state
-            touchRoom(room)
+            registry.touchRoom(room)
             for (const peer of room.peers) {
               if (peer !== ws) send(peer, { type: 'state', rev, state: msg.state, from: ws.data.peerId })
             }
@@ -267,7 +249,10 @@ try {
   process.exit(1)
 }
 
-console.log(`[relay] listening on :${PORT}`)
+console.log(
+  `[relay] listening on :${PORT} (inactivity TTL ${Math.round(INACTIVITY_TTL_MS / 1000)}s, ` +
+    `idle backstop TTL ${Math.round(IDLE_TTL_MS / 1000)}s)`,
+)
 
 /** Prune dead sockets: a missed pong (30s) marks the socket, the next beat terminates it. */
 const heartbeat = setInterval(() => {
