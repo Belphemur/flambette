@@ -17,6 +17,7 @@
 import type { PlanEntry, CookedEntry } from '../stores/plan'
 import type { CustomIngredient } from '../stores/customIngredients'
 import { DIET_IDS, type DietId } from './dietFilter'
+import { isStepTimer } from './stepTimer'
 import { zipStore, unzipStore, type ZipEntry } from './zip'
 
 /** Backup schema version. Bump + add a migration when the shape evolves. */
@@ -196,15 +197,16 @@ export const STORE_SLICES: SliceDef<any>[] = [
       useCustomIngredientsStore().replaceAll(value as CustomIngredient[])
     },
   },
-  /* Persisted ui prefs (share setting + diet filters + household room + theme). */
+  /* Persisted ui prefs (share setting + diet filters + household room + theme + step timers). */
   {
     file: 'settings.json',
-    label: 'settings (cooked-history room sharing + diet filters + household room + theme)',
+    label: 'settings (cooked-history room sharing + diet filters + household room + step timers + theme)',
     persistKeys: ['mealime-planner:v1:ui'],
     read: () => ({
       shareCookedHistory: useUiStore().shareCookedHistory,
       dietFilters: [...useUiStore().dietFilters],
       householdRoom: useUiStore().householdRoom,
+      stepTimers: useUiStore().stepTimers,
       theme: readTheme(),
     }),
     validate(value) {
@@ -226,6 +228,9 @@ export const STORE_SLICES: SliceDef<any>[] = [
       if (v.householdRoom !== undefined && typeof v.householdRoom !== 'string') {
         return 'settings.json householdRoom must be a string'
       }
+      if (v.stepTimers !== undefined && !isStepTimersMap(v.stepTimers)) {
+        return 'settings.json stepTimers must map variant ids to { viewIndex: timer }'
+      }
       if (v.theme !== undefined) {
         if (typeof v.theme !== 'object' || v.theme === null || Array.isArray(v.theme)) {
           return 'settings.json theme must be an object'
@@ -242,12 +247,14 @@ export const STORE_SLICES: SliceDef<any>[] = [
         shareCookedHistory?: boolean
         dietFilters?: DietId[]
         householdRoom?: string
+        stepTimers?: unknown
         theme?: { theme?: string }
       }
       useUiStore().applySettings({
         shareCookedHistory: v.shareCookedHistory,
         dietFilters: v.dietFilters,
         householdRoom: v.householdRoom,
+        stepTimers: v.stepTimers,
       })
       if (v.theme) writeTheme(v.theme.theme ?? '')
     },
@@ -269,6 +276,17 @@ export const STORE_SLICES: SliceDef<any>[] = [
     },
   },
 ]
+
+function isStepTimersMap(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  return Object.entries(value as Record<string, unknown>).every(([variant, views]) => {
+    if (!/^\d+$/.test(variant)) return false
+    if (typeof views !== 'object' || views === null || Array.isArray(views)) return false
+    return Object.entries(views as Record<string, unknown>).every(
+      ([view, timer]) => /^\d+$/.test(view) && isStepTimer(timer),
+    )
+  })
+}
 
 function isClearedMap(value: unknown): boolean {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false

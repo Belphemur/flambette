@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { DIET_IDS, type DietId } from '../lib/dietFilter'
+import { clampSeconds, isStepTimer, type StepTimer } from '../lib/stepTimer'
 
 /** Bottom-nav entries, in display order. `to` is the route path. */
 export const TABS: { id: string; label: string; icon: string; to: string }[] = [
@@ -60,6 +61,13 @@ export const useUiStore = defineStore(
     const dietFilters = ref<DietId[]>([])
     /** Persistent household room code the app auto-joins on start (ADR-0019). */
     const householdRoom = ref('')
+    /**
+     * Cooking-view step timers (ADR-0020): variant id -> step-VIEW leader
+     * index -> timer. Keyed by view (not raw step) because a "Meanwhile"
+     * pair is one view and shares one timer. Persisted so a reload
+     * mid-cook resumes an honest countdown (remaining + startedAt).
+     */
+    const stepTimers = ref<Record<number, Record<number, StepTimer>>>({})
     /** Transient toast: plain message, optionally with inline action buttons. */
     const toast = ref<Toast | null>(null)
     let toastTimer: ReturnType<typeof setTimeout> | undefined
@@ -74,11 +82,52 @@ export const useUiStore = defineStore(
       return cookingStepIndex.value[variantId] ?? 0
     }
 
+    /** The timer of one step view, or undefined when none was set. */
+    function stepTimer(variantId: number, viewKey: number): StepTimer | undefined {
+      return stepTimers.value[variantId]?.[viewKey]
+    }
+
+    /**
+     * Set (or restart) the timer of one step view to `seconds`. A running
+     * timer stamps `startedAt`, so the countdown survives a reload.
+     */
+    function setStepTimer(variantId: number, viewKey: number, seconds: number, running: boolean) {
+      const forRecipe = { ...(stepTimers.value[variantId] ?? {}) }
+      forRecipe[viewKey] = {
+        remaining: clampSeconds(seconds),
+        running,
+        startedAt: running ? Date.now() : null,
+      }
+      stepTimers.value = { ...stepTimers.value, [variantId]: forRecipe }
+    }
+
+    /** Start (or restart) a view's timer for `seconds`. */
+    function startStepTimer(variantId: number, viewKey: number, seconds: number) {
+      setStepTimer(variantId, viewKey, seconds, true)
+    }
+
+    /** Pause a view's timer, freezing the remaining seconds it had. */
+    function pauseStepTimer(variantId: number, viewKey: number, remaining: number) {
+      setStepTimer(variantId, viewKey, remaining, false)
+    }
+
+    /** Drop a view's timer entirely (chip/preset reset). */
+    function clearStepTimer(variantId: number, viewKey: number) {
+      const forRecipe = { ...(stepTimers.value[variantId] ?? {}) }
+      if (!(viewKey in forRecipe)) return
+      delete forRecipe[viewKey]
+      const next = { ...stepTimers.value }
+      if (Object.keys(forRecipe).length === 0) delete next[variantId]
+      else next[variantId] = forRecipe
+      stepTimers.value = next
+    }
+
     /** Replace persisted ui prefs wholesale (backup import). */
     function applySettings(prefs: {
       shareCookedHistory?: boolean
       dietFilters?: DietId[]
       householdRoom?: string
+      stepTimers?: unknown
     }): void {
       if (typeof prefs.shareCookedHistory === 'boolean') shareCookedHistory.value = prefs.shareCookedHistory
       if (Array.isArray(prefs.dietFilters)) {
@@ -86,6 +135,31 @@ export const useUiStore = defineStore(
         dietFilters.value = prefs.dietFilters.filter((d): d is DietId => DIET_IDS.includes(d as DietId))
       }
       if (typeof prefs.householdRoom === 'string') setHouseholdRoom(prefs.householdRoom)
+      if (prefs.stepTimers !== undefined) stepTimers.value = sanitizeStepTimers(prefs.stepTimers)
+    }
+
+    /**
+     * Keep only well-formed timers out of an imported/loaded map
+     * (validation-first import: unknown shapes are dropped, not trusted).
+     */
+    function sanitizeStepTimers(value: unknown): Record<number, Record<number, StepTimer>> {
+      const out: Record<number, Record<number, StepTimer>> = {}
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) return out
+      for (const [variantRaw, viewsRaw] of Object.entries(value as Record<string, unknown>)) {
+        if (!/^\d+$/.test(variantRaw)) continue
+        if (typeof viewsRaw !== 'object' || viewsRaw === null || Array.isArray(viewsRaw)) continue
+        const views: Record<number, StepTimer> = {}
+        for (const [viewRaw, timer] of Object.entries(viewsRaw as Record<string, unknown>)) {
+          if (!/^\d+$/.test(viewRaw) || !isStepTimer(timer)) continue
+          views[Number(viewRaw)] = {
+            remaining: clampSeconds(timer.remaining),
+            running: timer.running,
+            startedAt: timer.startedAt === null ? null : timer.startedAt,
+          }
+        }
+        if (Object.keys(views).length > 0) out[Number(variantRaw)] = views
+      }
+      return out
     }
 
     /**
@@ -127,9 +201,15 @@ export const useUiStore = defineStore(
       shareCookedHistory,
       dietFilters,
       householdRoom,
+      stepTimers,
       toast,
       setCookingStep,
       cookingStep,
+      stepTimer,
+      setStepTimer,
+      startStepTimer,
+      pauseStepTimer,
+      clearStepTimer,
       applySettings,
       setHouseholdRoom,
       showToast,
@@ -137,11 +217,12 @@ export const useUiStore = defineStore(
     }
   },
   {
-    // Only the share/diet/room prefs persist; cookingStepIndex stays
+    // Only the share/diet/room prefs + step timers persist (ADR-0020, so a
+    // reload mid-cook resumes honestly); cookingStepIndex stays
     // session-scoped.
     persist: {
       key: 'mealime-planner:v1:ui',
-      pick: ['shareCookedHistory', 'dietFilters', 'householdRoom'],
+      pick: ['shareCookedHistory', 'dietFilters', 'householdRoom', 'stepTimers'],
     },
   },
 )
