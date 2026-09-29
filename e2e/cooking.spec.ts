@@ -61,7 +61,7 @@ test('Finish on the last step closes cooking mode', async ({ page }) => {
   await expect(finish).toBeVisible()
   await finish.click()
   await expect(cooking).not.toBeVisible()
-  await expect(page.getByText('Enjoy!')).toBeVisible()
+  await expect(page.getByTestId('toast').getByText('Enjoy!')).toBeVisible()
 })
 
 test('cooking position is not persisted across a reload', async ({ page }) => {

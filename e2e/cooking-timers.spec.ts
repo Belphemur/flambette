@@ -62,7 +62,7 @@ test('a preset starts one countdown that runs, stops and clears', async ({ page 
 
   // One tap stops it and freezes the remaining time.
   await timer.click()
-  await expect(timer).toContainText(/▶/)
+  await expect(timer).toHaveAttribute('aria-label', /^Start timer, /)
   const frozen = await timerSeconds(cooking)
   await page.waitForTimeout(1500)
   expect(await timerSeconds(cooking)).toBe(frozen)
@@ -141,7 +141,7 @@ test('Finish asks before discarding a running timer', async ({ page }) => {
   page.once('dialog', (d) => void d.accept())
   await cooking.getByRole('button', { name: /Finish/ }).click()
   await expect(cooking).not.toBeVisible()
-  await expect(page.getByText('Enjoy!')).toBeVisible()
+  await expect(page.getByTestId('toast').getByText('Enjoy!')).toBeVisible()
   await expectZeroMealimeRequests(page)
 })
 
@@ -164,7 +164,7 @@ test('Finish prompts for a timer left on ANOTHER step (qodo 4128519620)', async 
   page.once('dialog', (d) => void d.accept())
   await cooking.getByRole('button', { name: /Finish/ }).click()
   await expect(cooking).not.toBeVisible()
-  await expect(page.getByText('Enjoy!')).toBeVisible()
+  await expect(page.getByTestId('toast').getByText('Enjoy!')).toBeVisible()
   await expectZeroMealimeRequests(page)
 })
 
@@ -189,13 +189,13 @@ test('an expired timer does not block Finish and offers Restart (qodo 4128519641
     .poll(() => timerSeconds(cooking), { timeout: 90_000, intervals: [1000, 2500, 2500, 5000] })
     .toBe(0)
   await expect(cooking.getByTestId('step-timer')).toContainText('0:00')
-  await expect(cooking.getByTestId('step-timer')).toContainText(/▶/)
+  await expect(cooking.getByTestId('step-timer')).toHaveAttribute('aria-label', /^Start timer, /)
   expect(await timerSeconds(cooking)).toBe(0)
 
   // Finish needs NO confirmation for an expired timer.
   await cooking.getByRole('button', { name: /Finish/ }).click()
   await expect(cooking).not.toBeVisible()
-  await expect(page.getByText('Enjoy!')).toBeVisible()
+  await expect(page.getByTestId('toast').getByText('Enjoy!')).toBeVisible()
   await expectZeroMealimeRequests(page)
 })
 
