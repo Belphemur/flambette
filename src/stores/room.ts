@@ -43,6 +43,41 @@ const CODE_REROLL_LIMIT = 3
 
 /** Session-scoped storage of the room code: survives reloads, not tab closes. */
 const ROOM_CODE_KEY = 'mealime-planner:v1:room-code'
+/**
+ * Session-scoped high-water mark of the household's `rev` for the code we
+ * were last in (review F4). `localRev` is in-memory and restarts at 0 on
+ * every page load, while the relay keeps a per-code floor that survives an
+ * empty-room delete — without this, a reloaded client would seed the
+ * re-created room at rev 1 and its edits would be ignored by peers already
+ * past that point. Keyed by code so two rooms never cross-contaminate.
+ */
+const ROOM_REV_KEY = 'mealime-planner:v1:room-rev'
+
+interface StoredRev {
+  code: string
+  rev: number
+}
+
+function readRevFloor(code: string | null): number {
+  if (!code) return 0
+  try {
+    const raw = sessionStorage.getItem(ROOM_REV_KEY)
+    if (!raw) return 0
+    const parsed = JSON.parse(raw) as StoredRev
+    return parsed.code === code && Number.isFinite(parsed.rev) ? parsed.rev : 0
+  } catch {
+    return 0
+  }
+}
+
+function writeRevFloor(code: string | null, rev: number) {
+  if (!code) return
+  try {
+    sessionStorage.setItem(ROOM_REV_KEY, JSON.stringify({ code, rev }))
+  } catch {
+    /* session storage full/unavailable: the floor is an optimization */
+  }
+}
 
 function wsUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -150,8 +185,29 @@ export const useRoomStore = defineStore('room', () => {
       pushTimer = null
       if (status.value !== 'live' || !ws || ws.readyState !== WebSocket.OPEN) return
       localRev = Math.max(localRev, maxSeenRev) + 1
-      ws.send(JSON.stringify({ type: 'state', rev: localRev, state: snapshot() }))
+      sendState()
     }, PUSH_DEBOUNCE_MS)
+  }
+
+  /** One place that writes a snapshot, so the rev floor (F4) is never missed. */
+  function sendState() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    writeRevFloor(code.value, localRev)
+    ws.send(JSON.stringify({ type: 'state', rev: localRev, state: snapshot() }))
+  }
+
+  /**
+   * Raise `maxSeenRev` to the highest revision anyone can prove for this
+   * code: the relay's reply (the per-code floor, which outlives an
+   * empty-room delete) and our own session high-water mark. Everything we
+   * seed or push from here on is strictly newer than both, so a room that
+   * was deleted and re-created cannot present a stale snapshot as a newer
+   * one (review F4).
+   */
+  function absorbRevFloor(relayRev: unknown) {
+    const fromRelay = typeof relayRev === 'number' && Number.isFinite(relayRev) ? relayRev : 0
+    maxSeenRev = Math.max(maxSeenRev, fromRelay, readRevFloor(code.value))
+    localRev = Math.max(localRev, maxSeenRev)
   }
 
   // Any local change to plan or checked groceries is pushed to the room.
@@ -208,14 +264,17 @@ export const useRoomStore = defineStore('room', () => {
         // JOIN path: a join for a code the relay does not know yet
         // answers `created` (join-or-create, ADR-0026), so the first
         // client to arrive establishes the room and seeds it itself.
+        // Seed ABOVE the per-code rev floor (review F4), never at rev 1.
+        absorbRevFloor(msg.rev)
         localRev = maxSeenRev + 1
-        ws?.send(JSON.stringify({ type: 'state', rev: localRev, state: snapshot() }))
+        sendState()
         break
       }
       case 'joined': {
         status.value = 'live'
         reconnectAttempts = 0
         startKeepalive()
+        absorbRevFloor(msg.rev)
         if (msg.state != null) {
           const rev = typeof msg.rev === 'number' ? msg.rev : localRev + 1
           if (rev > localRev) {
@@ -226,7 +285,7 @@ export const useRoomStore = defineStore('room', () => {
         // After a reconnect our local state is at least as fresh as the
         // relay's (which may even have restarted) — push to converge.
         localRev = Math.max(localRev, maxSeenRev) + 1
-        ws?.send(JSON.stringify({ type: 'state', rev: localRev, state: snapshot() }))
+        sendState()
         break
       }
       case 'state': {
@@ -255,7 +314,13 @@ export const useRoomStore = defineStore('room', () => {
           // and `not_in_room`. The decision is pure + unit-tested in
           // src/lib/relayErrors.ts; the store only applies it.
           const outcome = describeRelayError(msg.code)
-          if (outcome.retry === false) {
+          if (outcome.retry === 'ignore') {
+            // Review F6: OUR frame was refused (bad_state / bad_json /
+            // unknown_type). The room and this socket are perfectly fine —
+            // recycling the socket here would send `leave` and, if we are
+            // the only peer, delete the very room we are standing in. Stay
+            // live and let the next successful push carry the edit.
+          } else if (outcome.retry === false) {
             // The room is gone for good: drop the stored code and stop.
             // Retrying would join-or-create a brand-new EMPTY room and
             // look like silent data loss to the household.
@@ -283,7 +348,12 @@ export const useRoomStore = defineStore('room', () => {
     // A deliberate connect clears the "room is gone" latch — including
     // the join-or-create path, where re-joining re-establishes the room.
     roomGone = false
-    cleanupSocket()
+    // Review F6: this socket is being RECYCLED, not left. Sending `leave`
+    // would tell the relay we are done with a room we intend to re-join,
+    // and as the last peer that deletes the room and its state for
+    // everyone. The socket close detaches us anyway (and the re-join
+    // re-seeds from our own persisted stores).
+    cleanupSocket({ sendLeave: false })
     status.value = 'connecting'
     error.value = null
 
@@ -324,15 +394,24 @@ export const useRoomStore = defineStore('room', () => {
   function scheduleReconnect(joinCode: string) {
     if (!code.value || roomGone) return
     status.value = 'connecting'
+    // Review F5: never stack reconnects. An orphaned timer would fire
+    // after a terminal error had latched `roomGone`, and its `connect()`
+    // would clear that latch — i.e. resurrect a room the relay closed.
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
     const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_MIN_MS * 2 ** reconnectAttempts)
     reconnectAttempts++
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null
+      // Re-check at FIRE time, not just at schedule time.
+      if (roomGone || !code.value) return
       connect('join', joinCode)
     }, delay)
   }
 
-  function cleanupSocket() {
+  function cleanupSocket({ sendLeave = true }: { sendLeave?: boolean } = {}) {
     // Keepalive first: a leaked interval would keep sending into a dead
     // socket forever, and would keep a room alive that nobody is in.
     stopKeepalive()
@@ -347,10 +426,15 @@ export const useRoomStore = defineStore('room', () => {
     if (ws) {
       const socket = ws
       ws = null
-      try {
-        socket.send(JSON.stringify({ type: 'leave' }))
-      } catch {
-        /* already closing */
+      // A recycled socket does not announce a leave (review F6): the
+      // close below already detaches us, and `leave` would have the relay
+      // delete a room we are about to re-join.
+      if (sendLeave) {
+        try {
+          socket.send(JSON.stringify({ type: 'leave' }))
+        } catch {
+          /* already closing */
+        }
       }
       socket.onclose = null
       socket.close()

@@ -10,13 +10,16 @@ export type RelayErrorOutcome = {
   /** User-facing message, or null when the store should handle the code itself. */
   message: string | null
   /**
-   * false = give up permanently: clear the stored code and stop the
-   * reconnect loop (the room is gone; retrying would recreate it as a
-   * brand-new empty room, silently losing the household state).
-   * true  = the caller may retry (e.g. rate_limited, transient).
-   * null  = the store handles this code itself (code_taken re-roll).
+   * false    = give up permanently: clear the stored code and stop the
+   *   reconnect loop (the room is gone; retrying would recreate it as a
+   *   brand-new empty room, silently losing the household state).
+   * true     = the caller may retry (e.g. rate_limited, transient).
+   * 'ignore' = our OWN frame was refused and the room is untouched: do
+   *   NOTHING. Recycling the socket would send `leave` and, as the last
+   *   peer, delete the very room the client is standing in (review F6).
+   * null     = the store handles this code itself (code_taken re-roll).
    */
-  retry: boolean | null
+  retry: boolean | 'ignore' | null
 }
 
 const OUTCOMES: Record<string, RelayErrorOutcome> = {
@@ -24,15 +27,17 @@ const OUTCOMES: Record<string, RelayErrorOutcome> = {
   // not been updated for join-or-create. Either way: stop retrying.
   room_expired: { message: 'Room closed — it expired after a period of inactivity', retry: false },
   not_found: { message: 'Room not found — it may have expired', retry: false },
-  // Transient: the budget refills / the frame was a one-off glitch, so
-  // the backoff may keep trying. `bad_state` / `bad_json` /
-  // `unknown_type` are OUR frames being rejected — the room itself is
-  // perfectly alive, so the room must NOT be torn down over them.
+  // Transient: the budget refills, so the backoff may keep trying.
   rate_limited: { message: 'Room error — rate_limited', retry: true },
+  // The relay says this socket is not in a room — its room expired or was
+  // detached — so the room really IS gone for us: re-join and re-seed.
   not_in_room: { message: null, retry: true },
-  bad_state: { message: null, retry: true },
-  bad_json: { message: null, retry: true },
-  unknown_type: { message: null, retry: true },
+  // Our own frames were refused; the room and this socket are fine.
+  // Review F6: these must NOT recycle the socket — that sent `leave` and,
+  // for a single-peer room, deleted the room and its state.
+  bad_state: { message: null, retry: 'ignore' },
+  bad_json: { message: null, retry: 'ignore' },
+  unknown_type: { message: null, retry: 'ignore' },
   // The store re-rolls and re-sends `create`; it owns this one.
   code_taken: { message: null, retry: null },
 }

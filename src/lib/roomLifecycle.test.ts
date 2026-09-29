@@ -53,14 +53,16 @@ function fakeClock() {
 function harness(overrides: Record<string, unknown> = {}) {
   const timers = fakeClock()
   const expired: { code: string; reason: string }[] = []
+  const clock = { t: 1_000_000 }
   const registry = createRoomRegistry({
     setTimer: timers.setTimer,
     clearTimer: timers.clearTimer,
+    now: () => clock.t,
     mintCode: () => 'AAA111',
     onExpire: (room: { code: string }, reason: string) => expired.push({ code: room.code, reason }),
     ...overrides,
   })
-  return { registry, timers, expired }
+  return { registry, timers, expired, clock }
 }
 
 const ws = (peerId: number) => ({ data: { peerId, roomCode: undefined as string | undefined } })
@@ -236,5 +238,140 @@ describe('expiry clocks (ADR-0026)', () => {
     expect(() => registry.dropRoom('nope')).not.toThrow()
     expect(() => registry.expireRoom('nope', 'inactive')).not.toThrow()
     expect(expired).toEqual([])
+  })
+})
+
+describe('a socket belongs to at most one room (review F3)', () => {
+  test('attachPeer detaches the socket from its previous room', () => {
+    const { registry } = harness()
+    const a = ws(1)
+    const first = registry.joinOrCreate('mauve-peacock-candle').room!
+    registry.attachPeer(a, first)
+    expect(first.peers.has(a)).toBe(true)
+    expect(a.data.roomCode).toBe('mauve-peacock-candle')
+
+    const second = registry.joinOrCreate('rose-thistle-moss').room!
+    registry.attachPeer(a, second)
+
+    // Not in the old room's peer set any more: its later expiry must not
+    // send this (now live-elsewhere) client a terminal room_expired.
+    expect(first.peers.has(a)).toBe(false)
+    expect(second.peers.has(a)).toBe(true)
+    expect(a.data.roomCode).toBe('rose-thistle-moss')
+  })
+
+  test('leaving a room that is now empty deletes it (nobody is there)', () => {
+    const { registry } = harness()
+    const a = ws(1)
+    const first = registry.joinOrCreate('mauve-peacock-candle').room!
+    registry.attachPeer(a, first)
+    const second = registry.joinOrCreate('rose-thistle-moss').room!
+    registry.attachPeer(a, second)
+    expect(registry.rooms.size).toBe(1)
+    expect(registry.get('mauve-peacock-candle')).toBeUndefined()
+  })
+
+  test('attachPeer to the SAME room is a no-op re-add', () => {
+    const { registry } = harness()
+    const a = ws(1)
+    const room = registry.joinOrCreate('mauve-peacock-candle').room!
+    registry.attachPeer(a, room)
+    registry.attachPeer(a, room)
+    expect(room.peers.size).toBe(1)
+    expect(registry.rooms.size).toBe(1)
+  })
+})
+
+describe('rev is monotone per CODE, not per room instance (review F4)', () => {
+  test('the floor survives the empty-room delete and is handed back', () => {
+    const { registry } = harness()
+    const a = ws(1)
+    const room = registry.joinOrCreate('mauve-peacock-candle').room!
+    registry.attachPeer(a, room)
+    registry.noteState(room, 5, { plan: [] })
+    expect(registry.floorRev('mauve-peacock-candle')).toBe(5)
+
+    // Everyone leaves → the room (and its state) is gone…
+    registry.removePeer(a, room)
+    expect(registry.rooms.size).toBe(0)
+    // …but the household's revision history is not: a re-created room
+    // continues at 5 instead of restarting at 0, so nobody can mistake
+    // a fresh snapshot for "newer than what we already had".
+    const again = registry.joinOrCreate('mauve-peacock-candle')
+    expect(again.created).toBe(true)
+    expect(registry.floorRev('mauve-peacock-candle')).toBe(5)
+  })
+
+  test('the floor only ever moves up', () => {
+    const { registry } = harness()
+    const room = registry.joinOrCreate('mauve-peacock-candle').room!
+    registry.noteState(room, 7, {})
+    registry.noteState(room, 3, {}) // a lagging peer must not rewind us
+    expect(registry.floorRev('mauve-peacock-candle')).toBe(7)
+    registry.noteState(room, 8, {})
+    expect(registry.floorRev('mauve-peacock-candle')).toBe(8)
+  })
+
+  test('an unknown code has no floor, and a stale one is pruned', () => {
+    const { registry, clock } = harness({ idleTtlMs: 60_000 })
+    expect(registry.floorRev('never-seen')).toBe(0)
+    const room = registry.joinOrCreate('mauve-peacock-candle').room!
+    registry.noteState(room, 5, {})
+    clock.t += 59_000
+    expect(registry.floorRev('mauve-peacock-candle')).toBe(5)
+    clock.t += 2_000 // older than the idle TTL → the history is meaningless
+    expect(registry.floorRev('mauve-peacock-candle')).toBe(0)
+  })
+
+  test('floors are per code, never shared between rooms', () => {
+    const { registry } = harness()
+    const one = registry.joinOrCreate('mauve-peacock-candle').room!
+    const two = registry.joinOrCreate('rose-thistle-moss').room!
+    registry.noteState(one, 9, {})
+    registry.noteState(two, 2, {})
+    expect(registry.floorRev('mauve-peacock-candle')).toBe(9)
+    expect(registry.floorRev('rose-thistle-moss')).toBe(2)
+  })
+})
+
+describe('keepalive keeps a room alive (review F1)', () => {
+  test('touchRoom (what keepalive does) refreshes BOTH clocks', () => {
+    // The idle backstop is SHORTER than the inactivity window here, so
+    // the room can only survive if the keepalive path refreshes both.
+    const { registry, timers, expired } = harness({
+      inactivityTtlMs: 60_000,
+      idleTtlMs: 2_000,
+    })
+    const room = registry.joinOrCreate('mauve-peacock-candle').room!
+    room.peers.add(ws(1))
+
+    for (let i = 0; i < 8; i++) {
+      timers.advance(300) // one keepalive tick
+      registry.touchRoom(room)
+    }
+    expect(registry.get('mauve-peacock-candle')).toBe(room)
+    expect(expired).toEqual([])
+  })
+
+  test('a keepalive alone (no state traffic) keeps a room past the idle backstop', () => {
+    const { registry, timers, expired } = harness({
+      inactivityTtlMs: 60_000,
+      idleTtlMs: 2_000,
+    })
+    const room = registry.joinOrCreate('mauve-peacock-candle').room!
+    room.peers.add(ws(1))
+
+    // One keepalive before the 2s backstop fires pushes it out; without it
+    // the room is gone at 2s (the control assertion below).
+    timers.advance(1_500)
+    registry.touchRoom(room) // keepalive
+    timers.advance(1_500)
+    expect(registry.get('mauve-peacock-candle')).toBe(room)
+    expect(expired).toEqual([])
+
+    // Control: once the keepalives stop, the backstop does close it.
+    timers.advance(2_000)
+    expect(registry.rooms.size).toBe(0)
+    expect(expired).toEqual([{ code: 'mauve-peacock-candle', reason: 'idle' }])
   })
 })
