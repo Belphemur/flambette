@@ -27,6 +27,18 @@ describe('mentionsIngredient', () => {
     expect(mentionsIngredient('juice of ¾ lime', 'lemons')).toBe(false)
     expect(mentionsIngredient('1 lb chicken', 'chick')).toBe(false)
   })
+
+  test('plurals match in BOTH directions (qodo 4128519653)', () => {
+    // Ingredient singular, step line plural — the reported case.
+    expect(mentionsIngredient('juice of 2 lemons', 'lemon')).toBe(true)
+    // And the reverse: ingredient plural, line singular.
+    expect(mentionsIngredient('juice of ¾ lemon', 'lemon')).toBe(true)
+    // o-es / s-es plurals keep their boundaries.
+    expect(mentionsIngredient('2 tomatoes', 'tomato')).toBe(true)
+    expect(mentionsIngredient('2 potatoes', 'potato')).toBe(true)
+    // No widening past the boundary: "chick" never matches "chicken".
+    expect(mentionsIngredient('1 lb chickens', 'chick')).toBe(false)
+  })
 })
 
 describe('matchLineItems', () => {
@@ -90,6 +102,14 @@ describe('measuredChipsForLines', () => {
   test('imprecise lines get a chip in step order', () => {
     const chips = measuredChipsForLines(d, ['6 cloves garlic', 'juice of ¾ lemon'], 1)
     expect(chips).toEqual([{ lineIndex: 1, label: 'measured: 3 lemons' }])
+  })
+
+  test('a plural step line still yields a chip (qodo 4128519653)', () => {
+    // "juice of 2 lemons" is imprecise (the 2 is not the line item count)
+    // and must pick up the "3 lemons" line item.
+    expect(measuredChipsForLines(d, ['juice of 2 lemons'], 1)).toEqual([
+      { lineIndex: 0, label: 'measured: 3 lemons' },
+    ])
   })
 
   test('lines that already carry a parseable amount get no chip', () => {

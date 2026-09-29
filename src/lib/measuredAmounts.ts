@@ -36,11 +36,18 @@ function escapeRegExp(text: string): string {
 /**
  * True when `name` is mentioned in `line` at a word boundary, compared
  * through `nameKey` so "lemon"/"lemons" and "tomato"/"tomatoes" match.
+ *
+ * The pattern is plural-tolerant on BOTH sides (qodo phase 18):
+ * nameKey singularizes the ingredient name, but the authored step line
+ * may still carry the plural — "juice of 2 lemons" must match a line
+ * item named "lemon" (key `lemon`, pattern `\blemon(?:e?s)?\b`). The
+ * optional `(?:e?s)?` never widens the match past a word boundary, so
+ * "chick" still does not match "chicken".
  */
 export function mentionsIngredient(line: string, name: string): boolean {
   const key = nameKey(name)
   if (key.length < 2) return false
-  return new RegExp(`\\b${escapeRegExp(key)}\\b`, 'i').test(line)
+  return new RegExp(`\\b${escapeRegExp(key)}(?:e?s)?\\b`, 'i').test(line)
 }
 
 /**
