@@ -58,7 +58,13 @@ const registry = createRoomRegistry({
   onExpire(room, reason) {
     // Tell every peer the room is gone BEFORE it is dropped, so the
     // client can stop reconnecting instead of rejoining a corpse.
+    // Review F2/F3: only peers that are STILL in this room are notified,
+    // and every one of them has its `roomCode` cleared here — a stale
+    // socket that kept the code could still write state into (and
+    // `leave`/close could delete) a room re-created under the same code.
     for (const peer of room.peers) {
+      if (peer.data?.roomCode !== room.code) continue
+      peer.data.roomCode = undefined
       send(peer, { type: 'error', code: 'room_expired', reason })
     }
   },
@@ -107,7 +113,19 @@ try {
       const ip =
         (forwarded || srv.requestIP(req)?.address) ?? 'unknown'
       if (srv.upgrade(req, { data: { isAlive: true, roomCode: undefined, ip } })) return
-      return new Response('mealime relay\n', { headers: { 'content-type': 'text/plain' } })
+      // The health body echoes the lifecycle configuration so a test (or
+      // an operator) can tell two relays apart without guessing: a
+      // leftover listener from an earlier run with DIFFERENT TTLs must
+      // never be mistaken for the one a spec asked for.
+      return new Response(
+        JSON.stringify({
+          service: 'mealime-relay',
+          inactivityTtlMs: INACTIVITY_TTL_MS,
+          idleTtlMs: IDLE_TTL_MS,
+          attemptLimit: throttle.limit,
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      )
     },
     websocket: {
       open(ws) {
@@ -143,10 +161,11 @@ try {
               return
             }
             const room = registry.createRoom(wanted)
-            room.peers.add(ws)
-            ws.data.roomCode = room.code
-            registry.touchRoom(room)
-            send(ws, { type: 'created', code: room.code })
+            registry.attachPeer(ws, room)
+            // `rev` is the per-code floor (review F4): the client seeds
+            // ABOVE it, so a room re-created after an empty-room delete
+            // continues the household's revision history.
+            send(ws, { type: 'created', code: room.code, rev: registry.floorRev(room.code) })
             break
           }
 
@@ -165,13 +184,11 @@ try {
               send(ws, { type: 'error', code: 'not_found' })
               return
             }
-            room.peers.add(ws)
-            ws.data.roomCode = room.code
-            registry.touchRoom(room)
+            registry.attachPeer(ws, room)
             if (created) {
               // Fresh room: nothing shared yet, so `created` (the same
               // reply shape as the host path) makes the client seed it.
-              send(ws, { type: 'created', code: room.code })
+              send(ws, { type: 'created', code: room.code, rev: registry.floorRev(room.code) })
             } else {
               send(ws, { type: 'joined', code: room.code, rev: room.rev ?? 0, state: room.state ?? null })
             }
@@ -185,12 +202,16 @@ try {
             // which only prunes dead transports and deliberately does
             // not touch room activity. The answer is deliberately NOT
             // named 'pong': that name belongs to the socket-level beat.
+            // …and it refreshes BOTH expiry clocks (review F1): a peer
+            // that is connected and keepaliving is, by definition, not
+            // an idle room — a 12h-connected household must never be
+            // closed by the idle backstop.
             const room = ws.data.roomCode ? registry.get(ws.data.roomCode) : undefined
-            if (!room) {
+            if (!room || !room.peers.has(ws)) {
               send(ws, { type: 'error', code: 'not_in_room' })
               return
             }
-            registry.touchActivity(room)
+            registry.touchRoom(room)
             send(ws, { type: 'keepalive_ack' })
             break
           }
@@ -200,6 +221,10 @@ try {
             const rev = msg.rev
             if (
               !room ||
+              // Review F2: membership, not just the code. A socket whose
+              // room expired (its roomCode was cleared) or that was
+              // detached by a later join must not write into this room.
+              !room.peers.has(ws) ||
               typeof rev !== 'number' ||
               !Number.isFinite(rev) ||
               typeof msg.state !== 'object' ||
@@ -208,8 +233,7 @@ try {
               send(ws, { type: 'error', code: 'bad_state' })
               return
             }
-            room.rev = rev
-            room.state = msg.state
+            registry.noteState(room, rev, msg.state)
             registry.touchRoom(room)
             for (const peer of room.peers) {
               if (peer !== ws) send(peer, { type: 'state', rev, state: msg.state, from: ws.data.peerId })

@@ -12,10 +12,22 @@
  * - a room whose LAST peer leaves is deleted immediately, so "nobody is
  *   there" never needs to wait for a timer (its state goes with it; the
  *   returning client re-seeds the room on `joined`).
- * - two expiry clocks per room: a 1h INACTIVITY clock, refreshed only by
- *   application-level `keepalive` / `state` traffic, and the older 12h
- *   IDLE backstop refreshed by any interaction at all. Firing either
- *   closes the room and tells its peers `room_expired`.
+ * - two expiry clocks per room: a 1h INACTIVITY clock and the older 12h
+ *   IDLE backstop. BOTH are refreshed by any liveness signal —
+ *   keepalive included (review F1: a connected peer that keepalives is
+ *   definitionally not an idle room, so a 12h-connected household must
+ *   not be closed by the backstop). The 12h clock is therefore a
+ *   redundant safety net that only matters if the 1h path ever breaks;
+ *   the effective rule is "1h without keepalive or state traffic".
+ *   Firing either closes the room and tells its peers `room_expired`.
+ * - a socket belongs to AT MOST ONE room: `attachPeer` detaches it from
+ *   its previous room first (review F3), so a peer can never linger in
+ *   a room it left and then be told that room expired.
+ * - `rev` is monotone PER CODE, not per room instance (review F4): the
+ *   highest rev a code ever reached is kept for as long as the idle TTL
+ *   and is handed back in `created`/`joined`, so a room re-created after
+ *   an empty-room delete cannot restart at rev 1 and be mistaken for
+ *   "newer than what this household already has".
  *
  * Plain ESM JavaScript with injectable clock/timers/code generator so
  * the relay keeps running as a zero-dep Bun script and the unit specs
@@ -78,9 +90,16 @@ export function createRoomRegistry({
   onExpire = () => {},
   setTimer = setTimeout,
   clearTimer = clearTimeout,
+  now = () => Date.now(),
 } = {}) {
   /** code -> { code, peers:Set, rev, state, idleTimer, inactivityTimer } */
   const rooms = new Map()
+  /**
+   * code -> { rev, at }: the highest rev this code ever reached, kept
+   * across room deletion for `idleTtlMs` (review F4). Bounded by
+   * staleness pruning on read/write, so it cannot grow without limit.
+   */
+  const revFloor = new Map()
 
   function dropRoom(code) {
     const room = rooms.get(code)
@@ -103,32 +122,66 @@ export function createRoomRegistry({
     dropRoom(code)
   }
 
-  /** Restart the 1h inactivity clock (keepalive / state traffic). */
+  /** Restart the 1h inactivity clock. */
   function touchActivity(room) {
     clearTimer(room.inactivityTimer)
     room.inactivityTimer = setTimer(() => expireRoom(room.code, 'inactive'), inactivityTtlMs)
   }
 
-  /** Restart BOTH clocks — any interaction counts (create/join/keepalive/state). */
+  /**
+   * Restart BOTH clocks. Every liveness signal funnels through here —
+   * create, join, state AND keepalive (review F1). The two clocks are
+   * now refreshed by the same events, so 12h is pure defence in depth;
+   * "1h of silence closes the room" is the promise the client relies on.
+   */
   function touchRoom(room) {
     touchActivity(room)
     clearTimer(room.idleTimer)
     room.idleTimer = setTimer(() => expireRoom(room.code, 'idle'), idleTtlMs)
   }
 
-  function createRoom(forcedCode = '') {
-    if (forcedCode) {
-      const room = { code: forcedCode, peers: new Set(), idleTimer: null, inactivityTimer: null }
-      rooms.set(forcedCode, room)
-      touchRoom(room)
-      return room
+  /**
+   * Highest rev this code ever reached (0 when unknown or older than the
+   * idle TTL). Prunes the entry on the way through.
+   */
+  function floorRev(code) {
+    const entry = revFloor.get(code)
+    if (!entry) return 0
+    if (now() - entry.at > idleTtlMs) {
+      revFloor.delete(code)
+      return 0
     }
-    let code = mintCode()
-    while (rooms.has(code)) code = mintCode()
+    return entry.rev
+  }
+
+  /**
+   * Store a peer snapshot and keep the per-code floor moving. The floor
+   * is what makes a re-created room continue the household's revision
+   * history instead of restarting at 0 (review F4).
+   */
+  function noteState(room, rev, state) {
+    room.rev = rev
+    room.state = state
+    const entry = revFloor.get(room.code)
+    if (!entry || rev > entry.rev || now() - entry.at > idleTtlMs) {
+      revFloor.set(room.code, { rev, at: now() })
+    } else {
+      entry.at = now()
+    }
+  }
+
+  function newRoom(code) {
     const room = { code, peers: new Set(), idleTimer: null, inactivityTimer: null }
     rooms.set(code, room)
     touchRoom(room)
     return room
+  }
+
+  function createRoom(forcedCode = '') {
+    if (forcedCode) return newRoom(forcedCode)
+    let code = mintCode()
+    while (rooms.has(code)) code = mintCode()
+    return newRoom(code)
   }
 
   /**
@@ -156,7 +209,8 @@ export function createRoomRegistry({
   /**
    * Drop a peer. The room is DELETED when its last peer leaves (ADR-0026):
    * nobody is there, so the room (and its state) goes too. A returning
-   * client re-joins — which re-creates the room — and re-seeds it.
+   * client re-joins — which re-creates the room — and re-seeds it. The
+   * per-code `rev` floor survives (review F4).
    */
   function removePeer(ws, room) {
     if (!room) return
@@ -165,14 +219,32 @@ export function createRoomRegistry({
     if (room.peers.size === 0) dropRoom(room.code)
   }
 
+  /**
+   * Put a socket into a room, leaving any previous one first (review F3).
+   * Without the detach, a socket that creates/joins somewhere else stays
+   * in the old room's peer set, and that room's later expiry would send
+   * it a terminal `room_expired` while it is happily live elsewhere — and
+   * a later `leave`/`close` would delete a room it no longer belongs to.
+   */
+  function attachPeer(ws, room) {
+    const previous = ws?.data?.roomCode ? rooms.get(ws.data.roomCode) : undefined
+    if (previous && previous !== room) removePeer(ws, previous)
+    room.peers.add(ws)
+    if (ws?.data) ws.data.roomCode = room.code
+    return room
+  }
+
   return {
     rooms,
     createRoom,
     joinOrCreate,
     get,
     removePeer,
+    attachPeer,
     touchRoom,
     touchActivity,
+    noteState,
+    floorRev,
     dropRoom,
     expireRoom,
   }
