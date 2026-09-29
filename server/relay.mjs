@@ -31,7 +31,13 @@ import { makeThrottle, MemoryAttemptBuckets } from './throttle.mjs'
  * Logic lives in ./throttle.mjs (unit-tested); the relay just wires it.
  */
 const throttle = makeThrottle({
-  peerAddress: (ws) => server?.requestIP?.(ws)?.address ?? 'unknown',
+  // The REAL peer IP, captured at upgrade time (see fetch below): per-IP
+  // budgets are meaningless if every peer collapses into one shared
+  // bucket — under the suite's own connection churn legitimate joins
+  // started receiving `rate_limited` (224-test e2e run failed 4-9
+  // room-join tests; raising RELAY_ATTEMPT_LIMIT made all of them pass,
+  // which pins the shared-bucket collapse as the cause).
+  peerAddress: (ws) => ws.data.ip ?? 'unknown',
 })
 
 
@@ -132,7 +138,7 @@ try {
     // load balancers) get a 200; WebSocket upgrades are handed to the
     // websocket handler below.
     fetch(req, srv) {
-      if (srv.upgrade(req, { data: { isAlive: true, roomCode: undefined } })) return
+      if (srv.upgrade(req, { data: { isAlive: true, roomCode: undefined, ip: srv.requestIP(req)?.address ?? 'unknown' } })) return
       return new Response('mealime relay\n', { headers: { 'content-type': 'text/plain' } })
     },
     websocket: {

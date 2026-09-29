@@ -130,10 +130,19 @@ Deviations from the original sketch, each justified:
   baseline ≈ 4.85/package-per-meal — a ~58 % package reduction, not the
   prototype's -94 %. The greedy algorithm and scoring formula are unchanged;
   only the table's unit definition was wrong.
-- **The relay gained an IP-capture fix** (peer IP is read from `ws.data` set
-  at upgrade instead of `Server.requestIP(ws)`, which throws on a WebSocket
-  in Bun 1.4 and crashed the relay on every create/join). Found while
-  wiring the room-sync e2e; see commit `phase19: fix relay crash`.
+- **Relay: per-IP throttle budgets now key on the REAL peer address.**
+  `Server.requestIP(ws)` requires a Request object — called with a
+  ServerWebSocket it throws, so the throttle's `safeAddress` fallback
+  collapsed EVERY peer into the single `ip:unknown` bucket (30 attempts /
+  60 s shared across the whole suite). Late-suite room joins then got
+  `rate_limited` and their "Live" chip never appeared — CI showed 4 such
+  failures (local CI-mode: 9). Causally pinned: raising
+  `RELAY_ATTEMPT_LIMIT` made all 224 e2e pass. Fix (relay.mjs only —
+  `server/throttle.mjs` stays canonical): capture the IP at upgrade time
+  (`srv.requestIP(req)` inside fetch, where `req` IS a Request) into
+  `ws.data.ip` and key budgets on it. Same fix also restores the per-IP
+  half of the brute-force throttle, which could never distinguish IPs
+  under the fallback.
 - **Toast actions take an optional `testId`** (`stores/ui.ts`) so the undo
   affordance can carry `data-test="auto-plan-undo"` without changing the
   generic `toast-action-primary/secondary` contract.
