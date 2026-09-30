@@ -177,7 +177,7 @@ test('room: a favourite and a rating reach the other phone live', async ({ brows
   await expectZeroMealimeRequests(b)
 })
 
-test('room: the LAST rating written wins, and the household count grows', async ({ browser }) => {
+test('room: the LAST rating written wins, and both devices agree', async ({ browser }) => {
   const ctxA = await browser.newContext()
   const a = await ctxA.newPage()
   await blockExternalRequests(a)
@@ -193,7 +193,8 @@ test('room: the LAST rating written wins, and the household count grows', async 
   const aFirst = (await ratingsOf(a))[variantId]
 
   // B joins and rates the SAME recipe 5, later. A must adopt the newer
-  // record — and its count becomes 2 (two voices, not one overwritten).
+  // record verbatim — and the two devices must end up byte-identical, or
+  // the count-weighted scoring drifts apart per device.
   const ctxB = await browser.newContext()
   const b = await ctxB.newPage()
   await blockExternalRequests(b)
@@ -207,8 +208,12 @@ test('room: the LAST rating written wins, and the household count grows', async 
     .poll(async () => (await ratingsOf(a))[variantId]?.rating, { timeout: 10_000 })
     .toBe(5)
   const merged = (await ratingsOf(a))[variantId]
-  expect(merged.count).toBe(2)
   expect(merged.updatedAt).toBeGreaterThan(aFirst.updatedAt)
+  // Adopted verbatim, count included: an increment on receive is not
+  // idempotent under replay and leaves peers disagreeing.
+  expect(merged.count).toBe(1)
+  // Both devices now hold the same record.
+  expect((await ratingsOf(b))[variantId]).toEqual(merged)
   await expectZeroMealimeRequests(a)
   await expectZeroMealimeRequests(b)
 })

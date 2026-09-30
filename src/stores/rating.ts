@@ -51,6 +51,21 @@ function normalizeStamp(value: unknown, fallback: number): number {
   return Number.isFinite(n) && n >= 0 ? n : fallback
 }
 
+/**
+ * How far AHEAD of our own clock an inbound stamp may sit before we stop
+ * trusting it. Clock skew between two phones on a LAN is seconds, not
+ * hours — but a peer (or a hand-edited file) claiming a timestamp far in
+ * the future would pin that recipe's rating forever: every later, honest
+ * write looks "older" and is discarded. Clamping keeps a skewed peer
+ * usable and bounds the damage of a bogus one.
+ */
+const MAX_FUTURE_SKEW_MS = 60 * 60 * 1000
+
+/** Clamp an untrusted stamp into "plausible" territory. */
+function clampStamp(stamp: number, now: number): number {
+  return Math.min(stamp, now + MAX_FUTURE_SKEW_MS)
+}
+
 /** Map → the ratings.json row array. */
 export function ratingsToRows(map: Readonly<RatingsMap>): RatingFileRow[] {
   return Object.entries(map)
@@ -73,7 +88,7 @@ export function sanitizeRatings(value: unknown): RatingsMap {
     out[key] = {
       rating: stars,
       count: Number.isFinite(count) ? Math.max(1, Math.floor(Number(count))) : 1,
-      updatedAt: normalizeStamp(updatedAt, 0),
+      updatedAt: clampStamp(normalizeStamp(updatedAt, 0), Date.now()),
     }
   }
   return out
@@ -90,9 +105,9 @@ export const useRatingStore = defineStore(
       return map.value[String(variantId)]?.rating ?? 0
     }
 
-    /** How many ratings the household has cast for a recipe. */
+    /** How many ratings the household has cast for a recipe (0 = never). */
     function countFor(variantId: number): number {
-      return map.value[String(variantId)]?.count ?? 1
+      return map.value[String(variantId)]?.count ?? 0
     }
 
     /** When the local record for a recipe was last written (0 = never). */
@@ -109,7 +124,9 @@ export const useRatingStore = defineStore(
      *
      * Re-rating a recipe from THIS device REPLACES the value and keeps the
      * count: the count is a household-size signal for smoothing, and one
-     * person changing their mind must not inflate it.
+     * person changing their mind must not inflate it. (`count` tracks the
+     * votes KNOWN to the record — see `mergeRemote` for why it is not
+     * incremented on receive.)
      */
     function setRating(variantId: number, value: number, updatedAt: number = Date.now()): void {
       const rating = normalizeStarValue(value)
@@ -130,9 +147,17 @@ export const useRatingStore = defineStore(
 
     /**
      * Reconcile a peer's ratings: PER-RECORD last-writer-wins by
-     * `updatedAt`, with the count rolled forward so a second voice on the
-     * same recipe is visible to the smoothing. Never a wholesale replace
-     * (ADR-0031) — a peer that rated one recipe must not erase the rest.
+     * `updatedAt`, adopted VERBATIM. Never a wholesale replace (ADR-0031)
+     * — a peer that rated one recipe must not erase the rest.
+     *
+     * The incoming `count` is taken as-is, NOT incremented. An increment
+     * here is not idempotent under replay: the author already counted its
+     * own vote when it wrote the record, so adding one on every receive
+     * would inflate the count, and two peers receiving the same record
+     * would end up with different counts — the smoothing weight would
+     * drift apart from recipe to recipe and from device to device.
+     * Verbatim adoption is the only rule under which every peer holding
+     * the newest record for a recipe agrees on it.
      */
     function mergeRemote(incoming: unknown): void {
       const clean = sanitizeRatings(incoming)
@@ -141,12 +166,7 @@ export const useRatingStore = defineStore(
       for (const [key, record] of Object.entries(clean)) {
         const local = next[key]
         if (local && record.updatedAt <= local.updatedAt) continue
-        next[key] = {
-          ...record,
-          // A brand-new opinion from another member joins the tally; a
-          // first record we have never seen carries its own count.
-          count: local ? local.count + 1 : record.count,
-        }
+        next[key] = record
       }
       map.value = next
     }

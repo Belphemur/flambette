@@ -365,7 +365,9 @@ export const STORE_SLICES: SliceDef<any>[] = [
     },
     write(value) {
       // Merge, never replace: an older backup must not erase a rating
-      // this device took after the backup was written (ADR-0031).
+      // this device took after the backup was written (ADR-0031). The
+      // per-record merge adopts each row verbatim — including its count —
+      // so importing never inflates the smoothing weight.
       useRatingStore().mergeRemote(
         Object.fromEntries(
           (value as RatingFileRow[]).map((row) => [String(row.id), row]),

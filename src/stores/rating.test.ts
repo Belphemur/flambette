@@ -38,7 +38,7 @@ describe('useRatingStore (ADR-0031)', () => {
     expect(store.map['7'].rating).toBe(3.5)
   })
 
-  test('a NEWER record wins: peer B (5) beats peer A (4) and the count grows', () => {
+  test('a NEWER record wins: peer B (5) beats peer A (4), adopted verbatim', () => {
     const a = useRatingStore()
     a.setRating(100, 4, 1_000) // A rated it 4 at t=1000
 
@@ -50,13 +50,14 @@ describe('useRatingStore (ADR-0031)', () => {
     b.setRating(100, 5, 5_000) // B changes its mind, later
     a.mergeRemote(b.map) // A receives B's newer opinion
     expect(a.ratingFor(100)).toBe(5)
-    expect(a.countFor(100)).toBe(2) // A's 4 + B's 5
-    // And it converges back the other way — the VALUE travels, while the
-    // count does not double-count: the echoed record carries the same
-    // timestamp, and an equal timestamp is not a new opinion.
+    // Adopted VERBATIM, count included: an increment on receive is not
+    // idempotent under replay, and would leave peers disagreeing.
+    expect(a.countFor(100)).toBe(1)
+    // And it converges back the other way: both devices hold B's record.
     b.mergeRemote(a.map)
     expect(b.ratingFor(100)).toBe(5)
     expect(b.countFor(100)).toBe(1)
+    expect(a.map['100']).toEqual(b.map['100'])
   })
 
   test('an OLDER record loses: reversing the timestamps keeps the 4', () => {
@@ -93,6 +94,28 @@ describe('useRatingStore (ADR-0031)', () => {
       '6': { rating: 0, count: 1, updatedAt: 1 },
     })
     expect(store.map).toEqual({ '5': { rating: 5, count: 1, updatedAt: 0 } })
+  })
+
+  test('an unrated recipe reports count 0 (the star widget relies on it)', () => {
+    const store = useRatingStore()
+    expect(store.countFor(999)).toBe(0)
+    store.setRating(999, 3, 1)
+    expect(store.countFor(999)).toBe(1)
+  })
+
+  test('a far-future stamp is clamped, so it cannot pin a rating forever', () => {
+    const store = useRatingStore()
+    const now = Date.now()
+    store.setRating(1, 5, now)
+    // A peer (or a hand-edited file) claiming a decade from now.
+    store.mergeRemote({ '1': { rating: 2, count: 1, updatedAt: now + 10 * 365 * 86_400_000 } })
+    // It is stored CLAMPED into the plausible-skew window, not verbatim.
+    expect(store.ratingFor(1)).toBe(2) // it still wins near-term
+    expect(store.map['1'].updatedAt).toBeLessThanOrEqual(now + 60 * 60 * 1000)
+    // The property that matters: it cannot pin the rating forever — an
+    // honest write past the window beats it.
+    store.setRating(1, 4, now + 25 * 60 * 60 * 1000)
+    expect(store.ratingFor(1)).toBe(4)
   })
 
   test('ratings.json rows carry the id and sort by it', () => {

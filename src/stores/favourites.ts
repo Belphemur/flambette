@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { getCatalog } from '../lib/catalog'
 
 /**
@@ -9,19 +9,23 @@ import { getCatalog } from '../lib/catalog'
  * persisted to localStorage under `mealime-planner:v1:favourites`.
  *
  * Internally the truth is a record per recipe — `{favorited, updatedAt}`
- * — and the live `Set` is MATERIALIZED from the records that are
- * `favorited: true`. A plain set could only ever union, which means a
- * peer that un-starred a recipe would see it spring back to life on the
+ * — and the live `Set` is a COMPUTED materialized from the records that
+ * are `favorited: true`. A plain set could only ever union, which means
+ * a peer that un-starred a recipe would see it spring back to life on the
  * next push from anyone (the delete anomaly). Tombstones reconcile that,
  * with the same last-writer-wins-by-`updatedAt` rule the household
  * ratings use — ONE merge rule for the whole preference surface.
  *
+ * `records` being the single source of truth (rather than a `Set` kept in
+ * sync beside it) is what makes persistence hydration synchronous: the
+ * plugin writes `records` directly, and the derived set is correct on the
+ * very next read — no flush window in which a toggle could overwrite the
+ * saved ids, and no stale set for the room's `snapshot()` to publish.
+ *
  * UNCHANGED BY ADR-0031, deliberately: the seeding, the public
  * `Set<number>` interface, the persisted ARRAY format, and the
  * `favourites.json` backup slice. Tombstones are in-memory only — a
- * backup carries the starred recipes, not the tombstones, and they are
- * compact by construction (a tombstone is overwritten by the next record
- * for that recipe, and never needs a sweep).
+ * backup carries the starred recipes, not the tombstones.
  */
 
 export interface FavouriteRecord {
@@ -34,6 +38,15 @@ export interface FavouriteRecord {
 /** variantId → record. Keys are numeric variant ids, as strings in JSON. */
 export type FavouritesMap = Record<string, FavouriteRecord>
 
+/**
+ * The stamp carried by a DEFAULT, not an opinion: the first-run catalog
+ * seed and persistence hydration both write stamp 0. The room watcher uses
+ * it to tell "the household changed its mind" from "this device finished
+ * starting up", so a joiner can never publish its seed over the room's
+ * state (see src/stores/room.ts).
+ */
+export const DEFAULT_STAMP = 0
+
 function materialize(records: FavouritesMap): Set<number> {
   const out = new Set<number>()
   for (const [key, record] of Object.entries(records)) {
@@ -42,7 +55,7 @@ function materialize(records: FavouritesMap): Set<number> {
   return out
 }
 
-/** Ids → records, all starred. `stamp` is the merge key they carry. */
+/** Ids → records, all starred at `stamp`. */
 function fromIds(ids: Iterable<number>, stamp: number): FavouritesMap {
   const out: FavouritesMap = {}
   for (const id of ids) {
@@ -63,7 +76,7 @@ export function sanitizeFavourites(value: unknown): FavouritesMap {
     const stamp = Number(updatedAt)
     out[key] = {
       favorited,
-      updatedAt: Number.isFinite(stamp) && stamp >= 0 ? stamp : 0,
+      updatedAt: Number.isFinite(stamp) && stamp >= 0 ? stamp : DEFAULT_STAMP,
     }
   }
   return out
@@ -75,33 +88,12 @@ export const useFavouritesStore = defineStore(
     /** The timestamped truth: one record per recipe, stars AND tombstones. */
     const records = ref<FavouritesMap>({})
     /**
-     * The live set, MATERIALIZED from `records` by every write. Public
-     * API, Pinia state and the persisted shape all stay a `Set<number>`.
-     *
-     * A real ref (not a computed): pinia-plugin-persistedstate hydrates
-     * by ASSIGNING the persisted value, and it must be able to write it.
-     * It is kept in sync inside `commit()` rather than by a watcher, so a
-     * caller that toggles and then reads — or the room's `snapshot()` —
-     * never sees a stale set.
+     * The live set, derived from `records` on every read — always in sync
+     * by construction, which is what the room's `snapshot()` relies on.
      */
-    const ids = ref(new Set<number>())
+    const ids = computed(() => materialize(records.value))
     /** True once the store has been seeded/initialized from the catalog. */
     const seeded = ref(false)
-
-    /** The one place records change: records first, then the live set. */
-    function commit(next: FavouritesMap): void {
-      records.value = next
-      ids.value = materialize(next)
-    }
-
-    // Hydration: the persisted payload is the id ARRAY (format unchanged),
-    // so the records are rebuilt from it — stamp 0, because a bare restored
-    // id is older information than any record a peer has sent since.
-    watch(ids, (next) => {
-      if (next.size > 0 && Object.keys(records.value).length === 0) {
-        commit(fromIds(next, 0))
-      }
-    })
 
     function isFavourite(variantId: number): boolean {
       return ids.value.has(variantId)
@@ -113,9 +105,9 @@ export const useFavouritesStore = defineStore(
      */
     function toggleFavourite(variantId: number, updatedAt: number = Date.now()): void {
       const key = String(variantId)
-      const stamp = Number.isFinite(updatedAt) && updatedAt >= 0 ? updatedAt : Date.now()
+      const stamp = Number.isFinite(updatedAt) && updatedAt > DEFAULT_STAMP ? updatedAt : Date.now()
       const favorited = !ids.value.has(variantId)
-      commit({ ...records.value, [key]: { favorited, updatedAt: stamp } })
+      records.value = { ...records.value, [key]: { favorited, updatedAt: stamp } }
     }
 
     /**
@@ -133,14 +125,14 @@ export const useFavouritesStore = defineStore(
         if (local && record.updatedAt <= local.updatedAt) continue
         next[key] = record
       }
-      commit(next)
+      records.value = next
     }
 
     /**
-     * First-run seeding from the catalog snapshot. Only ADDS: an id we
-     * already hold a record for (e.g. a room merge that landed before the
-     * catalog finished loading) keeps its record — a seed is a default,
-     * not an authority.
+     * First-run seeding from the catalog snapshot. Only ADDS, and always
+     * at `DEFAULT_STAMP`: an id we already hold a record for (e.g. a room
+     * merge that landed before the catalog finished loading) keeps it,
+     * and a seed is a default, never an authority.
      */
     function seedFrom(catalogIds: Iterable<number>): void {
       const next = { ...records.value }
@@ -149,19 +141,17 @@ export const useFavouritesStore = defineStore(
         if (!Number.isFinite(id)) continue
         const key = String(id)
         if (key in next) continue
-        next[key] = { favorited: true, updatedAt: 0 }
+        next[key] = { favorited: true, updatedAt: DEFAULT_STAMP }
         changed = true
       }
-      if (changed) commit(next)
+      if (changed) records.value = next
     }
 
     /** Replace the set wholesale (backup import) — fresh local truth. */
     function replaceAll(newIds: number[]): void {
-      commit(
-        fromIds(
-          newIds.filter((n) => Number.isFinite(n)),
-          Date.now(),
-        ),
+      records.value = fromIds(
+        newIds.filter((n) => Number.isFinite(n)),
+        Date.now(),
       )
     }
 
@@ -170,12 +160,14 @@ export const useFavouritesStore = defineStore(
   {
     persist: {
       key: 'mealime-planner:v1:favourites',
-      pick: ['ids'],
-      // Sets don't round-trip through JSON — persist as an array. The
-      // format is UNCHANGED by ADR-0031: tombstones stay in memory.
+      // `records` is the truth, but the ON-DISK format is unchanged by
+      // ADR-0031: still a plain array of starred ids (tombstones stay in
+      // memory). Hydration therefore rebuilds records at DEFAULT_STAMP.
+      pick: ['records'],
       serializer: {
-        serialize: (state) => JSON.stringify([...(state.ids as Set<number>)]),
-        deserialize: (raw) => ({ ids: new Set(JSON.parse(raw) as number[]) }),
+        serialize: (state) =>
+          JSON.stringify([...materialize(state.records as FavouritesMap)]),
+        deserialize: (raw) => ({ records: fromIds(JSON.parse(raw) as number[], DEFAULT_STAMP) }),
       },
     },
   },

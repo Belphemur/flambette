@@ -364,7 +364,7 @@ function cancelBackupImport(): void {
       >
         <h3 class="text-sm font-bold tracking-tight">Restore this backup?</h3>
         <p class="text-xs dark:text-stone-400">
-          This overwrites your current plan, checked items, cooked history, favourites, recipe ratings, custom ingredients and settings with the backup’s contents.
+          This overwrites your current plan, checked items, cooked history, favourites, custom ingredients and settings with the backup’s contents. Recipe ratings are merged instead — a rating you set after the backup was taken is kept.
         </p>
         <p class="truncate text-xs dark:text-stone-500">
           {{ pendingBackup?.name }}

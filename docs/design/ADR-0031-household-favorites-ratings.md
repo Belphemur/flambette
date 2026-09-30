@@ -60,6 +60,26 @@ Tombstones need no cleanup: each is overwritten by the next record for
 that recipe, and the map is keyed by recipe, so it is compact by
 construction.
 
+Two invariants this shape buys, both of which cost us something in the
+first cut:
+
+- **`records` is the single source of truth** and the public `Set` is a
+  `computed` over it. The earlier design kept a real `Set` ref mirrored
+  from the records; persistence hydration then assigned the ref directly
+  and a `watch` had to rebuild the records — a deferred rebuild that a
+  toggle landing before the flush could beat, silently dropping every
+  persisted favourite. Deriving the set removes the flush window
+  entirely: it is correct on the first read after hydration, which is
+  also what the room's `snapshot()` needs.
+- **A default is not an opinion.** First-run seeding and persistence
+  hydration both stamp their records `DEFAULT_STAMP` (0), and the room's
+  favourites watcher skips a change in which every touched record is a
+  default. Without that, a device that seeds during a join would look
+  like it had made a local edit: `unsentLocalEdit` would suppress the
+  join handler's adoption and it would publish its own (possibly empty)
+  state over the room's plan — a startup artifact dressed as an edit.
+  A real toggle is stamped with the clock and is still published.
+
 ### 3. Ratings: a new store, seeded EMPTY
 
 `src/stores/rating.ts` — `useRatingStore`, a plain
@@ -105,10 +125,19 @@ preference surface is not:
   new opinion (so the echo of our own push can neither resurrect a star
   nor inflate a count).
 
-When an incoming record supersedes one we already hold, the count rolls
-forward (`local.count + 1`): a second household voice on the same recipe
-is real information for the smoothing. A record for a recipe we have
-never seen keeps its own count.
+An incoming record is adopted **verbatim**, `count` included. That is
+the only rule under which every peer holding the newest record for a
+recipe agrees on it: incrementing on receive is not idempotent under
+replay, so a re-rate would inflate the count and two devices would drift
+apart on the very number the smoothing weighs. `count` therefore tracks
+the votes known to the record — the author counts its own vote when it
+writes, and a device changing its own mind never inflates it.
+
+Inbound stamps are clamped to at most one hour AHEAD of our own clock
+(`MAX_FUTURE_SKEW_MS`). Two phones on a LAN are seconds apart, but a
+peer (or a hand-edited file) claiming a timestamp years ahead would
+otherwise pin that recipe's rating forever — every later, honest write
+looking "older". The clamp bounds that to one hour instead of never.
 
 `SharedState.ratings` and `SharedState.favorites` are emitted **only
 when non-empty** (the same conditional as `cookedHistory`): an absent
@@ -169,6 +198,30 @@ import MERGES rather than replaces — a deliberate exception to the
 you like, not a reconciliation log — shipping tombstones would leak
 unreconciled state into every restore and bloat the slice for no
 benefit.
+
+## Known limitations (accepted, not accidental)
+
+- **An older client can drop the fields from the room.** A v0.12.0 peer
+  sends neither `favorites` nor `ratings`, and the relay replaces its
+  whole stored snapshot on every push — so a push from an old peer
+  leaves the room's snapshot without them. Receivers are protected (an
+  absent field means "don't touch", so their local state survives), and
+  a peer that has never heard of these fields keeps its own. What IS lost
+  is the room's stored copy, which a device joining fresh would not
+  receive. This is a property of the existing whole-snapshot protocol
+  and applies equally to `cleared` and `customs`; fixing it means
+  per-field versioning in the relay, well beyond this change.
+- **Un-stars do not survive a reload.** Tombstones are in-memory only
+  (the persisted format and the backup file are the starred id array, by
+  the phase constraint), so a device that reloads holds its stars again
+  and could re-adopt them from a stale peer push. Closing this means
+  persisting records, which the constraint holds fixed for now.
+- **The Auto-Plan pin proves less than it once did.** A fresh profile
+  already holds the seeded favourites, so `runAutoPlan` always passes
+  `favoriteIds`; the e2e pin now proves the SEEDED case is unchanged
+  rather than the "no preferences at all" case. The "absent field == v2
+  bit for bit" contract is pinned by unit spec instead
+  (`packPlanner.test.ts`).
 
 ## Consequences
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { createPinia, setActivePinia } from 'pinia'
-import { useFavouritesStore } from './favourites'
+import { nextTick } from 'vue'
+import { DEFAULT_STAMP, useFavouritesStore } from './favourites'
 
 /**
  * Favourite reconciliation (ADR-0031): a favourited set WITH delete
@@ -95,5 +96,34 @@ describe('useFavouritesStore (ADR-0031 tombstones)', () => {
     })
     expect(store.records).toEqual({ '6': { favorited: true, updatedAt: 0 } })
     expect(store.isFavourite(6)).toBe(true)
+  })
+
+  test('the live set is correct on the FIRST read — no flush window', async () => {
+    // `ids` is derived from `records`, so hydration (which assigns
+    // `records` directly) is visible immediately. The earlier mirrored-ref
+    // design needed a watcher, and a toggle landing before that watcher
+    // ran dropped every persisted favourite.
+    const store = useFavouritesStore()
+    store.records = { '10': { favorited: true, updatedAt: DEFAULT_STAMP } }
+    expect([...store.ids]).toEqual([10])
+    // A toggle issued before any Vue flush must not lose the saved id.
+    store.toggleFavourite(11, 5_000)
+    expect([...store.ids].sort((a, b) => a - b)).toEqual([10, 11])
+    await nextTick()
+    expect(store.isFavourite(10)).toBe(true)
+  })
+
+  test('seeding and hydration write DEFAULT_STAMP (startup, not opinion)', () => {
+    const store = useFavouritesStore()
+    store.seedFrom([1, 2])
+    expect(store.records['1'].updatedAt).toBe(DEFAULT_STAMP)
+    expect(store.records['2'].updatedAt).toBe(DEFAULT_STAMP)
+    // A real toggle is stamped with the clock — the room watcher uses the
+    // difference to tell a startup write from a household opinion.
+    store.toggleFavourite(1, 9_000)
+    expect(store.records['1']).toEqual({ favorited: false, updatedAt: 9_000 })
+    // And a default stamp never overwrites a real one.
+    store.seedFrom([1])
+    expect(store.records['1'].updatedAt).toBe(9_000)
   })
 })

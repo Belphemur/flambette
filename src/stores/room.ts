@@ -10,7 +10,7 @@ import {
   type SharedQuickFilters,
 } from '../lib/quickFilters'
 import { useCustomIngredientsStore, type CustomIngredient } from './customIngredients'
-import { useFavouritesStore } from './favourites'
+import { useFavouritesStore, DEFAULT_STAMP } from './favourites'
 import { usePlanStore, type CookedEntry } from './plan'
 import { useGroceryStore } from './grocery'
 import { useRatingStore } from './rating'
@@ -390,13 +390,34 @@ export const useRoomStore = defineStore('room', () => {
     { deep: true, flush: 'sync' },
   )
 
-  // ADR-0031: household favourites + stars publish IMMEDIATELY — same
-  // push path and same echo guard, no debounce (see schedulePush). They
-  // are split from the watcher above purely to pick that mode; the
-  // `applyingRemote` guard is what stops an inbound from echoing back.
+  // ADR-0031: household stars publish IMMEDIATELY — same push path, same
+  // echo guard, no debounce (see schedulePush).
   watch(
-    () => [favourites.records, ratings.map] as const,
+    () => ratings.map,
     () => schedulePush(true),
+    { deep: true, flush: 'sync' },
+  )
+
+  // ADR-0031: favourites publish immediately too, but the watcher
+  // distinguishes a genuine household opinion from this device FINISHING
+  // ITS STARTUP. First-run catalog seeding and persistence hydration both
+  // write `DEFAULT_STAMP` records (0); a joiner that pushed those would
+  // set `unsentLocalEdit`, and the join handler would then publish the
+  // joiner's own (possibly empty) state over the room's plan — a startup
+  // artifact dressed up as an edit. So a change in which EVERY touched
+  // record is a default is not a local edit, while a real toggle made
+  // while joining is still published.
+  let lastFavouriteRecords = favourites.records
+  watch(
+    () => favourites.records,
+    (next) => {
+      const previous = lastFavouriteRecords
+      lastFavouriteRecords = next
+      const touched = Object.keys(next).filter((key) => next[key] !== previous[key])
+      if (touched.length === 0) return
+      if (touched.every((key) => next[key].updatedAt === DEFAULT_STAMP)) return
+      schedulePush(true)
+    },
     { deep: true, flush: 'sync' },
   )
 
