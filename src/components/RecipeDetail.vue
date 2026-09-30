@@ -8,6 +8,7 @@ import { scaleSteps, type ScaledStep } from '../lib/recipe'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
 import { useFavouritesStore } from '../stores/favourites'
+import RatingStars from './RatingStars.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
 import { onMounted, onUnmounted } from 'vue'
 import {
@@ -171,6 +172,10 @@ function startCooking() {
           <span class="capitalize">{{ catalog?.dataById.get(meta.id)?.category_name ?? meta.ruleset }}</span>
         </div>
         <h2 class="text-2xl font-bold tracking-tight">{{ meta.name }}</h2>
+        <div class="flex items-center gap-2" data-test="recipe-detail-rating">
+          <RatingStars :variant-id="meta.id" :catalog-rating="meta.rating" :size="20" />
+          <span class="text-xs text-stone-400 dark:text-stone-500">rate it for your household</span>
+        </div>
         <p class="flex flex-wrap gap-3 text-sm dark:text-stone-400">
           <span class="flex items-center gap-1">
             <Flame :size="14" aria-hidden="true" />{{ Math.round(meta.calories) }} kcal / serving

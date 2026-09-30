@@ -490,3 +490,108 @@ describe('buildAutoPlan v2 hardening (qodo round 1)', () => {
     expect(plan.packagesBought).toBe(1)
   })
 })
+
+describe('buildAutoPlan v3 (ADR-0031 household favourites)', () => {
+  /** Two candidates whose every scoring term is equal: same (zero) waste,
+   *  same rating, no tags. Only `favoriteIds` can break the tie. */
+  function tiedIndex(): PackIndex {
+    return idx({
+      '1': { i: [], s: 0 },
+      '2': { i: [], s: 0 },
+      '3': { i: [], s: 0 },
+    })
+  }
+
+  test('absent favoriteIds == v2 arithmetic (the e2e pin contract)', () => {
+    const index = tiedIndex()
+    const req = {
+      count: 3,
+      ratings: ratings([
+        [1, 0.5],
+        [2, 0.5],
+        [3, 0.5],
+      ]),
+    }
+    expect(buildAutoPlan(index, req).variantIds).toEqual([1, 2, 3])
+    // An EMPTY set must be indistinguishable from an absent one.
+    expect(buildAutoPlan(index, { ...req, favoriteIds: new Set<number>() }).variantIds).toEqual([
+      1, 2, 3,
+    ])
+  })
+
+  test('favourite bonus flips an exact tie', () => {
+    const index = tiedIndex()
+    const req = {
+      count: 3,
+      ratings: ratings([
+        [1, 0.5],
+        [2, 0.5],
+        [3, 0.5],
+      ]),
+    }
+    // Slot 1 is the seed (rating-only ranking, so id 1); slots 2-3 would
+    // take 2 then 3 — but 3 is a household favourite, so it wins slot 2.
+    expect(buildAutoPlan(index, { ...req, favoriteIds: new Set([3]) }).variantIds).toEqual([1, 3, 2])
+  })
+
+  test('the bonus never outvotes waste', () => {
+    // Same shape as the "package marginal cost outweighs any rating gap"
+    // case: 0.05 < 1 opened package, so the container-free recipe still
+    // wins even when the opening one is a favourite AND better rated.
+    const index = idx({
+      '1': { i: [[0, 0.5, 1, 1]], s: 1 },
+      '2': { i: [[0, 0.5, 1, 1]], s: 1 },
+      '3': { i: [[1, 2, 0, 0]], s: 1 },
+    })
+    const plan = buildAutoPlan(index, {
+      count: 2,
+      ratings: ratings([
+        [1, 0.5],
+        [2, 0.5],
+        [3, 0.5],
+      ]),
+      favoriteIds: new Set([3]),
+    })
+    expect(plan.variantIds).toEqual([1, 3])
+  })
+
+  test('bonus does not move the rotating seed', () => {
+    // Favouriting the LOWEST-rated candidate must not let it anchor the
+    // pack: the seed ranks on rating alone (ADR-0031).
+    const index = tiedIndex()
+    const plan = buildAutoPlan(index, {
+      count: 1,
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.2],
+        [3, 0.2],
+      ]),
+      favoriteIds: new Set([2]),
+    })
+    expect(plan.variantIds).toEqual([1])
+  })
+
+  test('an over-sized rating gap still outranks a favourite bonus', () => {
+    // FAVORITE_BONUS (0.05) < one rating swing: a 0.4 rating gap
+    // (0.25*0.4 = 0.1) cannot be flipped by the bonus alone.
+    const index = tiedIndex()
+    const req = { count: 2 }
+    const baseline = ratings([
+      [1, 0.6],
+      [2, 0.6],
+      [3, 0.6],
+    ])
+    const withoutFavorite = buildAutoPlan(index, { ...req, ratings: baseline })
+    const withFavorite = buildAutoPlan(index, {
+      ...req,
+      ratings: ratings([
+        [1, 0.6],
+        [2, 0.2],
+        [3, 0.6],
+      ]),
+      favoriteIds: new Set([2]),
+    })
+    expect(withoutFavorite.variantIds).toEqual([1, 2])
+    expect(withFavorite.variantIds).toEqual([1, 3])
+  })
+})

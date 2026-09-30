@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { createPinia, setActivePinia } from 'pinia'
 import { STORE_SLICES } from './backup'
 import { useUiStore } from '../stores/ui'
+import { useRatingStore } from '../stores/rating'
 
 /** read() of the settings slice also carries the theme override, which
  *  lives in localStorage under a non-Pinia key (useDark). */
@@ -136,5 +137,80 @@ describe('settings import (ADR-0013 registry)', () => {
     expect(ui.autoPlanRuleset).toBe('dinner')
     expect(ui.autoPlanMode).toBe('add')
     expect(ui.autoPlanGeneration).toBe(0)
+  })
+})
+
+/**
+ * ADR-0031 — the household ratings slice. Round-trip + validation, the
+ * "opinion is never seeded from the catalog" rule, and the per-record
+ * reconciliation that import inherits (newer `updatedAt` wins, so an
+ * older backup cannot clobber household ratings taken since).
+ */
+describe('ratings slice (ADR-0031 registry)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    ;(globalThis as Record<string, unknown>).localStorage = memoryStorage()
+  })
+
+  const ratingsSlice = () => {
+    const slice = STORE_SLICES.find((s) => s.file === 'ratings.json')
+    if (!slice) throw new Error('ratings.json slice missing from STORE_SLICES')
+    return slice
+  }
+
+  test('is registered in STORE_SLICES (export/import/validation share it)', () => {
+    expect(ratingsSlice().persistKeys).toEqual(['mealime-planner:v1:ratings'])
+  })
+
+  test('seeds empty — a rating is opinion, never catalog truth', () => {
+    expect(useRatingStore().ratingFor(17452)).toBe(0)
+    expect(ratingsSlice().read()).toEqual([])
+  })
+
+  test('round-trips ratings through read() → write()', () => {
+    const store = useRatingStore()
+    store.setRating(17452, 4.5, 1_000)
+    store.setRating(6389, 2, 1_000)
+    const exported = ratingsSlice().read()
+    expect(exported).toEqual([
+      { id: 6389, rating: 2, count: 1, updatedAt: 1_000 },
+      { id: 17452, rating: 4.5, count: 1, updatedAt: 1_000 },
+    ])
+
+    // A different device restores it.
+    setActivePinia(createPinia())
+    expect(useRatingStore().ratingFor(17452)).toBe(0)
+    ratingsSlice().write(exported)
+    expect(useRatingStore().ratingFor(17452)).toBe(4.5)
+    expect(useRatingStore().countFor(17452)).toBe(1)
+    expect(useRatingStore().ratingFor(6389)).toBe(2)
+  })
+
+  test('import RECONCILES: an older backup never rolls back a newer rating', () => {
+    const store = useRatingStore()
+    store.setRating(7, 5, 5_000) // this device rated it 5, recently
+    // A backup taken BEFORE that, with an older record.
+    ratingsSlice().write([{ id: 7, rating: 2, count: 1, updatedAt: 1_000 }])
+    expect(store.ratingFor(7)).toBe(5)
+    expect(store.map['7'].updatedAt).toBe(5_000)
+
+    // A NEWER record from a peer does land.
+    ratingsSlice().write([{ id: 7, rating: 3, count: 2, updatedAt: 9_000 }])
+    expect(store.ratingFor(7)).toBe(3)
+  })
+
+  test('rejects malformed payloads (import is validation-first + atomic)', () => {
+    const v = ratingsSlice().validate
+    expect(v([{ id: 1, rating: 9, count: 1, updatedAt: 1 }])).toContain('(0, 5]')
+    expect(v([{ id: 1, rating: 0, count: 1, updatedAt: 1 }])).toContain('(0, 5]')
+    expect(v([{ id: 1, rating: 3, count: 0, updatedAt: 1 }])).toContain('>= 1')
+    expect(v([{ id: 1, rating: 3, count: 1 }])).toContain('updatedAt')
+    expect(v([{ id: 1, rating: 3, count: 1, updatedAt: 'yesterday' }])).toContain('updatedAt')
+    expect(v([{ id: 1, rating: 3, count: 1, updatedAt: -1 }])).toContain('updatedAt')
+    expect(v([{ rating: 3, count: 1, updatedAt: 1 }])).toContain('numeric id')
+    expect(v([{ id: 'x', rating: 3, count: 1, updatedAt: 1 }])).toContain('numeric id')
+    expect(v([{ id: 1, rating: 3, count: 1, updatedAt: 1 }, 7])).toContain('must be objects')
+    expect(v({})).toContain('must be an array')
+    expect(v([{ id: 1, rating: 3, count: 1, updatedAt: 1 }])).toBeNull()
   })
 })

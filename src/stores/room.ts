@@ -10,8 +10,10 @@ import {
   type SharedQuickFilters,
 } from '../lib/quickFilters'
 import { useCustomIngredientsStore, type CustomIngredient } from './customIngredients'
+import { useFavouritesStore } from './favourites'
 import { usePlanStore, type CookedEntry } from './plan'
 import { useGroceryStore } from './grocery'
+import { useRatingStore } from './rating'
 import { useUiStore } from './ui'
 
 export type RoomStatus = 'idle' | 'connecting' | 'live' | 'error'
@@ -34,13 +36,34 @@ interface SharedState {
   cookedHistory?: CookedEntry[]
   /**
    * Household half of the quick filters (ADR-0028). `favOnly` is
-   * deliberately NOT carried: the favourites set is personal, so sharing
-   * the switch would blank a peer's Recipes tab (see quickFilters.ts).
+   * deliberately NOT carried: it is a VIEW preference, and sharing the
+   * switch would blank a peer's Recipes tab (see quickFilters.ts). The
+   * favourites SET itself IS household state as of ADR-0031 (see
+   * `favorites` in SharedState) — the starred recipes are shared, the
+   * switch that filters by them stays personal.
    * OPTIONAL: a peer running older code sends no `filters` key, and
    * receiving a payload WITHOUT it must leave the local selection
    * untouched (never a wipe).
    */
   filters?: SharedQuickFilters
+  /**
+   * ADR-0031 — the household favourites, as RECORDS with delete markers
+   * (`{favorited, updatedAt}` per recipe), not a bare id array: a bare set
+   * can only ever union, so a peer that un-starred a recipe would see it
+   * spring back on the next push. OPTIONAL and reconciled per key by
+   * `updatedAt`; a v0.12 peer sends no `favorites` key and keeps its own.
+   */
+  favorites?: Record<string, { favorited: boolean; updatedAt: number }>
+  /**
+   * ADR-0031 — household per-recipe stars. OPTIONAL and RECONCILED PER
+   * RECORD (each record carries its own `updatedAt`; newer wins), never
+   * applied wholesale: two peers rating DIFFERENT recipes is the normal
+   * case, and a whole-state replace would let whoever pushed last erase
+   * every other rating in the house. A v0.12 peer sends no `ratings` key
+   * and keeps its own. Emitted only when non-empty (an empty object means
+   * "nothing to say", not "clear the household").
+   */
+  ratings?: Record<string, { rating: number; count: number; updatedAt: number }>
 }
 
 const PUSH_DEBOUNCE_MS = 300
@@ -104,6 +127,8 @@ export const useRoomStore = defineStore('room', () => {
   const plan = usePlanStore()
   const grocery = useGroceryStore()
   const customIngredients = useCustomIngredientsStore()
+  const favourites = useFavouritesStore()
+  const ratings = useRatingStore()
   const ui = useUiStore()
 
   const status = ref<RoomStatus>('idle')
@@ -188,6 +213,16 @@ export const useRoomStore = defineStore('room', () => {
       // Household state (ADR-0028): the shared half of the quick filters.
       filters: toSharedFilters(ui.quickFilters),
     }
+    // ADR-0031: the favourites RECORDS (with delete markers) and the star
+    // ratings are emitted ONLY when non-empty — an absent key means
+    // "nothing to merge", never "clear the household", so a peer that
+    // holds nothing can never wipe a peer's preferences.
+    if (Object.keys(favourites.records).length > 0) {
+      state.favorites = { ...favourites.records }
+    }
+    if (Object.keys(ratings.map).length > 0) {
+      state.ratings = { ...ratings.map }
+    }
     // Personal history only crosses the wire when the sender opted in.
     if (ui.shareCookedHistory) {
       state.cookedHistory = plan.cookedHistory.map((h) => ({ ...h }))
@@ -222,6 +257,20 @@ export const useRoomStore = defineStore('room', () => {
         const merged = mergeSharedFilters(filters, ui.quickFilters)
         if (!sameQuickFilters(merged, ui.quickFilters)) ui.quickFilters = merged
       }
+      // Favourites (ADR-0031): PER-KEY reconciliation, newest `updatedAt`
+      // wins — so a later un-star really un-stars and an older un-star
+      // does not resurrect a star. The live Set is materialized inside
+      // the store from the surviving records. ABSENCE means "don't touch"
+      // (a v0.12 peer, or a peer that has starred nothing).
+      if (state.favorites != null) favourites.mergeRemote(state.favorites)
+      // Household stars (ADR-0031): PER-RECORD reconciliation — the
+      // incoming record wins for exactly the recipes it carries AND only
+      // when its `updatedAt` is newer than ours. A wholesale replace (or a
+      // blind key-merge without the timestamp test) would let a peer that
+      // rated ONE recipe wipe or roll back every other rating in the
+      // house. ABSENCE means "don't touch" (an older peer, or a peer that
+      // holds no ratings).
+      if (state.ratings != null) ratings.mergeRemote(state.ratings)
     } finally {
       applyingRemote = false
     }
@@ -229,7 +278,16 @@ export const useRoomStore = defineStore('room', () => {
 
   /* ---------- push (debounced) ---------- */
 
-  function schedulePush() {
+  /**
+   * The ONE push writer (ADR-0031): plan/grocery edits are debounced so a
+   * burst of taps coalesces, while household PREFERENCE edits (a star, a
+   * rating) pass `immediate` and go out at once — there is no burst to
+   * coalesce, and the relay answers a rapid burst with `rate_limited`.
+   * Both modes share this function, so there is a single writer of
+   * `localRev` and a single echo guard (`applyingRemote`): an inbound
+   * snapshot never bounces back, in either mode.
+   */
+  function schedulePush(immediate = false) {
     if (applyingRemote) return
     if (status.value !== 'live') {
       // The edit is real and must survive the join that is still in
@@ -245,6 +303,18 @@ export const useRoomStore = defineStore('room', () => {
     }
     localEditPending = true
     if (pushTimer) clearTimeout(pushTimer)
+    // A queued debounced push is superseded: the snapshot we are about to
+    // send is the same whole state, at a strictly higher rev.
+    if (immediate) {
+      pushTimer = null
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        if (code.value !== null) unsentLocalEdit = true
+        return
+      }
+      localRev = Math.max(localRev, maxSeenRev) + 1
+      sendState()
+      return
+    }
     pushTimer = setTimeout(() => {
       pushTimer = null
       if (status.value !== 'live' || !ws || ws.readyState !== WebSocket.OPEN) {
@@ -317,6 +387,16 @@ export const useRoomStore = defineStore('room', () => {
         ui.shareCookedHistory, // flipping ON must trigger a retroactive push
       ] as const,
     () => schedulePush(),
+    { deep: true, flush: 'sync' },
+  )
+
+  // ADR-0031: household favourites + stars publish IMMEDIATELY — same
+  // push path and same echo guard, no debounce (see schedulePush). They
+  // are split from the watcher above purely to pick that mode; the
+  // `applyingRemote` guard is what stops an inbound from echoing back.
+  watch(
+    () => [favourites.records, ratings.map] as const,
+    () => schedulePush(true),
     { deep: true, flush: 'sync' },
   )
 

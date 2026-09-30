@@ -16,6 +16,15 @@
  * - `seedGeneration`: the seed rotates over the top-ROTATION_K candidates
  *   ranked by rating; generation 0 = highest rating (v1 behavior).
  *
+ * v3 (ADR-0031) adds household PREFERENCE on top, without changing any
+ * v2 arithmetic when the new field is absent:
+ * - `favoriteIds`: a favourited candidate pays FAVORITE_BONUS less score.
+ *   A preference nudges ties; waste still decides.
+ * Household RATINGS need no field: the caller already injects the rating
+ * it wants scored through `ratings` (useAutoPlan blends the household
+ * stars over the catalog mean), which keeps this lib a pure function of
+ * its request.
+ *
  * PURE LIB: no Vue, no Pinia, no fetch. The index is loaded outside
  * (see src/composables/useAutoPlan.ts) and passed in.
  */
@@ -87,6 +96,15 @@ export interface PackPlanRequest {
    * output.
    */
   seedGeneration?: number
+  /**
+   * v3 (ADR-0031) — variant ids the household has favourited. Each one
+   * pays `FAVORITE_BONUS` off its score (0.05 — a fifth of a rating
+   * swing, a fiftieth of an opened package). Omitted → v2 arithmetic,
+   * bit for bit. The rotating SEED is deliberately NOT biased: it ranks
+   * on rating alone, so favourites nudge slot picking without changing
+   * which recipe anchors the pack.
+   */
+  favoriteIds?: ReadonlySet<number>
 }
 
 export interface PackPlan {
@@ -110,6 +128,13 @@ const RATING_WEIGHT = 0.25
  * similarity nudges ties, waste still decides.
  */
 const TAG_WEIGHT = 0.2
+/**
+ * v3 (ADR-0031): a household favourite is a preference signal, not a
+ * command — 0.05 is a fifth of RATING_WEIGHT and 1/20 of one opened
+ * package, so it can flip a near-tie (two candidates sharing every
+ * package) but never outvote waste.
+ */
+export const FAVORITE_BONUS = 0.05
 /** v2 (ADR-0027) — seed rotation depth: the top-5 rated candidates take
  *  turns being the seed across generations. */
 export const ROTATION_K = 5
@@ -133,7 +158,8 @@ function cmpAscendingId(a: number, b: number): number {
  * their packages — and are never re-picked. The seed ROTATES across
  * generations over the top-ROTATION_K candidates ranked by rating desc
  * (generation 0 = highest rating, ties → lowest id). Slots 2..N minimize
- * `marginalPackages + RATING_WEIGHT*(1-rating) + TAG_WEIGHT*tagOverlap`;
+ * `marginalPackages + RATING_WEIGHT*(1-rating) + TAG_WEIGHT*tagOverlap
+ * - FAVORITE_BONUS*isFavourite`;
  * ties → higher rating, then lower id. No randomness anywhere: the same
  * (index, request incl. generation) → identical output.
  */
@@ -143,6 +169,7 @@ export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan 
   const excluded = req.excludeIds ? new Set(req.excludeIds) : null
   const ratings = req.ratings
   const tags = req.tags
+  const favorites = req.favoriteIds ?? null
 
   // Pack state: running container totals keyed by (ingredient, container),
   // the set of non-pantry ingredient keys already present, and the pool of
@@ -260,7 +287,8 @@ export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan 
       const score =
         marginalPackages(id) +
         RATING_WEIGHT * (1 - rating) +
-        TAG_WEIGHT * tagOverlap(id)
+        TAG_WEIGHT * tagOverlap(id) -
+        (favorites?.has(id) ? FAVORITE_BONUS : 0)
       // Ties → higher rating, then lower id. Candidates are iterated in
       // ascending id order, so strict-improvement comparisons keep the
       // lower id on an exact tie.

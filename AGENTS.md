@@ -148,18 +148,23 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   `containerContribution` + `formatContainerQuantity`; linear/seasoning
   via `scaleQuantity`). NEVER invent a quantity: no line-item match means
   no chip. Step/recipe prose stays verbatim.
-- **Auto-Plan (ADR-0024, v2 = ADR-0027-auto-plan-v2)**: the plan generator is
+- **Auto-Plan (ADR-0024, v2 = ADR-0027-auto-plan-v2, v3 preference = ADR-0031)**: the plan generator is
   `src/lib/packPlanner.ts` — a PURE lib (no Vue/Pinia/fetch) over the
   committed `public/data/pack_index.json` footprint. Deterministic greedy
   packing, score = marginal whole-package cost (`Σ ceil(container total)`,
-  containers per ADR-0017) `+ 0.25·(1−rating) + 0.2·tagOverlap`; seed = rank
+  containers per ADR-0017) `+ 0.25·(1−rating) + 0.2·tagOverlap −
+  0.05·isFavourite`; seed = rank
   `(generation mod 5)` over the top-5 smoothed-rated candidates (generation
   0 = highest rating); staples in the index's `pantryStaples` are
   present-but-free. Ratings are BAYESIAN-SMOOTHED caller-side (prior
   weight 10, mean over the eligible slice) and tags come from
   `variety_tag_ids` — both injected from `builder_data.variant_meta` (the
   index carries no recipe metadata). Category / diet / ruleset exclusions
-  are resolved OUTSIDE the lib by `useAutoPlan` into `excludeIds`. DEFAULT
+  are resolved OUTSIDE the lib by `useAutoPlan` into `excludeIds`. The
+  rating SOURCE is layered: the catalog mean is the cold-start floor, and
+  the household's own stars (`ratings`) override it for rated recipes —
+  see the favourites + ratings bullet. Absent `favoriteIds`/`ratings`
+  means v2 arithmetic, bit for bit, which is what keeps the pins valid. DEFAULT
   mode is ADD: the current plan's meals pre-commit as `baseIds` (their
   waste is shared), new meals append; replace keeps the confirm-before-
   destroy flow. The Plan-tab dialog persists `autoPlanRuleset`,
@@ -175,16 +180,46 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   them by servings; only totals scale.
 - **Share/rooms**: `?p=` is the one-time gzip+base64url export (v1 bare
   arrays still decode). Room sync is whole-state last-write-wins keyed by
-  `rev`; shared state = `{plan, customItems, checked, cleared, customs}` —
+  `rev`; shared state = `{plan, customItems, checked, cleared, customs,
+  favorites, ratings}` —
   `cleared` is `clearedIngredients` (household state: clearing hides
   ingredients for everyone until re-planned/cooked) and `customs` is the
   remembered custom-ingredient memory (household since 2026-09-27,
-  ADR-0012 change note).
+  ADR-0012 change note). `favorites` + `ratings` are household
+  PREFERENCE (ADR-0031) and are the one deliberate exception to
+  whole-state LWW: both are RECORDS carrying `updatedAt` and reconcile
+  PER KEY, last writer by timestamp wins. `favorites` records are
+  `{favorited, updatedAt}` — tombstones, so an un-star propagates and a
+  stale push cannot resurrect it; `ratings` are
+  `{rating, count, updatedAt}`. Two peers rating different recipes must
+  not clobber each other, and an EQUAL timestamp is not a new opinion.
+  Absent field = "don't touch" (never a wipe), both are emitted only when
+  non-empty, and there is ONE push writer — `schedulePush(immediate?)`,
+  guarded by `applyingRemote`; preference edits pass `immediate` and skip
+  the debounce, everything else keeps it.
   `cookedHistory` is personal and must stay out of the room payload
   UNLESS the sender opted in via the `shareCookedHistory` setting
   (default off; ADR-0011 addendum) — then the payload may carry it and
   peers apply it. The opt-in is surfaced in Settings → Household sync
   (ADR-0028); do not flip the default without amending ADR-0011.
+- **Favourites + ratings (ADR-0031)**: the favourites store seeds from
+  the user's own Mealime snapshot on FIRST RUN and is never re-seeded or
+  cleared — never change that seeding (`seedFrom` only ADDS, so a peer
+  record that landed first is not clobbered). Internally it holds
+  `{favorited, updatedAt}` records and MATERIALIZES the public `Set`
+  synchronously on every write (never via a watcher — `snapshot()` could
+  publish a stale set); the persisted format stays the id array and
+  tombstones are in-memory only, so `favourites.json` ships the set.
+  `useRatingStore` (`src/stores/rating.ts`) seeds EMPTY:
+  `variant_meta.rating` is catalog truth and must NEVER be written into
+  a rating. Ratings are 0..5 in 0.5 steps; re-rating from this device
+  replaces the value and KEEPS `count` (household size, used for
+  smoothing); a peer's newer record rolls the count forward. Auto-Plan
+  weights (injected by `useAutoPlan`, the pure lib stays pure):
+  household stars override the catalog's Bayesian mean for rated recipes
+  (prior weight 1 vs the catalog's 10) and `favoriteIds` pay
+  `FAVORITE_BONUS` (0.05) off a candidate's score — a weight only, never
+  a command over waste.
 - **Join reconciliation (ADR-0028)**: a `joined` that ADOPTED the
   room's snapshot does NOT push afterwards (the echo re-published a
   possibly stale snapshot at a higher rev and could freeze the household
@@ -202,7 +237,12 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   fail loudly (assertRegistryCoverage + e2e registry-coverage case).
   Import is validation-first and atomic: never partial-apply. The
   backup & restore UI lives on the `/settings` tab (ADR-0016) — MOVED
-  out of Plan, never duplicated.
+  out of Plan, never duplicated. Registered today: plan + custom items +
+  cleared ingredients, cooked history, ingredients, checked, custom
+  ingredients, quick filters + settings, `favourites.json` (id array) and
+  `ratings.json` (ADR-0031: `{id, rating, count, updatedAt}` rows whose
+  import RECONCILES per record, so an older backup cannot roll back a
+  newer rating).
 - **Extras (ADR-0015)**: a free-form add that belongs to no planned
   meal is an "Extra" and stays in the static **EXTRA ITEMS** group,
   which renders FIRST on the Grocery tab (above every store section)
@@ -229,7 +269,7 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   settings tab, diet rules, household room, step timers, measured
   amounts, three-word room codes, share-room link, room lifecycle,
   unified quick filters, filter sync + join reconciliation, the Lucide
-  icon stack, Auto-Plan preview). Skim them before
+  icon stack, Auto-Plan preview, household favourites + ratings). Skim them before
   proposing changes; new lasting decisions get a new
   `ADR-NNNN-slug.md` (never rewrite an accepted one in place).
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { imageSrc, onImgError } from '../lib/images'
+import RatingStars from './RatingStars.vue'
 import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
 import { useRouter } from 'vue-router'
@@ -59,6 +60,9 @@ function openDetail() {
           <Clock :size="14" aria-hidden="true" />{{ meta.cooking_minutes }} min
         </span>
       </p>
+      <div class="mt-1.5">
+        <RatingStars :variant-id="meta.id" :catalog-rating="meta.rating" :size="15" compact />
+      </div>
     </div>
   </article>
 </template>
