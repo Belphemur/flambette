@@ -254,9 +254,19 @@ function confirmAutoPlan() {
   for (const variantId of result.variantIds) plan.restoreIngredients(variantId)
   // ADD mode completes the current plan: base entries stay, additions
   // land exactly like hand-added ones (authored servings; ADR-0027).
+  // Dedupe against the confirm-time plan: a room peer may have planned a
+  // meal while generation was pending, and the pack (built from the
+  // older pool) could re-pick it (CodeRabbit round 2).
+  const plannedNow = new Set(atConfirm.map((e) => e.variantId))
+  const additions = result.variantIds.filter((id) => !plannedNow.has(id))
+  if (additions.length === 0) {
+    ui.showToast('No new meals to add — your plan already covers this pack')
+    closeAutoPlan()
+    return
+  }
   const entries = replacing
-    ? result.variantIds.map((variantId) => ({ variantId, servings: 6 }))
-    : [...atConfirm, ...result.variantIds.map((variantId) => ({ variantId, servings: 6 }))]
+    ? additions.map((variantId) => ({ variantId, servings: 6 }))
+    : [...atConfirm, ...additions.map((variantId) => ({ variantId, servings: 6 }))]
   plan.replacePlan(entries, plan.customItems)
   // The generation counter advances AFTER a successful apply so the next
   // run rotates the seed (ADR-0027).
