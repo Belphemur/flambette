@@ -273,7 +273,12 @@ export const STORE_SLICES: SliceDef<any>[] = [
         (typeof v.autoPlanGeneration !== 'number' ||
           !Number.isFinite(v.autoPlanGeneration) ||
           v.autoPlanGeneration < 0 ||
-          !Number.isInteger(v.autoPlanGeneration))
+          !Number.isInteger(v.autoPlanGeneration) ||
+          // Cap at MAX_SAFE_INTEGER: anything bigger (Number.MAX_VALUE is
+          // a valid "integer") would overflow to Infinity on the next
+          // increment and break `generation % k` in the planner (qodo
+          // round 1, thread 3).
+          v.autoPlanGeneration > Number.MAX_SAFE_INTEGER)
       ) {
         return 'settings.json autoPlanGeneration must be a non-negative integer'
       }

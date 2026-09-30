@@ -437,3 +437,56 @@ describe('buildAutoPlan v2 (ADR-0027)', () => {
     expect(plan.packagesBought).toBe(1)
   })
 })
+
+describe('buildAutoPlan v2 hardening (qodo round 1)', () => {
+  test('non-finite / negative generation degrades to 0 instead of NaN', () => {
+    const index = idx({ '1': { i: [], s: 0 }, '2': { i: [], s: 0 } })
+    const voteRatings = ratings([
+      [1, 0.9],
+      [2, 0.8],
+    ])
+    // Number.MAX_VALUE + 1 → Infinity in the UI counter: gen % k must
+    // never be NaN (undefined seed).
+    expect(buildAutoPlan(index, { count: 1, seedGeneration: Number.MAX_VALUE, ratings: voteRatings }).variantIds).toEqual([1])
+    expect(buildAutoPlan(index, { count: 1, seedGeneration: Infinity, ratings: voteRatings }).variantIds).toEqual([1])
+    expect(buildAutoPlan(index, { count: 1, seedGeneration: -3, ratings: voteRatings }).variantIds).toEqual([1])
+    expect(buildAutoPlan(index, { count: 1, seedGeneration: NaN, ratings: voteRatings }).variantIds).toEqual([1])
+  })
+
+  test('scaled base meals ceil their container rows (ADR-0017)', () => {
+    // Base 1 owns 1/2 pkg of ingA, planned at 12 servings (factor 2) →
+    // ceil(0.5·2) = 1 package committed. Candidates 2 (another 1/2 pkg
+    // ingA) and 3 (1/2 pkg of fresh ingB) both cost 1 marginal package.
+    // Tie on score AND rating → lower id seeds first.
+    const index = idx({
+      '1': { i: [[0, 0.5, 1, 1]], s: 1 },
+      '2': { i: [[0, 0.5, 1, 1]], s: 1 },
+      '3': { i: [[1, 0.5, 1, 1]], s: 1 },
+    })
+    const plan = buildAutoPlan(index, {
+      count: 2,
+      baseIds: [1],
+      baseServings: new Map([[1, 12]]),
+      ratings: ratings([
+        [2, 0.9],
+        [3, 0.9],
+      ]),
+    })
+    expect(plan.variantIds).toEqual([2, 3])
+    // Ledger: ingA 1 (scaled) + 0.5 + 0.5 = ceil(2.0) = 2, ingB 0.5 = 1.
+    expect(plan.packagesBought).toBe(3)
+  })
+
+  test('unscaled base keeps v1 ledger behavior', () => {
+    const index = idx({
+      '1': { i: [[0, 0.5, 1, 1]], s: 1 },
+      '2': { i: [[0, 0.5, 1, 1]], s: 1 },
+    })
+    const plan = buildAutoPlan(index, {
+      count: 1,
+      baseIds: [1],
+      ratings: ratings([[2, 0.5]]),
+    })
+    expect(plan.packagesBought).toBe(1)
+  })
+})

@@ -65,6 +65,14 @@ export interface PackPlanRequest {
    */
   baseIds?: Iterable<number>
   /**
+   * v2 (qodo round 1): variant id → the servings the household ACTUALLY
+   * plans for each base meal. Base footprints commit at the authored
+   * servings by default; when a meal was scaled, its container rows are
+   * ceil-scaled per ADR-0017 so the ledger reflects what is really bought
+   * (linear rows are presence-only for the ledger and need no scaling).
+   */
+  baseServings?: ReadonlyMap<number, number>
+  /**
    * v2 (ADR-0027) — variant id → variety_tag_ids (builder_data). Candidates
    * whose tags are already present on picked meals (base included) pay a
    * TAG_WEIGHT penalty per shared tag. Omitted → v1 behavior (no variety
@@ -106,6 +114,8 @@ const TAG_WEIGHT = 0.2
  *  turns being the seed across generations. */
 export const ROTATION_K = 5
 const EPS = 1e-9
+/** All 2,730 recipes are authored serving_count = 6 (frozen catalog). */
+const AUTHORED_SERVINGS = 6
 
 /** Container key inside a pack: (ingredient keyId, container unitId). */
 function containerKeyId(keyId: number, unitId: number): number {
@@ -144,14 +154,17 @@ export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan 
   const picked = new Set<number>()
 
   /** Commit a recipe's footprint + tags into the ledger (base OR pick). */
-  function commit(id: number): void {
+  function commit(id: number, factor = 1): void {
     for (const [keyId, amount, unitId, isContainer] of index.recipes[String(id)]?.i ?? []) {
       const keyName = index.ingredientKeys[keyId]
       if (pantry.has(keyName)) continue
       scored.add(keyId)
       if (isContainer && amount > 0) {
         const key = containerKeyId(keyId, unitId)
-        totals.set(key, (totals.get(key) ?? 0) + amount)
+        // Scaled base meals (qodo round 2): a meal planned for more
+        // servings buys whole containers — ceil per ADR-0017.
+        const contribution = factor === 1 ? amount : Math.max(1, Math.ceil(amount * factor - EPS))
+        totals.set(key, (totals.get(key) ?? 0) + contribution)
       }
     }
     for (const tag of tags?.get(id) ?? []) tagPool.add(tag)
@@ -160,7 +173,8 @@ export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan 
   // Base meals pre-commit (add mode) and are never eligible as picks.
   const baseIds = [...new Set(req.baseIds ?? [])].sort(cmpAscendingId)
   for (const id of baseIds) {
-    commit(id)
+    const servings = req.baseServings?.get(id)
+    commit(id, servings && servings > 0 ? servings / AUTHORED_SERVINGS : 1)
     picked.add(id)
   }
 
@@ -220,9 +234,16 @@ export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan 
   const byRating = [...candidates].sort((a, b) => ratingOf(b) - ratingOf(a))
   const k = Math.min(ROTATION_K, byRating.length)
   // Guard: with a base pack and an empty candidate pool there is no seed
-  // (and no slots) — fall through to the partial-pack warning.
+  // (and no slots) — fall through to the partial-pack warning. Non-finite
+  // or negative generations (a hostile backup import) degrade to 0 so
+  // `gen % k` can never produce NaN → an undefined seed (qodo round 2).
   if (k > 0) {
-    const seed = byRating[Math.floor(req.seedGeneration ?? 0) % k]
+    const rawGeneration = req.seedGeneration ?? 0
+    const generation =
+      typeof rawGeneration === 'number' && Number.isFinite(rawGeneration) && rawGeneration >= 0
+        ? Math.floor(rawGeneration)
+        : 0
+    const seed = byRating[generation % k]
     commit(seed)
     pack.push(seed)
     picked.add(seed)

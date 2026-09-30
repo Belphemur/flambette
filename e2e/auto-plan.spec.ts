@@ -271,6 +271,25 @@ test('ruleset select: dessert-only run yields only desserts', async ({ page }) =
   await expectZeroMealimeRequests(page)
 })
 
+test('empty pack (pool exhausted) can never erase or modify the plan', async ({ page }) => {
+  await page.goto('/plan')
+  await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
+
+  // dessert + meat leaves no candidates in the catalog → empty pack.
+  await page.getByTestId('auto-plan-button').first().click()
+  await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+  await page.getByTestId('auto-plan-ruleset').selectOption('dessert')
+  await page.getByTestId('auto-plan-category').selectOption('meat')
+  await page.getByTestId('auto-plan-generate').click()
+  await expect(page.getByTestId('auto-plan-preview')).toBeVisible({ timeout: 15_000 })
+
+  // The apply button stays disabled; the plan is untouched either way.
+  await expect(page.getByTestId('auto-plan-confirm')).toBeDisabled()
+  await page.getByRole('button', { name: 'Close auto-plan' }).click()
+  expect(await plannedIds(page)).toEqual([])
+  await expectZeroMealimeRequests(page)
+})
+
 test('undo restores the exact previous plan in ADD mode (ids + servings)', async ({ page }) => {
   await page.goto('/plan')
   await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })

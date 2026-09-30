@@ -141,6 +141,10 @@ export async function runAutoPlan(options: AutoPlanOptions): Promise<AutoPlanRes
   // waste into the ledger and stay; in REPLACE mode they are excluded
   // and the plan is replaced after confirm.
   const baseIds = mode === 'add' ? planStore.plan.map((e) => e.variantId) : []
+  // Base meals may have been scaled by the user — the ledger must
+  // reflect what is actually bought (qodo round 2).
+  const baseServings =
+    mode === 'add' ? new Map(planStore.plan.map((e) => [e.variantId, e.servings])) : undefined
 
   // The complement of the eligible set ALWAYS excludes — even when the
   // eligible set is empty (otherwise buildAutoPlan would interpret a
@@ -153,6 +157,7 @@ export async function runAutoPlan(options: AutoPlanOptions): Promise<AutoPlanRes
     ratings,
     tags,
     baseIds,
+    baseServings,
     seedGeneration: options.seedGeneration ?? ui.nextAutoPlanGeneration(),
   })
   return { ...result, eligibleCount: eligible.size }

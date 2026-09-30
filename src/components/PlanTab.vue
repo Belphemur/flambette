@@ -136,14 +136,8 @@ const RULESETS = [
 ] as const
 /** After Generate: the pending result awaiting the confirm step. */
 const pendingPlan = ref<(PackPlan & { eligibleCount: number }) | null>(null)
-/** Exact pre-generation state for the undo toast (ids + servings + the
- *  cleared-ingredient snapshots, so undo restores the whole grocery view). */
-const previousEntries = ref<{ variantId: number; servings: number }[]>([])
-const previousCleared = ref<Record<number, string[]>>({})
 
 function openAutoPlan() {
-  previousEntries.value = plan.plan.map((e) => ({ ...e }))
-  previousCleared.value = { ...plan.clearedIngredients }
   pendingPlan.value = null
   autoPlanOpen.value = true
 }
@@ -224,7 +218,13 @@ const pendingMeals = computed(() => {
  * (the counts line still reports the planner's own number).
  */
 const previewComplete = computed(
-  () => !!pendingPlan.value && pendingMeals.value.length === pendingPlan.value.variantIds.length,
+  () =>
+    !!pendingPlan.value &&
+    // An EMPTY pack (pool exhausted under the active filters) must never
+    // be confirmable: in replace mode it would erase the plan (qodo
+    // round 1, thread 2).
+    pendingPlan.value.variantIds.length > 0 &&
+    pendingMeals.value.length === pendingPlan.value.variantIds.length,
 )
 
 /** Confirm/apply step: add mode APPENDS to the current plan (no
@@ -233,6 +233,20 @@ const previewComplete = computed(
 function confirmAutoPlan() {
   const result = pendingPlan.value
   if (!result) return
+  // An EMPTY pack (pool exhausted under the active filters) must never
+  // apply: in replace mode replacePlan([]) would ERASE the user's plan
+  // (qodo round 1, thread 2); in add mode it would be a no-op anyway.
+  if (result.variantIds.length === 0) {
+    ui.showToast(result.warnings?.[0] ?? 'No eligible recipes for this plan')
+    closeAutoPlan()
+    return
+  }
+  // Snapshot the plan AT CONFIRM TIME, not at dialog-open: a room update
+  // may have changed the plan while generation was pending, and building
+  // the entries from the stale open-time copy would discard it (qodo
+  // round 1, thread 1). Undo restores this exact state.
+  const atConfirm = plan.plan.map((e) => ({ ...e }))
+  const clearedAtConfirm = { ...plan.clearedIngredients }
   const replacing = ui.autoPlanMode === 'replace'
   // Fresh planning = fresh ingredients: re-planning a meal must forget
   // any cleared-ingredient snapshot (same rule as addToPlan, ADR v0.4
@@ -242,20 +256,18 @@ function confirmAutoPlan() {
   // land exactly like hand-added ones (authored servings; ADR-0027).
   const entries = replacing
     ? result.variantIds.map((variantId) => ({ variantId, servings: 6 }))
-    : [...previousEntries.value, ...result.variantIds.map((variantId) => ({ variantId, servings: 6 }))]
+    : [...atConfirm, ...result.variantIds.map((variantId) => ({ variantId, servings: 6 }))]
   plan.replacePlan(entries, plan.customItems)
   // The generation counter advances AFTER a successful apply so the next
   // run rotates the seed (ADR-0027).
   ui.advanceAutoPlanGeneration()
-  // Undo restores the EXACT pre-generation state (ids + servings + the
+  // Undo restores the EXACT pre-apply state (ids + servings + the
   // cleared-ingredient map) from copies taken at confirm time — not from
   // the mutable dialog refs a later dialog open would overwrite
   // (qodo thread 3). Same semantics in BOTH modes.
-  const undoEntries = previousEntries.value.map((e) => ({ ...e }))
-  const undoCleared = { ...previousCleared.value }
   const undo = () => {
-    plan.replacePlan(undoEntries, plan.customItems)
-    plan.setClearedIngredients(undoCleared)
+    plan.replacePlan(atConfirm, plan.customItems)
+    plan.setClearedIngredients(clearedAtConfirm)
   }
   const warning = result.warnings?.[0]
   ui.showToast(
@@ -265,7 +277,7 @@ function confirmAutoPlan() {
         ? `Plan generated: ${result.variantIds.length} meals`
         : `${result.variantIds.length} meals added to your plan`,
     {
-      actions: undoEntries.length > 0 || !replacing ? [{ label: 'Undo', run: undo, testId: 'auto-plan-undo' }] : undefined,
+      actions: atConfirm.length > 0 || !replacing ? [{ label: 'Undo', run: undo, testId: 'auto-plan-undo' }] : undefined,
       duration: 6000,
       kind: 'autoplan-toast',
     },
@@ -665,7 +677,7 @@ function confirmAutoPlan() {
               ({{ pendingPlan.eligibleCount }} eligible recipes).
               <template v-if="ui.autoPlanMode === 'replace'">
                 Replaces your current plan
-                <template v-if="previousEntries.length > 0">({{ previousEntries.length }} meals)</template>.
+                <template v-if="plan.plan.length > 0">({{ plan.plan.length }} meals)</template>.
               </template>
             </p>
             <p v-if="!previewComplete" class="text-xs text-amber-700 dark:text-amber-400">
