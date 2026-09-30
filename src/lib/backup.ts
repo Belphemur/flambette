@@ -216,6 +216,9 @@ export const STORE_SLICES: SliceDef<any>[] = [
         householdRoom: ui.householdRoom,
         stepTimers: ui.stepTimers,
         theme: readTheme(),
+        autoPlanRuleset: ui.autoPlanRuleset,
+        autoPlanMode: ui.autoPlanMode,
+        autoPlanGeneration: ui.autoPlanGeneration,
       }
     },
     validate(value) {
@@ -252,6 +255,33 @@ export const STORE_SLICES: SliceDef<any>[] = [
           return 'settings.json theme.theme must be "dark", "light" or ""'
         }
       }
+      if (
+        v.autoPlanRuleset !== undefined &&
+        !(AUTO_PLAN_RULESETS as readonly string[]).includes(v.autoPlanRuleset as string)
+      ) {
+        return `settings.json autoPlanRuleset must be one of ${AUTO_PLAN_RULESETS.join('/')}`
+      }
+      if (
+        v.autoPlanMode !== undefined &&
+        v.autoPlanMode !== 'add' &&
+        v.autoPlanMode !== 'replace'
+      ) {
+        return 'settings.json autoPlanMode must be "add" or "replace"'
+      }
+      if (
+        v.autoPlanGeneration !== undefined &&
+        (typeof v.autoPlanGeneration !== 'number' ||
+          !Number.isFinite(v.autoPlanGeneration) ||
+          v.autoPlanGeneration < 0 ||
+          !Number.isInteger(v.autoPlanGeneration) ||
+          // Cap at MAX_SAFE_INTEGER: anything bigger (Number.MAX_VALUE is
+          // a valid "integer") would overflow to Infinity on the next
+          // increment and break `generation % k` in the planner (qodo
+          // round 1, thread 3).
+          v.autoPlanGeneration > Number.MAX_SAFE_INTEGER)
+      ) {
+        return 'settings.json autoPlanGeneration must be a non-negative integer'
+      }
       return null
     },
     write(value) {
@@ -262,6 +292,9 @@ export const STORE_SLICES: SliceDef<any>[] = [
         householdRoom?: string
         stepTimers?: unknown
         theme?: { theme?: string }
+        autoPlanRuleset?: unknown
+        autoPlanMode?: unknown
+        autoPlanGeneration?: unknown
       }
       useUiStore().applySettings({
         shareCookedHistory: v.shareCookedHistory,
@@ -273,6 +306,9 @@ export const STORE_SLICES: SliceDef<any>[] = [
           v.quickFilters ?? (Array.isArray(v.dietFilters) ? { diets: v.dietFilters } : {}),
         householdRoom: v.householdRoom ?? '',
         stepTimers: v.stepTimers ?? {},
+        autoPlanRuleset: v.autoPlanRuleset ?? 'dinner',
+        autoPlanMode: v.autoPlanMode ?? 'add',
+        autoPlanGeneration: v.autoPlanGeneration ?? 0,
       })
       if (v.theme) writeTheme(v.theme.theme ?? '')
     },
@@ -481,6 +517,6 @@ export function applyBackup(zipBytes: Uint8Array): ApplyResult {
  * a wall of imports; imports are hoisted by ES modules so this is safe. */
 import { usePlanStore } from '../stores/plan'
 import { useGroceryStore } from '../stores/grocery'
-import { useUiStore } from '../stores/ui'
+import { AUTO_PLAN_RULESETS, useUiStore } from '../stores/ui'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
 import { useFavouritesStore } from '../stores/favourites'

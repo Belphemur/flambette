@@ -148,23 +148,29 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   `containerContribution` + `formatContainerQuantity`; linear/seasoning
   via `scaleQuantity`). NEVER invent a quantity: no line-item match means
   no chip. Step/recipe prose stays verbatim.
-- **Auto-Plan (ADR-0024/0030)**: the plan generator is `src/lib/packPlanner.ts` —
-  a PURE lib (no Vue/Pinia/fetch) over the committed
-  `public/data/pack_index.json` footprint. Deterministic greedy packing,
-  score = marginal whole-package cost (`Σ ceil(container total)`, containers
-  per ADR-0017) `+ 0.25·(1−rating)`; seed = highest rating (ties → lowest
-  id); staples in the index's `pantryStaples` are present-but-free. Category
-  / diet / already-planned exclusions are resolved OUTSIDE the lib by
-  `useAutoPlan` into `excludeIds`, and ratings come from
-  `builder_data.variant_meta` (the index carries no recipe metadata — same
-  rule as the pack index bullet in Generated data). UI lives in a Plan-tab
-  dialog: confirm before replacing a hand-curated plan, undo toast restores
-  the exact previous entries. e2e pins the default 4-pack
-  `[4908, 6185, 6729, 12069]` — any catalog or scoring change breaks those
+- **Auto-Plan (ADR-0024, v2 = ADR-0027-auto-plan-v2)**: the plan generator is
+  `src/lib/packPlanner.ts` — a PURE lib (no Vue/Pinia/fetch) over the
+  committed `public/data/pack_index.json` footprint. Deterministic greedy
+  packing, score = marginal whole-package cost (`Σ ceil(container total)`,
+  containers per ADR-0017) `+ 0.25·(1−rating) + 0.2·tagOverlap`; seed = rank
+  `(generation mod 5)` over the top-5 smoothed-rated candidates (generation
+  0 = highest rating); staples in the index's `pantryStaples` are
+  present-but-free. Ratings are BAYESIAN-SMOOTHED caller-side (prior
+  weight 10, mean over the eligible slice) and tags come from
+  `variety_tag_ids` — both injected from `builder_data.variant_meta` (the
+  index carries no recipe metadata). Category / diet / ruleset exclusions
+  are resolved OUTSIDE the lib by `useAutoPlan` into `excludeIds`. DEFAULT
+  mode is ADD: the current plan's meals pre-commit as `baseIds` (their
+  waste is shared), new meals append; replace keeps the confirm-before-
+  destroy flow. The Plan-tab dialog persists `autoPlanRuleset`,
+  `autoPlanMode` and the rotating `autoPlanGeneration` counter in the ui
+  store (STORE_SLICES registered). e2e pins the v2 default 4-pack
+  `[17452, 6389, 9889, 6167]` — any catalog or scoring change breaks those
   pins loudly. The dialog's confirm step PREVIEWS the pack (image +
   title per meal, `data-test="auto-plan-preview"`, resolved through
-  `imageSrc`/`onImgError` like every other tile) before it replaces
-  anything.
+  `imageSrc`/`onImgError` like every other tile) before anything is
+  applied; undo restores the exact prior plan (entries + cleared map) in
+  BOTH modes.
 - **Nutrition**: `meta.calories`/`sodium_mg` are PER-SERVING — never scale
   them by servings; only totals scale.
 - **Share/rooms**: `?p=` is the one-time gzip+base64url export (v1 bare

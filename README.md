@@ -37,13 +37,16 @@ neutral placeholder.
   vegan, applied across search, browse and Auto-Plan. The catalog ships no
   diet metadata, so this is a transparent keyword heuristic over each
   recipe's ingredient list: a fast suggestion lens, not a guarantee.
-- **Auto-Plan** — generate a whole week of meals in one tap. A deterministic
+- **Auto-Plan** — complete a week of meals in one tap. A deterministic
   pack builder scores recipes by *marginal package cost* (how many extra
   supermarket packages each pick would force you to buy, counting a
-  container as bought whole), weighted slightly against rating, and skips
-  pantry staples you already have. Pick a pack size, optionally exclude
-  categories or diets, confirm, and undo if you don't like the result.
-  Same inputs always produce the same plan — no model, no randomness.
+  container as bought whole), weighted against vote-smoothed rating and
+  variety, and skips pantry staples you already have. By default it ADDS
+  to your current plan and reuses what you're already buying; a meal-type
+  selector (Dinner / Breakfast / Dessert / Any) scopes each run. Pick a
+  pack size, optionally exclude categories or diets, confirm, and undo if
+  you don't like the result. Same inputs always produce the same plan —
+  no model, no randomness.
 - **Plan** — add recipes with per-meal serving counts; totals for kcal, cook
   time and meal count. Persisted to `localStorage`.
 - **Grocery** — aggregates ingredient line items across the whole plan:
