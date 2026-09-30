@@ -244,3 +244,196 @@ describe('buildAutoPlan', () => {
     expect(plan.scoredIngredients).toBe(2)
   })
 })
+
+describe('buildAutoPlan v2 (ADR-0027)', () => {
+  test('baseIds pre-commit waste, never picked, not in variantIds', () => {
+    // Base owns 1/2 pkg of ingA. Candidates: 2 (also 1/2 pkg of ingA —
+    // marginal 0 WITH the base, 1 without), 3 (fresh ingB package).
+    const index = idx({
+      '1': { i: [[0, 0.5, 1, 1]], s: 1 },
+      '2': { i: [[0, 0.5, 1, 1]], s: 1 },
+      '3': { i: [[1, 1, 1, 1]], s: 1 },
+    })
+    const withBase = buildAutoPlan(index, {
+      count: 2,
+      baseIds: [1],
+      ratings: ratings([
+        [2, 0.2],
+        [3, 1.0],
+      ]),
+    })
+    // Seed 3 (rating 1.0); slot 2 takes 2 because the base already
+    // committed half its package (score 0.2 vs 3's... 2 is the only
+    // other candidate — pin the order and the ledger).
+    expect(withBase.variantIds).toEqual([3, 2])
+    expect(withBase.variantIds).not.toContain(1)
+    expect(withBase.packagesBought).toBe(2)
+    // Without the base the same request picks 1 over 2 (both would open
+    // the ingA package at full price; 1 has the higher rating).
+    const withoutBase = buildAutoPlan(index, {
+      count: 2,
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.2],
+        [3, 1.0],
+      ]),
+    })
+    expect(withoutBase.variantIds).toEqual([3, 1])
+    expect(withoutBase.packagesBought).toBe(2)
+  })
+
+  test('packagesBought/scoredIngredients describe the FULL pack (base + additions)', () => {
+    const index = idx({
+      '1': { i: [[0, 0.5, 1, 1], [1, 2, 0, 0]], s: 2 },
+      '2': { i: [[0, 0.5, 1, 1]], s: 1 },
+    })
+    const combined = buildAutoPlan(index, {
+      count: 1,
+      baseIds: [1],
+      ratings: ratings([[2, 0.2]]),
+    })
+    // Base 1/2 + addition 1/2 share ONE package; ingB is linear (free).
+    expect(combined.packagesBought).toBe(1)
+    expect(combined.scoredIngredients).toBe(2)
+    expect(combined.variantIds).toEqual([2])
+  })
+
+  test('tag penalty flips a pick', () => {
+    // Seed 1 (rating 0.9). Recipes 2 and 3 tie on waste AND rating; 2
+    // shares tag 7 with the seed, 3 has a fresh tag -> 3 wins slot 2.
+    const index = idx({
+      '1': { i: [], s: 0 },
+      '2': { i: [], s: 0 },
+      '3': { i: [], s: 0 },
+    })
+    const tags = new Map([
+      [1, [7]],
+      [2, [7]],
+      [3, [8]],
+    ])
+    const plan = buildAutoPlan(index, {
+      count: 2,
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.5],
+        [3, 0.5],
+      ]),
+      tags,
+    })
+    expect(plan.variantIds).toEqual([1, 3])
+    // Without tags the id tiebreak would pick 2.
+    const noTags = buildAutoPlan(index, {
+      count: 2,
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.5],
+        [3, 0.5],
+      ]),
+    })
+    expect(noTags.variantIds).toEqual([1, 2])
+  })
+
+  test('tag overlap counts BASE meals too', () => {
+    // Base 1 carries tag 7. Candidates 2 (tag 7) and 3 (tag 8) tie on
+    // rating; 4 seeds (0.6). Slot 2: 3 (fresh) beats 2 (shares the BASE
+    // tag). Slot 3 takes the remaining 2.
+    const index = idx({
+      '1': { i: [], s: 0 },
+      '2': { i: [], s: 0 },
+      '3': { i: [], s: 0 },
+      '4': { i: [], s: 0 },
+    })
+    const tags = new Map([
+      [1, [7]],
+      [2, [7]],
+      [3, [8]],
+    ])
+    const plan = buildAutoPlan(index, {
+      count: 3,
+      baseIds: [1],
+      ratings: ratings([
+        [2, 0.5],
+        [3, 0.5],
+        [4, 0.6],
+      ]),
+      tags,
+    })
+    expect(plan.variantIds).toEqual([4, 3, 2])
+  })
+
+  test('rotating seed: gen 0 = highest rating; gen g takes rank g mod K', () => {
+    const index = idx({
+      '1': { i: [], s: 0 },
+      '2': { i: [], s: 0 },
+      '3': { i: [], s: 0 },
+      '4': { i: [], s: 0 },
+      '5': { i: [], s: 0 },
+      '6': { i: [], s: 0 },
+    })
+    const req = (generation: number) => ({
+      count: 1,
+      seedGeneration: generation,
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.85],
+        [3, 0.8],
+        [4, 0.75],
+        [5, 0.7],
+        [6, 0.6],
+      ]),
+    })
+    // Top-5 by rating: 1,2,3,4,5 (6 is rank 5, outside K).
+    expect(buildAutoPlan(index, req(0)).variantIds).toEqual([1])
+    expect(buildAutoPlan(index, req(1)).variantIds).toEqual([2])
+    expect(buildAutoPlan(index, req(2)).variantIds).toEqual([3])
+    expect(buildAutoPlan(index, req(3)).variantIds).toEqual([4])
+    expect(buildAutoPlan(index, req(4)).variantIds).toEqual([5])
+    // Wraps around.
+    expect(buildAutoPlan(index, req(5)).variantIds).toEqual([1])
+    expect(buildAutoPlan(index, req(6)).variantIds).toEqual([2])
+  })
+
+  test('rotation is stable per generation (determinism contract v2)', () => {
+    const index = idx({ '1': { i: [] , s: 0 }, '2': { i: [], s: 0 } })
+    const req = { count: 2, seedGeneration: 1, ratings: ratings([[1, 0.5], [2, 0.4]]) }
+    expect(buildAutoPlan(index, req)).toEqual(buildAutoPlan(index, req))
+  })
+
+  test('count counts NEW meals only (base excluded)', () => {
+    const index = idx({
+      '1': { i: [], s: 0 },
+      '2': { i: [], s: 0 },
+      '3': { i: [], s: 0 },
+    })
+    const plan = buildAutoPlan(index, {
+      count: 3,
+      baseIds: [1, 2],
+      ratings: ratings([[3, 0.5]]),
+    })
+    // Only 1 candidate remains: 1 new meal, warning reflects 1/3.
+    expect(plan.variantIds).toEqual([3])
+    expect(plan.warnings).toEqual(['Pool exhausted at 1/3 meals'])
+  })
+
+  test('base-only pool (no candidates) warns without the empty-pool text', () => {
+    const index = idx({ '1': { i: [], s: 0 } })
+    const plan = buildAutoPlan(index, { count: 2, baseIds: [1] })
+    expect(plan.variantIds).toEqual([])
+    expect(plan.warnings).toEqual(['Pool exhausted at 0/2 meals'])
+    expect(plan.packagesBought).toBe(0)
+    expect(plan.scoredIngredients).toBe(0)
+  })
+
+  test('base ids outside the index commit nothing and stay out of picks', () => {
+    const index = idx({ '2': { i: [[0, 1, 1, 1]], s: 1 }, '3': { i: [], s: 0 } })
+    const plan = buildAutoPlan(index, { count: 2, baseIds: [99] })
+    expect(plan.variantIds.length).toBe(2)
+    expect(plan.packagesBought).toBe(1)
+  })
+
+  test('duplicate base ids commit once', () => {
+    const index = idx({ '1': { i: [[0, 1, 1, 1]], s: 1 } })
+    const plan = buildAutoPlan(index, { count: 1, baseIds: [1, 1] })
+    expect(plan.packagesBought).toBe(1)
+  })
+})
