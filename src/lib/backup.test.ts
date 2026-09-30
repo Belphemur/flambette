@@ -101,4 +101,40 @@ describe('settings import (ADR-0013 registry)', () => {
     expect(out.quickFilters.diets).toEqual(['vegan'])
     expect(out.dietFilters).toEqual(['vegan'])
   })
+
+  test('Auto-Plan v2 settings round-trip (ADR-0027 registry rule)', () => {
+    // Export carries the three Auto-Plan prefs.
+    const ui = useUiStore()
+    ui.autoPlanRuleset = 'dessert'
+    ui.autoPlanMode = 'replace'
+    ui.autoPlanGeneration = 3
+    const out = settingsSlice().read() as Record<string, unknown>
+    expect(out.autoPlanRuleset).toBe('dessert')
+    expect(out.autoPlanMode).toBe('replace')
+    expect(out.autoPlanGeneration).toBe(3)
+
+    // Import restores them.
+    settingsSlice().write({
+      autoPlanRuleset: 'breakfast',
+      autoPlanMode: 'add',
+      autoPlanGeneration: 7,
+    })
+    expect(ui.autoPlanRuleset).toBe('breakfast')
+    expect(ui.autoPlanMode).toBe('add')
+    expect(ui.autoPlanGeneration).toBe(7)
+
+    // Invalid values are refused by validate().
+    const slice = settingsSlice()
+    expect(slice.validate({ autoPlanRuleset: 'brunch' })).toContain('autoPlanRuleset')
+    expect(slice.validate({ autoPlanMode: 'append' })).toContain('autoPlanMode')
+    expect(slice.validate({ autoPlanGeneration: -1 })).toContain('autoPlanGeneration')
+    expect(slice.validate({})).toBeNull()
+
+    // An OLD backup without the keys resets to the defaults (same rule
+    // as the other settings: restore claims settings are overwritten).
+    settingsSlice().write({ shareCookedHistory: true })
+    expect(ui.autoPlanRuleset).toBe('dinner')
+    expect(ui.autoPlanMode).toBe('add')
+    expect(ui.autoPlanGeneration).toBe(0)
+  })
 })

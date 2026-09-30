@@ -54,6 +54,16 @@ export interface ToastOptions {
   onDismiss?: () => void
 }
 
+/** Auto-Plan ruleset choices (ADR-0027). 'any' imposes no filter. */
+export type AutoPlanRuleset = 'dinner' | 'breakfast' | 'dessert' | 'any'
+export type AutoPlanMode = 'add' | 'replace'
+export const AUTO_PLAN_RULESETS: readonly AutoPlanRuleset[] = [
+  'dinner',
+  'breakfast',
+  'dessert',
+  'any',
+]
+
 /**
  * UI state not owned by the router: cooking step positions (survive tab
  * switches within a session) and transient toasts. Not persisted.
@@ -69,6 +79,20 @@ export const useUiStore = defineStore(
     /** Share personal cooked history with the live room (off by default —
      *  history is personal data; see ADR-0011 addendum). Part of backups. */
     const shareCookedHistory = ref(false)
+    /** Auto-Plan settings (ADR-0027): last ruleset choice + mode, and the
+     *  rotating seed generation (incremented on every successful
+     *  generate). All persisted + carried in backups. */
+    const autoPlanRuleset = ref<AutoPlanRuleset>('dinner')
+    const autoPlanMode = ref<AutoPlanMode>('add')
+    const autoPlanGeneration = ref(0)
+    /** Generation a run should use (the stored counter). */
+    function nextAutoPlanGeneration(): number {
+      return autoPlanGeneration.value
+    }
+    /** Bump after a successful generate so the next run rotates the seed. */
+    function advanceAutoPlanGeneration(): void {
+      autoPlanGeneration.value += 1
+    }
     /**
      * The unified quick-filter selection (ADR-0027): diet chips, protein
      * chip, cook-time bucket, sort mode and the favourites/PRO toggles in
@@ -154,8 +178,25 @@ export const useUiStore = defineStore(
       dietFilters?: unknown
       householdRoom?: string
       stepTimers?: unknown
+      autoPlanRuleset?: unknown
+      autoPlanMode?: unknown
+      autoPlanGeneration?: unknown
     }): void {
       if (typeof prefs.shareCookedHistory === 'boolean') shareCookedHistory.value = prefs.shareCookedHistory
+      if (
+        typeof prefs.autoPlanRuleset === 'string' &&
+        (AUTO_PLAN_RULESETS as readonly string[]).includes(prefs.autoPlanRuleset)
+      ) {
+        autoPlanRuleset.value = prefs.autoPlanRuleset as AutoPlanRuleset
+      }
+      if (
+        (prefs.autoPlanMode === 'add' || prefs.autoPlanMode === 'replace')
+      ) {
+        autoPlanMode.value = prefs.autoPlanMode
+      }
+      if (typeof prefs.autoPlanGeneration === 'number' && Number.isFinite(prefs.autoPlanGeneration) && prefs.autoPlanGeneration >= 0) {
+        autoPlanGeneration.value = Math.floor(prefs.autoPlanGeneration)
+      }
       const filters =
         normalizeQuickFilters(prefs.quickFilters) ??
         (Array.isArray(prefs.quickFilters)
@@ -266,6 +307,11 @@ export const useUiStore = defineStore(
       householdRoom,
       stepTimers,
       toast,
+      autoPlanRuleset,
+      autoPlanMode,
+      autoPlanGeneration,
+      nextAutoPlanGeneration,
+      advanceAutoPlanGeneration,
       setCookingStep,
       cookingStep,
       stepTimer,
@@ -286,7 +332,15 @@ export const useUiStore = defineStore(
     // cookingStepIndex stays session-scoped.
     persist: {
       key: 'mealime-planner:v1:ui',
-      pick: ['shareCookedHistory', 'quickFilters', 'householdRoom', 'stepTimers'],
+      pick: [
+        'shareCookedHistory',
+        'quickFilters',
+        'householdRoom',
+        'stepTimers',
+        'autoPlanRuleset',
+        'autoPlanMode',
+        'autoPlanGeneration',
+      ],
       // Hydration has already run when this fires, so a v0.12 blob (which
       // has no `quickFilters` and therefore patched nothing) can still be
       // migrated from its legacy `dietFilters` array.
