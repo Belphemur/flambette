@@ -550,11 +550,16 @@ function onTouchEnd(e: TouchEvent) {
   </li>
   </ul>
   </div>
+  </template>
   <!-- Step timers (ADR-0020 + ADR-0038): ONE row per step VIEW, under
   that view's own content instead of a global strip above the nav — the
-  controls are now visibly the step's own. Only the current view is
-  mounted, so `viewKey`, `timer`, `timerRunning`, `timerLabel`,
-  `recipeTotalSuggestion` and every timer action below read the
+  controls are now visibly the step's own. The row sits AFTER the
+  `visibleSteps` loop, not inside it: a Meanwhile view contributes a
+  leader AND a partner to that loop but exactly ONE timer (view-level
+  `viewKey`/`timer`/`addOpen`/`recipeTotalSuggestion`), so inside the
+  loop a pair rendered two rows — two identical controls, two
+  `aria-live` regions and two `data-test` hooks for one view. Only the
+  current view is mounted, so every timer action below reads the
   on-screen view unchanged. The row scrolls with the step body and is
   deliberately NOT sticky: the footer keeps Prev/Next. -->
   <div v-if="doc" class="mt-2" data-test="step-timer-row">
@@ -638,7 +643,6 @@ function onTouchEnd(e: TouchEvent) {
   </div>
   </div>
   </div>
-  </template>
   </div>
   </div>
 
