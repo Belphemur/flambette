@@ -52,10 +52,18 @@ step AND run CONCURRENTLY — a per-step single timer cannot represent
    over the per-recipe object keyed by current step number. Register the
    script+artifact convention in the AGENTS.md generated-data table.
 
-4. **Ambiguous anchors do NOT arm silently.** Tapping the suggested chip
-   always lands in the confirm shape (name + minutes) with the proposal
-   pre-filled — explicit user intent gates every arm/edge-case, no
-   toast-surface countdown (ADR-0020's rule holds).
+4. **Ambiguous anchors do NOT arm silently.** Per the screenshot, the strip
+   sits between the step body (instruction + checklist) and the footer.
+   The add affordance stays explicit (`timer-add`): tapping it opens the
+   panel — **but when the current step has a recipe-detected hint and no
+   timer is yet running for this recipe, the panel opens itself pre-filled
+   with that suggestion instead of the empty add-state** (so "Simmer 15–18
+   min" arms without a tap). An already-running timer for the view is a
+   chip in the strip (never a surprise panel). Explicit user intent gates
+   every arm/edge-case, no toast-surface countdown (ADR-0020's rule holds):
+   the pre-filled proposal always lands in the confirm shape (name +
+   minutes) on open; `timer-confirm` is disabled at 0 minutes; Escape/
+   `timer-cancel` aborts — nothing auto-arms.
 
 5. **Persistence & reload honesty.** The list is stored under the existing
    `ui.stepTimers[variantId]` key as `{ [timerId]: StepTimer … }` — the
