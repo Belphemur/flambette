@@ -47,7 +47,8 @@ function addToPlan(row: Row) {
     <p class="text-xs text-stone-500 dark:text-stone-400" data-test="history-sync-note">
       Shared with your household by default — every phone in the room contributes to one cooking log, and histories
       merge rather than overwrite each other. Turn off
-      <strong>“Sync cooked history”</strong> in Settings → Household sync to keep this device's history private.
+      <strong>“Sync cooked history”</strong> in Settings → Household sync to stop sharing new cooks — cooks shared
+      earlier stay in the room, so this controls what goes out from here, not what has already been shared.
     </p>
 
     <div

@@ -29,8 +29,31 @@ export interface CookedEntry {
 const COOKED_HISTORY_CAP = 200
 const COOKED_RECENT_MS = 30 * 24 * 60 * 60 * 1000
 
-/** Monotonic counter backing CookedEntry.id (per-device). */
+/**
+ * Stable identity key for a cook event: the per-device id when the row
+ * carries one, the (variantId, cookedAt) pair otherwise (legacy rows from
+ * older peers / imports). Used for BOTH dedupe and the cap tie-break, so
+ * the ordering is a total order and every device sorts identically.
+ */
+export function cookedEventKey(row: CookedEntry): string {
+  return row.id ?? `${row.variantId}@${row.cookedAt}`
+}
+
+/**
+ * Per-JS-context random device nonce backing CookedEntry.id: a reload
+ * regenerates it, which is exactly why a bare monotonic counter would
+ * collide with ids already persisted on this device or minted by another
+ * phone — the nonce makes every session's id space disjoint from every
+ * other (time + counter alone would re-collide after a reload while the
+ * persisted history keeps its old ids).
+ */
+const cookDeviceNonce = Math.random().toString(36).slice(2, 10)
 let cookIdSeq = 0
+
+/** Mint a globally-unique id for a new cook event (ADR-0032). */
+function nextCookedId(): string {
+  return `${cookDeviceNonce}-${Date.now().toString(36)}-${cookIdSeq++}`
+}
 
 /**
  * Meal plan: list of {variantId, servings}. Persisted to localStorage under
@@ -137,7 +160,7 @@ export const usePlanStore = defineStore(
       removeFromPlan(variantId)
       restoreIngredients(variantId)
       cookedHistory.value = [
-        { variantId, cookedAt: Date.now(), id: `${cookIdSeq++}` },
+        { variantId, cookedAt: Date.now(), id: nextCookedId() },
         ...cookedHistory.value,
       ].slice(0, COOKED_HISTORY_CAP)
     }
@@ -152,7 +175,16 @@ export const usePlanStore = defineStore(
     function replaceCookedHistory(rows: CookedEntry[]): void {
       cookedHistory.value = rows
         .filter((r) => Number.isFinite(r.variantId) && Number.isFinite(r.cookedAt))
-        .map((r) => ({ variantId: r.variantId, cookedAt: r.cookedAt }))
+        // Preserve the per-device id: a household member's backup restores
+        // the SAME event other peers hold under its id, and dropping it
+        // here would make the restored copy key by the pair — the next
+        // merge would count the event twice. Rows without an id (legacy
+        // backups) keep the pair fallback.
+        .map((r) => ({
+          variantId: r.variantId,
+          cookedAt: r.cookedAt,
+          ...(r.id !== undefined ? { id: r.id } : {}),
+        }))
         .slice(0, COOKED_HISTORY_CAP)
     }
 
@@ -173,25 +205,41 @@ export const usePlanStore = defineStore(
       // Seed with the CURRENT household view so inbound rows that duplicate
       // what we already hold don't count as "added" and don't get republished.
       for (const row of [...cookedHistory.value]) {
-        const key = row.id ?? `${row.variantId}@${row.cookedAt}`
-        seen.add(key)
+        seen.add(cookedEventKey(row))
         merged.push({ variantId: row.variantId, cookedAt: row.cookedAt, id: row.id })
       }
-      let added = 0
+      // Keys of rows that came in from THIS merge — a row that duplicates a
+      // local one is not an addition, and a row the CAP discards must not
+      // report an addition either (it would make both devices republish
+      // their unchanged history forever: rev ping-pong).
+      const inboundKeys = new Set<string>()
       for (const row of rows) {
         if (!Number.isFinite(row.variantId) || !Number.isFinite(row.cookedAt)) continue
         // Prefer the per-device unique id when present (disambiguates two
         // same-recipe cooks on different phones in the same millisecond,
         // which the pair alone collides on). Fall back to (variantId, cookedAt)
         // for rows from older peers / imports that lack it.
-        const key = row.id ?? `${row.variantId}@${row.cookedAt}`
+        const key = cookedEventKey(row)
         if (seen.has(key)) continue
         seen.add(key)
         merged.push({ variantId: row.variantId, cookedAt: row.cookedAt, id: row.id })
-        added++
+        inboundKeys.add(key)
       }
-      merged.sort((a, b) => b.cookedAt - a.cookedAt)
+      // Newest first, with a DETERMINISTIC tie-break: two devices that hold
+      // different events with the same boundary timestamp must sort them the
+      // same way, or each device keeps its own event at the cap edge and
+      // endlessly republishes the other's discard. The event key is unique
+      // within the merged list, so this is a total order.
+      merged.sort(
+        (a, b) =>
+          b.cookedAt - a.cookedAt ||
+          cookedEventKey(a).localeCompare(cookedEventKey(b)),
+      )
       cookedHistory.value = merged.slice(0, COOKED_HISTORY_CAP)
+      let added = 0
+      for (const row of cookedHistory.value) {
+        if (inboundKeys.has(cookedEventKey(row))) added++
+      }
       return added > 0
     }
 

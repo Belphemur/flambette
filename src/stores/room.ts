@@ -11,7 +11,7 @@ import {
 } from '../lib/quickFilters'
 import { useCustomIngredientsStore, type CustomIngredient } from './customIngredients'
 import { useFavouritesStore, DEFAULT_STAMP } from './favourites'
-import { usePlanStore, type CookedEntry } from './plan'
+import { usePlanStore, cookedEventKey, type CookedEntry } from './plan'
 import { useGroceryStore } from './grocery'
 import { useRatingStore } from './rating'
 import { useUiStore } from './ui'
@@ -237,6 +237,11 @@ export const useRoomStore = defineStore('room', () => {
     // now need to reconcile to the room? Declared in scope so the finally
     // block can read it.
     let inboundAdded = false
+    // CodeRabbit: the mirror case — rows WE hold that the room's snapshot
+    // lacks (a joiner with local cooks adopting an empty/subset history).
+    // inboundAdded only sees the other direction and would return false,
+    // silently stranding our cooks from the household forever.
+    let localRowsMissingFromRoom = false
     try {
       plan.replacePlan(state.plan ?? [], state.customItems ?? [])
       const checked: Record<string, boolean> = {}
@@ -253,8 +258,19 @@ export const useRoomStore = defineStore('room', () => {
       // with no delete feature, and now that every device pushes it at
       // once, a replace would let whoever pushed last erase the other
       // phones' cooks. An empty inbound list is a peer that cooked
-      // nothing, not a request to wipe ours.
-      if (state.cookedHistory) inboundAdded = plan.mergeCookedHistory(state.cookedHistory)
+      // nothing, not a request to wipe ours. RECONCILE BOTH DIRECTIONS:
+      // rows the snapshot had that we lacked (→ republish so peers learn
+      // them) AND rows we hold that the snapshot lacked (→ republish so
+      // the room learns ours). An ABSENT cookedHistory key is "don't
+      // touch" — an opted-out sender's snapshot never reconciles, or a
+      // history-less state receipt would republish forever.
+      if (state.cookedHistory) {
+        const incomingKeys = new Set(state.cookedHistory.map(cookedEventKey))
+        inboundAdded = plan.mergeCookedHistory(state.cookedHistory)
+        localRowsMissingFromRoom = plan.cookedHistory.some(
+          (row) => !incomingKeys.has(cookedEventKey(row)),
+        )
+      }
       // Quick filters (ADR-0028). ABSENCE means "don't touch": an older
       // peer sends no `filters` key, and treating that as an empty
       // selection would wipe the household's filters on every push. The
@@ -281,16 +297,20 @@ export const useRoomStore = defineStore('room', () => {
       if (state.ratings != null) ratings.mergeRemote(state.ratings)
     } finally {
       applyingRemote = false
-      // Finding #2 (qodo): an inbound merge can pull cook events the relay
-      // does not yet hold (disjoint histories, or a joiner keeping local
-      // cooks). The watch on cookedHistory is muted by `applyingRemote`, so
-      // those rows would never reach later peers. Reconcile them here:
-      // republish the household snapshot — BUT only when no local plan edit
-      // is pending, so we never clobber another peer's uncommitted edit.
-      // We are the device that just absorbed the missing rows, so our
-      // snapshot now carries them at a strictly higher rev; peers that adopt
-      // it converge on the full union.
-      if (inboundAdded && !localEditPending && ui.shareCookedHistory) {
+      // Finding #2 (qodo) + CodeRabbit mirror case: an inbound merge can
+      // pull cook events the relay does not yet hold, AND a joiner that
+      // adopts a snapshot can hold events the snapshot lacks. The watch on
+      // cookedHistory is muted by `applyingRemote`, so those rows would
+      // never reach later peers. Reconcile here: republish the household
+      // snapshot — BUT only when no local plan edit is pending, so we
+      // never clobber another peer's uncommitted edit. Republishing is
+      // convergent: the next snapshot the room echoes carries the union,
+      // so both flags go false and the pushes stop.
+      if (
+        (inboundAdded || localRowsMissingFromRoom) &&
+        !localEditPending &&
+        ui.shareCookedHistory
+      ) {
         localRev = Math.max(localRev, maxSeenRev) + 1
         sendState()
       }

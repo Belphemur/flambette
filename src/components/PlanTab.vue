@@ -498,7 +498,7 @@ function confirmAutoPlan() {
           </p>
           <label
             class="flex items-start gap-2.5 py-1"
-            title="On by default — turn it off to keep this device's cooked history private"
+            title="On by default — turn it off to stop sharing future cooks (already-shared cooks stay in the room)"
           >
             <input
               type="checkbox"
@@ -509,7 +509,7 @@ function confirmAutoPlan() {
             />
             <span class="text-sm leading-tight">
               Share cooked history with room
-              <span class="block text-xs dark:text-stone-400">On by default — the room keeps one merged cooking log. Turn it off to keep this device's history private. Also in Settings → Household sync.</span>
+              <span class="block text-xs dark:text-stone-400">On by default — the room keeps one merged cooking log. Turn it off to stop sharing new cooks: already-shared cooks stay in the room. Also in Settings → Household sync.</span>
             </span>
           </label>
           <template v-if="room.inRoom">

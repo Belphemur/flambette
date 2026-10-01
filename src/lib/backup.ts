@@ -153,29 +153,32 @@ export const STORE_SLICES: SliceDef<any>[] = [
     },
   },
   /* Personal cooked history (plan store, personal slice — always in backups).
-   * The per-device `id` (ADR-0031) is NOT exported: it disambiguates cooks
-   * on this device and is meaningless to a restored install, whose
-   * `markCooked` will mint its own fresh ids. Carrying it would make
-   * re-exports differ from freshly-cooked rows and leak a counter that
-   * has no stable cross-device meaning. */
+   * The per-device `id` (ADR-0032) IS exported: it is the event's identity
+   * across the household — other peers hold this same event under its id,
+   * so a restored install must keep it or the next merge counts the event
+   * twice (restored copy keys by the pair, peers by id). Export and import
+   * are id-transparent, so a backup round-trips byte-equal; legacy rows
+   * without an id keep the (variantId, cookedAt) pair fallback. */
   {
     file: 'cooked-history.json',
     label: 'cooked-meal history',
     persistKeys: ['mealime-planner:v1:plan'],
     read: () =>
-      usePlanStore().cookedHistory.map((h) => ({
-        variantId: h.variantId,
-        cookedAt: h.cookedAt,
-      })),
+      usePlanStore().cookedHistory.map((h) =>
+        h.id !== undefined
+          ? { variantId: h.variantId, cookedAt: h.cookedAt, id: h.id }
+          : { variantId: h.variantId, cookedAt: h.cookedAt },
+      ),
     validate(value) {
       if (!Array.isArray(value)) return 'cooked-history.json must be an array'
       for (const r of value) {
         if (
           typeof r !== 'object' || r === null ||
           typeof (r as CookedEntry).variantId !== 'number' || !Number.isFinite((r as CookedEntry).variantId) ||
-          typeof (r as CookedEntry).cookedAt !== 'number' || !Number.isFinite((r as CookedEntry).cookedAt)
+          typeof (r as CookedEntry).cookedAt !== 'number' || !Number.isFinite((r as CookedEntry).cookedAt) ||
+          ((r as CookedEntry).id !== undefined && typeof (r as CookedEntry).id !== 'string')
         ) {
-          return 'cooked history rows must be {variantId, cookedAt} numbers'
+          return 'cooked history rows must be {variantId, cookedAt} numbers + optional id string'
         }
       }
       return null
