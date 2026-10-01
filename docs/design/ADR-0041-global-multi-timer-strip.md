@@ -32,16 +32,25 @@ step AND run CONCURRENTLY — a per-step single timer cannot represent
    pre-fills from context (below). Limit 4 concurrent timers (screen
    space on Pixel 7); adding a 5th asks which to replace.
 
-3. **Recipe-detected suggestion.** When the step text (or measured-amount
-   chips) contains an explicit cook duration ("Simmer the rice for 12
-   minutes", "Bake 20–25 min"), the timer affordance proposes that value,
-   labelled with the food mentioned where the sentence names one (else
-   "Step N"). One suggestion per timer; the user can edit before arming.
-   Detection is a pure lib (`src/lib/timerSuggest.ts` or extend the measured-
-   amounts parser) over the OUTER pattern
-   `/\b(?:for )?\b(\d+)(?:–|‑|-| to )?(\d+)?\s*(min(?:ute)?s?|hours?|h)\b/i`
-   — no fabricated quantities beyond the authored text (ADR-0022's rule),
-   ranges suggest the LOWER bound and say so ("Bake 20 min (of 20–25)").
+3. **Recipe-detected suggestion (build-time extraction).** Timer hints are
+   extracted OFFLINE from the raw catalog by a stdlib Python script — the
+   repo's existing generated-data pattern (`scripts/extract_ingredients.py`,
+   `scripts/build_pack_index.py` in AGENTS.md). New
+   `scripts/extract_timer_hints.py` scans all 2,730
+   `public/data/recipes/*.json` step texts (incl. measured-amount-bearing
+   lines) for an explicit cook duration ("Simmer the rice for 12 minutes",
+   "Bake 20–25 min") and emits the COMMITTED artifact
+   `public/data/timer_hints.json`: `{ [variantId]: [{ step: number,
+   seconds: number, label?: string, range?: [number, number] }] }` —
+   ranges record BOTH bounds; the UI suggests the lower bound and says so
+   ("Bake 20 min (of 20–25)"; ADR-0022's no-fabrication rule holds: only
+   authored durations are extracted). The runtime lib
+   (`src/lib/timerSuggest.ts`) becomes a pure LOOKUP over the loaded
+   artifact (per current view's steps, same `imageSrc`-style lazy pattern
+   as the catalog load), NOT a runtime regex — offline behaviour is
+   unchanged because the hints ship in the repo. Register the output in
+   the AGENTS.md generated-data table; label with the food named in the
+   sentence, else "Step N".
 
 4. **Ambiguous anchors do NOT arm silently.** Tapping the suggested chip
    always lands in the confirm shape (name + minutes) with the proposal
