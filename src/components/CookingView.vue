@@ -40,12 +40,24 @@ const meta = computed(() => catalog.value?.byId.get(props.id) ?? null)
  * Servings source: the plan entry's servings when the recipe is planned,
  * otherwise the recipe's base serving_count. No stepper here — change
  * servings from the detail sheet.
+ *
+ * Frozen at the first successful resolution (ADR-0034). It USED to be a
+ * live computed over the plan, which quietly corrupted the cook: marking
+ * "as cooked" mid-recipe drops the meal from the plan, the computed fell
+ * back to the base `serving_count`, and every remaining step silently
+ * RESCALED under the user mid-cook (a 4-serving cook became 6). The
+ * session's servings are decided when it opens, like everything else about
+ * it, and a mark cannot change the arithmetic of a recipe in progress.
  */
+let frozenServings: number | null = null
 const servings = computed(() => {
   const id = meta.value?.id
   if (id === undefined) return 1
-  const entry = plan.plan.find((e) => e.variantId === id)
-  return entry?.servings ?? meta.value!.serving_count
+  if (frozenServings === null) {
+    const entry = plan.plan.find((e) => e.variantId === id)
+    frozenServings = entry?.servings ?? meta.value!.serving_count
+  }
+  return frozenServings
 })
 
 const factor = computed(() => (doc.value ? servings.value / doc.value.serving_count : 1))

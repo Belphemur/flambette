@@ -5,6 +5,7 @@ import {
   gotoTab,
   openFirstRecipeDetail,
   openRecipeDetail,
+  visibleVariantIds,
   waitForCatalog,
 } from './helpers'
 
@@ -196,6 +197,35 @@ test('mark as cooked is available at EVERY step and keeps you cooking (ADR-0034)
   await expect(page.getByTestId('cook-history')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
+test('marking mid-cook does not rescale the cook (ADR-0034)', async ({ page }) => {
+  // The servings of a cook are decided when the session opens. Marking
+  // "as cooked" drops the meal from the plan, and a live servings lookup
+  // would fall back to the recipe's base serving_count and silently
+  // rescale every remaining step under the user mid-recipe.
+  await blockExternalRequests(page)
+  await page.goto('/')
+  await waitForCatalog(page)
+  const [id] = await visibleVariantIds(page)
+  await page.evaluate((variantId) => {
+    localStorage.setItem(
+      'mealime-planner:v1:plan',
+      JSON.stringify({ plan: [{ variantId, servings: 2 }], customItems: [], clearedIngredients: {} }),
+    )
+  }, id)
+  await page.goto(`/cooking/${id}`)
+
+  const cooking = page.getByRole('dialog', { name: /Cooking / })
+  await expect(cooking.getByTestId('cook-serves')).toContainText('serves 2')
+  await expect(cooking.getByTestId('mark-cooked')).toBeVisible()
+  await cooking.getByTestId('mark-cooked').click()
+  await expect(page.getByTestId('toast')).toContainText('Marked as cooked')
+
+  // Same servings, same step, after the meal is off the plan.
+  await expect(cooking.getByTestId('cook-serves')).toContainText('serves 2')
+  await expect(cooking.getByTestId('step-counter')).toContainText('Step 1 /')
+  await expectZeroMealimeRequests(page)
+})
+
 test('cooking position is not persisted across a reload', async ({ page }) => {
   const { cooking } = await startCooking(page)
   await cooking.getByRole('button', { name: /Next/ }).click()
