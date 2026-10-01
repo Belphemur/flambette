@@ -387,11 +387,21 @@ artifact is a broken build).
 | `extract_ingredients.py` | `public/data/ingredients.json` | autocomplete index (ADR-0012) |
 | `build_pack_index.py` | `public/data/pack_index.json` | planner ingredient footprint (ADR-0024) |
 | `verify_pack_index_parity.ts` | — | gates the Python builder against the TS it mirrors |
+| `extract_timer_hints.py` | `public/data/recipes/<variantId>.timer.json` | per-recipe timer-hint sidecars for the cooking view's timer suggestions (ADR-0041); goldens: `python3 scripts/test_extract_timer_hints.py` |
 
 ```bash
 bun run data:pack     # rebuild pack_index.json
 bun run data:verify   # assert Python == src/lib/containers.ts + quantity.ts
+python3 scripts/extract_timer_hints.py   # regen per-recipe .timer.json sidecars (idempotent, deletes stale)
+python3 scripts/test_extract_timer_hints.py  # 15 golden extraction cases
 ```
+
+Timer-hint sidecar rules (ADR-0041): recipes with zero hints omit the file
+entirely (an on-demand fetch 404s and shows no suggestion affordance);
+re-runs delete stale sidecars first; the extractor's maximum duration and
+`src/lib/stepTimer.ts`'s `MAX_TIMER_SECONDS` must stay in lockstep
+(both 21,600 s = 6 h) — one is Python, one is TS, so no `data:verify` gate
+exists for them; change both together.
 
 Parity rules for anything mirroring TS into Python:
 - `nameKey` / `unitKey` / `parseQuantity` / `parseContainerQuantity` must stay
