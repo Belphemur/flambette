@@ -5,7 +5,7 @@
 </tr>
 </table>
 
-<p align="center"><img src="docs/screenshots/hero.jpg" width="100%" alt="Flambette hero — a steaming red Dutch oven of Tuscan chicken and tomato stew with basil and crusty bread" /></p>
+<p align="center"><img src="docs/screenshots/hero.webp" width="100%" alt="Flambette — a steaming red Dutch oven of Tuscan chicken and tomato stew beside the app's recipe card" /></p>
 
 <table>
 <tr>
