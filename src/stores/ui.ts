@@ -10,7 +10,15 @@ import {
 } from '../lib/quickFilters'
 import { isRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { clampServings, FALLBACK_SERVINGS, isServings, MIN_SERVINGS } from '../lib/servings'
-import { clampSeconds, isStepTimer, type StepTimer } from '../lib/stepTimer'
+import {
+  MAX_CONCURRENT_TIMERS,
+  clampSeconds,
+  isStepTimer,
+  nextTimerId,
+  newCookTimer,
+  normalizeTimerLabel,
+  type CookTimer,
+} from '../lib/stepTimer'
 
 /** Bottom-nav entries, in display order. `to` is the route path; `icon` is
  *  a Lucide component (WS5), not an emoji or a hand-rolled path — the
@@ -146,8 +154,13 @@ export const useUiStore = defineStore(
      * index -> timer. Keyed by view (not raw step) because a "Meanwhile"
      * pair is one view and shares one timer. Persisted so a reload
      * mid-cook resumes an honest countdown (remaining + startedAt).
+     *
+     * ADR-0041: the inner key is a TIMER ID, not a step-view index, and
+     * each value is a named `CookTimer`, so one cook can run several
+     * countdowns at once from the single global strip. Same persisted
+     * slice as before — the backup registry (ADR-0013) needs no new one.
      */
-    const stepTimers = ref<Record<number, Record<number, StepTimer>>>({})
+    const stepTimers = ref<Record<number, Record<number, CookTimer>>>({})
     /** Transient toast: plain message, optionally with inline action buttons. */
     const toast = ref<Toast | null>(null)
     let toastTimer: ReturnType<typeof setTimeout> | undefined
@@ -162,40 +175,87 @@ export const useUiStore = defineStore(
       return cookingStepIndex.value[variantId] ?? 0
     }
 
-    /** The timer of one step view, or undefined when none was set. */
-    function stepTimer(variantId: number, viewKey: number): StepTimer | undefined {
-      return stepTimers.value[variantId]?.[viewKey]
+    /** Every armed timer of a recipe, oldest id first (ADR-0041). */
+    function timers(variantId: number): CookTimer[] {
+      const forRecipe = stepTimers.value[variantId]
+      if (!forRecipe) return []
+      return Object.values(forRecipe).sort((a, b) => a.id - b.id)
+    }
+
+    /** One armed timer by id, or undefined when it was cleared. */
+    function timerById(variantId: number, id: number): CookTimer | undefined {
+      return stepTimers.value[variantId]?.[id]
+    }
+
+    /** True when another timer would exceed `MAX_CONCURRENT_TIMERS`. */
+    function isTimerListFull(variantId: number): boolean {
+      return timers(variantId).length >= MAX_CONCURRENT_TIMERS
     }
 
     /**
-     * Set (or restart) the timer of one step view to `seconds`. A running
-     * timer stamps `startedAt`, so the countdown survives a reload.
+     * Arm a NEW timer for a recipe and return its id, or null when the
+     * concurrent cap is already reached — the caller then asks which
+     * timer to replace (ADR-0041 §2). A running timer stamps `startedAt`
+     * here, once, so nothing downstream re-arms a countdown.
      */
-    function setStepTimer(variantId: number, viewKey: number, seconds: number, running: boolean) {
+    function addTimer(variantId: number, label: string, seconds: number, running = true): number | null {
       const forRecipe = { ...(stepTimers.value[variantId] ?? {}) }
-      forRecipe[viewKey] = {
-        remaining: clampSeconds(seconds),
-        running,
-        startedAt: running ? Date.now() : null,
+      if (Object.keys(forRecipe).length >= MAX_CONCURRENT_TIMERS) return null
+      const id = nextTimerId(forRecipe)
+      forRecipe[id] = newCookTimer(id, label, seconds, running, running ? Date.now() : null)
+      stepTimers.value = { ...stepTimers.value, [variantId]: forRecipe }
+      return id
+    }
+
+    /** Swap a timer that is already on the strip for a new value. */
+    function replaceTimer(variantId: number, id: number, label: string, seconds: number): void {
+      const forRecipe = { ...(stepTimers.value[variantId] ?? {}) }
+      if (!(id in forRecipe)) return
+      forRecipe[id] = newCookTimer(id, label, seconds, true, Date.now())
+      stepTimers.value = { ...stepTimers.value, [variantId]: forRecipe }
+    }
+
+    /**
+     * Start (or restart) one timer. `seconds` defaults to the timer's own
+     * remaining value, so a paused timer resumes where it stopped.
+     */
+    function startTimer(variantId: number, id: number, seconds?: number): void {
+      const forRecipe = { ...(stepTimers.value[variantId] ?? {}) }
+      const existing = forRecipe[id]
+      if (!existing) return
+      const base = seconds === undefined ? existing.remaining : seconds
+      forRecipe[id] = newCookTimer(id, existing.label, base || 300, true, Date.now())
+      stepTimers.value = { ...stepTimers.value, [variantId]: forRecipe }
+    }
+
+    /** Pause one timer, freezing the remaining seconds it had. */
+    function pauseTimer(variantId: number, id: number, remaining: number): void {
+      const forRecipe = { ...(stepTimers.value[variantId] ?? {}) }
+      const existing = forRecipe[id]
+      if (!existing) return
+      forRecipe[id] = {
+        ...existing,
+        remaining: clampSeconds(remaining),
+        running: false,
+        startedAt: null,
       }
       stepTimers.value = { ...stepTimers.value, [variantId]: forRecipe }
     }
 
-    /** Start (or restart) a view's timer for `seconds`. */
-    function startStepTimer(variantId: number, viewKey: number, seconds: number) {
-      setStepTimer(variantId, viewKey, seconds, true)
-    }
-
-    /** Pause a view's timer, freezing the remaining seconds it had. */
-    function pauseStepTimer(variantId: number, viewKey: number, remaining: number) {
-      setStepTimer(variantId, viewKey, remaining, false)
-    }
-
-    /** Drop a view's timer entirely (chip/preset reset). */
-    function clearStepTimer(variantId: number, viewKey: number) {
+    /** Rename one timer in place (the chip's label field). */
+    function renameTimer(variantId: number, id: number, label: string): void {
       const forRecipe = { ...(stepTimers.value[variantId] ?? {}) }
-      if (!(viewKey in forRecipe)) return
-      delete forRecipe[viewKey]
+      const existing = forRecipe[id]
+      if (!existing) return
+      forRecipe[id] = { ...existing, label: normalizeTimerLabel(label) }
+      stepTimers.value = { ...stepTimers.value, [variantId]: forRecipe }
+    }
+
+    /** Drop one timer entirely (a chip's delete). */
+    function clearTimer(variantId: number, id: number): void {
+      const forRecipe = { ...(stepTimers.value[variantId] ?? {}) }
+      if (!(id in forRecipe)) return
+      delete forRecipe[id]
       const next = { ...stepTimers.value }
       if (Object.keys(forRecipe).length === 0) delete next[variantId]
       else next[variantId] = forRecipe
@@ -353,23 +413,33 @@ export const useUiStore = defineStore(
     /**
      * Keep only well-formed timers out of an imported/loaded map
      * (validation-first import: unknown shapes are dropped, not trusted).
+     *
+     * This is also where ADR-0041's persistence migration lives: a
+     * pre-ADR-0041 record — `{ remaining, running, startedAt }` under a
+     * step-VIEW index, with no label — is a perfectly good countdown, so
+     * it is adopted as one timer keyed by that same id and labelled
+     * "Step". User data is never dropped for the rename; only a record
+     * that is not a countdown at all is discarded.
      */
-    function sanitizeStepTimers(value: unknown): Record<number, Record<number, StepTimer>> {
-      const out: Record<number, Record<number, StepTimer>> = {}
+    function sanitizeStepTimers(value: unknown): Record<number, Record<number, CookTimer>> {
+      const out: Record<number, Record<number, CookTimer>> = {}
       if (typeof value !== 'object' || value === null || Array.isArray(value)) return out
       for (const [variantRaw, viewsRaw] of Object.entries(value as Record<string, unknown>)) {
         if (!/^\d+$/.test(variantRaw)) continue
         if (typeof viewsRaw !== 'object' || viewsRaw === null || Array.isArray(viewsRaw)) continue
-        const views: Record<number, StepTimer> = {}
-        for (const [viewRaw, timer] of Object.entries(viewsRaw as Record<string, unknown>)) {
-          if (!/^\d+$/.test(viewRaw) || !isStepTimer(timer)) continue
-          views[Number(viewRaw)] = {
+        const timers: Record<number, CookTimer> = {}
+        for (const [idRaw, timer] of Object.entries(viewsRaw as Record<string, unknown>)) {
+          if (!/^\d+$/.test(idRaw) || !isStepTimer(timer)) continue
+          const id = Number(idRaw)
+          timers[id] = {
+            id,
+            label: normalizeTimerLabel((timer as CookTimer).label),
             remaining: clampSeconds(timer.remaining),
             running: timer.running,
             startedAt: timer.startedAt === null ? null : timer.startedAt,
           }
         }
-        if (Object.keys(views).length > 0) out[Number(variantRaw)] = views
+        if (Object.keys(timers).length > 0) out[Number(variantRaw)] = timers
       }
       return out
     }
@@ -446,11 +516,15 @@ export const useUiStore = defineStore(
       advanceAutoPlanGeneration,
       setCookingStep,
       cookingStep,
-      stepTimer,
-      setStepTimer,
-      startStepTimer,
-      pauseStepTimer,
-      clearStepTimer,
+      timers,
+      timerById,
+      isTimerListFull,
+      addTimer,
+      replaceTimer,
+      startTimer,
+      pauseTimer,
+      renameTimer,
+      clearTimer,
       applySettings,
       migrateLegacyFilters,
       adoptHistoryShareDefault,

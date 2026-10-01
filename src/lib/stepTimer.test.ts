@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  DEFAULT_TIMER_LABEL,
+  MAX_TIMER_LABEL,
   MAX_TIMER_SECONDS,
   TIMER_PRESETS_MIN,
   announceCountdown,
@@ -7,7 +9,10 @@ import {
   formatCountdown,
   isFinished,
   isStepTimer,
+  newCookTimer,
   newStepTimer,
+  nextTimerId,
+  normalizeTimerLabel,
   remainingSeconds,
 } from './stepTimer'
 
@@ -87,5 +92,48 @@ describe('isStepTimer', () => {
     expect(isStepTimer({ remaining: 60, running: false })).toBe(false)
     expect(isStepTimer(null)).toBe(false)
     expect(isStepTimer([])).toBe(false)
+  })
+})
+
+/* ---------- Concurrent named timers (ADR-0041) ---------- */
+
+describe('normalizeTimerLabel', () => {
+  test('collapses whitespace and never returns an empty chip', () => {
+    expect(normalizeTimerLabel('  oven   tray ')).toBe('oven tray')
+    expect(normalizeTimerLabel('')).toBe(DEFAULT_TIMER_LABEL)
+    expect(normalizeTimerLabel('   ')).toBe(DEFAULT_TIMER_LABEL)
+    expect(normalizeTimerLabel(undefined)).toBe(DEFAULT_TIMER_LABEL)
+    expect(normalizeTimerLabel(42)).toBe(DEFAULT_TIMER_LABEL)
+  })
+
+  test('bounds a long label to the chip budget without a trailing space', () => {
+    const long = 'a'.repeat(MAX_TIMER_LABEL) + ' bb'
+    // Bounded by the budget, and the cut never leaves a trailing space.
+    expect(normalizeTimerLabel(long)).toBe('a'.repeat(MAX_TIMER_LABEL))
+  })
+})
+
+describe('nextTimerId', () => {
+  test('continues past the largest id in use', () => {
+    expect(nextTimerId({})).toBe(1)
+    expect(nextTimerId({ 1: {}, 4: {} })).toBe(5)
+    expect(nextTimerId({ 9: {}, 2: {} })).toBe(10)
+  })
+})
+
+describe('newCookTimer', () => {
+  test('a CookTimer is a StepTimer plus an id and a label (one countdown engine)', () => {
+    const t = newCookTimer(2, 'Rice', 720, true, 1000)
+    expect(isStepTimer(t)).toBe(true)
+    expect(t).toEqual({ id: 2, label: 'Rice', remaining: 720, running: true, startedAt: 1000 })
+    expect(remainingSeconds(t, 1000 + 60_000)).toBe(660)
+    expect(isFinished(t, 1000 + 720_000)).toBe(true)
+  })
+
+  test('clamps the duration and normalizes the label like every other timer', () => {
+    const t = newCookTimer(1, '', MAX_TIMER_SECONDS * 10, false)
+    expect(t.remaining).toBe(MAX_TIMER_SECONDS)
+    expect(t.label).toBe(DEFAULT_TIMER_LABEL)
+    expect(t.running).toBe(false)
   })
 })

@@ -6,6 +6,11 @@
  * is derived from `remaining - (now - startedAt)` whenever it is running.
  * Everything here is pure and unit-tested; `stores/ui.ts` only holds the
  * map and `CookingView.vue` drives the 1 s tick.
+ *
+ * ADR-0041 keeps this engine EXACTLY as it is and turns the map's inner
+ * key from a step-view index into a timer id, so a recipe can run several
+ * named countdowns at once (see `CookTimer` below). Every chip derives its
+ * remaining seconds through the same `remainingSeconds`.
  */
 
 export interface StepTimer {
@@ -22,6 +27,90 @@ export const TIMER_PRESETS_MIN: readonly number[] = [1, 3, 5, 10, 15, 20, 30]
 
 /** Upper bound on a persisted/entered duration: 6 hours. */
 export const MAX_TIMER_SECONDS = 6 * 60 * 60
+
+/* ---------- Concurrent named timers (ADR-0041) ----------
+ *
+ * ADR-0041 restores ONE global strip and turns the single per-step timer
+ * into a LIST of named chips, because a cook juggling an oven and a pot of
+ * rice needs both countdowns live at once. The countdown ENGINE is
+ * unchanged and shared: a `CookTimer` structurally IS a `StepTimer`
+ * (`remaining`/`running`/`startedAt`), so every chip derives its countdown
+ * through `remainingSeconds` exactly as before — a persisted id is never
+ * re-armed on reload.
+ */
+
+/** Free-text chip label budget (a chip is narrow on a Pixel 7). */
+export const MAX_TIMER_LABEL = 24
+
+/**
+ * Screen-space cap on CONCURRENT timers. Adding beyond it asks which timer
+ * to replace rather than growing the strip (ADR-0041 §2).
+ */
+export const MAX_CONCURRENT_TIMERS = 4
+
+/**
+ * Label for a timer the user never named — also what a pre-ADR-0041
+ * persisted record migrates to, so an imported timer keeps its countdown
+ * and simply reads as the step's own timer.
+ */
+export const DEFAULT_TIMER_LABEL = 'Step'
+
+/** A named, concurrently-running timer chip (ADR-0041). */
+export interface CookTimer extends StepTimer {
+  /** Stable key within the recipe's timer map. */
+  id: number
+  /** User- or recipe-authored chip label, ≤ `MAX_TIMER_LABEL`. */
+  label: string
+}
+
+/**
+ * Coerce a chip label: whitespace-collapsed, trimmed, never empty and
+ * never longer than `MAX_TIMER_LABEL`. Anything unusable becomes
+ * `DEFAULT_TIMER_LABEL` so a chip always names something.
+ */
+export function normalizeTimerLabel(label: unknown): string {
+  const text = typeof label === 'string' ? label.replace(/\s+/g, ' ').trim() : ''
+  if (!text) return DEFAULT_TIMER_LABEL
+  return text.length > MAX_TIMER_LABEL ? text.slice(0, MAX_TIMER_LABEL).trimEnd() : text
+}
+
+/**
+ * A fresh timer for `id`. `startedAt` is the CALLER's stamp: this stays
+ * pure so a store action owns the one `Date.now()` in the path (and a
+ * test never races the clock).
+ */
+export function newCookTimer(
+  id: number,
+  label: unknown,
+  seconds: number,
+  running = true,
+  startedAt: number | null = null,
+): CookTimer {
+  return {
+    id,
+    label: normalizeTimerLabel(label),
+    ...newStepTimer(seconds),
+    running,
+    startedAt,
+  }
+}
+
+/**
+ * Next free timer id for a recipe's timer map: one past the largest key in
+ * use. Derived from the map rather than kept in its own counter, so a
+ * backup/room payload that arrives with ids already in use cannot collide
+ * and there is nothing extra to persist.
+ */
+export function nextTimerId(timers: Record<number, unknown>): number {
+  let max = 0
+  for (const key of Object.keys(timers)) {
+    const n = Number(key)
+    if (Number.isFinite(n) && n > max) max = Math.floor(n)
+  }
+  return max + 1
+}
+
+
 
 /** A fresh, paused timer for `seconds`. */
 export function newStepTimer(seconds: number): StepTimer {
