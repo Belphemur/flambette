@@ -11,12 +11,14 @@ import { usePlanStore } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
 import { useFavouritesStore } from '../stores/favourites'
 import RatingStars from './RatingStars.vue'
+import NutritionModal from './NutritionModal.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
 import { ICON_ROLES, ingredientRole } from '../lib/palette'
 import HueIcon from './HueIcon.vue'
 import { onMounted, onUnmounted } from 'vue'
 import {
   ArrowLeft,
+  BookOpen,
   ChefHat,
   ChevronDown,
   Clock,
@@ -37,6 +39,9 @@ const doc = ref<RecipeDoc | null>(null)
 const loading = ref(false)
 const loadError = ref<string | null>(null)
 const ui = useUiStore()
+
+/** The full per-serving facts live in a modal (ADR-0039), not inline. */
+const nutritionOpen = ref(false)
 
 /**
  * Servings shown for THIS recipe: the plan entry's count when the recipe
@@ -179,6 +184,9 @@ function close() {
 }
 
 function onKey(e: KeyboardEvent) {
+  // The facts modal owns Escape while it is open (ADR-0039): this view
+  // must not navigate away underneath it.
+  if (nutritionOpen.value) return
   if (e.key === 'Escape') close()
 }
 onMounted(() => window.addEventListener('keydown', onKey))
@@ -411,8 +419,31 @@ function startCooking() {
   }}%</span>
   </div>
   </div>
+  <!-- The 66-row facts block would turn the detail into a wall, so the
+  summary above stays and the rest opens on demand (ADR-0039). The
+  trigger sits INSIDE the section: the section's position contract is
+  unchanged. -->
+  <button
+  v-if="doc"
+  class="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-surface-raised px-4 text-sm font-semibold text-brand-text ring-1 ring-border-strong active:bg-surface-sunken sm:w-auto sm:px-3"
+  aria-label="Full nutrition facts"
+  aria-haspopup="dialog"
+  data-test="nutrition-open"
+  @click="nutritionOpen = true"
+  >
+  <BookOpen :size="16" aria-hidden="true" />Full nutrition facts
+  </button>
   </div>
   </section>
+
+  <Teleport to="body">
+  <NutritionModal
+  v-if="nutritionOpen && doc"
+  :nutrition="doc.nutrition"
+  :calories="meta.calories"
+  @close="nutritionOpen = false"
+  />
+  </Teleport>
 
   <template v-if="loading">
   <div class="mt-6 space-y-3">

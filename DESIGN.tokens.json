@@ -355,6 +355,72 @@
         "hex": "#a5b4fc"
       }
     },
+    "nutrition-protein": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.486,
+          0.302,
+          0.745
+        ],
+        "hex": "#7c4dbe"
+      }
+    },
+    "nutrition-protein-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.769,
+          0.659,
+          0.961
+        ],
+        "hex": "#c4a8f5"
+      }
+    },
+    "nutrition-carbs": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.055,
+          0.455,
+          0.565
+        ],
+        "hex": "#0e7490"
+      }
+    },
+    "nutrition-carbs-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.361,
+          0.753,
+          0.847
+        ],
+        "hex": "#5cc0d8"
+      }
+    },
+    "nutrition-fat": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.478,
+          0.373,
+          0.047
+        ],
+        "hex": "#7a5f0c"
+      }
+    },
+    "nutrition-fat-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.91,
+          0.784,
+          0.416
+        ],
+        "hex": "#e8c86a"
+      }
+    },
     "warning": {
       "$value": {
         "colorSpace": "srgb",

@@ -292,6 +292,50 @@ test.describe('the recipe detail', () => {
     const n = (await dialog.getByTestId('nutrition').boundingBox())!
     expect(n.y).toBeGreaterThan(a.y)
   })
+
+  test('the facts modal shows a derived macro donut and closes on Escape', async ({ page }) => {
+    await blockExternalRequests(page)
+    // A PINNED variant whose published macros account for its energy, so
+    // this case is about the donut rather than about which recipe the
+    // default sort happens to surface. The refusal path is unit-tested
+    // in `src/lib/nutrition.test.ts`.
+    await page.goto('/')
+    await waitForCatalog(page)
+    await page.locator('[data-variant-id="21756"] [data-test="recipe-card-link"]').first().click()
+    const detail = page.getByRole('dialog')
+    await expect(detail.getByTestId('nutrition')).toBeVisible()
+
+    await detail.getByTestId('nutrition-open').click()
+    const modal = page.getByTestId('nutrition-modal')
+    await expect(modal).toBeVisible()
+    await expect(modal).toHaveAttribute('aria-modal', 'true')
+    // Per serving, and the donut is calories-derived (ADR-0004, ADR-0039).
+    await expect(modal).toContainText('per serving')
+    await expect(modal.getByTestId('nutrition-donut-calories')).toHaveText(/^\d+$/)
+
+    // The three legend percentages exist and sum to 100 within rounding.
+    const pcts = await Promise.all(
+      ['fat', 'carbs', 'protein'].map(async (id) => {
+        const text = (await modal.getByTestId(`nutrition-legend-${id}`).textContent())!
+        return Number(text.match(/(\d+)%/)![1])
+      }),
+    )
+    for (const pct of pcts) expect(pct).toBeGreaterThan(0)
+    expect(pcts.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(99)
+    expect(pcts.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(101)
+
+    // The grouped facts are there, sodium included, in the modal now.
+    await expect(modal.getByTestId('nutrition-group-minerals')).toBeVisible()
+    await expect(modal.locator('[data-key="sodium"]')).toBeVisible()
+    // Amino acids stay collapsed until asked for.
+    await expect(modal.locator('[data-key="alanine"]')).toHaveCount(0)
+
+    // Escape closes the MODAL, not the detail behind it.
+    await page.keyboard.press('Escape')
+    await expect(modal).toHaveCount(0)
+    await expect(page.getByTestId('detail-title')).toBeVisible()
+    await expectZeroMealimeRequests(page)
+  })
 })
 
 test.describe('pinned widths in BOTH themes', () => {

@@ -97,6 +97,17 @@
   --color-nutrition-energy-soft: #fbbf6e;
   --color-nutrition-sodium: #4f46e5;
   --color-nutrition-sodium-soft: #a5b4fc;
+  /* Macro ARCS (ADR-0039): a percent-of-calories donut + legend inside the
+     nutrition facts modal. No glyph, no IconRole — the legend word is the
+     name. Values finalised against the four light surfaces: 4.92 / 4.59 /
+     5.19:1 (the first `#B38F1F` fat candidate measured 2.62:1 and was
+     darkened into the same gold family). */
+  --color-nutrition-protein: #7c4dbe;
+  --color-nutrition-protein-soft: #c4a8f5;
+  --color-nutrition-carbs: #0e7490;
+  --color-nutrition-carbs-soft: #5cc0d8;
+  --color-nutrition-fat: #7a5f0c;
+  --color-nutrition-fat-soft: #e8c86a;
 
   /* --- Status. Not food identity: never a "what kind of food" cue. --- */
   --color-warning: #9a3412;
@@ -166,6 +177,9 @@
   --color-hue-vegan: var(--color-hue-vegan-soft, #6ee7b7);
   --color-nutrition-energy: var(--color-nutrition-energy-soft, #fbbf6e);
   --color-nutrition-sodium: var(--color-nutrition-sodium-soft, #a5b4fc);
+  --color-nutrition-protein: var(--color-nutrition-protein-soft, #c4a8f5);
+  --color-nutrition-carbs: var(--color-nutrition-carbs-soft, #5cc0d8);
+  --color-nutrition-fat: var(--color-nutrition-fat-soft, #e8c86a);
   --color-warning: var(--color-warning-soft, #fdba74);
   --color-danger: var(--color-danger-soft, #fca5a5);
   --color-favourite: var(--color-favourite-soft);

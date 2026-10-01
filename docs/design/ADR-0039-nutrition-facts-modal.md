@@ -83,6 +83,15 @@ literal Tailwind class names per the ADR-0036 rule, mirrored into
 and DESIGN.tokens.json regenerated with `@google/design.md export`.
 No raw hex in any component.
 
+**Values finalised (2026-10-01).** protein `#7C4DBE` / soft `#C4A8F5`;
+carbs `#0E7490` / soft `#5CC0D8`; fat **`#7A5F0C`** / soft `#E8C86A`. The
+drafted fat value `#B38F1F` measured **2.62:1** on the light `primary-tint`
+surface and was darkened within the same gold family; the shipped six
+measure 4.92 / 4.59 / 5.19:1 on the four light surfaces and 6.77 / 6.59 /
+8.51:1 on the four dark ones. No glyph and no `IconRole` were added — the
+three hues are donut-arc/legend identities and the legend WORD is the name.
+
+
 ### 5. Data access pattern for the doc
 
 `RecipeDetail` already loads the full `doc` (`getRecipe`); the modal is
