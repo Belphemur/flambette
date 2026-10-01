@@ -54,11 +54,20 @@ advance is conditional on there already being a pack to differ from.
    re-check (`generation !== ui.nextAutoPlanGeneration()`) still drops
    superseded results. `confirmAutoPlan` therefore never re-reads the counter
    — it only bumps it — so a pack previewed at generation N lands exactly as
-   shown and leaves the counter at N+1. There is no double-advance path.
-4. **A filter change re-arms the first-press rule.** The existing watcher on
+   shown and leaves the counter at N+1.
+4. **A regeneration in flight makes the on-screen preview unconfirmable.**
+   The press supersedes the pack currently on screen, so applying THAT pack
+   would advance the counter twice (once for the press, once for the apply)
+   and land a pack stale by two generations. `previewComplete` therefore also
+   requires `!autoPlanBusy` (the confirm button is disabled and says
+   "Waiting for the new plan…"), with a belt-and-braces guard in the handler
+   itself. The old preview becomes confirmable again on its own after a
+   FAILED rebuild, because the busy flag clears in the `finally` — the
+   rejection of the old pack is not permanent.
+5. **A filter change re-arms the first-press rule.** The existing watcher on
    `[count, category, mode, ruleset]` clears `pendingPlan`, so the next press
    reads "Generate" and honours the stored generation again.
-5. **The lib stays pure.** Nothing about "is this a regenerate" reaches
+6. **The lib stays pure.** Nothing about "is this a regenerate" reaches
    `src/lib/packPlanner.ts`; the decision is entirely the caller's.
 
 ## Consequences
@@ -85,6 +94,19 @@ advance is conditional on there already being a pack to differ from.
   further Regenerate press advances it by exactly one and changes the pack,
   and the apply advances it one more time. Both projects (Desktop Chrome and
   Pixel 7) run these.
+
+## Testing notes
+
+The **mid-roll confirm block is enforced in code, not pinned in e2e**. A
+Regenerate press takes the *memoized* index and catalog paths, so the busy
+window is a microtask-to-sub-frame interval — far shorter than Playwright's
+first poll, and `page.route` cannot widen it because both loaders memoize
+after the first run. An e2e assertion on the disabled state would be a
+timing coin-flip, so the invariant is pinned by construction (the gate and
+the handler guard) and by the ADR text. The *observable* half — that a press
+rolls the seed and an apply advances once more — is e2e-pinned, and the test
+helper waits on the dialog's busy state rather than on tile visibility,
+because the previous pack's tiles stay mounted for the whole await.
 
 ## Alternatives considered
 

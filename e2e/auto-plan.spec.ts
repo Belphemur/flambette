@@ -86,10 +86,25 @@ async function readGeneration(page: Page): Promise<number> {
   })
 }
 
+/**
+ * Click the dialog's Generate/Regenerate button. The previous pack's
+ * tiles stay mounted for the whole await, so "a tile is visible" is NOT
+ * a completion signal (qodo PR #14 thread 2) — waiting on it let a
+ * Regenerate press read the old pack back. `previewIds` below waits on
+ * the dialog's busy state, which IS the only honest "this pack is final"
+ * signal, so the press helper stays a plain click.
+ */
+async function pressGenerate(page: Page): Promise<void> {
+  await page.getByTestId('auto-plan-generate').click()
+}
+
 /** Variant ids of the pack currently shown in the open preview. */
 async function previewIds(page: Page): Promise<number[]> {
   await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
-  await expect(page.locator('[data-test^="auto-plan-meal-"]').first()).toBeVisible({ timeout: 15_000 })
+  // A finished run leaves "Generating…"; a FAILED one leaves the previous
+  // preview up, which is also a settled state to read.
+  await expect(page.getByTestId('auto-plan-generate')).not.toHaveText('Generating…', { timeout: 20_000 })
+  await expect(page.getByTestId('auto-plan-confirm')).toBeVisible({ timeout: 20_000 })
   const tiles = await page.locator('[data-test^="auto-plan-meal-"]').all()
   if (tiles.length === 0) throw new Error('no preview tiles')
   const ids: number[] = []
@@ -188,12 +203,12 @@ test('rotation: a Regenerate press rolls the seed, every apply rotates it (ADR-0
   // which makes the affordance dead. No confirm, no apply — the advance
   // happens on the press itself.
   await expect(page.getByTestId('auto-plan-generate')).toHaveText('Regenerate')
-  await page.getByTestId('auto-plan-generate').click()
+  await pressGenerate(page)
   const second = await previewIds(page)
   expect(await readGeneration(page)).toBe(1)
   expect(second).not.toEqual(first)
 
-  await page.getByTestId('auto-plan-generate').click()
+  await pressGenerate(page)
   const third = await previewIds(page)
   expect(await readGeneration(page)).toBe(2)
   expect(third).not.toEqual(second)
@@ -217,7 +232,7 @@ test('rotation: a FIXED generation stays stable, successive ones differ', async 
   async function firstPreviewId(): Promise<number> {
     await page.getByTestId('auto-plan-button').first().click()
     await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
-    await page.getByTestId('auto-plan-generate').click()
+    await pressGenerate(page)
     const ids = await previewIds(page)
     await page.getByTestId('auto-plan-cancel').click()
     await page.getByRole('button', { name: 'Close auto-plan' }).click()

@@ -236,10 +236,19 @@ const pendingMeals = computed(() => {
  * Confirming would then replace the plan with a meal the user never saw,
  * so the confirm button stays disabled until the preview is complete
  * (the counts line still reports the planner's own number).
+ *
+ * A REGENERATION in flight also blocks it (ADR-0033, qodo PR #14 thread
+ * 1): the press already advanced the seed, so the pack on screen is the
+ * one the user just asked to replace. Confirming it would advance the
+ * counter a SECOND time (once for the press, once for the apply) and
+ * land a pack that is stale by two generations. The old preview returns
+ * to being confirmable on its own if the rebuild fails, because the busy
+ * flag clears in the `finally`.
  */
 const previewComplete = computed(
   () =>
     !!pendingPlan.value &&
+    !autoPlanBusy.value &&
     // An EMPTY pack (pool exhausted under the active filters) must never
     // be confirmable: in replace mode it would erase the plan (qodo
     // round 1, thread 2).
@@ -253,6 +262,10 @@ const previewComplete = computed(
 function confirmAutoPlan() {
   const result = pendingPlan.value
   if (!result) return
+  // Belt-and-braces with the `previewComplete` gate: a regeneration in
+  // flight means the pack on screen is already superseded, and applying
+  // it would double-advance the seed (ADR-0033).
+  if (autoPlanBusy.value) return
   // An EMPTY pack (pool exhausted under the active filters) must never
   // apply: in replace mode replacePlan([]) would ERASE the user's plan
   // (qodo round 1, thread 2); in add mode it would be a no-op anyway.
@@ -748,7 +761,7 @@ function confirmAutoPlan() {
                 class="h-10 flex-1 rounded-xl bg-primary text-sm font-semibold text-white active:bg-primary-dark"
                 data-test="auto-plan-confirm"
                 :disabled="!previewComplete"
-                :title="previewComplete ? undefined : 'Waiting for the preview to load'"
+                :title="previewComplete ? undefined : autoPlanBusy ? 'Waiting for the new plan…' : 'Waiting for the preview to load'"
                 @click="confirmAutoPlan"
               >
                 {{ ui.autoPlanMode === 'add' ? 'Add these meals' : 'Use this plan' }}
