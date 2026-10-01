@@ -76,6 +76,13 @@ const DIMENSION_TOKENS: Record<string, string> = {
   'spacing.reading': '--container-reading',
 }
 
+/**
+ * @theme colour variables that are deliberate CSS-side helpers rather
+ * than 1:1 transcriptions of a DESIGN.md colour name — each one still
+ * carries a documented value and is asserted in the whole-file test.
+ */
+const EXTRA_THEME_COLORS: string[] = ['--color-brand-text']
+
 const FRONTMATTER = designMd.split('---')[1] ?? ''
 
 function designColor(token: string): string | null {
@@ -92,6 +99,21 @@ function designDimension(token: string): string | null {
 function themeVar(cssVar: string): string | null {
   const m = styleCss.match(new RegExp(`${cssVar}:\\s*([^;]+);`))
   return m ? m[1].trim().toLowerCase() : null
+}
+
+/** Every colour NAME declared in DESIGN.md's `colors:` front-matter. */
+function designColorNames(): string[] {
+  const colorsBlock = designMd.slice(designMd.indexOf('colors:'), designMd.indexOf('typography:'))
+  return Array.from(colorsBlock.matchAll(/^  ([a-z-]+):\s*"#/gm), (m) => m[1])
+}
+
+/** Every `--color-*` variable name defined in the light `@theme` block. */
+function themeColorVars(): string[] {
+  const start = styleCss.indexOf('@theme {')
+  const end = styleCss.indexOf('\n}', start)
+  return Array.from(
+    new Set(Array.from(styleCss.slice(start, end).matchAll(/--color-[a-z-]+/g), (m) => m[0])),
+  )
 }
 
 const ALL_ROLES = Object.keys(ICON_ROLES) as IconRole[]
@@ -161,6 +183,34 @@ describe('the icon role registry (ADR-0036)', () => {
     for (const [token, cssVar] of Object.entries(DIMENSION_TOKENS)) {
       expect(designDimension(token), `${token} missing from DESIGN.md`).not.toBeNull()
       expect(themeVar(cssVar)).toBe(designDimension(token))
+    }
+  })
+
+  test('the mirror is WHOLE-FILE: every DESIGN.md colour is mapped, none stray', () => {
+    // The value test above walks the ALLOWLIST, which can only prove the
+    // listed pairs match. A newly added DESIGN.md colour (or a leftover
+    // @theme variable) would silently escape it, so this test parses BOTH
+    // files' key sets and demands full coverage in each direction.
+    const designKeys = designColorNames()
+    expect(designKeys.length).toBeGreaterThan(0)
+    for (const key of designKeys) {
+      expect(COLOR_TOKENS[key], `DESIGN.md colour '${key}' is not in COLOR_TOKENS`).toBeDefined()
+    }
+    // The reverse: a mapping for a colour DESIGN.md no longer declares is
+    // a dead entry that would let a rename hide.
+    expect(Object.keys(COLOR_TOKENS).sort()).toEqual(designKeys.sort())
+    // …and no @theme colour may exist outside the declared mappings (the
+    // one deliberate helper, --color-brand-text, is the dark-flipping
+    // carrier of `primary-strong`-as-text and is value-checked below).
+    for (const cssVar of themeColorVars()) {
+      expect(
+        [...Object.values(COLOR_TOKENS), ...EXTRA_THEME_COLORS],
+        `@theme colour '${cssVar}' is not mapped from DESIGN.md`,
+      ).toContain(cssVar)
+    }
+    for (const cssVar of EXTRA_THEME_COLORS) {
+      // Each helper must still carry a DOCUMENTED value.
+      expect(themeVar(cssVar)).toBe(designColor('primary-strong'))
     }
   })
 

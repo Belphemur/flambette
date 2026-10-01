@@ -87,15 +87,19 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   `aria-hidden`; an icon that carries state must also be queryable
   (`aria-label` / `aria-expanded`), because that is what the specs
   assert. ICON COLOUR is a semantic decision, not a style choice
-  (ADR-0035): render a role's icon through `<HueIcon role="…">`, which
-  pulls its class from `src/lib/palette.ts` — categorical hues for
-  ingredient TYPE (`meat`/`hue-meat`, `fish`/`hue-fish`,
-  `vegetarian`→`hue-vegan`) and semantic hues for NUTRITION
-  (`energy`/`nutrition-energy` on the flame, `sodium`/`nutrition-sodium`
-  on the droplet). A hue is the icon's IDENTITY, never its state: a
-  selected filter chip is still its own food hue, and selection itself is
-  always the primary token. The two families never mix, and colour is
-  never the only signal (the label stays).
+  (ADR-0036): render a role through `<HueIcon role="…">`, which pulls
+  glyph, accessible name and class from the single registry in
+  `src/lib/palette.ts` — categorical hues for ingredient TYPE
+  (`meat`/`hue-meat`, `fish`/`hue-fish`, `vegetarian`/`hue-vegetarian`,
+  `vegan`/`hue-vegan`; the two greens have DIFFERENT tokens AND glyphs)
+  and semantic hues for NUTRITION (`energy`/`nutrition-energy` on the
+  flame, `sodium`/`nutrition-sodium` on the droplet). A hue is the
+  icon's IDENTITY, never its state: selected chips are a TINT
+  (`primary-tint` + `primary-strong` text, not a filled tomato), so an
+  icon keeps its food hue in BOTH states and stays ≥4.5:1 on the tint;
+  the only filled-primary element is the Start cooking action. The two
+  families never mix, and colour is never the only signal (the label
+  stays).
 - **Design tokens (DESIGN.md, ADR-0036)**: `DESIGN.md` at the repo root
   is the SINGLE SOURCE OF TRUTH for the visual identity (palette,
   typography, shapes, spacing, components + the prose Overview/Do's &

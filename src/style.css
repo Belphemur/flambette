@@ -79,7 +79,12 @@
   --color-text-dark-muted: #c7b5a6;
 
   /* --- Food & nutrition IDENTITIES (DESIGN.md `hue-*`, `nutrition-*`).
-     A hue is an icon's identity, never its state. --- */
+     A hue is an icon's identity, never its state — including on a
+     SELECTED chip: selection re-skins the chip with the `primary-tint`
+     surface and `primary-strong` text and leaves the icon's hue alone,
+     which stays ≥4.5:1 on both tints (light `#FBEAE5`, dark
+     `#44241D`). The filled tomato is reserved for the Start cooking
+     action, not for chips. --- */
   --color-hue-meat: #b3381f;
   --color-hue-meat-soft: #f08a6a;
   --color-hue-fish: #0e7490;
