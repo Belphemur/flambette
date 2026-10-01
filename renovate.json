@@ -1,7 +1,9 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
-  "baseBranches": ["main"],
+  "baseBranchPatterns": [
+    "main"
+  ],
   "timezone": "America/New_York",
   "schedule": ["at any time"],
   "automerge": true,
