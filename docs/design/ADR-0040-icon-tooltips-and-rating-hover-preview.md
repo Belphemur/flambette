@@ -41,6 +41,24 @@ so no tooltip can ship stuck-open on touch. The tooltip is a visual
 DUAL of the element's accessible name — it never becomes the only
 carrier of the name (ADR-0029: accessible names stay on the element).
 
+**Implementation note (2026-10-01, factual).** The `hidden … hovercap:block`
+shape sketched here is emitted by Tailwind v4 as `display:block` INSIDE
+`@media (hover: hover)` and nothing else, so on every hover-capable
+device it beats `hidden` and the bubble is permanently open — the
+opposite of the intent. The shipped reveal is
+`hidden group-hover/htt:block hovercap:group-focus-within/htt:block`:
+hover reveals everywhere (a touch device cannot fire it) and focus
+reveals only on hover-capable devices, which is what keeps a phone TAP
+— which focuses the half-slot button — from popping a bubble. Same
+"cannot ship stuck-open on touch" guarantee, no failure mode. The
+decision (one implementation, hover-gated, decorative duplicate of the
+name) is unchanged.
+
+The bubble is rendered by `HueIcon` itself rather than a new
+`IconTooltip.vue`: a separate component would need the same wrapper
+`group`, the same bubble classes and a slot, to sit inside an element it
+does not own. `HueIcon` is therefore the one tooltip implementation.
+
 ### 2. Food-type icon tooltips (browse cards + detail header)
 
 `HueIcon` gains an opt-in `tooltip?: string` prop (default: the role's

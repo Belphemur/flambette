@@ -126,6 +126,64 @@ test('rate a recipe half a star at a time; it survives a reload', async ({ page 
   await expectZeroMealimeRequests(page)
 })
 
+test('hover previews a rating and a tooltip, and never writes one (ADR-0040)', async ({
+  page,
+  isMobile,
+}) => {
+  // A hover affordance is mouse-only by design: `hovercap:` is
+  // `@media (hover: hover)`, so on the touch project there is no bubble
+  // to assert and the case is meaningless, not failing.
+  test.skip(isMobile === true, 'hover affordance, asserted on desktop')
+  const card = recipeCards(page).first()
+  const stars = card.getByTestId('rating-stars')
+
+  const slot = card.getByRole('button', { name: 'Rate 4 of 5 stars' })
+  await slot.hover()
+
+  // The preview bubble says the SAME string the slot's aria-label carries
+  // — one source of truth, so they cannot drift.
+  const bubble = card.getByTestId('rating-preview')
+  await expect(bubble).toBeVisible()
+  await expect(bubble).toHaveText(/Rate 4 of 5 stars/)
+
+  // Previewing is NOT rating: the committed value is untouched, and
+  // nothing reached the store.
+  await expect(stars).toHaveAttribute('data-rating', '0')
+  expect(await ratingsOf(page)).toEqual({})
+
+  // Mouse-out reverts instantly. Moving to a neutral corner is the only
+  // honest way to do it: the card is covered by its own stretched link,
+  // so hovering a sibling "safely" retries forever (and the sticky header
+  // can cover a card scrolled under it).
+  await page.mouse.move(2, 2)
+  await expect(bubble).toHaveCount(0)
+  await expect(stars).toHaveAttribute('data-rating', '0')
+
+  // Tap still commits exactly as before.
+  await slot.click()
+  await expect(stars).toHaveAttribute('data-rating', '4')
+  await expectZeroMealimeRequests(page)
+})
+
+test('a tap on a phone never opens a preview bubble', async ({ page, isMobile }) => {
+  // The other half of ADR-0040's "desktop only": a phone tap FOCUSES the
+  // half-slot button, so an ungated `group-focus-within` reveal would pop
+  // the bubble on exactly the device the affordance is excluded from.
+  // This case is the regression guard for that, and it is the only place
+  // the touch project can say anything useful about a hover affordance.
+  test.skip(isMobile !== true, 'touch project only')
+  const card = recipeCards(page).first()
+  const slot = card.getByRole('button', { name: 'Rate 4 of 5 stars' })
+  await slot.tap()
+
+  // The tap rates (that is the whole touch contract) and the bubble is
+  // still hidden: the reveal is `hovercap:`-gated, and this viewport
+  // never matches `(hover: hover)`.
+  await expect(card.getByTestId('rating-stars')).toHaveAttribute('data-rating', '4')
+  await expect(card.getByTestId('rating-preview')).toBeHidden()
+  await expect(page.locator('[data-test="icon-tooltip"]').first()).toBeHidden()
+})
+
 test('tapping a star does not open the recipe', async ({ page }) => {
   const card = recipeCards(page).first()
   await card.getByRole('button', { name: 'Rate 2 of 5 stars' }).click()

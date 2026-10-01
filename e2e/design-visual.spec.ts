@@ -640,3 +640,36 @@ test.describe('touch viewport never gets the hover affordance', () => {
     await expectZeroMealimeRequests(page)
   })
 })
+test.describe('icon tooltips (pointer)', () => {
+  test('a bare food-type icon shows its category name on hover', async ({ page, isMobile }) => {
+    // ADR-0040: the bubble is a visual DUAL of the icon's accessible
+    // name, revealed on hover/focus and gated by the same
+    // `@media (hover: hover)` rule that scopes the pointer cursor — so
+    // the touch project is provably exempt rather than untested.
+    test.skip(isMobile === true, 'pointer affordance only')
+    await page.setViewportSize(DESKTOP_VIEWPORT)
+    await blockExternalRequests(page)
+    await page.goto('/')
+    await waitForCatalog(page)
+
+    // A card's type icon is the BARE icon that carries the meaning on its
+    // own (the category word is not printed beside it), so it is exactly
+    // what a tooltip is for.
+    const named = page.locator('[data-test="recipe-card"] svg[role="img"]').first()
+    await expect(named).toBeVisible()
+    const name = await named.getAttribute('aria-label')
+    expect(name).toBeTruthy()
+
+    const wrapper = named.locator('xpath=..')
+    const bubble = wrapper.locator('[data-test="icon-tooltip"]')
+    await expect(bubble).toBeHidden()
+
+    await named.hover()
+    await expect(bubble).toBeVisible()
+    // The bubble and the accessible name are the same string.
+    await expect(bubble).toHaveText(name!)
+    // It is a decoration, never a second thing for AT to read.
+    await expect(bubble).toHaveAttribute('aria-hidden', 'true')
+    await expectZeroMealimeRequests(page)
+  })
+})

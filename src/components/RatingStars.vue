@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { Star } from 'lucide-vue-next'
 import { useRatingStore } from '../stores/rating'
 import { useUiStore } from '../stores/ui'
@@ -30,12 +30,22 @@ const ui = useUiStore()
 const mine = computed(() => ratingStore.ratingFor(props.variantId))
 const count = computed(() => ratingStore.countFor(props.variantId))
 
+/**
+ * The score a hover/focus WOULD set (ADR-0040), 0.5-step like the store.
+ * Presentation only: the preview feeds the same `fillPercent` the
+ * committed rating feeds, so a half slot previews a half star, and it
+ * NEVER calls `setRating` — the store write stays exactly where it is,
+ * on the tap. Mouse-out/focus-out restores the committed value at once.
+ */
+const hovered = ref<number | null>(null)
+const display = computed(() => hovered.value ?? mine.value)
+
 /** Five slots, each split in two half-star targets. */
 const slots = [1, 2, 3, 4, 5].map((n) => ({ n, halves: [n - 0.5, n] }))
 
-/** How much of slot `n` is filled by the current rating (0..100%). */
+/** How much of slot `n` is filled by the DISPLAYED rating (0..100%). */
 function fillPercent(n: number): number {
-  return Math.min(100, Math.max(0, (mine.value - (n - 1)) * 100))
+  return Math.min(100, Math.max(0, (display.value - (n - 1)) * 100))
 }
 
 function starLabel(value: number): string {
@@ -50,6 +60,20 @@ function rate(value: number) {
   { duration: 2000 },
   )
 }
+
+/** Preview on hover AND on keyboard focus, so both get the same signal. */
+function preview(value: number | null) {
+  hovered.value = value
+}
+
+/**
+ * The bubble's text is the SAME `starLabel()` the slot's `aria-label`
+ * uses — one string table, so the sighted preview and the accessible name
+ * can never drift (ADR-0040).
+ */
+const previewLabel = computed(() =>
+  hovered.value === null ? '' : starLabel(hovered.value),
+)
 </script>
 
 <template>
@@ -65,6 +89,19 @@ function rate(value: number) {
   "
   role="group"
   >
+  <span
+  class="relative inline-flex group/htt"
+  data-test="rating-stars-inner"
+  >
+  <span
+  v-if="hovered !== null"
+  role="presentation"
+  aria-hidden="true"
+  data-test="rating-preview"
+  class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-max -translate-x-1/2 rounded-md bg-surface-dark px-2 py-1 text-[11px] leading-snug text-on-brand shadow-lg group-hover/htt:block hovercap:group-focus-within/htt:block"
+  >
+  {{ previewLabel }}
+  </span>
   <span
   v-for="slot in slots"
   :key="slot.n"
@@ -94,7 +131,12 @@ function rate(value: number) {
   :aria-label="starLabel(half)"
   data-test="rating-star"
   @click.stop.prevent="rate(half)"
+  @mouseenter="preview(half)"
+  @mouseleave="preview(null)"
+  @focus="preview(half)"
+  @blur="preview(null)"
   />
+  </span>
   </span>
   <span
   v-if="!compact && count === 0 && catalogRating"

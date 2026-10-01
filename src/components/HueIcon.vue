@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { ICON_ROLES, ROLE_GLYPHS, hueClass, type IconRole } from '../lib/palette'
 
 /**
@@ -14,21 +15,70 @@ import { ICON_ROLES, ROLE_GLYPHS, hueClass, type IconRole } from '../lib/palette
  * an accessible name and a tooltip, and the word is never announced
  * twice. Without a label it is what an icon next to real text has always
  * been here — `aria-hidden` (ADR-0029).
+ *
+ * `tooltip` (ADR-0040) is the visual DUAL of that name, never its
+ * replacement: the bubble is `aria-hidden` and `pointer-events-none`, so
+ * the accessible name stays the single carrier. It defaults to the
+ * `label`, which gives a tooltip to exactly the two places that have
+ * BARE icons carrying meaning (the browse card type icon and the detail
+ * header type icon) and to nothing else — a diet/protein chip already
+ * prints its word beside the glyph, so a bubble there would be noise.
+ * Pass `tooltip=""` to opt a labelled icon OUT.
+ *
+ * The bubble reveals on `group-hover/htt` (which a touch device can
+ * never fire) and on `group-focus-within/htt` COMBINED with the
+ * `hovercap:` variant, i.e. `@media (hover: hover)` — the same
+ * discipline that scopes the pointer cursor. The second half matters:
+ * a tap on a phone FOCUSES the button inside a rating row, so an
+ * ungated `group-focus-within` would pop a bubble on the touch device
+ * this whole mechanism exists to stay off.
+ *
+ * It is deliberately NOT `hidden … hovercap:block` (the shape ADR-0040's
+ * sketch used): `hovercap:block` compiles to `display:block` INSIDE the
+ * media query and nothing else, so on every hover-capable device it
+ * overrides `hidden` and the bubble is permanently open. `hidden` +
+ * the two reveal variants gives the same "cannot render on touch"
+ * guarantee without that failure mode. This component is the ONE
+ * tooltip implementation (DRY).
+ *
+ * KNOWN, DELIBERATE: the icon keeps its native `title`, so a
+ * hover-capable browser will eventually also show its own OS-level
+ * tooltip beside this bubble. `title` is retained on instruction
+ * (see the ADR-0040 handoff); the follow-up is to drop `title` on
+ * bubble-bearing icons only.
  */
-const props = withDefaults(defineProps<{ role: IconRole; size?: number; label?: string }>(), {
+const props = withDefaults(defineProps<{ role: IconRole; size?: number; label?: string; tooltip?: string }>(), {
   size: 18,
   label: undefined,
+  tooltip: undefined,
+})
+
+/** The bubble text: an explicit tooltip, else the label, else nothing. */
+const bubble = computed(() => {
+  const text = props.tooltip ?? props.label
+  return text ?? ''
 })
 </script>
 
 <template>
-  <component
-  :is="ROLE_GLYPHS[ICON_ROLES[props.role].glyph]"
-  :size="props.size"
-  :class="hueClass(props.role)"
-  :role="props.label ? 'img' : undefined"
-  :aria-hidden="props.label ? undefined : 'true'"
-  :aria-label="props.label"
-  :title="props.label"
-  />
+  <span class="group/htt relative inline-flex">
+    <component
+    :is="ROLE_GLYPHS[ICON_ROLES[props.role].glyph]"
+    :size="props.size"
+    :class="hueClass(props.role)"
+    :role="props.label ? 'img' : undefined"
+    :aria-hidden="props.label ? undefined : 'true'"
+    :aria-label="props.label"
+    :title="props.label"
+    />
+    <span
+    v-if="bubble"
+    role="presentation"
+    aria-hidden="true"
+    data-test="icon-tooltip"
+    class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-max max-w-40 -translate-x-1/2 rounded-md bg-surface-dark px-2 py-1 text-[11px] leading-snug text-on-brand shadow-lg group-hover/htt:block hovercap:group-focus-within/htt:block"
+    >
+    {{ bubble }}
+    </span>
+  </span>
 </template>
