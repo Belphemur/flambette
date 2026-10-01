@@ -39,13 +39,35 @@ async function timerSeconds(cooking: Locator) {
   return m ? Number(m[1]) * 60 + Number(m[2]) : NaN
 }
 
+/** Reveal an unarmed step's preset ladder (ADR-0038's collapsed row). */
+async function openAddRow(cooking: Locator) {
+  await cooking.getByTestId('timer-add').click()
+  await expect(cooking.getByTestId('timer-preset-1')).toBeVisible()
+}
+
+/**
+ * Arm a preset from the step's own row (ADR-0038). An UNARMED step shows
+ * only the "Add timer" affordance, so the ladder has to be opened first;
+ * an armed step already shows it, and there is no add affordance to
+ * click. One helper so no test can silently arm through a stale path.
+ */
+async function armPreset(cooking: Locator, minutes: number) {
+  if (await cooking.getByTestId('timer-add').count()) await openAddRow(cooking)
+  await cooking.getByTestId(`timer-preset-${minutes}`).click()
+}
+
 test('a preset starts one countdown that runs, stops and clears', async ({ page }) => {
   const cooking = await startCooking(page)
 
-  // No timer before the user asks for one.
+  // The row is always there; before the user asks for a timer it offers
+  // exactly one thing, and the ladder is NOT spread over the step.
+  const row = cooking.getByTestId('step-timer-row')
+  await expect(row).toBeVisible()
   await expect(cooking.getByTestId('step-timer')).toHaveCount(0)
+  await expect(cooking.getByTestId('timer-add')).toBeVisible()
+  await expect(cooking.getByTestId('timer-preset-1')).toHaveCount(0)
 
-  await cooking.getByTestId('timer-preset-1').click()
+  await armPreset(cooking, 1)
   const timer = cooking.getByTestId('step-timer')
   await expect(timer).toBeVisible()
   await expect(timer).toContainText('1:00')
@@ -69,6 +91,9 @@ test('a preset starts one countdown that runs, stops and clears', async ({ page 
 
   await cooking.getByTestId('timer-clear').click()
   await expect(cooking.getByTestId('step-timer')).toHaveCount(0)
+  // Clearing puts the add affordance back; the ladder stays open so a
+  // re-arm is one tap, but the countdown and the add row never coexist.
+  await expect(cooking.getByTestId('timer-add')).toBeVisible()
   await expectZeroMealimeRequests(page)
 })
 
@@ -77,6 +102,7 @@ test('the recipe total cooking time is offered once, clearly labelled', async ({
 
   // Labeled as the RECIPE TOTAL, not as this step's time.
   const suggestion = cooking.getByTestId('timer-preset-recipe')
+  await openAddRow(cooking)
   await expect(suggestion).toContainText('total')
   const minutes = Number((await suggestion.textContent())!.match(/(\d+)m total/)![1])
   expect(minutes).toBeGreaterThan(0)
@@ -86,22 +112,50 @@ test('the recipe total cooking time is offered once, clearly labelled', async ({
     .toBeGreaterThan(minutes * 60 - 5)
 
   // The suggestion is a first-step affordance only — on the second step
-  // view the bar is just the presets.
+  // view the row is a bare add affordance.
   await cooking.getByRole('button', { name: /Next/ }).click()
+  await expect(cooking.getByTestId('timer-add')).toBeVisible()
   await expect(cooking.getByTestId('timer-preset-recipe')).toHaveCount(0)
+  await expectZeroMealimeRequests(page)
+})
+
+test('timers are per-step, and a step without one offers only the add row', async ({ page }) => {
+  const cooking = await startCooking(page)
+
+  await armPreset(cooking, 5)
+  await expect(cooking.getByTestId('step-timer')).toContainText('5:00')
+
+  // Step 2 has its OWN timer state, and that state is "none": the row is
+  // there, it says Add timer, and it carries no countdown.
+  await cooking.getByRole('button', { name: /Next/ }).click()
+  await expect(cooking.getByTestId('step-timer-row')).toBeVisible()
+  await expect(cooking.getByTestId('step-timer')).toHaveCount(0)
+  await expect(cooking.getByTestId('timer-add')).toBeVisible()
+  await expect(cooking.getByTestId('timer-add')).toHaveAttribute('aria-expanded', 'false')
+  await expect(cooking.getByTestId('timer-preset-5')).toHaveCount(0)
+
+  // Arming step 2 leaves step 1's timer alone — one timer per VIEW.
+  await armPreset(cooking, 1)
+  await expect(cooking.getByTestId('step-timer')).toContainText('1:00')
+  await cooking.getByRole('button', { name: /Previous/ }).click()
+  await expect(cooking.getByTestId('step-timer')).toContainText('5:00')
+  await expect
+    .poll(() => timerSeconds(cooking), { timeout: 15_000 })
+    .toBeLessThan(300)
   await expectZeroMealimeRequests(page)
 })
 
 test('a running timer survives step navigation and a reload', async ({ page }) => {
   const cooking = await startCooking(page)
 
-  await cooking.getByTestId('timer-preset-3').click()
+  await armPreset(cooking, 3)
   await expect(cooking.getByTestId('step-timer')).toContainText('3:00')
 
-  // Navigate away: the view keeps its own (empty) timer, and back again
+  // Navigate away: that view has its own (empty) timer, and back again
   // the countdown has kept running.
   await cooking.getByRole('button', { name: /Next/ }).click()
   await expect(cooking.getByTestId('step-timer')).toHaveCount(0)
+  await expect(cooking.getByTestId('timer-add')).toBeVisible()
   await cooking.getByRole('button', { name: /Previous/ }).click()
   await expect
     .poll(() => timerSeconds(cooking), { timeout: 15_000 })
@@ -128,7 +182,7 @@ test('Finish asks before discarding a running timer', async ({ page }) => {
   for (let i = 1; i < total; i++) await next.click()
   await expect(cooking.getByText(new RegExp(`Step ${total} \\/ ${total}`))).toBeVisible()
 
-  await cooking.getByTestId('timer-preset-5').click()
+  await armPreset(cooking, 5)
   await expect(cooking.getByTestId('step-timer')).toContainText('5:00')
 
   // Declining the confirm keeps the cook session AND the timer.
@@ -149,7 +203,7 @@ test('Finish prompts for a timer left on ANOTHER step (qodo 4128519620)', async 
   const cooking = await startCooking(page)
 
   // Timer on step 1, then navigate to the LAST step and finish there.
-  await cooking.getByTestId('timer-preset-5').click()
+  await armPreset(cooking, 5)
   await expect(cooking.getByTestId('step-timer')).toContainText('5:00')
   const progress = await cooking.getByText(/Step 1 \/ (\d+)/).textContent()
   const total = Number(progress!.match(/Step 1 \/ (\d+)/)![1])
@@ -183,7 +237,7 @@ test('an expired timer does not block Finish and offers Restart (qodo 4128519641
 
   // Shortest preset, then outlast it. At 0:00 the timer button offers a
   // restart — pausing a finished countdown made no sense.
-  await cooking.getByTestId('timer-preset-1').click()
+  await armPreset(cooking, 1)
   await expect(cooking.getByTestId('step-timer')).toContainText('1:00')
   await expect
     .poll(() => timerSeconds(cooking), { timeout: 90_000, intervals: [1000, 2500, 2500, 5000] })
@@ -201,7 +255,7 @@ test('an expired timer does not block Finish and offers Restart (qodo 4128519641
 
 test('the header close button routes through the timer confirmation (qodo 4128519620)', async ({ page }) => {
   const cooking = await startCooking(page)
-  await cooking.getByTestId('timer-preset-5').click()
+  await armPreset(cooking, 5)
   await expect(cooking.getByTestId('step-timer')).toContainText('5:00')
 
   page.once('dialog', (d) => void d.dismiss())
@@ -222,7 +276,7 @@ test('mark as cooked also asks before discarding a running timer', async ({ page
   const cooking = await startCooking(page)
   await expect(cooking.getByTestId('mark-cooked')).toBeVisible()
 
-  await cooking.getByTestId('timer-preset-5').click()
+  await armPreset(cooking, 5)
   page.once('dialog', (d) => void d.dismiss())
   await cooking.getByTestId('mark-cooked').click()
   await expect(cooking).toBeVisible()

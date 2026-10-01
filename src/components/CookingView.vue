@@ -10,6 +10,7 @@ import {
   PartyPopper,
   Pause,
   Play,
+  Plus,
   X,
 } from 'lucide-vue-next'
 import { catalog, getRecipe } from '../lib/catalog'
@@ -150,6 +151,14 @@ function close() {
  */
 const measuredOpen = ref(false)
 
+/**
+ * Whether the unarmed step's preset ladder is revealed (ADR-0038). This
+ * is the ONLY presentation state ADR-0038 adds: the timers themselves
+ * live in the ui store keyed by `viewKey`, so no store, lib or backup
+ * change comes with moving the controls.
+ */
+const addOpen = ref(false)
+
 const visibleMeasured = computed(() =>
   visibleSteps.value.map((vs) => ({
   partner: vs.partner,
@@ -193,6 +202,17 @@ const timerRunning = computed(() => remainingSeconds(timer.value, now.value) > 0
 const timerLabel = computed(() => formatCountdown(timerRemaining.value))
 /** Only changes on minute boundaries → the live region stays quiet. */
 const timerAnnouncement = computed(() => announceCountdown(timerRemaining.value))
+
+/**
+ * The add ladder is disclosure state, not timer state, and disclosure is
+ * PER STEP (ADR-0038): arriving at a step shows that step's row, so an
+ * open ladder on step 1 must not follow the cook to step 2. Watching
+ * `viewKey` also covers the Meanwhile pair swap, where the leader index
+ * changes under the same step.
+ */
+watch(viewKey, () => {
+  addOpen.value = false
+})
 /** The recipe's own total cooking time, offered on the FIRST view only. */
 const recipeTotalSuggestion = computed(() => {
   if (viewKey.value !== 0) return null
@@ -530,18 +550,18 @@ function onTouchEnd(e: TouchEvent) {
   </li>
   </ul>
   </div>
-  </template>
-  </div>
-  </div>
-
-  <!-- Step timers (ADR-0020): one per step view, collapsed to a strip
-  above the nav buttons so the step text keeps the screen. -->
-  <div
-  v-if="doc"
-  class="border-t px-4 py-2"
-  data-test="step-timer-bar"
-  >
-  <div class="mx-auto flex max-w-reading items-center gap-2">
+  <!-- Step timers (ADR-0020 + ADR-0038): ONE row per step VIEW, under
+  that view's own content instead of a global strip above the nav — the
+  controls are now visibly the step's own. Only the current view is
+  mounted, so `viewKey`, `timer`, `timerRunning`, `timerLabel`,
+  `recipeTotalSuggestion` and every timer action below read the
+  on-screen view unchanged. The row scrolls with the step body and is
+  deliberately NOT sticky: the footer keeps Prev/Next. -->
+  <div v-if="doc" class="mt-2" data-test="step-timer-row">
+  <!-- Armed: the countdown, then the ladder and clear. An UNARMED step
+  never shows a countdown and an armed step never shows the add
+  affordance — the two are mutually exclusive by construction. -->
+  <div class="flex flex-wrap items-center gap-2">
   <button
   v-if="timer"
   class="flex h-11 min-w-24 shrink-0 items-center justify-center gap-1 rounded-xl border px-3 font-mono text-base font-semibold tabular-nums"
@@ -556,12 +576,36 @@ function onTouchEnd(e: TouchEvent) {
   <span>{{ timerLabel }}</span>
   <span class="sr-only">{{ timerAnnouncement }}</span>
   </button>
-  <div v-else class="h-11 min-w-24 shrink-0"></div>
+  <!-- Unarmed: one subdued affordance, in the same place, so the
+  row's presence is constant and the step's timer state is the only
+  thing that changes. -->
+  <button
+  v-else
+  class="flex h-11 items-center gap-1.5 rounded-xl px-2 text-sm font-medium text-text-muted"
+  data-test="timer-add"
+  :aria-expanded="addOpen ? 'true' : 'false'"
+  aria-label="Add a timer to this step"
+  @click="addOpen = !addOpen"
+  >
+  <Plus :size="16" aria-hidden="true" />
+  Add timer
+  <ChevronDown
+  v-if="addOpen"
+  :size="14"
+  aria-hidden="true"
+  class="transition-transform"
+  :class="addOpen ? 'rotate-180' : ''"
+  />
+  <ChevronRight v-else :size="14" aria-hidden="true" />
+  </button>
 
-  <!-- Presets: one tap each. The recipe's own cooking time is
-  offered once, on the first view, explicitly labelled as the
-  RECIPE TOTAL so it is not read as this step's time. -->
-  <div class="flex min-w-0 flex-1 flex-wrap gap-1">
+  <!-- Presets: one tap each. Rendered ONCE, shown when the step is
+  armed (to re-arm or to change the preset) or when the unarmed row
+  has been opened — one ladder in the template, two reasons to see
+  it. The recipe's own cooking time is offered once, on the first
+  view, explicitly labelled as the RECIPE TOTAL so it is not read as
+  this step's time. -->
+  <div v-if="timer || addOpen" class="flex min-w-0 flex-wrap gap-1">
   <button
   v-for="m in TIMER_PRESETS_MIN"
   :key="m"
@@ -592,6 +636,9 @@ function onTouchEnd(e: TouchEvent) {
   <X :size="16" aria-hidden="true" />
   </button>
   </div>
+  </div>
+  </div>
+  </template>
   </div>
   </div>
 

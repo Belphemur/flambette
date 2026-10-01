@@ -67,6 +67,20 @@ suggestion — all stay as-is. What changes is WHERE the controls render.
    (plus any spec pinning the bar's location). No store / lib / backup
    change; timers survive a reload exactly as before.
 
+**Implementation note (2026-10-01).** Two details the decision left
+open, resolved without touching the state model:
+
+- *Disclosure is per step.* The unarmed "Add timer" row keeps one
+  `addOpen` ref, but it resets on `viewKey` change — "navigating to
+  another step view shows only that view's timer state" applies to the
+  disclosure too, and it also covers the Meanwhile pair swap where the
+  leader index changes under the same step.
+- *One ladder in the template.* The preset chips are rendered once,
+  shown when the step is armed or when the unarmed row is open, rather
+  than duplicated in both branches. An armed step never renders the add
+  affordance and an unarmed one never renders a countdown, so the two
+  are mutually exclusive by construction rather than by a guard.
+
 ## Alternatives considered
 
 - **Keep the global bar and label it ("Timer for step 4")**. Rejected:
