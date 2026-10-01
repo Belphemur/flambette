@@ -48,23 +48,26 @@ body {
  *    pointer across the entire dimmed screen reads as "click anywhere",
  *    which is not the affordance, and it hides the dialog edge.
  *  - a disabled control: `not-allowed`, so it never advertises a click
- *    it will not honour.
+ *    it will not honour. The enabled selectors below exclude
+ *    `[aria-disabled='true']` outright rather than relying on the
+ *    not-allowed rule out-specifying them — an element that simply does
+ *    not match the pointer rule cannot lose to it.
  *  - the grocery provenance pill: `cursor-help`, it is a tooltip target
  *    whose `@click.stop` only swallows the row's toggle.
  * ------------------------------------------------------------------ */
 @custom-variant hovercap (@media (hover: hover));
 
 @media (hover: hover) {
-  button:not(:disabled),
-  [role='button'],
-  [role='checkbox'],
-  [role='radio'],
-  [role='switch'],
-  [role='option'],
-  [aria-pressed],
-  input[type='checkbox']:not(:disabled),
-  input[type='radio']:not(:disabled),
-  select:not(:disabled),
+  button:not(:disabled):not([aria-disabled='true']),
+  [role='button']:not([aria-disabled='true']),
+  [role='checkbox']:not([aria-disabled='true']),
+  [role='radio']:not([aria-disabled='true']),
+  [role='switch']:not([aria-disabled='true']),
+  [role='option']:not([aria-disabled='true']),
+  [aria-pressed]:not([aria-disabled='true']),
+  input[type='checkbox']:not(:disabled):not([aria-disabled='true']),
+  input[type='radio']:not(:disabled):not([aria-disabled='true']),
+  select:not(:disabled):not([aria-disabled='true']),
   label[for],
   label:has(> input[type='checkbox']:not(:disabled)),
   label:has(> input[type='radio']:not(:disabled)) {
