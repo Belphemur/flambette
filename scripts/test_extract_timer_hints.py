@@ -51,6 +51,13 @@ class HintFromText(unittest.TestCase):
     def test_compound_fraction_refused(self):
         self.assertIsNone(mod.hint_from_text("Proof the dough 1 ½ hours.", 1))
 
+    def test_descending_range_refused_not_repaired(self):
+        # Authored text CAN be a typo ("18-10 minutes"): emitting [1080, 600]
+        # would prefill 18 minutes and disclose an "18-10" range. The match
+        # is refused outright; a later duration in the step still wins.
+        self.assertIsNone(mod.hint_from_text("Cook 18-10 minutes.", 1))
+        self.assert_seconds("Cook 18-10 minutes. Then simmer 5 minutes.", 1, 0, 300, "Step 1")
+
     def test_food_label_takes_the_first_whole_word_in_the_sentence(self):
         self.assert_seconds("Add shrimp and cook until pink, 2-3 minutes.", 7, 6, 120, "Shrimp", high=180)
 
@@ -84,6 +91,16 @@ class ExtractRecipe(unittest.TestCase):
                 {"step": 1, "seconds": 600, "label": "Sauce"},
             ],
         )
+
+    def test_descending_range_leaves_no_hint_but_siblings_survive(self):
+        doc = {
+            "instructions": [
+                {"primary_message": "Fry the tofu 18-10 minutes, stirring.", "secondary_message": ""},
+                {"primary_message": "Add rice and cook 12 minutes.", "secondary_message": ""},
+            ]
+        }
+        hints = mod.extract_recipe(doc)
+        self.assertEqual(hints, [{"step": 1, "seconds": 720, "label": "Rice"}])
 
     def test_recipe_with_zero_hints_is_empty_list(self):
         doc = {"instructions": [{"primary_message": "Wash and dry the fresh produce.", "secondary_message": "3 cups kale"}]}

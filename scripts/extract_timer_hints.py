@@ -29,6 +29,11 @@ Data properties:
   can display is covered.
 - A digit directly followed by a fraction glyph ("1 ½ hours") is refused
   rather than half-parsed — same rule as the runtime parser's old guard.
+- A DESCENDING range ("18-10 minutes" — authored text can be a typo) is
+  refused rather than repaired: emitting [1080, 600] would have the UI
+  prefill 18 minutes and display an "18-10" disclosure. The match is
+  skipped like any other invalid duration; the step keeps any later
+  duration it may have.
 
 Stdlib only; idempotent; no network. Re-run with:
     python3 scripts/extract_timer_hints.py
@@ -125,6 +130,8 @@ def hint_from_text(text: str, step_number: int) -> dict | None:
         if lo_s < MIN_TIMER_SECONDS or lo_s > MAX_TIMER_SECONDS:
             continue  # the timer engine cannot honestly represent this value
         hi_s = seconds_for(float(high), m.group("unit")) if high else None
+        if hi_s is not None and hi_s < lo_s:
+            continue  # descending range = authored typo, never repair it
         food = food_in(sentence)
         label = title_case(food) if food else "Step %d" % step_number
         hint = {"step": step_number - 1, "seconds": lo_s, "label": label}
