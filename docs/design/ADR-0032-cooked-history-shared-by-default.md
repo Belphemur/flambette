@@ -53,8 +53,21 @@ our rows should disappear.
    `applySettings` (backup import) also sets the flag, because a restore that
    carries the value is an explicit choice.
 3. **History merges on apply, it does not replace.** `plan.mergeCookedHistory`
-   unions the inbound list with the local one, deduplicated on
-   `(variantId, cookedAt)`, newest first, same 200-row cap. Backup import
+   unions the inbound list with the local one, deduplicated on the event's
+   identity: the **per-device `id`** when the row carries one, the
+   `(variantId, cookedAt)` pair otherwise (rows from older peers or legacy
+   backups). The pair alone collides when two phones cook the same recipe in
+   the same millisecond, so `id` — minted as `deviceNonce-time-counter` per
+   JS context, so a reload can never re-mint an id already persisted — is the
+   primary key; the pair is only the fallback for rows that predate ids. The
+   `id` also travels in backups and room payloads: it is the event's identity
+   across the household, and stripping it would make a restored copy dedupe
+   under a different key than the peers' copies of the same event and
+   double-count it. Rows sort newest first with the event key as a
+   deterministic tie-break (two devices must sort identical-timestamp events
+   identically, or each keeps its own at the cap edge and the merge
+   ping-pongs); the cap drops the same row on every device, and only rows
+   the cap RETAINED count as additions. Same 200-row cap. Backup import
    keeps `replaceCookedHistory` — a restore is an explicit full overwrite, and
    the confirm dialog says so.
 4. **The debounce guard does not apply to append-only members.** ADR-0028
@@ -65,7 +78,17 @@ our rows should disappear.
    the loss is permanent, not merely a race. An inbound `cookedHistory` is
    therefore merged even inside the guard window; a union cannot clobber the
    queued edit, so the rule's intent (our edit wins) is untouched.
-5. **The opt-out stays first-class and obvious.** Settings → Household sync
+5. **The opt-out is about SENDING, and the relay preserves the room's log.**
+   An opted-out device stops putting history on the wire; it still RECEIVES
+   the household's cooks (its `applyRemote` unions whatever arrives). Because
+   the relay stores the last snapshot it was given, a keyless snapshot from
+   the opted-out device would otherwise erase the stored log for every later
+   joiner — so the relay carries a previously stored `cookedHistory` into a
+   snapshot that omits the key (`server/roomLifecycle.mjs` `noteState`). A
+   sharing sender always sends the key (even empty), so it still replaces
+   wholesale and a send-side drop stays possible; the preservation only
+   covers the silent-sender case.
+6. **The opt-out stays first-class and obvious.** Settings → Household sync
    carries the toggle (on by default, "turn this off to keep this device's
    history strictly private; the choice sticks"), the Plan tab's room sheet
    keeps its checkbox, and the History tab states that the log is shared and

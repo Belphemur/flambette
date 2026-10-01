@@ -38,7 +38,7 @@ interface SharedState {
    * Household half of the quick filters (ADR-0028). `favOnly` is
    * deliberately NOT carried: it is a VIEW preference, and sharing the
    * switch would blank a peer's Recipes tab (see quickFilters.ts). The
-   * favourites SET itself IS household state as of ADR-0032 (see
+   * favourites SET itself IS household state as of ADR-0031 (see
    * `favorites` in SharedState) — the starred recipes are shared, the
    * switch that filters by them stays personal.
    * OPTIONAL: a peer running older code sends no `filters` key, and
@@ -47,7 +47,7 @@ interface SharedState {
    */
   filters?: SharedQuickFilters
   /**
-   * ADR-0032 — the household favourites, as RECORDS with delete markers
+   * ADR-0031 — the household favourites, as RECORDS with delete markers
    * (`{favorited, updatedAt}` per recipe), not a bare id array: a bare set
    * can only ever union, so a peer that un-starred a recipe would see it
    * spring back on the next push. OPTIONAL and reconciled per key by
@@ -55,7 +55,7 @@ interface SharedState {
    */
   favorites?: Record<string, { favorited: boolean; updatedAt: number }>
   /**
-   * ADR-0032 — household per-recipe stars. OPTIONAL and RECONCILED PER
+   * ADR-0031 — household per-recipe stars. OPTIONAL and RECONCILED PER
    * RECORD (each record carries its own `updatedAt`; newer wins), never
    * applied wholesale: two peers rating DIFFERENT recipes is the normal
    * case, and a whole-state replace would let whoever pushed last erase
@@ -213,7 +213,7 @@ export const useRoomStore = defineStore('room', () => {
       // Household state (ADR-0028): the shared half of the quick filters.
       filters: toSharedFilters(ui.quickFilters),
     }
-    // ADR-0032: the favourites RECORDS (with delete markers) and the star
+    // ADR-0031: the favourites RECORDS (with delete markers) and the star
     // ratings are emitted ONLY when non-empty — an absent key means
     // "nothing to merge", never "clear the household", so a peer that
     // holds nothing can never wipe a peer's preferences.
@@ -281,13 +281,13 @@ export const useRoomStore = defineStore('room', () => {
         const merged = mergeSharedFilters(filters, ui.quickFilters)
         if (!sameQuickFilters(merged, ui.quickFilters)) ui.quickFilters = merged
       }
-      // Favourites (ADR-0032): PER-KEY reconciliation, newest `updatedAt`
+      // Favourites (ADR-0031): PER-KEY reconciliation, newest `updatedAt`
       // wins — so a later un-star really un-stars and an older un-star
       // does not resurrect a star. The live Set is materialized inside
       // the store from the surviving records. ABSENCE means "don't touch"
       // (a v0.12 peer, or a peer that has starred nothing).
       if (state.favorites != null) favourites.mergeRemote(state.favorites)
-      // Household stars (ADR-0032): PER-RECORD reconciliation — the
+      // Household stars (ADR-0031): PER-RECORD reconciliation — the
       // incoming record wins for exactly the recipes it carries AND only
       // when its `updatedAt` is newer than ours. A wholesale replace (or a
       // blind key-merge without the timestamp test) would let a peer that
@@ -320,7 +320,7 @@ export const useRoomStore = defineStore('room', () => {
   /* ---------- push (debounced) ---------- */
 
   /**
-   * The ONE push writer (ADR-0032): plan/grocery edits are debounced so a
+   * The ONE push writer (ADR-0031): plan/grocery edits are debounced so a
    * burst of taps coalesces, while household PREFERENCE edits (a star, a
    * rating) pass `immediate` and go out at once — there is no burst to
    * coalesce, and the relay answers a rapid burst with `rate_limited`.
@@ -441,7 +441,7 @@ export const useRoomStore = defineStore('room', () => {
     { deep: true, flush: 'sync' },
   )
 
-  // ADR-0032: household stars publish IMMEDIATELY — same push path, same
+  // ADR-0031: household stars publish IMMEDIATELY — same push path, same
   // echo guard, no debounce (see schedulePush).
   watch(
     () => ratings.map,
@@ -449,7 +449,7 @@ export const useRoomStore = defineStore('room', () => {
     { deep: true, flush: 'sync' },
   )
 
-  // ADR-0032: favourites publish immediately too, but the watcher
+  // ADR-0031: favourites publish immediately too, but the watcher
   // distinguishes a genuine household opinion from this device FINISHING
   // ITS STARTUP. First-run catalog seeding and persistence hydration both
   // write `DEFAULT_STAMP` records (0); a joiner that pushed those would

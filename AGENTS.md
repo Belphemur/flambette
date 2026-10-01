@@ -223,7 +223,10 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   `plan.mergeCookedHistory` (a UNION, never a replace: history is
   append-only and every device pushes at once, so a replace would let
   the last writer erase the other phones' cooks). A backup import is the
-  one exception and keeps `replaceCookedHistory`. The toggle is surfaced
+  one exception and keeps `replaceCookedHistory`. The relay preserves a
+  previously stored `cookedHistory` when a snapshot arrives WITHOUT the key
+  (an opted-out sender is silent about history, never a wipe), so a later
+  joiner still adopts the household's log. The toggle is surfaced
   in Settings → Household sync and the Plan tab's room sheet; changing
   the default again needs a new ADR, not an edit to ADR-0032.
 - **Join reconciliation (ADR-0028)**: a `joined` that ADOPTED the

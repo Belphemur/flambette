@@ -332,6 +332,33 @@ describe('rev is monotone per CODE, not per room instance (review F4)', () => {
     expect(registry.floorRev('mauve-peacock-candle')).toBe(9)
     expect(registry.floorRev('rose-thistle-moss')).toBe(2)
   })
+
+  test('noteState preserves stored history when a sender omits the key (ADR-0032)', () => {
+    // An opted-out sender's keyless snapshot must not erase the household
+    // cooking log: room.state is what a LATER JOINER adopts, and a
+    // wholesale replace would make the room answer `joined` with no
+    // history at all — the sharing peers' cooks stranded on their devices.
+    const { registry } = harness()
+    const room = registry.joinOrCreate('mauve-peacock-candle').room!
+    const history = [{ variantId: 5, cookedAt: 50, id: 'peer-1' }]
+    registry.noteState(room, 5, { plan: [], cookedHistory: history })
+    expect(room.state.cookedHistory).toEqual(history)
+
+    // An opted-out push (no key) keeps the stored history.
+    registry.noteState(room, 6, { plan: [], checked: {} })
+    expect(room.state.cookedHistory).toEqual(history)
+
+    // A sharing push (key PRESENT, even empty) replaces wholesale — the
+    // sender is authoritative when it speaks about history.
+    registry.noteState(room, 7, { plan: [], cookedHistory: [] })
+    expect(room.state.cookedHistory).toEqual([])
+
+    // No stored history yet + keyless push → stays keyless (nothing to
+    // preserve, no fabricated empty list a client would read as a wipe).
+    const other = registry.joinOrCreate('rose-thistle-moss').room!
+    registry.noteState(other, 1, { plan: [] })
+    expect('cookedHistory' in other.state).toBe(false)
+  })
 })
 
 describe('keepalive keeps a room alive (review F1)', () => {

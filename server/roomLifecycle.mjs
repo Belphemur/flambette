@@ -158,10 +158,23 @@ export function createRoomRegistry({
    * Store a peer snapshot and keep the per-code floor moving. The floor
    * is what makes a re-created room continue the household's revision
    * history instead of restarting at 0 (review F4).
+   *
+   * ADR-0032: an opted-out sender legitimately omits `cookedHistory` —
+   * absence means "don't touch" (ADR-0028's member rule), never "wipe the
+   * household's cooking log". This store is what a LATER JOINER adopts,
+   * so a wholesale replace on a keyless snapshot would strand the cooks
+   * every sharing peer pushed: the room would answer `joined` with no
+   * history at all. When the sender did not send the key, carry the
+   * previously stored history into the stored snapshot. A sharing sender
+   * always sends the key (even empty), so it still replaces wholesale and
+   * can never resurrect rows the sender itself dropped.
    */
   function noteState(room, rev, state) {
     room.rev = rev
-    room.state = state
+    room.state =
+      state.cookedHistory === undefined && room.state?.cookedHistory !== undefined
+        ? { ...state, cookedHistory: room.state.cookedHistory }
+        : state
     const entry = revFloor.get(room.code)
     if (!entry || rev > entry.rev || now() - entry.at > idleTtlMs) {
       revFloor.set(room.code, { rev, at: now() })

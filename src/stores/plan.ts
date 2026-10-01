@@ -18,7 +18,7 @@ export interface CookedEntry {
   /**
    * Per-device unique id for this cook event. Two phones can cook the same
    * recipe in the same millisecond; (variantId, cookedAt) alone then collides
-   * and a merge would drop one. `id` disambiguates them (ADR-0011/0031).
+   * and a merge would drop one. `id` disambiguates them (ADR-0011/0032).
    * Backward-compatible: older rows imported via backup or received from an
    * older peer lack it, and mergeCookedHistory falls back to the pair.
    */

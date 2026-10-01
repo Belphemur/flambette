@@ -262,14 +262,13 @@ export const useUiStore = defineStore(
     }
 
     /**
-    /**
      * Apply the ADR-0032 default (sharing ON) to a pre-ADR-0032 install,
      * and mark EVERY install as migrated so the default can never re-run.
      *
      * Called from `afterHydrate`: at that point the persisted blob has loaded,
      * so we can inspect what actually landed. Two cases:
      *
-     * - **Pre-ADR-0031 install**: the blob carries `shareCookedHistory: false`
+     * - **Pre-ADR-0032 install**: the blob carries `shareCookedHistory: false`
      *   (the old default) and NO `historyShareDefaultMigrated` flag. We adopt
      *   ON — the owner ruled that a silent `false` is not a user choice.
      *
