@@ -382,10 +382,10 @@ function confirmAutoPlan() {
             :alt="meal.meta.name"
             loading="lazy"
             @error="onImgError"
-            class="size-16 shrink-0 cursor-pointer rounded-lg dark:bg-stone-800 object-cover"
+            class="size-16 shrink-0 hovercap:cursor-pointer rounded-lg dark:bg-stone-800 object-cover"
             @click="openRecipe(meal.meta.id)"
           />
-          <div class="min-w-0 flex-1 cursor-pointer" @click="openRecipe(meal.meta.id)">
+          <div class="min-w-0 flex-1 hovercap:cursor-pointer" @click="openRecipe(meal.meta.id)">
             <h3 class="line-clamp-2 text-sm font-semibold">{{ meal.meta.name }}</h3>
             <p class="mt-0.5 text-xs dark:text-stone-400">
               {{ Math.round(meal.meta.calories) }} kcal/serving ·

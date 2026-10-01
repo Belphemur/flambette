@@ -290,7 +290,7 @@ const ariaLabel = 'Add a custom grocery item'
         role="option"
         :aria-selected="i === activeIndex"
         :aria-label="`Add '${rowAt(i)!.name}' — ${rowAt(i)!.category}`"
-        class="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm"
+        class="flex hovercap:cursor-pointer items-center gap-2 px-4 py-2 text-sm"
         :class="i === activeIndex ? 'bg-primary/10 dark:bg-primary/20' : ''"
         :data-test="i === 0 ? 'add-suggestion-first' : 'add-suggestion-row'"
         @mousedown.prevent

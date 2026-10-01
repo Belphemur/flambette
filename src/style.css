@@ -25,3 +25,56 @@ body {
 .pb-safe {
   padding-bottom: max(env(safe-area-inset-bottom), 0.25rem);
 }
+
+/* ------------------------------------------------------------------ *
+ * Clickable affordance: a pointer cursor on everything you can click.
+ *
+ * Scoped to `@media (hover: hover)` on purpose. A pointer is a MOUSE
+ * affordance — it is only ever painted where a hover state exists, so
+ * no `cursor: pointer` reaches a touch viewport, where the affordance
+ * is the tap target itself. This rule changes `cursor` ONLY: no tap
+ * target, hit area, padding or handler is touched, so ADR-0016's pinned
+ * Pixel 7 fit (82px/tab) is unaffected.
+ *
+ * The selectors are the semantic click roles plus the native controls,
+ * so a new button/chip/checkbox/toggle is covered the moment it is
+ * written — nobody has to remember a class. The few NON-semantic
+ * surfaces (a recipe-card `<article>`, a meal-row `<img>`/`<div>`)
+ * carry the `hovercap:cursor-pointer` utility instead, which resolves to
+ * the same media query.
+ *
+ * Deliberately NOT given a pointer:
+ *  - full-screen dialog scrims (`@click.self` backdrop dismiss): a
+ *    pointer across the entire dimmed screen reads as "click anywhere",
+ *    which is not the affordance, and it hides the dialog edge.
+ *  - a disabled control: `not-allowed`, so it never advertises a click
+ *    it will not honour.
+ *  - the grocery provenance pill: `cursor-help`, it is a tooltip target
+ *    whose `@click.stop` only swallows the row's toggle.
+ * ------------------------------------------------------------------ */
+@custom-variant hovercap (@media (hover: hover));
+
+@media (hover: hover) {
+  button:not(:disabled),
+  [role='button'],
+  [role='checkbox'],
+  [role='radio'],
+  [role='switch'],
+  [role='option'],
+  [aria-pressed],
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled),
+  select:not(:disabled),
+  label[for],
+  label:has(> input[type='checkbox']:not(:disabled)),
+  label:has(> input[type='radio']:not(:disabled)) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  input:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+}

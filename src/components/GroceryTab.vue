@@ -202,7 +202,7 @@ function customCategory(item: string): string | undefined {
             class="flex min-h-11 items-center gap-3 px-3 py-2"
             data-test="extra-row"
           >
-            <label class="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+            <label class="flex min-w-0 flex-1 hovercap:cursor-pointer items-center gap-3">
               <input
                 type="checkbox"
                 class="size-5 shrink-0 accent-primary"
@@ -277,7 +277,7 @@ function customCategory(item: string): string | undefined {
               class="flex min-h-11 items-center gap-3 px-3 py-2"
               data-test="grocery-row"
             >
-              <label class="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+              <label class="flex min-w-0 flex-1 hovercap:cursor-pointer items-center gap-3">
                 <input
                   type="checkbox"
                   class="size-5 shrink-0 accent-primary"
