@@ -98,7 +98,7 @@ const previewLabel = computed(() =>
   role="presentation"
   aria-hidden="true"
   data-test="rating-preview"
-  class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-max -translate-x-1/2 rounded-md bg-surface-dark px-2 py-1 text-[11px] leading-snug text-on-brand shadow-lg group-hover/htt:block hovercap:group-focus-within/htt:block"
+  class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-max -translate-x-1/2 rounded-md bg-surface-dark px-2 py-1 text-[11px] leading-snug text-on-brand shadow-lg hovercap:group-hover/htt:block hovercap:group-focus-within/htt:block"
   >
   {{ previewLabel }}
   </span>

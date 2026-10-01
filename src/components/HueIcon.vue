@@ -26,12 +26,22 @@ import { ICON_ROLES, ROLE_GLYPHS, hueClass, type IconRole } from '../lib/palette
  * Pass `tooltip=""` to opt a labelled icon OUT.
  *
  * The bubble reveals on `group-hover/htt` (which a touch device can
- * never fire) and on `group-focus-within/htt` COMBINED with the
- * `hovercap:` variant, i.e. `@media (hover: hover)` — the same
- * discipline that scopes the pointer cursor. The second half matters:
- * a tap on a phone FOCUSES the button inside a rating row, so an
- * ungated `group-focus-within` would pop a bubble on the touch device
- * this whole mechanism exists to stay off.
+ * never fire), on `group-focus/htt` and on `group-focus-within/htt` —
+ * all COMBINED with the `hovercap:` variant, i.e.
+ * `@media (hover: hover)` — the same discipline that scopes the pointer
+ * cursor. The media gate matters: a tap on a phone FOCUSES the button
+ * inside a rating row, so an ungated `group-focus-within` would pop a
+ * bubble on the touch device this whole mechanism exists to stay off.
+ *
+ * The host span is itself a focus target (`tabindex="0"`) and is
+ * `pointer-events-none`. The latter restores the card link's click path
+ * (the positioned tooltip host painted above the stretched
+ * `after:inset-0` overlay used to swallow clicks on the type icon) while
+ * leaving it keyboard focusable. The trade-off is that the pointer over
+ * the icon region now hits whatever is under it, so HOVER is anchored on
+ * an ancestor `group/htt` (the browse card root carries the same group
+ * name) rather than on the host itself — hovering the card is what opens
+ * the bubble, which is also the natural gesture for it.
  *
  * It is deliberately NOT `hidden … hovercap:block` (the shape ADR-0040's
  * sketch used): `hovercap:block` compiles to `display:block` INSIDE the
@@ -61,7 +71,14 @@ const bubble = computed(() => {
 </script>
 
 <template>
-  <span class="group/htt relative inline-flex">
+  <!-- Focusable so the keyboard can reach the same information the
+  pointer gets (see the header note); `pointer-events-none` so the card's
+  stretched link keeps the click path under the icon. -->
+  <span
+  tabindex="0"
+  data-test="hue-icon"
+  class="group/htt pointer-events-none relative inline-flex rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+  >
     <component
     :is="ROLE_GLYPHS[ICON_ROLES[props.role].glyph]"
     :size="props.size"
@@ -76,7 +93,7 @@ const bubble = computed(() => {
     role="presentation"
     aria-hidden="true"
     data-test="icon-tooltip"
-    class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-max max-w-40 -translate-x-1/2 rounded-md bg-surface-dark px-2 py-1 text-[11px] leading-snug text-on-brand shadow-lg group-hover/htt:block hovercap:group-focus-within/htt:block"
+    class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-max max-w-40 -translate-x-1/2 rounded-md bg-surface-dark px-2 py-1 text-[11px] leading-snug text-on-brand shadow-lg hovercap:group-hover/htt:block hovercap:group-focus/htt:block hovercap:group-focus-within/htt:block"
     >
     {{ bubble }}
     </span>

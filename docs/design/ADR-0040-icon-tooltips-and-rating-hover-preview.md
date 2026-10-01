@@ -61,14 +61,24 @@ does not own. `HueIcon` is therefore the one tooltip implementation.
 
 ### 2. Food-type icon tooltips (browse cards + detail header)
 
-`HueIcon` gains an opt-in `tooltip?: string` prop (default: the role's
-label — i.e. whenever a `label` prop is set, the tooltip shows that
-same text). Browse cards and the detail header opt in; the icon keeps
+`HueIcon` gains a `tooltip?: string` prop. Call-site opt-in is NOT
+required: when `tooltip` is omitted, a non-empty `label` becomes the
+tooltip, so exactly the two BARE icons that carry meaning on their own
+(browse card type icon, detail header type icon) get a bubble and a
+labelled control does not. Pass `tooltip=""` to suppress the bubble
+while keeping the accessible name. The icon keeps
 `role="img"`/`aria-label` (required), and the tooltip is a decorative
 duplicate of the label, hidden from AT (`aria-hidden="true"`).
 Where the icon sits against the app edge (browse cards top row), the
 tooltip flips to below per the grocery pill's behavior pattern; the
 implementation reuses one positioning rule, not two.
+
+The keyboard path needs an explicit target: the bare type icons are
+not inside a button or a link (the card's stretched link is a sibling
+overlay), so `HueIcon`'s host span is `tabindex="0"` (with a
+`focus-visible` ring) and `pointer-events-none` — the latter keeps the
+stretched link's click path, which the positioned tooltip host would
+otherwise cover. Both reveal variants are gated by `hovercap:`.
 
 Diet-chip and protein-chip icons are NOT given tooltips: their buttons
 already carry visible text labels (DESIGN.md "Filter buttons KEEP

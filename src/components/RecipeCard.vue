@@ -24,7 +24,7 @@ const isFavourite = computed(() => favourites.isFavourite(props.meta.id))
 
 <template>
   <article
-  class="group relative overflow-hidden rounded-xl bg-surface-raised ring-1 ring-border transition-shadow hover:shadow-md"
+  class="group group/htt relative overflow-hidden rounded-xl bg-surface-raised ring-1 ring-border transition-shadow hover:shadow-md"
   data-test="recipe-card"
   :data-variant-id="meta.id"
   >
