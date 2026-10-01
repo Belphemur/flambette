@@ -330,10 +330,77 @@ test.describe('the recipe detail', () => {
     // Amino acids stay collapsed until asked for.
     await expect(modal.locator('[data-key="alanine"]')).toHaveCount(0)
 
+    // Every catalog key carries its PUBLISHED unit: the trace minerals and
+    // vitamins are milligrams/micrograms, never grams (ADR-0039 §2). A
+    // partial unit table printed "1190 g potassium".
+    for (const [key, unit] of [
+      ['potassium', 'mg'],
+      ['calcium', 'mg'],
+      ['vitamin_c', 'mg'],
+      ['selenium', 'µg'],
+      ['vitamin_a', 'µg'],
+    ] as const) {
+      const line = modal.locator(`[data-key="${key}"]`)
+      if ((await line.count()) > 0) await expect(line).toContainText(unit)
+    }
+
+    // The legend dots are PAINTED (a filled background), and so is the
+    // track ring — an unfilled legend beside a borderless track rendered
+    // an invisible chart.
+    const fatDot = modal.locator('[data-test="nutrition-legend-fat"] span').first()
+    await expect
+      .poll(() =>
+        fatDot.evaluate((el) => getComputedStyle(el).backgroundColor),
+      )
+      .not.toBe('rgba(0, 0, 0, 0)')
+    const track = modal.locator('[data-test="nutrition-donut"] svg circle').first()
+    expect(await track.getAttribute('stroke')).toBe('currentColor')
+
     // Escape closes the MODAL, not the detail behind it.
     await page.keyboard.press('Escape')
     await expect(modal).toHaveCount(0)
     await expect(page.getByTestId('detail-title')).toBeVisible()
+    // …and focus returns to the trigger that opened it, so a keyboard
+    // user does not lose their place.
+    await expect(detail.getByTestId('nutrition-open')).toBeFocused()
+    await expectZeroMealimeRequests(page)
+  })
+
+  test('the facts modal TRAPS focus and puts it back on close', async ({ page }) => {
+    await blockExternalRequests(page)
+    await page.goto('/')
+    await waitForCatalog(page)
+    await page.locator('[data-variant-id="21756"] [data-test="recipe-card-link"]').first().click()
+    const detail = page.getByRole('dialog')
+    await expect(detail.getByTestId('nutrition')).toBeVisible()
+    await detail.getByTestId('nutrition-open').click()
+
+    const modal = page.getByTestId('nutrition-modal')
+    await expect(modal).toBeVisible()
+    // Focus moves into the panel on open.
+    await expect(modal).toBeFocused()
+
+    // Tab (and Shift+Tab) stay INSIDE the dialog: the modal is teleported
+    // to <body>, so without a trap they walk into the still-mounted
+    // recipe detail behind the backdrop.
+    const focusInside = () =>
+      page.evaluate(() => {
+        const panel = document.querySelector('[data-test="nutrition-modal"]')
+        return !!panel && !!document.activeElement && panel.contains(document.activeElement)
+      })
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press('Tab')
+      expect(await focusInside()).toBe(true)
+    }
+    for (let i = 0; i < 4; i++) {
+      await page.keyboard.press('Shift+Tab')
+      expect(await focusInside()).toBe(true)
+    }
+
+    // The close BUTTON is a real close path too, and it restores focus.
+    await modal.getByTestId('nutrition-modal-close').click()
+    await expect(modal).toHaveCount(0)
+    await expect(detail.getByTestId('nutrition-open')).toBeFocused()
     await expectZeroMealimeRequests(page)
   })
 })
@@ -664,12 +731,32 @@ test.describe('icon tooltips (pointer)', () => {
     const bubble = wrapper.locator('[data-test="icon-tooltip"]')
     await expect(bubble).toBeHidden()
 
-    await named.hover()
+    // Hover is anchored on the CARD (`group/htt`): the tooltip host is
+    // pointer-transparent so the stretched link keeps the click path.
+    await page.locator('[data-test="recipe-card-link"]').first().hover()
     await expect(bubble).toBeVisible()
     // The bubble and the accessible name are the same string.
     await expect(bubble).toHaveText(name!)
     // It is a decoration, never a second thing for AT to read.
     await expect(bubble).toHaveAttribute('aria-hidden', 'true')
+
+    // The KEYBOARD path reaches the same information: the host span is
+    // focusable (the bare icon is inside neither a button nor a link), so
+    // Tab to it and the bubble opens without a pointer.
+    await page.mouse.move(0, 0)
+    await expect(bubble).toBeHidden()
+    const host = page.locator('[data-test="hue-icon"]').first()
+    await host.focus()
+    await expect(host).toBeFocused()
+    await expect(bubble).toBeVisible()
+    await expect(bubble).toHaveText(name!)
+
+    // The host is pointer-transparent, so a click ON THE ICON still
+    // reaches the card's stretched link and opens the recipe.
+    expect(await host.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none')
+    const box = (await named.boundingBox())!
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+    await expect(page.getByTestId('detail-title')).toBeVisible()
     await expectZeroMealimeRequests(page)
   })
 })

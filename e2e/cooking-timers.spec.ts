@@ -50,10 +50,24 @@ async function openAddRow(cooking: Locator) {
  * only the "Add timer" affordance, so the ladder has to be opened first;
  * an armed step already shows it, and there is no add affordance to
  * click. One helper so no test can silently arm through a stale path.
+ *
+ * Every step here WAITS (auto-retrying `expect`), never `count()`:
+ * `startCooking` returns as soon as the dialog is visible, and the row
+ * renders in the same tick as the step body, so a `count()` probe can
+ * read 0 and skip opening the ladder — then the preset click races the
+ * render. `toBeVisible()` re-queries until it appears.
  */
 async function armPreset(cooking: Locator, minutes: number) {
-  if (await cooking.getByTestId('timer-add').count()) await openAddRow(cooking)
-  await cooking.getByTestId(`timer-preset-${minutes}`).click()
+  const row = cooking.getByTestId('step-timer-row')
+  await expect(row).toBeVisible()
+  const add = cooking.getByTestId('timer-add')
+  if (await add.isVisible()) {
+    await add.click()
+    await expect(cooking.getByTestId('timer-preset-1')).toBeVisible()
+  }
+  const preset = cooking.getByTestId(`timer-preset-${minutes}`)
+  await expect(preset).toBeVisible()
+  await preset.click()
 }
 
 test('a preset starts one countdown that runs, stops and clears', async ({ page }) => {
