@@ -7,8 +7,8 @@ import {
   CircleAlert,
   CircleDashed,
   CircleDot,
+  Flame,
   Moon,
-  Salad,
   Sun,
   TriangleAlert,
 } from 'lucide-vue-next'
@@ -175,8 +175,8 @@ onMounted(async () => {
   >
   <div class="flex items-center justify-between px-4 py-2">
   <h1 class="flex items-center gap-2 py-1 text-lg font-bold tracking-tight text-brand-text">
-  <Salad :size="22" aria-hidden="true" />
-  Mealime Planner
+  <Flame :size="22" aria-hidden="true" />
+  Flambette
   </h1>
   <div class="flex items-center gap-2">
   <span

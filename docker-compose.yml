@@ -14,7 +14,7 @@
 #     docker compose up -d --build
 services:
   web:
-    image: ghcr.io/belphemur/mealime-planner:0.14.1
+    image: ghcr.io/belphemur/flambette:0.15.0
     # build: .
     ports:
       # host:container — nginx listens on 80 inside the image.
@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   relay:
-    image: ghcr.io/belphemur/mealime-planner-relay:0.14.1
+    image: ghcr.io/belphemur/flambette-relay:0.15.0
     # build: ./server
     # Rooms are held in memory only: restarting the relay drops live rooms,
     # while each browser's plan and checklist survive untouched in

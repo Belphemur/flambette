@@ -116,7 +116,7 @@ jobs:
         run: docker build .
 
       - name: Build relay Docker image
-        run: docker build -t mealime-relay:ci ./server
+        run: docker build -t flambette-relay:ci ./server
 
       # A successful build proves nothing about startup: the relay image once
       # shipped without ./throttle.mjs, so it crash-looped on `bun relay.mjs`
@@ -124,7 +124,7 @@ jobs:
       # HTTP 200 off the health endpoint before the image is considered good.
       - name: Smoke-run relay image
         run: |
-          docker run -d --name relay-smoke -p 18081:8081 mealime-relay:ci
+          docker run -d --name relay-smoke -p 18081:8081 flambette-relay:ci
           # Relay answers plain HTTP on non-upgrade requests, so poll it.
           for i in $(seq 1 30); do
             if curl -fsS http://localhost:18081/ >/dev/null 2>&1; then

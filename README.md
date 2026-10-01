@@ -1,4 +1,4 @@
-# Mealime Planner
+# Flambette
 
 <table>
 <tr>
@@ -21,7 +21,7 @@
 (<code>bun run dev</code>), on the seeded catalog, at 390&times;844 &mdash; light
 and dark, from the same build.</sub></p>
 
-A mobile-first single-page app for browsing the Mealime recipe catalog,
+A mobile-first single-page app for browsing a frozen recipe catalog (originally scraped from Mealime, whose name this project does not carry),
 building a meal plan, and generating a grocery list from it.
 
 Fully offline and fully self-contained: the repo ships the complete recipe
@@ -147,8 +147,8 @@ baked into the image. Running without compose means no live-room sync
 (no relay behind `/ws`); everything else works.
 
 ```bash
-docker build -t mealime-planner .
-docker run -d -p 8080:80 mealime-planner
+docker build -t flambette .
+docker run -d -p 8080:80 flambette
 # open http://localhost:8080
 ```
 
@@ -165,7 +165,7 @@ service in your compose file:
 ```yaml
 services:
   web:
-    image: ghcr.io/belphemur/mealime-planner:latest
+    image: ghcr.io/belphemur/flambette:latest
     networks: [traefik, internal]   # internal carries web→relay /ws traffic
     labels:
       - traefik.enable=true
@@ -179,7 +179,7 @@ services:
       - traefik.docker.network=traefik
 
   relay:
-    image: ghcr.io/belphemur/mealime-planner-relay:latest
+    image: ghcr.io/belphemur/flambette-relay:latest
     networks: [internal]
     # no ports:, no traefik.enable — reachable only from web
 
@@ -227,7 +227,8 @@ with no keepalive and no activity, 12h idle being the backstop);
   `/plan`, `/grocery`, `/history`, `/settings`) plus `/shop`,
   `/recipe/:id`, `/cooking/:id`
 - State via Pinia stores in `src/stores/`, persisted to
-  localStorage under the `mealime-planner:v1:*` keys
+  localStorage under the `mealime-planner:v1:*` keys — the storage key keeps
+  the historical name on purpose so existing installs keep their data
   (`mealime-planner:v1:favourites`, `mealime-planner:v1:plan`,
   `mealime-planner:v1:checked`); the live-room code is kept in
   sessionStorage (`mealime-planner:v1` scope, `room` store)

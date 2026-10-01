@@ -424,5 +424,5 @@ Parity rules for anything mirroring TS into Python:
 ## Release
 
 - `git tag v<semver>` + push tag → release workflow publishes
-  `ghcr.io/belphemur/mealime-planner` AND `...-relay` (tags `X.Y.Z`,
+  `ghcr.io/belphemur/flambette` AND `...-relay` (tags `X.Y.Z`,
   `X.Y`, `latest` — the workflow strips the `v` prefix).
