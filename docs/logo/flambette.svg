@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Flambette">
+  <!--
+    Flambette logo — a flame rising off a stacked dinner plate.
+    Palette = DESIGN.md. Plate rim is now tomato-strong so the plate keeps
+    its edge on any background; inner plate stays cream. Flame sits above.
+  -->
+  <defs>
+    <linearGradient id="flameBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F08A6A"/>
+      <stop offset="0.55" stop-color="#B3381F"/>
+      <stop offset="1" stop-color="#8E2C17"/>
+    </linearGradient>
+  </defs>
+  <!-- table shadow -->
+  <ellipse cx="64" cy="114" rx="54" ry="9" fill="#292524" opacity="0.18"/>
+  <!-- plate: deep tomato rim ring -->
+  <circle cx="64" cy="86" r="36" fill="#8E2C17"/>
+  <circle cx="64" cy="84" r="27" fill="#FFF8F0"/>
+  <!-- plate center dimple -->
+  <circle cx="64" cy="84" r="13" fill="#E5D8CB"/>
+  <!-- flame: teardrop above with inner flame -->
+  <path d="M64 4
+           C 79 21, 93 39, 93 60
+           A 29 31 0 0 1 35 60
+           C 35 39, 49 21, 64 4 Z"
+        fill="url(#flameBody)"/>
+  <path d="M64 36
+           C 71 45, 76 53, 76 62
+           A 12 13 0 0 1 52 62
+           C 52 53, 57 45, 64 36 Z"
+        fill="#FFF8F0"/>
+</svg>
