@@ -157,9 +157,17 @@ summary, and the per-variant `history-row` / `history-count-*` /
 `history-add-*` contracts stay exactly where they are. Plan provenance is a
 NEW read-side view over the SAME events, in `src/lib/history.ts`:
 `groupHistoryByPlan(events)` returns groups keyed by `planId` (rows without
-one fall into a single "earlier cooks" group), sorted by `planCreatedAt` then
+one fall into a single "Earlier cooks" group), sorted by `planCreatedAt` then
 last cook, each carrying its recipes. `HistoryView` renders that grouping
 around the existing per-recipe rows.
+
+A consequence worth stating plainly: a recipe cooked in TWO plans appears
+once in each of them, and the count pill reads the count WITHIN that batch
+("cooked once" twice), not the household total. Cooking the last meal out
+ends that plan, so two unplanned weeks of the same recipe are two groups —
+which is the honest reading of a batch log. The household total ("Cooked N
+times") stays where it always was and is never lost: the recipe detail line,
+its per-event spoiler, and `aggregateHistory` all still report it.
 
 Storage is NOT multiplied: one event belongs to exactly ONE plan, and there
 is no second table, no per-plan entry array, no snapshot of plan contents. A
