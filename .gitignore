@@ -19,3 +19,6 @@ scrape_recipes.py
 scrape_images.py
 .vercel
 .env*
+
+# Python bytecode from the stdlib data scripts
+__pycache__/
