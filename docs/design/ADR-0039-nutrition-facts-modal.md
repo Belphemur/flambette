@@ -50,16 +50,28 @@ disclosure), Vitamins and Minerals (vitamin A/C/D/E/K, B1/B2/B3/B5/B6/
 B12, choline, folate, calcium, iron, magnesium, phosphorus, potassium,
 sodium, zinc, selenium, copper, manganese). Water/ash/caffeine/alcohol
 and micronutrients are in a collapsed-by-default remainder group.
-Units: grams per serving for the masses (kcal for `energy`, mg for
-sodium/cholesterol, µg for vitamin_a/D/K/B12/folate).
+Units: grams per serving for the masses, with an EXPLICIT unit for
+every one of the 66 catalog keys (unit-tested for completeness, so a
+missing entry can never silently print grams): `kcal` for `energy`;
+`mg` for sodium, cholesterol, vitamin C/E, B1–B6, choline, caffeine and
+the milligram minerals (calcium, copper, iron, magnesium, manganese,
+phosphorus, potassium, zinc); `µg` for vitamin A/D/K, B12, folate and
+selenium; `g` for everything else (macros, sugars, amino acids, water,
+ash, alcohol, sugar alcohols).
 
 ### 3. The macro donut is CALORIES-DERIVED, not gram-derived, and can never lie
 
 The reference pie shows macro **percent of calories**, using the
-standard 4 kcal/g for carbs and protein and 9 for fat:
-`fatPct = 9·fat/energy`, `carbPct = 4·carbs/energy`,
-`proteinPct = 4·protein/energy` (each clamped ≥ 0, and the triple
-SUM-normalised only when it lands in 1.0 ± 0.05 — a genuine mislabelled
+standard 4 kcal/g for carbs and protein and 9 for fat, with **fiber
+charged at its NET 2 kcal/g** (USDA counts fiber at 4 for the food
+energy total, but a good part of it is not metabolised; without the
+discount a high-fiber recipe such as catalog 9148 derives 746 kcal
+against its published 701 and would lose its donut):
+`fatPct = 9·fat/energy`, `carbPct = (4·carbs − 2·fiber)/energy`
+(fiber clamped to `[0, carbs]`), `proteinPct = 4·protein/energy` (each
+clamped ≥ 0, and the triple SUM-normalised only when it lands in
+1.0 ± 0.12 — catalog rounding plus the fiber and sugar-alcohol
+discrepancies land well inside that band, while a genuine mislabelled
 catalog entry falls back to hiding the % labels rather than displaying
 a fabricated split that does not sum to 100).
 

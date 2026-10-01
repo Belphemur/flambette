@@ -3,10 +3,12 @@ import {
   ENERGY_ROW,
   NUTRITION_KEYS,
   NUTRITION_GROUPS,
+  formatNutritionRow,
   formatNutritionValue,
   macroSplit,
   nutritionGroups,
   unitFor,
+  unknownUnitKeys,
 } from './nutrition'
 import type { Nutrition } from './types'
 
@@ -80,9 +82,40 @@ describe('macroSplit', () => {
   })
 
   test('small rounding drift inside the tolerance is normalised, not refused', () => {
-    // 98% accounted for: within the ±5% band, so it is normalised to 100.
+    // 98% accounted for: within the band, so it is normalised to 100.
     const split = macroSplit(balanced({ energy: 711.3 }))!
     expect(split.fatPct + split.carbPct + split.proteinPct).toBeCloseTo(1, 10)
+  })
+
+  test('a high-fiber recipe is DERIVED, not refused (fiber costs 2 kcal/g net)', () => {
+    // Catalog recipe 9148, per serving. Counting all 74.55 g of carbs at
+    // 4 kcal/g overshot the published 701.46 kcal by 6% and the modal
+    // showed "split not derivable" for a recipe whose macros DO account
+    // for its energy once fiber is charged at its net factor.
+    const derived = macroSplit({
+      energy: 701.46,
+      fat: 40.03,
+      carbs: 74.55,
+      protein: 21.92,
+      fiber: 21.94,
+    })
+    expect(derived).not.toBeNull()
+    const sum = derived!.fatPct + derived!.carbPct + derived!.proteinPct
+    expect(sum).toBeCloseTo(1, 10)
+    // Fiber is a real share of the carbohydrate mass, so carbs keep the
+    // larger arc even after the discount.
+    expect(derived!.carbPct).toBeGreaterThan(derived!.proteinPct)
+  })
+
+  test('fiber above the carbohydrate total cannot drive the split negative', () => {
+    // A corrupt row (fiber > carbs) must clamp to the carbs, not produce a
+    // negative arc: fiber charges 2 kcal/g net, so the clamp is what keeps
+    // the carbohydrate contribution at 4·carbs − 2·carbs ≥ 0.
+    const split = macroSplit(
+      balanced({ carbs: 10, fiber: 40, energy: 9 * 29.58 + 4 * 10 - 2 * 10 + 4 * 21.46 }),
+    )!
+    expect(split.carbPct).toBeGreaterThanOrEqual(0)
+    expect(split.carbPct + split.proteinPct + split.fatPct).toBeCloseTo(1, 10)
   })
 
   test('zero-fat and zero-carb recipes keep two honest arcs', () => {
@@ -137,6 +170,64 @@ describe('the nutrition group layout', () => {
       expect(unitFor(key)).toBe('µg')
     }
     expect(unitFor('fat')).toBe('g')
+  })
+
+  test('EVERY known key has an explicit unit — the default must never be reached', () => {
+    // A partial table silently printed "1048 g potassium" / "44 g
+    // selenium"; this is the regression gate for that class of bug.
+    expect(unknownUnitKeys()).toEqual([])
+    expect(unknownUnitKeys([...NUTRITION_KEYS, ENERGY_ROW.key])).toEqual([])
+    for (const key of [
+      'vitamin_c',
+      'vitamin_e',
+      'b1_thiamine',
+      'b2_riboflavin',
+      'b3_niacin',
+      'b5_pantothenic_acid',
+      'b6_pyridoxine',
+      'choline',
+      'calcium',
+      'iron',
+      'magnesium',
+      'manganese',
+      'phosphorus',
+      'potassium',
+      'zinc',
+      'copper',
+      'selenium',
+      'caffeine',
+    ]) {
+      expect(['mg', 'µg']).toContain(unitFor(key))
+    }
+  })
+
+  test('a catalog-magnitude row formats in its PUBLISHED unit', () => {
+    // Typical per-serving values from the frozen catalog: potassium and
+    // calcium are milligrams, selenium and vitamin A micrograms, protein
+    // grams. Before the table was completed these printed as
+    // "1190 g potassium" / "44 g selenium" / "827 g vitamin A".
+    const groups = nutritionGroups({
+      energy: 635.97,
+      protein: 35.565,
+      fat: 32.175,
+      carbs: 47.94,
+      potassium: 1189.735,
+      calcium: 190.255,
+      selenium: 43.965,
+      vitamin_a: 826.99,
+      vitamin_c: 52.67,
+    } as Nutrition)
+    const row = (key: string) => {
+      const found = groups.flatMap((g) => g.rows).find((r) => r.key === key)
+      expect(found).toBeDefined()
+      return formatNutritionRow(found!)
+    }
+    expect(row('potassium')).toEqual({ value: '1190', unit: 'mg' })
+    expect(row('calcium')).toEqual({ value: '190', unit: 'mg' })
+    expect(row('selenium')).toEqual({ value: '44', unit: 'µg' })
+    expect(row('vitamin_a')).toEqual({ value: '827', unit: 'µg' })
+    expect(row('vitamin_c')).toEqual({ value: '53', unit: 'mg' })
+    expect(row('protein')).toEqual({ value: '36', unit: 'g' })
   })
 
   test('amino acids and the Other remainder are collapsed; the macros are not', () => {

@@ -25,12 +25,23 @@ import type { Nutrition } from './types'
 export const KCAL_PER_G = { fat: 9, carbs: 4, protein: 4 } as const
 
 /**
- * How far the three macro calorie contributions may sit from the stated
- * energy before the split is refused. Catalog rounding plus a fiber/
- * sugar-alcohol discrepancy lands well inside 5%; a genuinely mislabelled
- * entry does not.
+ * Fiber's NET Atwater factor. USDA counts fiber at 4 kcal/g for the food
+ * energy total, but a good part of it is not metabolised, so the 2 kcal/g
+ * net factor is what the ESTIMATE uses: carbohydrate that is fiber is
+ * charged 4 - 2 = 2 kcal/g here. Without this a high-fiber recipe
+ * overshoots the stated energy and loses its donut (recipe 9148: 746 kcal
+ * derived against 701 published, versus 702 once fiber is charged at
+ * 2 kcal/g).
  */
-export const SPLIT_TOLERANCE = 0.05
+export const KCAL_PER_G_FIBER_NET = 2
+
+/**
+ * How far the three macro calorie contributions may sit from the stated
+ * energy before the split is refused. Catalog rounding, the fiber
+ * adjustment above and a sugar-alcohol discrepancy land well inside 12%;
+ * a genuinely mislabelled entry does not.
+ */
+export const SPLIT_TOLERANCE = 0.12
 
 export interface MacroSplit {
   /** 0..1, sum-normalised. */
@@ -50,11 +61,13 @@ export function macroSplit(n: Nutrition | null | undefined): MacroSplit | null {
   const fat = num(n.fat)
   const carbs = num(n.carbs)
   const protein = num(n.protein)
+  const fiber = Math.min(Math.max(num(n.fiber), 0), carbs)
   if (!(energy > 0)) return null
   if (fat < 0 || carbs < 0 || protein < 0) return null
   const raw = {
     fatPct: (KCAL_PER_G.fat * fat) / energy,
-    carbPct: (KCAL_PER_G.carbs * carbs) / energy,
+    // Fiber is carbohydrate that costs 2 kcal/g net, not 4.
+    carbPct: (KCAL_PER_G.carbs * carbs - (KCAL_PER_G.carbs - KCAL_PER_G_FIBER_NET) * fiber) / energy,
     proteinPct: (KCAL_PER_G.protein * protein) / energy,
   }
   const total = raw.fatPct + raw.carbPct + raw.proteinPct
@@ -69,21 +82,102 @@ export function macroSplit(n: Nutrition | null | undefined): MacroSplit | null {
 
 export type NutritionUnit = 'kcal' | 'g' | 'mg' | 'µg'
 
-/** `µg` for the fat-soluble vitamins, B12 and folate; `mg` for the
- *  milligram minerals and cholesterol; `g` for the macronutrient masses. */
+/**
+ * The published unit of EVERY catalog key, enumerated over the 66-key
+ * catalog (magnitudes sanity-checked against `public/data/recipes/*.json`
+ * per serving: vitamin C 52 mg, calcium 190 mg, potassium 1190 mg,
+ * selenium 44 µg, folate 146 µg, amino acids ~1.8 g).
+ *
+ * The default in `unitFor` stays `g` for defensive robustness against a
+ * future key, but `assertUnitTableComplete` (unit-tested) fails the build
+ * if a known key ever falls through to it — a "full nutrition facts" panel
+ * that prints `1048 g potassium` is worse than no row at all.
+ */
 export const NUTRITION_UNITS: Record<string, NutritionUnit> = {
   energy: 'kcal',
+  // mg — electrolytes, cholesterol and the water-soluble vitamins.
   sodium: 'mg',
   cholesterol: 'mg',
+  vitamin_c: 'mg',
+  vitamin_e: 'mg',
+  b1_thiamine: 'mg',
+  b2_riboflavin: 'mg',
+  b3_niacin: 'mg',
+  b5_pantothenic_acid: 'mg',
+  b6_pyridoxine: 'mg',
+  choline: 'mg',
+  // mg — minerals.
+  calcium: 'mg',
+  copper: 'mg',
+  iron: 'mg',
+  magnesium: 'mg',
+  manganese: 'mg',
+  phosphorus: 'mg',
+  potassium: 'mg',
+  zinc: 'mg',
+  // µg — fat-soluble vitamins, B12, folate and selenium.
   vitamin_a: 'µg',
   vitamin_d: 'µg',
   vitamin_k: 'µg',
   b12_cobalamin: 'µg',
   folate: 'µg',
+  selenium: 'µg',
+  // mg — a stimulant measured in milligrams, never grams (catalog max 25.5).
+  caffeine: 'mg',
+  // g — everything else: macros, sugars, amino acids and the bulk rows.
+  protein: 'g',
+  carbs: 'g',
+  fat: 'g',
+  saturated: 'g',
+  monounsaturated: 'g',
+  polyunsaturated: 'g',
+  omega_3: 'g',
+  omega_6: 'g',
+  transfats: 'g',
+  starch: 'g',
+  fiber: 'g',
+  sugars: 'g',
+  fructose: 'g',
+  galactose: 'g',
+  glucose: 'g',
+  lactose: 'g',
+  maltose: 'g',
+  sucrose: 'g',
+  sugar_alcohol: 'g',
+  alanine: 'g',
+  arginine: 'g',
+  aspartic_acid: 'g',
+  cystine: 'g',
+  glutamic_acid: 'g',
+  glycine: 'g',
+  histidine: 'g',
+  isoleucine: 'g',
+  leucine: 'g',
+  lysine: 'g',
+  methionine: 'g',
+  phenylalanine: 'g',
+  proline: 'g',
+  serine: 'g',
+  threonine: 'g',
+  tryptophan: 'g',
+  tyrosine: 'g',
+  valine: 'g',
+  water: 'g',
+  ash: 'g',
+  alcohol: 'g',
 }
 
 export function unitFor(key: string): NutritionUnit {
   return NUTRITION_UNITS[key] ?? 'g'
+}
+
+/**
+ * Every key the facts layout can render must have an EXPLICIT unit — a
+ * missing entry silently prints the wrong unit. Returns the offending
+ * keys (empty when the table is complete) so a unit test can assert it.
+ */
+export function unknownUnitKeys(keys: readonly string[] = NUTRITION_KEYS): string[] {
+  return keys.filter((key) => NUTRITION_UNITS[key] === undefined)
 }
 
 export interface NutritionRow {
