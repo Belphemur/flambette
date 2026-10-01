@@ -5,6 +5,8 @@
 </tr>
 </table>
 
+<p align="center"><img src="docs/screenshots/hero.jpg" width="100%" alt="Flambette hero — a steaming red Dutch oven of Tuscan chicken and tomato stew with basil and crusty bread" /></p>
+
 <table>
 <tr>
 <td width="19%" align="center"><img src="docs/screenshots/recipes.png" width="100%" alt="Recipes grid" /><br /><sub><b>Recipes</b> — search, tinted filter chips and a photo-led food grid</sub></td>
