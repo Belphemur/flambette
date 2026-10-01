@@ -26,11 +26,11 @@
     },
     {
       "description": [
-        "Major bumps land one per PR, but NEVER auto-merge: a major can break the toolchain in ways CI does not cover (vite/peer ranges), so a human reads the release notes and merges."
+        "Major bumps land one per PR and auto-merge ONLY on a fully green CI gate (e2e + unit + docker) — CI is the safety net for majors, exactly like minors."
       ],
       "matchUpdateTypes": ["major"],
-      "automerge": false,
-      "dependencyDashboardApproval": false
+      "automerge": true,
+      "automergeType": "pr"
     },
     {
       "description": [
