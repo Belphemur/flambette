@@ -1,0 +1,612 @@
+{
+  "$schema": "https://www.designtokens.org/schemas/2025.10/format.json",
+  "$description": "A warm, photo-led kitchen companion: cream and espresso surfaces, confident tomato actions, clear food iconography, and generous responsive layouts.",
+  "color": {
+    "$type": "color",
+    "primary": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.702,
+          0.22,
+          0.122
+        ],
+        "hex": "#b3381f"
+      }
+    },
+    "primary-strong": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.557,
+          0.173,
+          0.09
+        ],
+        "hex": "#8e2c17"
+      }
+    },
+    "primary-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.941,
+          0.541,
+          0.416
+        ],
+        "hex": "#f08a6a"
+      }
+    },
+    "primary-tint": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.984,
+          0.918,
+          0.898
+        ],
+        "hex": "#fbeae5"
+      }
+    },
+    "primary-tint-dark": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.267,
+          0.141,
+          0.114
+        ],
+        "hex": "#44241d"
+      }
+    },
+    "on-primary": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          1,
+          1,
+          1
+        ],
+        "hex": "#ffffff"
+      }
+    },
+    "surface": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          1,
+          0.973,
+          0.941
+        ],
+        "hex": "#fff8f0"
+      }
+    },
+    "surface-raised": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          1,
+          1,
+          1
+        ],
+        "hex": "#ffffff"
+      }
+    },
+    "surface-sunken": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          1,
+          0.941,
+          0.902
+        ],
+        "hex": "#fff0e6"
+      }
+    },
+    "border": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.898,
+          0.847,
+          0.796
+        ],
+        "hex": "#e5d8cb"
+      }
+    },
+    "border-strong": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.549,
+          0.478,
+          0.42
+        ],
+        "hex": "#8c7a6b"
+      }
+    },
+    "text": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.161,
+          0.145,
+          0.141
+        ],
+        "hex": "#292524"
+      }
+    },
+    "text-muted": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.388,
+          0.341,
+          0.306
+        ],
+        "hex": "#63574e"
+      }
+    },
+    "surface-dark": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.09,
+          0.075,
+          0.063
+        ],
+        "hex": "#171310"
+      }
+    },
+    "surface-dark-raised": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.141,
+          0.11,
+          0.094
+        ],
+        "hex": "#241c18"
+      }
+    },
+    "surface-dark-sunken": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.196,
+          0.149,
+          0.122
+        ],
+        "hex": "#32261f"
+      }
+    },
+    "border-dark": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.337,
+          0.267,
+          0.22
+        ],
+        "hex": "#564438"
+      }
+    },
+    "border-dark-strong": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.635,
+          0.557,
+          0.502
+        ],
+        "hex": "#a28e80"
+      }
+    },
+    "text-dark": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          1,
+          0.973,
+          0.941
+        ],
+        "hex": "#fff8f0"
+      }
+    },
+    "text-dark-muted": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.78,
+          0.71,
+          0.651
+        ],
+        "hex": "#c7b5a6"
+      }
+    },
+    "hue-meat": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.702,
+          0.22,
+          0.122
+        ],
+        "hex": "#b3381f"
+      }
+    },
+    "hue-meat-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.941,
+          0.541,
+          0.416
+        ],
+        "hex": "#f08a6a"
+      }
+    },
+    "hue-fish": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.055,
+          0.455,
+          0.565
+        ],
+        "hex": "#0e7490"
+      }
+    },
+    "hue-fish-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.361,
+          0.753,
+          0.847
+        ],
+        "hex": "#5cc0d8"
+      }
+    },
+    "hue-vegetarian": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.075,
+          0.478,
+          0.22
+        ],
+        "hex": "#137a38"
+      }
+    },
+    "hue-vegetarian-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.525,
+          0.937,
+          0.675
+        ],
+        "hex": "#86efac"
+      }
+    },
+    "hue-vegan": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.016,
+          0.471,
+          0.341
+        ],
+        "hex": "#047857"
+      }
+    },
+    "hue-vegan-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.431,
+          0.906,
+          0.718
+        ],
+        "hex": "#6ee7b7"
+      }
+    },
+    "nutrition-energy": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.722,
+          0.227,
+          0.039
+        ],
+        "hex": "#b83a0a"
+      }
+    },
+    "nutrition-energy-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.984,
+          0.749,
+          0.431
+        ],
+        "hex": "#fbbf6e"
+      }
+    },
+    "nutrition-sodium": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.31,
+          0.275,
+          0.898
+        ],
+        "hex": "#4f46e5"
+      }
+    },
+    "nutrition-sodium-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.647,
+          0.706,
+          0.988
+        ],
+        "hex": "#a5b4fc"
+      }
+    },
+    "warning": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.604,
+          0.204,
+          0.071
+        ],
+        "hex": "#9a3412"
+      }
+    },
+    "warning-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.992,
+          0.729,
+          0.455
+        ],
+        "hex": "#fdba74"
+      }
+    },
+    "danger": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.725,
+          0.11,
+          0.11
+        ],
+        "hex": "#b91c1c"
+      }
+    },
+    "danger-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.988,
+          0.647,
+          0.647
+        ],
+        "hex": "#fca5a5"
+      }
+    },
+    "favourite": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.882,
+          0.114,
+          0.282
+        ],
+        "hex": "#e11d48"
+      }
+    },
+    "favourite-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.984,
+          0.443,
+          0.522
+        ],
+        "hex": "#fb7185"
+      }
+    }
+  },
+  "spacing": {
+    "$type": "dimension",
+    "base": {
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      }
+    },
+    "xs": {
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      }
+    },
+    "sm": {
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      }
+    },
+    "md": {
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      }
+    },
+    "lg": {
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      }
+    },
+    "xl": {
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      }
+    },
+    "2xl": {
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      }
+    },
+    "container": {
+      "$value": {
+        "value": 1100,
+        "unit": "px"
+      }
+    },
+    "reading": {
+      "$value": {
+        "value": 672,
+        "unit": "px"
+      }
+    },
+    "gutter-mobile": {
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      }
+    },
+    "gutter-desktop": {
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      }
+    },
+    "touch-target": {
+      "$value": {
+        "value": 44,
+        "unit": "px"
+      }
+    }
+  },
+  "rounded": {
+    "$type": "dimension",
+    "sm": {
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      }
+    },
+    "md": {
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      }
+    },
+    "lg": {
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      }
+    },
+    "xl": {
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      }
+    },
+    "full": {
+      "$value": {
+        "value": 9999,
+        "unit": "px"
+      }
+    }
+  },
+  "typography": {
+    "headline-lg": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "system-ui",
+        "fontSize": {
+          "value": 32,
+          "unit": "px"
+        },
+        "fontWeight": 700
+      }
+    },
+    "headline-md": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "system-ui",
+        "fontSize": {
+          "value": 24,
+          "unit": "px"
+        },
+        "fontWeight": 700
+      }
+    },
+    "title": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "system-ui",
+        "fontSize": {
+          "value": 16,
+          "unit": "px"
+        },
+        "fontWeight": 600
+      }
+    },
+    "body-md": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "system-ui",
+        "fontSize": {
+          "value": 16,
+          "unit": "px"
+        },
+        "fontWeight": 400
+      }
+    },
+    "body-sm": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "system-ui",
+        "fontSize": {
+          "value": 14,
+          "unit": "px"
+        },
+        "fontWeight": 400
+      }
+    },
+    "label-md": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "system-ui",
+        "fontSize": {
+          "value": 12,
+          "unit": "px"
+        },
+        "fontWeight": 500
+      }
+    },
+    "cooking-step": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "system-ui",
+        "fontSize": {
+          "value": 20,
+          "unit": "px"
+        },
+        "fontWeight": 500
+      }
+    }
+  }
+}

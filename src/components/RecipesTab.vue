@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
-import { ArrowUpDown, Check, Ham, Salad, Shrimp, Drumstick, Heart, Vegan, Beef, Fish, Sparkles, Wheat, SearchX } from 'lucide-vue-next'
+import { ArrowUpDown, Check, Heart, Sparkles, SearchX } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { catalog } from '../lib/catalog'
 import {
@@ -23,6 +23,7 @@ import {
   type SortBy,
 } from '../lib/quickFilters'
 import { popularityScore } from '../lib/quantity'
+import { dietHueClass, dietRole, proteinHueClass, roleGlyph } from '../lib/palette'
 import { searchVariantIds } from '../lib/search'
 import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
@@ -102,8 +103,8 @@ function setSortOptionEl(el: Element | null, index: number) {
 function openSort() {
   sortOpen.value = true
   sortFocusIndex.value = Math.max(
-    0,
-    SORT_OPTIONS.findIndex((o) => o.value === filters.value.sortBy),
+  0,
+  SORT_OPTIONS.findIndex((o) => o.value === filters.value.sortBy),
   )
   // The listbox exists only after this tick.
   void nextTick(() => focusSortOption(sortFocusIndex.value))
@@ -122,31 +123,31 @@ function focusSortOption(index: number) {
 
 function onSortMenuKeydown(e: KeyboardEvent) {
   switch (e.key) {
-    case 'ArrowDown':
-      e.preventDefault()
-      focusSortOption(sortFocusIndex.value + 1)
-      break
-    case 'ArrowUp':
-      e.preventDefault()
-      focusSortOption(sortFocusIndex.value - 1)
-      break
-    case 'Home':
-      e.preventDefault()
-      focusSortOption(0)
-      break
-    case 'End':
-      e.preventDefault()
-      focusSortOption(SORT_OPTIONS.length - 1)
-      break
-    case 'Escape':
-      e.preventDefault()
-      e.stopPropagation()
-      closeSort({ refocus: true })
-      break
-    case 'Tab':
-      // Tabbing out ends the interaction rather than stranding focus.
-      closeSort()
-      break
+  case 'ArrowDown':
+  e.preventDefault()
+  focusSortOption(sortFocusIndex.value + 1)
+  break
+  case 'ArrowUp':
+  e.preventDefault()
+  focusSortOption(sortFocusIndex.value - 1)
+  break
+  case 'Home':
+  e.preventDefault()
+  focusSortOption(0)
+  break
+  case 'End':
+  e.preventDefault()
+  focusSortOption(SORT_OPTIONS.length - 1)
+  break
+  case 'Escape':
+  e.preventDefault()
+  e.stopPropagation()
+  closeSort({ refocus: true })
+  break
+  case 'Tab':
+  // Tabbing out ends the interaction rather than stranding focus.
+  closeSort()
+  break
   }
 }
 
@@ -177,21 +178,24 @@ const sortText = computed(() => sortLabel(filters.value.sortBy))
 
 /* ---------- Icon maps (WS5: one Lucide icon per filter) ---------- */
 
-/** Protein chips carry the food icon; "Any" is a neutral sparkle. */
-const PROTEIN_ICONS: Record<ProteinFilter, Component> = {
-  '': Sparkles,
-  fish: Fish,
-  meat: Beef,
-  vegetarian: Wheat,
+/** Every food chip renders the SAME glyph and hue in every state: the
+ *  hue is the icon's identity, never its state. Selection is painted by
+ *  the chip surface (brand tint + brand outline + `aria-pressed`), so a
+ *  red icon is never invisible on a red fill, and the pill never changes
+ *  width when it is pressed (ADR-0036 item 6). */
+const PROTEIN_ICONS: Record<ProteinFilter, { icon: Component; cls: string }> = {
+  '': { icon: Sparkles, cls: '' }, // "Any" is not a food, so it has no hue
+  fish: { icon: roleGlyph('fish'), cls: proteinHueClass('fish') },
+  meat: { icon: roleGlyph('meat'), cls: proteinHueClass('meat') },
+  vegetarian: { icon: roleGlyph('vegetarian'), cls: proteinHueClass('vegetarian') },
 }
 
-const DIET_ICONS: Record<DietId, Component> = {
-  'no-pork': Ham,
-  'no-shellfish': Shrimp,
-  'no-meat': Drumstick,
-  vegetarian: Salad,
-  vegan: Vegan,
-}
+const DIET_ICONS: Record<DietId, { icon: Component; cls: string }> = Object.fromEntries(
+  DIET_IDS.map((d) => {
+  const role = dietRole(d)
+  return [d, { icon: role === null ? Sparkles : roleGlyph(role), cls: dietHueClass(d) }]
+  }),
+) as Record<DietId, { icon: Component; cls: string }>
 
 /* ---------- Result pipeline ---------- */
 
@@ -204,48 +208,48 @@ const results = computed<VariantMeta[]>(() => {
   const index = dietIndex.value
 
   const facets = (meta: VariantMeta): boolean => {
-    if (f.favOnly && !favourites.ids.has(meta.id)) return false
-    if (f.proOnly && !meta.is_pro) return false
-    if (f.protein !== '' && c.dataById.get(meta.id)?.category_name !== f.protein)
-      return false
-    if (f.maxTime !== null && meta.cooking_minutes > f.maxTime) return false
-    if (diets.length > 0) {
-      const verdict = index?.verdictById.get(meta.id)
-      if (!verdict || !matchesAllDiets(verdict, diets)) return false
-    }
-    return true
+  if (f.favOnly && !favourites.ids.has(meta.id)) return false
+  if (f.proOnly && !meta.is_pro) return false
+  if (f.protein !== '' && c.dataById.get(meta.id)?.category_name !== f.protein)
+  return false
+  if (f.maxTime !== null && meta.cooking_minutes > f.maxTime) return false
+  if (diets.length > 0) {
+  const verdict = index?.verdictById.get(meta.id)
+  if (!verdict || !matchesAllDiets(verdict, diets)) return false
+  }
+  return true
   }
 
   let list: VariantMeta[]
   if (q) {
-    // Indexed fuzzy/prefix search over name + ingredients, intersected with
-    // the active facet filters.
-    const matched = new Set(searchVariantIds(q))
-    list = c.data.variant_meta.filter((meta) => matched.has(meta.id) && facets(meta))
+  // Indexed fuzzy/prefix search over name + ingredients, intersected with
+  // the active facet filters.
+  const matched = new Set(searchVariantIds(q))
+  list = c.data.variant_meta.filter((meta) => matched.has(meta.id) && facets(meta))
   } else {
-    list = c.data.variant_meta.filter(facets)
+  list = c.data.variant_meta.filter(facets)
   }
 
   list = [...list]
   switch (f.sortBy) {
-    case 'rating':
-      list.sort(
-        (a, b) => b.rating - a.rating || b.rating_count - a.rating_count,
-      )
-      break
-    case 'time':
-      list.sort((a, b) => a.cooking_minutes - b.cooking_minutes)
-      break
-    case 'calories':
-      list.sort((a, b) => a.calories - b.calories)
-      break
-    case 'popularity':
-      list.sort((a, b) => popularityScore(b.popularity) - popularityScore(a.popularity))
-      break
-    case 'latest':
-      // Newest creations first; missing timestamps sink to the bottom.
-      list.sort((a, b) => (b.first_published_at ?? 0) - (a.first_published_at ?? 0))
-      break
+  case 'rating':
+  list.sort(
+  (a, b) => b.rating - a.rating || b.rating_count - a.rating_count,
+  )
+  break
+  case 'time':
+  list.sort((a, b) => a.cooking_minutes - b.cooking_minutes)
+  break
+  case 'calories':
+  list.sort((a, b) => a.calories - b.calories)
+  break
+  case 'popularity':
+  list.sort((a, b) => popularityScore(b.popularity) - popularityScore(a.popularity))
+  break
+  case 'latest':
+  // Newest creations first; missing timestamps sink to the bottom.
+  list.sort((a, b) => (b.first_published_at ?? 0) - (a.first_published_at ?? 0))
+  break
   }
   return list
 })
@@ -275,12 +279,12 @@ let observer: IntersectionObserver | null = null
 
 onMounted(() => {
   observer = new IntersectionObserver(
-    (entries) => {
-      if (entries.some((e) => e.isIntersecting) && hasMore.value) {
-        visibleCount.value = Math.min(visibleCount.value + BATCH_SIZE, results.value.length)
-      }
-    },
-    { rootMargin: '800px' },
+  (entries) => {
+  if (entries.some((e) => e.isIntersecting) && hasMore.value) {
+  visibleCount.value = Math.min(visibleCount.value + BATCH_SIZE, results.value.length)
+  }
+  },
+  { rootMargin: '800px' },
   )
   observer.observe(sentinel.value!)
 })
@@ -289,187 +293,219 @@ onUnmounted(() => observer?.disconnect())
 
 <template>
   <section class="space-y-3">
-    <input
-      v-model="query"
-      type="search"
-      placeholder="Search recipes or ingredients…"
-      class="h-11 w-full rounded-xl border dark:border-stone-700 dark:bg-stone-900 px-4 text-sm outline-none focus:border-primary"
-      aria-label="Search recipes or ingredients"
-    />
+  <input
+  v-model="query"
+  type="search"
+  placeholder="Search recipes or ingredients…"
+  class="h-11 w-full rounded-xl border px-4 text-sm outline-none focus:border-brand-text"
+  aria-label="Search recipes or ingredients"
+  />
 
-    <!-- WS1: a 2-column GRID on phones, a wrapping flex row from `sm` up.
-         Grid cells never orphan a control on a line of its own, which is
-         what `ml-auto` used to do to the sort control on a ~390px screen. -->
-    <div
-      class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center"
-      data-test="filter-bar"
-    >
-      <select
-        :value="filters.maxTime ?? ''"
-        class="h-11 w-full rounded-lg border px-2 text-sm dark:border-stone-700 dark:bg-stone-900 sm:w-auto"
-        aria-label="Filter by max cook time"
-        data-test="cook-time-filter"
-        @change="patchFilters({ maxTime: ($event.target as HTMLSelectElement).value === '' ? null : Number(($event.target as HTMLSelectElement).value) })"
-      >
-        <option value="">Any cook time</option>
-        <option :value="20">≤ 20 min</option>
-        <option :value="30">≤ 30 min</option>
-        <option :value="45">≤ 45 min</option>
-      </select>
+  <!-- WS1: a 2-column GRID on phones, a wrapping flex row from `sm` up.
+  Grid cells never orphan a control on a line of its own, which is
+  what `ml-auto` used to do to the sort control on a ~390px screen. -->
+  <div
+  class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center"
+  data-test="filter-bar"
+  >
+  <select
+  :value="filters.maxTime ?? ''"
+  class="h-11 w-full rounded-lg border px-2 text-sm sm:w-auto"
+  aria-label="Filter by max cook time"
+  data-test="cook-time-filter"
+  @change="patchFilters({ maxTime: ($event.target as HTMLSelectElement).value === '' ? null : Number(($event.target as HTMLSelectElement).value) })"
+  >
+  <option value="">Any cook time</option>
+  <option :value="20">≤ 20 min</option>
+  <option :value="30">≤ 30 min</option>
+  <option :value="45">≤ 45 min</option>
+  </select>
 
-      <button
-        class="flex h-11 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors"
-        :class="filters.favOnly ? 'border-amber-400 dark:bg-amber-950 dark:text-amber-300' : 'dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'"
-        :aria-pressed="filters.favOnly"
-        aria-label="Favourites only"
-        data-test="favourites-filter"
-        @click="patchFilters({ favOnly: !filters.favOnly })"
-      >
-        <Heart :size="16" :fill="filters.favOnly ? 'currentColor' : 'none'" aria-hidden="true" />
-        <span class="truncate">Favourites</span>
-      </button>
+  <button
+  class="flex h-11 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors"
+  :class="filters.favOnly ? 'border-favourite bg-brand-tint text-text' : ''"
+  :aria-pressed="filters.favOnly"
+  aria-label="Favourites only"
+  data-test="favourites-filter"
+  @click="patchFilters({ favOnly: !filters.favOnly })"
+  >
+  <Heart
+  :size="16"
+  :fill="filters.favOnly ? 'currentColor' : 'none'"
+  :class="filters.favOnly ? 'text-favourite' : ''"
+  aria-hidden="true"
+  />
+  <span class="truncate">Favourites</span>
+  </button>
 
-      <button
-        class="h-11 rounded-lg border px-3 text-sm font-bold tracking-wide transition-colors"
-        :class="filters.proOnly ? 'border-stone-900 bg-stone-900 text-amber-300' : 'dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'"
-        :aria-pressed="filters.proOnly"
-        aria-label="PRO recipes only"
-        data-test="pro-filter"
-        @click="patchFilters({ proOnly: !filters.proOnly })"
-      >
-        PRO
-      </button>
+  <button
+  class="h-11 rounded-lg border px-3 text-sm font-bold tracking-wide transition-colors"
+  :class="filters.proOnly ? 'border-border-strong bg-surface-sunken text-warning' : ''"
+  :aria-pressed="filters.proOnly"
+  aria-label="PRO recipes only"
+  data-test="pro-filter"
+  @click="patchFilters({ proOnly: !filters.proOnly })"
+  >
+  PRO
+  </button>
 
-      <!-- Compact sort affordance: icon + current label, never a wide
-           native select with "Sort: …" options. -->
-      <div ref="sortWrapEl" class="relative">
-        <button
-          ref="sortTriggerEl"
-          class="flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300"
-          aria-haspopup="listbox"
-          :aria-expanded="sortOpen"
-          aria-label="Sort recipes"
-          data-test="sort-button"
-          @click="sortOpen ? closeSort({ refocus: true }) : openSort()"
-        >
-          <ArrowUpDown :size="16" aria-hidden="true" />
-          <span class="truncate">{{ sortText }}</span>
-        </button>
-        <ul
-          v-if="sortOpen"
-          class="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 dark:bg-stone-800 dark:ring-stone-700"
-          role="listbox"
-          aria-label="Sort recipes"
-          data-test="sort-menu"
-          @keydown="onSortMenuKeydown"
-        >
-          <li v-for="(option, index) in SORT_OPTIONS" :key="option.value" role="none">
-            <button
-              :ref="(el) => setSortOptionEl(el as Element | null, index)"
-              class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm dark:text-stone-200"
-              role="option"
-              :tabindex="index === sortFocusIndex ? 0 : -1"
-              :aria-selected="filters.sortBy === option.value"
-              :aria-label="`Sort by ${option.label}`"
-              :data-test="`sort-option-${option.value}`"
-              @click="setSort(option.value)"
-            >
-              <Check
-                v-if="filters.sortBy === option.value"
-                :size="16"
-                class="shrink-0 text-primary"
-                aria-hidden="true"
-              />
-              <span v-else class="w-4 shrink-0" aria-hidden="true" />
-              <span class="truncate">{{ option.label }}</span>
-            </button>
-          </li>
-        </ul>
-      </div>
-    </div>
+  <!-- Compact sort affordance: icon + current label, never a wide
+  native select with "Sort: …" options. -->
+  <div ref="sortWrapEl" class="relative">
+  <button
+  ref="sortTriggerEl"
+  class="flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium"
+  aria-haspopup="listbox"
+  :aria-expanded="sortOpen"
+  aria-label="Sort recipes"
+  data-test="sort-button"
+  @click="sortOpen ? closeSort({ refocus: true }) : openSort()"
+  >
+  <ArrowUpDown :size="16" aria-hidden="true" />
+  <span class="truncate">{{ sortText }}</span>
+  </button>
+  <ul
+  v-if="sortOpen"
+  class="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-xl bg-surface-raised py-1 shadow-lg ring-1"
+  role="listbox"
+  aria-label="Sort recipes"
+  data-test="sort-menu"
+  @keydown="onSortMenuKeydown"
+  >
+  <li v-for="(option, index) in SORT_OPTIONS" :key="option.value" role="none">
+  <button
+  :ref="(el) => setSortOptionEl(el as Element | null, index)"
+  class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
+  role="option"
+  :tabindex="index === sortFocusIndex ? 0 : -1"
+  :aria-selected="filters.sortBy === option.value"
+  :aria-label="`Sort by ${option.label}`"
+  :data-test="`sort-option-${option.value}`"
+  @click="setSort(option.value)"
+  >
+  <Check
+  v-if="filters.sortBy === option.value"
+  :size="16"
+  class="shrink-0 text-brand"
+  aria-hidden="true"
+  />
+  <span v-else class="w-4 shrink-0" aria-hidden="true" />
+  <span class="truncate">{{ option.label }}</span>
+  </button>
+  </li>
+  </ul>
+  </div>
+  </div>
 
-    <!-- WS2: ONE filter surface. The former "All diets" dropdown is gone;
-         the protein slice it used to own is the first chip group here, and
-         the diet rules follow in the same group. -->
-    <div
-      class="flex flex-wrap items-center gap-2"
-      role="group"
-      aria-label="Quick filters"
-      data-test="quick-filters"
-    >
-      <button
-        v-for="p in PROTEIN_OPTIONS"
-        :key="p.value || 'any'"
-        type="button"
-        :data-test="`protein-chip-${p.value || 'any'}`"
-        class="flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors"
-        :class="
-          filters.protein === p.value
-            ? 'border-primary bg-primary text-white'
-            : 'dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'
-        "
-        :aria-pressed="filters.protein === p.value"
-        :aria-label="`Protein: ${p.label}`"
-        @click="setProtein(p.value)"
-      >
-        <component :is="PROTEIN_ICONS[p.value]" :size="14" aria-hidden="true" />
-        {{ p.label }}
-      </button>
+  <!-- WS2: ONE filter surface. The former "All diets" dropdown is gone;
+  the protein slice it used to own is the first chip group here, and
+  the diet rules follow beneath it. On a PHONE each GROUP is one
+  scrollable line instead of three wrapped ones: at 390px the wrap pushed
+  the first food off the screen entirely, and food is the point of this
+  tab. From `sm` up they wrap exactly as before.
 
-      <div
-        class="flex flex-wrap items-center gap-2"
-        role="group"
-        aria-label="Diet filters"
-        data-test="diet-filters"
-      >
-        <button
-          v-for="d in DIET_IDS"
-          :key="d"
-          type="button"
-          :data-test="`diet-chip-${d}`"
-          class="flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors"
-          :class="
-            activeDiets.includes(d)
-              ? 'border-primary bg-primary text-white'
-              : 'dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'
-          "
-          :aria-pressed="activeDiets.includes(d)"
-          :aria-label="`${DIET_LABELS[d]}: ${DIET_DESCRIPTIONS[d]}`"
-          @click="toggleDiet(d)"
-        >
-          <component :is="DIET_ICONS[d]" :size="14" aria-hidden="true" />
-          {{ dietChipLabel(d, dietCounts[d]) }}
-        </button>
-      </div>
-    </div>
+  The outer box only STACKS the two groups — it must never be the
+  scroller, or the diet row scrolls away out of sight beside the
+  protein row. -->
+  <div
+  class="space-y-2"
+  role="group"
+  aria-label="Quick filters"
+  data-test="quick-filters"
+  >
+  <div
+  class="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:items-center sm:overflow-visible sm:px-0 sm:pb-0"
+  role="group"
+  aria-label="Protein filters"
+  data-test="protein-filters"
+  >
+  <button
+  v-for="p in PROTEIN_OPTIONS"
+  :key="p.value || 'any'"
+  type="button"
+  :data-test="`protein-chip-${p.value || 'any'}`"
+  class="flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-raised px-3 text-sm font-medium whitespace-nowrap transition-colors"
+  :class="filters.protein === p.value ? 'border-brand-text bg-brand-tint text-brand-text' : ''"
+  :aria-pressed="filters.protein === p.value"
+  :aria-label="`Protein: ${p.label}`"
+  @click="setProtein(p.value)"
+  >
+  <component
+  :is="PROTEIN_ICONS[p.value].icon"
+  :size="14"
+  :class="PROTEIN_ICONS[p.value].cls"
+  aria-hidden="true"
+  />
+  {{ p.label }}
+  </button>
+  </div>
 
-    <p class="text-xs text-stone-400">
-      {{ results.length }} recipe{{ results.length === 1 ? '' : 's' }}
-      <button
-        v-if="filtersActive"
-        class="ml-2 text-primary-dark underline"
-        @click="clearFilters"
-      >
-        Clear filters
-      </button>
-    </p>
+  <div
+  class="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:items-center sm:overflow-visible sm:px-0 sm:pb-0"
+  role="group"
+  aria-label="Diet filters"
+  data-test="diet-filters"
+  >
+  <button
+  v-for="d in DIET_IDS"
+  :key="d"
+  type="button"
+  :data-test="`diet-chip-${d}`"
+  class="flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-raised px-3 text-sm font-medium whitespace-nowrap transition-colors"
+  :class="activeDiets.includes(d) ? 'border-brand-text bg-brand-tint text-brand-text' : ''"
+  :aria-pressed="activeDiets.includes(d)"
+  :aria-label="`${DIET_LABELS[d]}: ${DIET_DESCRIPTIONS[d]}`"
+  @click="toggleDiet(d)"
+  >
+  <!-- The role hue is the icon's IDENTITY and survives selection
+  (DESIGN.md "Selection and actions"): the selected chip is a TINT,
+  never a fill, so the icon keeps `DIET_ICONS[d].cls` in BOTH states. -->
+  <component
+  :is="DIET_ICONS[d].icon"
+  :size="14"
+  :class="DIET_ICONS[d].cls"
+  aria-hidden="true"
+  />
+  {{ dietChipLabel(d, dietCounts[d]) }}
+  </button>
+  </div>
+  </div>
 
-    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-      <RecipeCard v-for="meta in visibleResults" :key="meta.id" :meta="meta" />
-    </div>
+  <p class="text-xs text-text-muted">
+  {{ results.length }} recipe{{ results.length === 1 ? '' : 's' }}
+  <button
+  v-if="filtersActive"
+  class="ml-2 text-brand-text underline"
+  @click="clearFilters"
+  >
+  Clear filters
+  </button>
+  </p>
 
-    <div
-      v-if="hasMore"
-      ref="sentinel"
-      class="py-4 text-center text-xs text-stone-400"
-      aria-live="polite"
-    >
-      Loading more recipes…
-    </div>
+  <!-- Grid (DESIGN.md Layout): ONE column below 360px, two from 360px,
+  three from 720px, four from 1024px. There is no five-column
+  stage — at the 1100px cap a fifth column makes the cards narrow
+  exactly when their metadata grew. 12px gaps on phones, 20px on
+  desktop. -->
+  <div
+  class="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 min-[720px]:grid-cols-3 min-[1024px]:grid-cols-4 min-[1024px]:gap-5"
+  data-test="recipe-grid"
+  >
+  <RecipeCard v-for="meta in visibleResults" :key="meta.id" :meta="meta" />
+  </div>
 
-    <div v-if="results.length === 0" class="py-16 text-center text-stone-400">
-      <SearchX :size="40" class="mx-auto" aria-hidden="true" />
-      <p class="mt-2 font-medium">No recipes match your filters</p>
-    </div>
+  <div
+  v-if="hasMore"
+  ref="sentinel"
+  class="py-4 text-center text-xs text-text-muted"
+  aria-live="polite"
+  >
+  Loading more recipes…
+  </div>
+
+  <div v-if="results.length === 0" class="py-16 text-center text-text-muted">
+  <SearchX :size="40" class="mx-auto" aria-hidden="true" />
+  <p class="mt-2 font-medium">No recipes match your filters</p>
+  </div>
   </section>
 </template>

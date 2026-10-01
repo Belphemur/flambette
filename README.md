@@ -1,15 +1,25 @@
 # Mealime Planner
 
-<p align="center">
-  <img src="docs/screenshots/recipes.png" width="19%" alt="Recipes grid" />
-  <img src="docs/screenshots/recipe-detail.png" width="19%" alt="Recipe detail" />
-  <img src="docs/screenshots/plan.png" width="19%" alt="Meal plan" />
-  <img src="docs/screenshots/grocery.png" width="19%" alt="Grocery list" />
-  <img src="docs/screenshots/cooking.png" width="19%" alt="Cooking mode" />
-</p>
-<p align="center">
-  <img src="docs/screenshots/dark-mode.png" width="24%" alt="Dark mode" />
-</p>
+<table>
+<tr>
+<td width="19%" align="center"><img src="docs/screenshots/recipes.png" width="100%" alt="Recipes grid" /><br /><sub><b>Recipes</b> — search, tinted filter chips and a photo-led food grid</sub></td>
+<td width="19%" align="center"><img src="docs/screenshots/recipe-detail.png" width="100%" alt="Recipe detail" /><br /><sub><b>Recipe</b> — photo, type icon, filled <i>Start cooking</i> and the nutrition block</sub></td>
+<td width="19%" align="center"><img src="docs/screenshots/plan.png" width="100%" alt="Meal plan" /><br /><sub><b>Plan</b> — meal rows with servings, live totals and the Auto-Plan route</sub></td>
+<td width="19%" align="center"><img src="docs/screenshots/grocery.png" width="100%" alt="Grocery list" /><br /><sub><b>Grocery</b> — store sections, scaled quantities and provenance pills</sub></td>
+<td width="19%" align="center"><img src="docs/screenshots/cooking.png" width="100%" alt="Cooking mode" /><br /><sub><b>Cooking</b> — one step at a time on a 672px reading measure</sub></td>
+</tr>
+<tr>
+<td width="19%" align="center"><img src="docs/screenshots/recipes-dark.png" width="100%" alt="Recipes grid, dark mode" /><br /><sub>Espresso surfaces, soft food hues</sub></td>
+<td width="19%" align="center"><img src="docs/screenshots/recipe-detail-dark.png" width="100%" alt="Recipe detail, dark mode" /><br /><sub>The same tomato action, now keyed for espresso</sub></td>
+<td width="19%" align="center"><img src="docs/screenshots/plan-dark.png" width="100%" alt="Meal plan, dark mode" /><br /><sub>Warm-on-dark, no unstyled light surface</sub></td>
+<td width="19%" align="center"><img src="docs/screenshots/grocery-dark.png" width="100%" alt="Grocery list, dark mode" /><br /><sub>Quantities stay legible in both themes</sub></td>
+<td width="19%" align="center"><img src="docs/screenshots/cooking-dark.png" width="100%" alt="Cooking mode, dark mode" /><br /><sub>Hands-free step reader at the stove</sub></td>
+</tr>
+</table>
+
+<p align="center"><sub>Every screenshot is captured from the running app
+(<code>bun run dev</code>), on the seeded catalog, at 390&times;844 &mdash; light
+and dark, from the same build.</sub></p>
 
 A mobile-first single-page app for browsing the Mealime recipe catalog,
 building a meal plan, and generating a grocery list from it.
