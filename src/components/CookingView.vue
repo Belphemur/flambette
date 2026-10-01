@@ -24,6 +24,7 @@ import {
   announceCountdown,
   formatCountdown,
   remainingSeconds,
+  sameTimerType,
   type CookTimer,
 } from '../lib/stepTimer'
 import { getTimerHints, hintForStep, suggestionFromHint, type TimerSuggestion } from '../lib/timerSuggest'
@@ -303,6 +304,37 @@ function applySuggestion(s: TimerSuggestion) {
   nameInput.value = s.label
   minutesInput.value = String(s.minutes)
 }
+
+/**
+ * ADR-0041 §4 — the panel AUTO-OPENS, pre-filled, when the step view on
+ * screen carries an authored duration and nothing of that TYPE is
+ * counting down for this recipe yet. The saved tap is "Add timer" (the
+ * recipe's own sentence is already in the fields); the CONFIRM is still
+ * the user's, so nothing a parser found ever starts counting on its own.
+ * The concurrent cap (§2) applies on top — the pre-fill is a proposal
+ * either way.
+ *
+ * Declared after `suggestion` on purpose: a watcher reading it above
+ * would be a TS2448 "used before declaration" landmine.
+ *
+ * Three refusals, all of them the user's intent winning:
+ *  - a RUNNING timer of the SAME TYPE reads as a chip in the strip, never
+ *    as a surprise panel — but a live "Oven" says nothing about a "Rice"
+ *    suggestion, so the gate is per-TYPE (`sameTimerType`), never
+ *    per-recipe;
+ *  - an open panel stays open — re-filling a panel the user is reading
+ *    mid-edit would move text under their cursor;
+ *  - a half-typed draft is never clobbered: a dirty field beats an
+ *    auto-fill, which is what makes a LATE sidecar resolve safe.
+ */
+watch(suggestion, (s) => {
+  if (!s) return
+  if (addOpen.value) return
+  if (timers.value.some((t) => isRunning(t) && sameTimerType(t.label, s.label))) return
+  if (nameInput.value.trim() !== '' || minutesInput.value.trim() !== '') return
+  addOpen.value = true
+  applySuggestion(s)
+})
 
 /**
  * Arm a timer from the ladder or the confirm. Returns false when the

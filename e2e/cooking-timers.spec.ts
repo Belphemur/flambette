@@ -66,8 +66,18 @@ async function secondsAt(cooking: Locator, index = 0): Promise<number> {
   return m ? Number(m[1]) * 60 + Number(m[2]) : NaN
 }
 
-/** Open the add panel. The add affordance is only there while it is closed. */
+/**
+ * Open the add panel from the EXPLICIT affordance. Since ADR-0041 §4 the
+ * panel can also open itself on a hinted step (which hides the add
+ * button), so a helper that wants the plain add shape dismisses an
+ * auto-opened proposal first — the tests below then read as "the user
+ * asked for it", not "the recipe did".
+ */
 async function openPanel(cooking: Locator) {
+  if (await cooking.getByTestId('timer-panel').isVisible()) {
+    await cooking.getByTestId('timer-cancel').click()
+    await expect(cooking.getByTestId('timer-panel')).toHaveCount(0)
+  }
   await expect(cooking.getByTestId('timer-add')).toBeVisible()
   await cooking.getByTestId('timer-add').click()
   await expect(cooking.getByTestId('timer-panel')).toBeVisible()
@@ -100,6 +110,17 @@ async function armNamed(cooking: Locator, label: string, minutes: number) {
   if (!(await cooking.getByTestId('timer-replace-prompt').isVisible())) {
     await expect(cooking.getByTestId('timer-panel')).toHaveCount(0)
   }
+}
+
+/** Walk to the view whose first step is number `n` (1-based), either way. */
+async function goToStepView(cooking: Locator, n: number) {
+  for (let guard = 0; guard < 20; guard++) {
+    const counter = (await cooking.getByTestId('step-counter').textContent()) ?? ''
+    const at = Number(counter.match(/Steps? (\d+)/)![1])
+    if (at === n) return
+    await cooking.getByRole('button', { name: at < n ? /Next/ : /Previous/ }).click()
+  }
+  throw new Error(`never reached the view starting at step ${n}`)
 }
 
 /** Walk to the last step view, where Finish lives. */
@@ -244,6 +265,75 @@ test('a duration the recipe writes out is offered, and only through the confirm'
   await expect(chips(cooking)).toHaveCount(1)
   await expect(countdown(cooking)).toContainText('15:00')
   await expect(countdown(cooking)).toHaveAttribute('aria-label', /^Pause .*timer, 15:0\d left/)
+  await expectZeroMealimeRequests(page)
+})
+
+test('the panel opens itself, pre-filled, on a step the recipe timed (ADR-0041 §4)', async ({ page }) => {
+  const cooking = await startCookingRecipe(page, 5264)
+
+  // The sidecar resolves AFTER the step renders, and the panel still opens
+  // itself: nothing here waits for a gesture. Step 1 is authored
+  // "15-18 minutes", so the LOWER bound is proposed and the range is
+  // disclosed — the same values `timer-suggest` would have written.
+  await expect(cooking.getByTestId('timer-panel')).toBeVisible()
+  await expect(cooking.getByTestId('timer-name')).toHaveValue('Step 1 (of 15–18)')
+  await expect(cooking.getByTestId('timer-minutes')).toHaveValue('15')
+  // The pre-filled proposal is still a proposal: the add affordance is
+  // hidden only because the panel is already up, and no chip exists yet.
+  await expect(cooking.getByTestId('timer-add')).toHaveCount(0)
+  await expect(chips(cooking)).toHaveCount(0)
+
+  // One tap arms — the "Add timer" click the cook never has to make.
+  await cooking.getByTestId('timer-confirm').click()
+  await expect(chips(cooking)).toHaveCount(1)
+  await expect(countdown(cooking)).toContainText('15:00')
+  await expect(countdown(cooking)).toHaveAttribute('aria-label', /^Pause .*timer, 15:0\d left/)
+  await expectZeroMealimeRequests(page)
+})
+
+test('the auto-open gate is per-TYPE: a live Oven never suppresses a Rice suggestion', async ({ page }) => {
+  const cooking = await startCookingRecipe(page, 5264)
+
+  // Step 7 is authored with a duration and names the food: "Shrimp
+  // (of 2–3)". The panel offers it without waiting for a gesture.
+  await goToStepView(cooking, 7)
+  await expect(cooking.getByTestId('timer-panel')).toBeVisible()
+  await expect(cooking.getByTestId('timer-name')).toHaveValue('Shrimp (of 2–3)')
+  await cooking.getByTestId('timer-confirm').click()
+  await expect(chips(cooking)).toHaveCount(1)
+
+  // Step 11 is hinted too ("Step 11", 1 min) and is a DIFFERENT type from
+  // the live Shrimp chip — a cook holding an oven and a pot of rice holds
+  // both. So the panel still opens itself here.
+  await goToStepView(cooking, 11)
+  await expect(cooking.getByTestId('timer-panel')).toBeVisible()
+  await expect(cooking.getByTestId('timer-name')).toHaveValue('Step 11 (of 1–2)')
+
+  // Walk back to the Shrimp step: its OWN type is already counting down,
+  // so there the panel stays closed and the chip speaks for itself. This
+  // is the per-TYPE gate, not a per-recipe one.
+  await goToStepView(cooking, 7)
+  await expect(cooking.getByTestId('timer-panel')).toHaveCount(0)
+  await expect(chips(cooking)).toHaveCount(1)
+  await expect(cooking.getByTestId('timer-add')).toBeVisible()
+
+  // …and the refusal really is about the live timer: opened by hand, the
+  // very same view still offers its suggestion.
+  await cooking.getByTestId('timer-add').click()
+  await expect(cooking.getByTestId('timer-suggest')).toContainText('Shrimp')
+  await expectZeroMealimeRequests(page)
+})
+
+test('navigating away from a suggested step closes the panel it opened', async ({ page }) => {
+  const cooking = await startCookingRecipe(page, 5264)
+
+  await expect(cooking.getByTestId('timer-panel')).toBeVisible()
+  await cooking.getByRole('button', { name: /Next/ }).click()
+  await expect(cooking.getByTestId('timer-panel')).toHaveCount(0)
+  // Step 2 carries no authored duration, so nothing re-opens behind the
+  // cook and no half-filled draft follows them either.
+  await expect(cooking.getByTestId('timer-add')).toBeVisible()
+  await expect(chips(cooking)).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
 

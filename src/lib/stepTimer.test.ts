@@ -14,6 +14,7 @@ import {
   nextTimerId,
   normalizeTimerLabel,
   remainingSeconds,
+  sameTimerType,
 } from './stepTimer'
 
 describe('remainingSeconds', () => {
@@ -110,6 +111,36 @@ describe('normalizeTimerLabel', () => {
     const long = 'a'.repeat(MAX_TIMER_LABEL) + ' bb'
     // Bounded by the budget, and the cut never leaves a trailing space.
     expect(normalizeTimerLabel(long)).toBe('a'.repeat(MAX_TIMER_LABEL))
+  })
+})
+
+describe('sameTimerType', () => {
+  test('a live chip of the SAME type suppresses the auto-open, case aside', () => {
+    // ADR-0041 §4: the gate is per-TYPE, so "Rice" and "rice" are one type…
+    expect(sameTimerType('Rice', 'rice')).toBe(true)
+    expect(sameTimerType('  RICE ', 'rice')).toBe(true)
+    expect(sameTimerType('Rice tray', 'rice tray')).toBe(true)
+  })
+
+  test('a live chip of a DIFFERENT type does not (one cook, oven and rice)', () => {
+    expect(sameTimerType('Oven', 'Rice')).toBe(false)
+    expect(sameTimerType('Shrimp (of 2–3)', 'Step 11 (of 1–2)')).toBe(false)
+  })
+
+  test('both sides normalize first: the chip budget can cut the label', () => {
+    // The chip label is truncated at MAX_TIMER_LABEL, the suggestion's is
+    // not; comparing raw strings would miss exactly the case that matters.
+    const suggestion = 'Roasted root vegetables with thyme'
+    const armed = newCookTimer(1, suggestion, 600, true)
+    expect(armed.label).not.toBe(suggestion) // the chip budget DID cut it
+    expect(armed.label.length).toBeLessThanOrEqual(MAX_TIMER_LABEL)
+    expect(sameTimerType(armed.label, suggestion)).toBe(true)
+  })
+
+  test('an unusable label is the shared "Step" type, never a wildcard', () => {
+    expect(sameTimerType('', 'Step')).toBe(true)
+    expect(sameTimerType(undefined, 'Step')).toBe(true)
+    expect(sameTimerType('', 'Rice')).toBe(false)
   })
 })
 

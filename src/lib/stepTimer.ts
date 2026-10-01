@@ -75,6 +75,24 @@ export function normalizeTimerLabel(label: unknown): string {
 }
 
 /**
+ * Do two chip labels name the same TYPE of work? ADR-0041 §4: the
+ * auto-open gate is per-TYPE, so a live "Oven" must not suppress a
+ * "Rice" suggestion (and vice versa) — one cook holds an oven AND a pot
+ * of rice, and both pre-fills are legitimate at once.
+ *
+ * Case- and whitespace-insensitive, both sides normalized through
+ * `normalizeTimerLabel` first (a chip's label is truncated at
+ * `MAX_TIMER_LABEL`, the suggestion's is not, so comparing the RAW
+ * strings would miss the very case that matters most: the chip reading
+ * back exactly what was armed).
+ */
+export function sameTimerType(a: unknown, b: unknown): boolean {
+  const left = normalizeTimerLabel(a).toLowerCase()
+  const right = normalizeTimerLabel(b).toLowerCase()
+  return left === right
+}
+
+/**
  * A fresh timer for `id`. `startedAt` is the CALLER's stamp: this stays
  * pure so a store action owns the one `Date.now()` in the path (and a
  * test never races the clock).
