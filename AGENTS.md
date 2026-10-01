@@ -279,6 +279,21 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   `@vueuse/core` (system preference default, manual override persisted).
 - Every interactive element gets an `aria-label`; every view must work in
   dark mode.
+- **Clickable affordance**: every clickable surface gets a pointer cursor,
+  and it is DESKTOP-ONLY — `src/style.css` wraps the whole rule in
+  `@media (hover: hover)` (a pointer is a mouse affordance; on touch the
+  affordance is the tap target, and no `cursor: pointer` may ship to a
+  phone). The global rule covers `<button>`, `[role=button|checkbox|
+  radio|switch|option]`, `[aria-pressed]`, checkboxes/radios, `<select>`,
+  and `label[for]` / labels wrapping a checkbox, so new controls need no
+  class. Non-semantic surfaces (a card `<article>`, a row `<img>`/`<div>`)
+  use the `hovercap:cursor-pointer` utility, which resolves to the same
+  media query. Deliberately excluded: full-screen dialog scrims
+  (`@click.self`), which are not an affordance; a disabled control gets
+  `not-allowed` and is excluded from the pointer selectors; the grocery
+  provenance pill stays `cursor-help` (a tooltip target). Change `cursor`
+  ONLY — never a tap target, hit area or padding (ADR-0016's Pixel 7 fit is
+  e2e-pinned).
 - **Design ADRs**: `docs/design/` holds ADR-style decision records
   (offline catalog, derived grocery, per-serving nutrition, clear
   semantics, rooms, Bun toolchain, auto-collapse, extras pilling,
