@@ -1,0 +1,1 @@
+{"steps":[{"step":0,"seconds":600,"label":"Step 1"},{"step":4,"seconds":420,"label":"Pepper"},{"step":5,"seconds":60,"label":"Step 6"},{"step":6,"seconds":360,"label":"Sauce","range":[360,480]},{"step":10,"seconds":180,"label":"Fish","range":[180,240]}]}

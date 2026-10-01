@@ -1,0 +1,1 @@
+{"steps":[{"step":1,"seconds":300,"label":"Step 2"},{"step":4,"seconds":300,"label":"Step 5","range":[300,360]},{"step":6,"seconds":180,"label":"Step 7","range":[180,240]},{"step":9,"seconds":120,"label":"Step 10","range":[120,180]},{"step":10,"seconds":300,"label":"Cheese"}]}
