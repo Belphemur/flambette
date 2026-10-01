@@ -45,9 +45,10 @@ function addToPlan(row: Row) {
 <template>
   <section class="space-y-3" aria-label="Cooking history">
     <p class="text-xs text-stone-500 dark:text-stone-400" data-test="history-sync-note">
-      Personal to this device by default (ADR-0011). Turn on
-      <strong>“Also sync cooked history”</strong> in Settings → Household sync to share it with the room — history then
-      syncs both ways, last write wins.
+      Shared with your household by default — every phone in the room contributes to one cooking log, and histories
+      merge rather than overwrite each other. Turn off
+      <strong>“Sync cooked history”</strong> in Settings → Household sync to stop sharing new cooks — cooks shared
+      earlier stay in the room, so this controls what goes out from here, not what has already been shared.
     </p>
 
     <div

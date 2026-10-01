@@ -152,21 +152,33 @@ export const STORE_SLICES: SliceDef<any>[] = [
       grocery.map = map
     },
   },
-  /* Personal cooked history (plan store, personal slice — always in backups). */
+  /* Personal cooked history (plan store, personal slice — always in backups).
+   * The per-device `id` (ADR-0032) IS exported: it is the event's identity
+   * across the household — other peers hold this same event under its id,
+   * so a restored install must keep it or the next merge counts the event
+   * twice (restored copy keys by the pair, peers by id). Export and import
+   * are id-transparent, so a backup round-trips byte-equal; legacy rows
+   * without an id keep the (variantId, cookedAt) pair fallback. */
   {
     file: 'cooked-history.json',
     label: 'cooked-meal history',
     persistKeys: ['mealime-planner:v1:plan'],
-    read: () => usePlanStore().cookedHistory.map((h) => ({ ...h })),
+    read: () =>
+      usePlanStore().cookedHistory.map((h) =>
+        h.id !== undefined
+          ? { variantId: h.variantId, cookedAt: h.cookedAt, id: h.id }
+          : { variantId: h.variantId, cookedAt: h.cookedAt },
+      ),
     validate(value) {
       if (!Array.isArray(value)) return 'cooked-history.json must be an array'
       for (const r of value) {
         if (
           typeof r !== 'object' || r === null ||
           typeof (r as CookedEntry).variantId !== 'number' || !Number.isFinite((r as CookedEntry).variantId) ||
-          typeof (r as CookedEntry).cookedAt !== 'number' || !Number.isFinite((r as CookedEntry).cookedAt)
+          typeof (r as CookedEntry).cookedAt !== 'number' || !Number.isFinite((r as CookedEntry).cookedAt) ||
+          ((r as CookedEntry).id !== undefined && typeof (r as CookedEntry).id !== 'string')
         ) {
-          return 'cooked history rows must be {variantId, cookedAt} numbers'
+          return 'cooked history rows must be {variantId, cookedAt} numbers + optional id string'
         }
       }
       return null
@@ -199,11 +211,15 @@ export const STORE_SLICES: SliceDef<any>[] = [
       useCustomIngredientsStore().replaceAll(value as CustomIngredient[])
     },
   },
-  /* Persisted ui prefs (history-sharing opt-in + quick filters + household
+  /* Persisted ui prefs (history-sharing opt-OUT + quick filters + household
      room + theme + step timers). ADR-0027 unified the Recipes-tab filters
      into one `quickFilters` object; the legacy `dietFilters` array is still
      EMITTED (mirrored) so a backup restores the diet chips on an install
-     that predates the unified model, and still ACCEPTED on import. */
+     that predates the unified model, and still ACCEPTED on import.
+     ADR-0032 flipped `shareCookedHistory` to on-by-default: the member is
+     the device's opt-OUT choice, and a restore that carries it counts as
+     explicit (it also marks the one-time default migration as done, so
+     importing an old backup is not re-flipped on the next launch). */
   {
     file: 'settings.json',
     label: 'settings (cooked-history room sharing + quick filters + household room + step timers + theme)',

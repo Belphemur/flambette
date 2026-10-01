@@ -2,9 +2,10 @@ import { computed } from 'vue'
 import { usePlanStore, type CookedEntry } from '../stores/plan'
 
 /**
- * Read-side selectors over the plan store's personal cooked history
- * (ADR-0011). The store rows are one per cook EVENT; aggregating into
- * per-recipe rows (count + last date) happens here, never in a view.
+ * Read-side selectors over the plan store's cooked history (ADR-0011,
+ * shared with the room by default since ADR-0032). The store rows are one
+ * per cook EVENT; aggregating into per-recipe rows (count + last date)
+ * happens here, never in a view.
  */
 
 /** One aggregated history row: a recipe and how often it was cooked. */
@@ -30,7 +31,7 @@ export function aggregateHistory(events: CookedEntry[]): HistoryEntry[] {
   return [...byVariant.values()].sort((a, b) => b.lastAt - a.lastAt)
 }
 
-/** How many times this variant was cooked (this device only). */
+/** How many times this variant was cooked (this device + the room). */
 export function cookCount(events: CookedEntry[], variantId: number): number {
   let n = 0
   for (const e of events) if (e.variantId === variantId) n += 1

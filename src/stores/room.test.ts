@@ -278,6 +278,242 @@ describe('room store — revisions never restart (F4)', () => {
   })
 })
 
+describe('cooked history is household state by default (ADR-0032)', () => {
+  test('DEFAULT: the payload carries cookedHistory', async () => {
+    const plan = usePlanStore()
+    const ui = useUiStore()
+    expect(ui.shareCookedHistory).toBe(true) // the flipped default
+    const { socket } = await startRoom()
+    plan.replaceCookedHistory([{ variantId: 7, cookedAt: 1000 }])
+    await sleep(500) // debounce
+    const pushed = socket.frames('state').at(-1)!
+    expect((pushed.state as { cookedHistory?: unknown[] }).cookedHistory).toEqual([
+      { variantId: 7, cookedAt: 1000 },
+    ])
+  })
+
+  test('an explicit OPT-OUT keeps it off the wire, and a peer payload still merges in', async () => {
+    const plan = usePlanStore()
+    const ui = useUiStore()
+    const { socket } = await startRoom()
+    ui.shareCookedHistory = false
+    plan.replaceCookedHistory([{ variantId: 7, cookedAt: 1000 }])
+    await sleep(500)
+    const pushed = socket.frames('state').at(-1)!
+    // The key must be ABSENT, not empty: absence is what an older peer
+    // reads as "this device shares nothing".
+    expect('cookedHistory' in (pushed.state as object)).toBe(false)
+
+    // …and history still ARRIVES from a peer that shares (an opt-out is
+    // about sending, not about being cut off).
+    socket.receive({
+      type: 'state',
+      rev: 40,
+      state: {
+        plan: [],
+        customItems: [],
+        checked: {},
+        cookedHistory: [{ variantId: 9, cookedAt: 2000 }],
+      },
+    })
+    expect(plan.cookedHistory).toEqual([
+      { variantId: 9, cookedAt: 2000 },
+      { variantId: 7, cookedAt: 1000 },
+    ])
+  })
+
+  test('applying a peer history UNIONS it (a shorter peer never erases ours)', async () => {
+    const plan = usePlanStore()
+    const { socket } = await startRoom()
+    plan.replaceCookedHistory([
+      { variantId: 1, cookedAt: 10 },
+      { variantId: 2, cookedAt: 20 },
+      { variantId: 3, cookedAt: 30 },
+    ])
+    socket.receive({
+      type: 'state',
+      rev: 50,
+      state: {
+        plan: [],
+        customItems: [],
+        checked: {},
+        // A phone that has cooked less, plus one row we already have.
+        cookedHistory: [
+          { variantId: 3, cookedAt: 30 },
+          { variantId: 9, cookedAt: 90 },
+        ],
+      },
+    })
+    // Whole-state replace would have dropped 1 and 2; the union keeps them.
+    expect(plan.cookedHistory.map((h) => h.variantId).sort()).toEqual([1, 2, 3, 9])
+  })
+
+  test('flipping the opt-out OFF afterwards sends a retroactive push without history', async () => {
+    const plan = usePlanStore()
+    const ui = useUiStore()
+    const { socket } = await startRoom()
+    plan.replaceCookedHistory([{ variantId: 7, cookedAt: 1000 }])
+    await sleep(500)
+    const withHistory = socket.frames('state').at(-1)!
+    expect('cookedHistory' in (withHistory.state as object)).toBe(true)
+
+    ui.shareCookedHistory = false
+    await sleep(500)
+    const optedOut = socket.frames('state').at(-1)!
+    expect('cookedHistory' in (optedOut.state as object)).toBe(false)
+  })
+
+  test('two cooks of the same recipe in the same millisecond stay distinct (id disambiguates the pair)', () => {
+    // qodo #4: (variantId, cookedAt) collides when two phones cook the same
+    // recipe in the same ms; the merge must dedupe on the per-device id, not
+    // the pair, or one cook silently vanishes.
+    const plan = usePlanStore()
+    plan.replaceCookedHistory([
+      { variantId: 1, cookedAt: 1000, id: 'a' },
+      { variantId: 1, cookedAt: 1000, id: 'b' },
+    ])
+    const added = plan.mergeCookedHistory([
+      { variantId: 1, cookedAt: 1000, id: 'c' },
+      // same pair but a different id — must NOT count as a duplicate.
+    ])
+    expect(added).toBe(true)
+    expect(plan.cookedHistory).toHaveLength(3)
+  })
+
+  test('a joiner that already has local cooks republishes them to the room', async () => {
+    // qodo #2: a joining phone with its own cook events must push them so
+    // later peers receive them — adopting the snapshot silently would leave
+    // the household's raw snapshot incomplete.
+    const plan = usePlanStore()
+    const ui = useUiStore()
+    ui.shareCookedHistory = true
+    // Local cooks the relay does NOT yet hold.
+    plan.replaceCookedHistory([{ variantId: 5, cookedAt: 50, id: 'local' }])
+    const { socket } = await startRoom('rose-thistle-moss')
+    await sleep(5)
+    // Peer's snapshot arrives, UNIONing its history onto ours.
+    socket.receive({
+      type: 'state',
+      rev: 60,
+      state: {
+        plan: [],
+        customItems: [],
+        checked: {},
+        cookedHistory: [{ variantId: 8, cookedAt: 80, id: 'peer' }],
+      },
+    })
+    // The inbound union pulled in a new row (applyRemote's finally
+    // reconciliation) → the device republishes at a higher rev.
+    await sleep(5)
+    const outbound = socket.frames('state').at(-1)!
+    expect(outbound.rev).toBeGreaterThan(60)
+    const shared = (outbound.state as { cookedHistory?: unknown[] }).cookedHistory
+    expect(shared).toBeDefined()
+    expect(
+      (shared as { variantId: number }[]).map((h) => h.variantId).sort(),
+    ).toEqual([5, 8])
+  })
+
+  test('a joiner adopting a snapshot SMALLER than its own history republishes the missing rows (CodeRabbit mirror case)', async () => {
+    // inboundAdded only sees rows the snapshot had that we lacked. A
+    // joiner with local cooks adopting an EMPTY room's history returns
+    // added=false and (ADR-0028) does not push — its cooks would never
+    // reach the household. The union-vs-incoming check catches this.
+    const plan = usePlanStore()
+    const ui = useUiStore()
+    ui.shareCookedHistory = true
+    plan.replaceCookedHistory([{ variantId: 5, cookedAt: 50, id: 'local' }])
+    const { socket } = await startRoom('rose-thistle-moss')
+    await sleep(5)
+    // Empty-room snapshot: the key is PRESENT but holds nothing (a join
+    // answers `created` for an unknown code, so a seeded empty room is a
+    // `joined`-shaped state with an empty history list).
+    socket.receive({
+      type: 'state',
+      rev: 60,
+      state: { plan: [], customItems: [], checked: {}, cookedHistory: [] },
+    })
+    await sleep(5)
+    const outbound = socket.frames('state').at(-1)!
+    expect(outbound.rev).toBeGreaterThan(60)
+    const shared = (outbound.state as { cookedHistory?: unknown[] }).cookedHistory
+    expect(shared).toBeDefined()
+    expect((shared as { variantId: number }[]).map((h) => h.variantId)).toEqual([5])
+  })
+
+  test('a snapshot WITHOUT the history key (opted-out sender) never reconciles', async () => {
+    // Absence means "don't touch" (ADR-0028 member rule): if absence
+    // reconciled, every receipt of a history-less state would republish
+    // our rows at a higher rev forever — a two-peer rev ping-pong.
+    const plan = usePlanStore()
+    plan.replaceCookedHistory([{ variantId: 5, cookedAt: 50, id: 'local' }])
+    const { socket } = await startRoom('rose-thistle-moss')
+    await sleep(500) // our own push flushes; note the LAST frame's rev
+    const baseline = socket.frames('state').at(-1)!.rev
+    socket.receive({
+      type: 'state',
+      rev: baseline + 1,
+      state: { plan: [], customItems: [], checked: {} },
+    })
+    await sleep(500)
+    // The only state frame after the inbound one is the pre-existing
+    // baseline push; a reconcile would have minted a strictly higher rev.
+    expect(socket.frames('state').at(-1)!.rev).toBe(baseline)
+    expect(plan.cookedHistory.map((h) => h.variantId)).toEqual([5])
+  })
+
+  test('the capped-history merge is deterministic and counts only RETAINED rows (no rev ping-pong)', () => {
+    // CodeRabbit: two devices holding 199 shared newer events plus
+    // DIFFERENT events at the boundary timestamp must sort identically
+    // (stable event-key tie-break), and an inbound event the cap discards
+    // must not report an addition — otherwise each device republishes its
+    // unchanged history forever.
+    const plan = usePlanStore()
+    const existing = Array.from({ length: 199 }, (_, i) => ({
+      variantId: i + 1,
+      cookedAt: 100_000 + (199 - i), // newest first, all newer than the edge
+    }))
+    plan.replaceCookedHistory(existing)
+    // OUR edge event vs the peer's, same timestamp, different identity:
+    // both sides sort deterministically, so exactly ONE survives on every
+    // device and the discarded one is never counted as added.
+    plan.replaceCookedHistory([...existing, { variantId: 500, cookedAt: 50_000, id: 'ours' }])
+    const added = plan.mergeCookedHistory([
+      ...existing,
+      { variantId: 500, cookedAt: 50_000, id: 'theirs' },
+    ])
+    expect(added).toBe(false)
+    expect(plan.cookedHistory).toHaveLength(200)
+    expect(plan.cookedHistory.at(-1)).toEqual({ variantId: 500, cookedAt: 50_000, id: 'ours' })
+  })
+
+  test('restore keeps event ids, so the next merge dedupes instead of double-counting', () => {
+    // CodeRabbit: export/import used to strip the id, so a restored copy
+    // keyed by the pair while peers keyed the same event by id — the next
+    // merge counted it twice.
+    const plan = usePlanStore()
+    plan.replaceCookedHistory([{ variantId: 5, cookedAt: 100, id: 'peer-9' }])
+    plan.mergeCookedHistory([{ variantId: 5, cookedAt: 100, id: 'peer-9' }])
+    expect(plan.cookedHistory).toHaveLength(1)
+  })
+
+  test('minted ids survive a counter reset: a fresh session never collides with persisted ids', () => {
+    // CodeRabbit: cookIdSeq was a bare module counter — a reload restarted
+    // it at 0 while persisted history kept ids 0..N, so a NEW cook could
+    // collide with an OLD row and the merge would drop the inbound event.
+    const plan = usePlanStore()
+    plan.replaceCookedHistory([
+      { variantId: 1, cookedAt: 10, id: '0' },
+      { variantId: 1, cookedAt: 11, id: '1' },
+    ])
+    plan.markCooked(2)
+    const minted = plan.cookedHistory[0]!
+    // The minted id cannot be a plain sequential number.
+    expect(minted.id).not.toBe('2')
+    expect(Number.isNaN(Number(minted.id))).toBe(true)
+  })
+})
+
 describe('room store — quick filters are household state (ADR-0028)', () => {
   test('a payload WITH filters is applied, unknown members are repaired', async () => {
     const { socket } = await startRoom()

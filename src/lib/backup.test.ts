@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { createPinia, setActivePinia } from 'pinia'
 import { STORE_SLICES } from './backup'
 import { useUiStore } from '../stores/ui'
+import { usePlanStore } from '../stores/plan'
 import { useRatingStore } from '../stores/rating'
 
 /** read() of the settings slice also carries the theme override, which
@@ -137,6 +138,61 @@ describe('settings import (ADR-0013 registry)', () => {
     expect(ui.autoPlanRuleset).toBe('dinner')
     expect(ui.autoPlanMode).toBe('add')
     expect(ui.autoPlanGeneration).toBe(0)
+  })
+})
+
+/**
+ * ADR-0032 — the cooked-history slice. The per-device `id` travels WITH
+ * the backup: it is the event's identity across the household, so a
+ * restored install must keep it or the next room merge counts the event
+ * twice (restored copy keys by the pair, peers by id).
+ */
+describe('cooked-history slice (ADR-0032 registry)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    ;(globalThis as Record<string, unknown>).localStorage = memoryStorage()
+  })
+
+  const historySlice = () => {
+    const slice = STORE_SLICES.find((s) => s.file === 'cooked-history.json')
+    if (!slice) throw new Error('cooked-history.json slice missing from STORE_SLICES')
+    return slice
+  }
+
+  test('export PRESERVES the event id (round-trip keeps household identity)', () => {
+    usePlanStore().replaceCookedHistory([
+      { variantId: 5, cookedAt: 100, id: 'dev-1' },
+      { variantId: 6, cookedAt: 90 },
+    ])
+    expect(historySlice().read()).toEqual([
+      { variantId: 5, cookedAt: 100, id: 'dev-1' },
+      { variantId: 6, cookedAt: 90 },
+    ])
+  })
+
+  test('import preserves ids; legacy rows without one keep the pair fallback', () => {
+    const store = usePlanStore()
+    historySlice().write([
+      { variantId: 5, cookedAt: 100, id: 'peer-9' },
+      { variantId: 6, cookedAt: 90 },
+    ] as never)
+    expect(store.cookedHistory).toEqual([
+      { variantId: 5, cookedAt: 100, id: 'peer-9' },
+      { variantId: 6, cookedAt: 90 },
+    ])
+
+    // A restored event keeps its id → a later room merge with a peer that
+    // holds the same event dedupes instead of double-counting.
+    store.mergeCookedHistory([{ variantId: 5, cookedAt: 100, id: 'peer-9' }])
+    expect(store.cookedHistory).toHaveLength(2)
+  })
+
+  test('validate: rows must be numbers + an OPTIONAL string id', () => {
+    expect(historySlice().validate([{ variantId: 5, cookedAt: 100, id: 'a' }])).toBeNull()
+    expect(historySlice().validate([{ variantId: 5, cookedAt: 100 }])).toBeNull()
+    expect(historySlice().validate([{ variantId: 5, cookedAt: 100, id: 3 }])).toContain(
+      'optional id string',
+    )
   })
 })
 

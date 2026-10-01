@@ -11,7 +11,7 @@ import {
 } from '../lib/quickFilters'
 import { useCustomIngredientsStore, type CustomIngredient } from './customIngredients'
 import { useFavouritesStore, DEFAULT_STAMP } from './favourites'
-import { usePlanStore, type CookedEntry } from './plan'
+import { usePlanStore, cookedEventKey, type CookedEntry } from './plan'
 import { useGroceryStore } from './grocery'
 import { useRatingStore } from './rating'
 import { useUiStore } from './ui'
@@ -30,9 +30,9 @@ interface SharedState {
   /** Remembered custom-ingredient names — HOUSEHOLD state (ADR-0012:
    *  device-local → household, 2026 policy change). */
   customs?: CustomIngredient[]
-  /** Personal cooked history — included ONLY when the sender opted in via
-   *  the shareCookedHistory setting (ADR-0011 addendum); otherwise a
-   *  personal slice that must never cross the wire. */
+  /** Cooked history — HOUSEHOLD state by default (ADR-0032 supersedes
+   *  ADR-0011's opt-in) and included only when the SENDER has sharing on;
+   *  a device that opted out never puts it on the wire. */
   cookedHistory?: CookedEntry[]
   /**
    * Household half of the quick filters (ADR-0028). `favOnly` is
@@ -223,7 +223,8 @@ export const useRoomStore = defineStore('room', () => {
     if (Object.keys(ratings.map).length > 0) {
       state.ratings = { ...ratings.map }
     }
-    // Personal history only crosses the wire when the sender opted in.
+    // History crosses the wire unless the SENDER has opted out
+    // (ADR-0032: on by default, opt-out is permanent).
     if (ui.shareCookedHistory) {
       state.cookedHistory = plan.cookedHistory.map((h) => ({ ...h }))
     }
@@ -232,6 +233,15 @@ export const useRoomStore = defineStore('room', () => {
 
   function applyRemote(state: SharedState) {
     applyingRemote = true
+    // Finding #2 (qodo): did an inbound merge add cooked-history rows we
+    // now need to reconcile to the room? Declared in scope so the finally
+    // block can read it.
+    let inboundAdded = false
+    // CodeRabbit: the mirror case — rows WE hold that the room's snapshot
+    // lacks (a joiner with local cooks adopting an empty/subset history).
+    // inboundAdded only sees the other direction and would return false,
+    // silently stranding our cooks from the household forever.
+    let localRowsMissingFromRoom = false
     try {
       plan.replacePlan(state.plan ?? [], state.customItems ?? [])
       const checked: Record<string, boolean> = {}
@@ -243,10 +253,24 @@ export const useRoomStore = defineStore('room', () => {
       // Household custom-ingredient memory (ADR-0012); absent on old
       // payloads → treated as "nothing shared yet", NOT as "wipe local".
       if (state.customs) customIngredients.replaceAll(state.customs)
-      // Cooked history arrives only from opted-in senders (ADR-0011
-      // addendum). Wipe-to-empty is intentional when a sharer with an
-      // empty history pushes: whole-state LWW.
-      if (state.cookedHistory) plan.replaceCookedHistory(state.cookedHistory)
+      // Cooked history arrives from senders that have sharing on
+      // (ADR-0032). It is a UNION, not a replace: history is append-only
+      // with no delete feature, and now that every device pushes it at
+      // once, a replace would let whoever pushed last erase the other
+      // phones' cooks. An empty inbound list is a peer that cooked
+      // nothing, not a request to wipe ours. RECONCILE BOTH DIRECTIONS:
+      // rows the snapshot had that we lacked (→ republish so peers learn
+      // them) AND rows we hold that the snapshot lacked (→ republish so
+      // the room learns ours). An ABSENT cookedHistory key is "don't
+      // touch" — an opted-out sender's snapshot never reconciles, or a
+      // history-less state receipt would republish forever.
+      if (state.cookedHistory) {
+        const incomingKeys = new Set(state.cookedHistory.map(cookedEventKey))
+        inboundAdded = plan.mergeCookedHistory(state.cookedHistory)
+        localRowsMissingFromRoom = plan.cookedHistory.some(
+          (row) => !incomingKeys.has(cookedEventKey(row)),
+        )
+      }
       // Quick filters (ADR-0028). ABSENCE means "don't touch": an older
       // peer sends no `filters` key, and treating that as an empty
       // selection would wipe the household's filters on every push. The
@@ -273,6 +297,23 @@ export const useRoomStore = defineStore('room', () => {
       if (state.ratings != null) ratings.mergeRemote(state.ratings)
     } finally {
       applyingRemote = false
+      // Finding #2 (qodo) + CodeRabbit mirror case: an inbound merge can
+      // pull cook events the relay does not yet hold, AND a joiner that
+      // adopts a snapshot can hold events the snapshot lacks. The watch on
+      // cookedHistory is muted by `applyingRemote`, so those rows would
+      // never reach later peers. Reconcile here: republish the household
+      // snapshot — BUT only when no local plan edit is pending, so we
+      // never clobber another peer's uncommitted edit. Republishing is
+      // convergent: the next snapshot the room echoes carries the union,
+      // so both flags go false and the pushes stop.
+      if (
+        (inboundAdded || localRowsMissingFromRoom) &&
+        !localEditPending &&
+        ui.shareCookedHistory
+      ) {
+        localRev = Math.max(localRev, maxSeenRev) + 1
+        sendState()
+      }
     }
   }
 
@@ -342,14 +383,24 @@ export const useRoomStore = defineStore('room', () => {
    * Take delivery of an inbound snapshot. The REVISION is always absorbed
    * — it is proof of ordering, and dropping it would let our next push
    * reuse a rev the room has already passed, so peers would ignore it.
-   * Only the CONTENT is withheld while a local edit is still queued: our
-   * push is sent at a strictly higher rev and carries our whole state, so
-   * the withheld snapshot is older by the time it would have been applied.
+   * Only the last-write-wins CONTENT is withheld while a local edit is
+   * still queued: our push is sent at a strictly higher rev and carries
+   * our whole state, so the withheld snapshot is older by the time it
+   * would have been applied. Append-only members (cooked history) are the
+   * exception — see below.
    */
   function acceptRemote(rev: number, state: unknown) {
     maxSeenRev = localRev = rev
-    if (localEditPending) return
-    applyRemote(state as SharedState)
+    const incoming = state as SharedState
+    if (localEditPending) {
+      // APPEND-ONLY members are still applied. A union cannot clobber the
+      // queued edit, and withholding it would lose the peer's cook events
+      // PERMANENTLY: our push is built from the local list, and nothing
+      // would ever resend what we just refused (ADR-0032).
+      if (Array.isArray(incoming.cookedHistory)) plan.mergeCookedHistory(incoming.cookedHistory)
+      return
+    }
+    applyRemote(incoming)
   }
 
   /**
@@ -384,7 +435,7 @@ export const useRoomStore = defineStore('room', () => {
         customIngredients.list,
         ui.quickFilters, // quick filters are household state (ADR-0028)
         plan.cookedHistory, // only pushed when ui.shareCookedHistory — snapshot() gates it
-        ui.shareCookedHistory, // flipping ON must trigger a retroactive push
+        ui.shareCookedHistory, // flipping sharing must trigger a retroactive push
       ] as const,
     () => schedulePush(),
     { deep: true, flush: 'sync' },

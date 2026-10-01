@@ -212,10 +212,10 @@ function cancelBackupImport(): void {
       <!-- Always rendered, never behind a saved-room condition: the note
            on the History tab points here, and a member in a Plan-tab
            room (or with no household code yet) must still be able to
-           opt in. The control only means anything once a room exists,
+           opt out. The control only means anything once a room exists,
            which the surrounding card says out loud. -->
       <div
-        class="flex items-center gap-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 dark:border-amber-700/60 dark:bg-amber-950/40"
+        class="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2 dark:border-stone-700 dark:bg-stone-900"
         data-test="history-sharing-row"
       >
         <label class="flex min-w-0 flex-1 items-start gap-2 text-xs dark:text-stone-300">
@@ -227,10 +227,10 @@ function cancelBackupImport(): void {
             data-test="share-cooked-history"
           />
           <span>
-            Also sync <strong>cooked history</strong> with the household.
+            Sync <strong>cooked history</strong> with the household.
             <span class="block dark:text-stone-400">
-              Off by default — what you cook is personal (ADR-0011). Turning it on sends this device's history to the
-              room and applies the other phones' history here.
+              On by default — everyone in the room shares one cooking log, and histories merge rather than replace.
+              Turn this off to stop sharing new cooks: this device will no longer send its history to the room, and future snapshots won't include it. Cooks shared earlier stay in the room — sharing only controls what goes out from here.
             </span>
           </span>
         </label>
