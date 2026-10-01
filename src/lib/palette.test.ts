@@ -2,25 +2,60 @@ import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ICON_HUES, ICON_ROLES, hueClass, ingredientRole, proteinRole } from './palette'
+import {
+  ICON_ROLES,
+  ROLE_GLYPHS,
+  dietHueClass,
+  dietRole,
+  hueClass,
+  ingredientRole,
+  proteinHueClass,
+  proteinRole,
+  roleGlyph,
+  type IconRole,
+} from './palette'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const styleCss = readFileSync(resolve(REPO_ROOT, 'src/style.css'), 'utf8')
 const designMd = readFileSync(resolve(REPO_ROOT, 'DESIGN.md'), 'utf8')
 
-/** The colours DESIGN.md declares and `@theme` mirrors, token -> variable.
- *  `primary` is the only RENAMED pair (the CSS side is `--color-brand`, so
- *  the legacy `primary` utility does not shadow the theme token). */
+/**
+ * The DESIGN.md colour token -> the `@theme` variable that carries it.
+ *
+ * The RENAMES are the interesting part and are deliberate: DESIGN.md
+ * names the tomato family `primary-*` (it is the one action colour in
+ * the product language) while Tailwind's own `primary` scale would
+ * shadow the theme variable, so the CSS side calls it `brand-*`. The
+ * values are still transcriptions — that is what the value test below
+ * asserts.
+ */
 const COLOR_TOKENS: Record<string, string> = {
   primary: '--color-brand',
   'primary-strong': '--color-brand-strong',
   'primary-soft': '--color-brand-soft',
   'primary-tint': '--color-brand-tint',
+  'primary-tint-dark': '--color-brand-tint-dark',
   'on-primary': '--color-on-brand',
+  surface: '--color-surface',
+  'surface-raised': '--color-surface-raised',
+  'surface-sunken': '--color-surface-sunken',
+  border: '--color-border',
+  'border-strong': '--color-border-strong',
+  text: '--color-text',
+  'text-muted': '--color-text-muted',
+  'surface-dark': '--color-surface-dark',
+  'surface-dark-raised': '--color-surface-dark-raised',
+  'surface-dark-sunken': '--color-surface-dark-sunken',
+  'border-dark': '--color-border-dark',
+  'border-dark-strong': '--color-border-dark-strong',
+  'text-dark': '--color-text-dark',
+  'text-dark-muted': '--color-text-dark-muted',
   'hue-meat': '--color-hue-meat',
   'hue-meat-soft': '--color-hue-meat-soft',
   'hue-fish': '--color-hue-fish',
   'hue-fish-soft': '--color-hue-fish-soft',
+  'hue-vegetarian': '--color-hue-vegetarian',
+  'hue-vegetarian-soft': '--color-hue-vegetarian-soft',
   'hue-vegan': '--color-hue-vegan',
   'hue-vegan-soft': '--color-hue-vegan-soft',
   'nutrition-energy': '--color-nutrition-energy',
@@ -28,7 +63,9 @@ const COLOR_TOKENS: Record<string, string> = {
   'nutrition-sodium': '--color-nutrition-sodium',
   'nutrition-sodium-soft': '--color-nutrition-sodium-soft',
   warning: '--color-warning',
+  'warning-soft': '--color-warning-soft',
   danger: '--color-danger',
+  'danger-soft': '--color-danger-soft',
   favourite: '--color-favourite',
   'favourite-soft': '--color-favourite-soft',
 }
@@ -57,22 +94,59 @@ function themeVar(cssVar: string): string | null {
   return m ? m[1].trim().toLowerCase() : null
 }
 
-describe('icon hue contract (ADR-0035)', () => {
-  test('each role owns a distinct token pair and a label', () => {
-    const tokens = ICON_ROLES.map((r) => ICON_HUES[r].token)
+const ALL_ROLES = Object.keys(ICON_ROLES) as IconRole[]
+
+describe('the icon role registry (ADR-0036)', () => {
+  test('every role owns a distinct token pair, one literal class and a label', () => {
+    const tokens = ALL_ROLES.map((r) => ICON_ROLES[r].token)
     expect(new Set(tokens).size).toBe(tokens.length)
-    for (const role of ICON_ROLES) {
-      expect(ICON_HUES[role].darkToken).toBe(`${ICON_HUES[role].token}-soft`)
-      expect(ICON_HUES[role].label.length).toBeGreaterThan(0)
+    const classes = ALL_ROLES.map((r) => ICON_ROLES[r].className)
+    expect(new Set(classes).size).toBe(classes.length)
+    for (const role of ALL_ROLES) {
+      const spec = ICON_ROLES[role]
+      expect(spec.darkToken).toBe(`${spec.token}-soft`)
+      expect(spec.label.length).toBeGreaterThan(0)
+      expect(ROLE_GLYPHS[spec.glyph]).toBeDefined()
     }
   })
 
-  test('categorical roles are ingredient types, semantic roles are nutrition', () => {
-    expect(ICON_HUES.meat.kind).toBe('categorical')
-    expect(ICON_HUES.fish.kind).toBe('categorical')
-    expect(ICON_HUES.vegan.kind).toBe('categorical')
-    expect(ICON_HUES.energy.kind).toBe('semantic')
-    expect(ICON_HUES.sodium.kind).toBe('semantic')
+  test('the class is a LITERAL single utility — dark mode is the theme, not a prefix', () => {
+    // Tailwind scans source TEXT for complete class names, so an
+    // interpolated `text-${token}` emits no CSS at all and the icon ships
+    // uncoloured. A `dark:` variant here would be dead weight AND would
+    // re-introduce the per-component dark-mode forgetting the theme flip
+    // exists to prevent.
+    for (const role of ALL_ROLES) {
+      const cls = hueClass(role)
+      expect(cls).toBe(`text-${ICON_ROLES[role].token}`)
+      expect(cls.split(' ')).toHaveLength(1)
+      expect(cls).not.toContain('dark:')
+      expect(cls).not.toContain('${')
+      // …and the literal really is in the source, which is what makes
+      // Tailwind emit the utility at all.
+      expect(styleCss.includes(`--color-${ICON_ROLES[role].token}:`)).toBe(true)
+    }
+  })
+
+  test('every role maps to a distinct glyph, and vegetarian ≠ vegan', () => {
+    const glyphs = ALL_ROLES.map((r) => ICON_ROLES[r].glyph)
+    expect(new Set(glyphs).size).toBe(glyphs.length)
+    // Owner decision (ADR-0036): the two greens must read apart in
+    // MONOCHROME too, so a shared glyph is not allowed even if the hues
+    // were close.
+    expect(ICON_ROLES.vegetarian.glyph).not.toBe(ICON_ROLES.vegan.glyph)
+    expect(ICON_ROLES.vegetarian.token).not.toBe(ICON_ROLES.vegan.token)
+    expect(ICON_ROLES.vegetarian.label).toBe('Vegetarian')
+    expect(ICON_ROLES.vegan.label).toBe('Vegan')
+  })
+
+  test('categorical roles are food types, semantic roles are nutrition facts', () => {
+    expect(ICON_ROLES.meat.kind).toBe('categorical')
+    expect(ICON_ROLES.fish.kind).toBe('categorical')
+    expect(ICON_ROLES.vegetarian.kind).toBe('categorical')
+    expect(ICON_ROLES.vegan.kind).toBe('categorical')
+    expect(ICON_ROLES.energy.kind).toBe('semantic')
+    expect(ICON_ROLES.sodium.kind).toBe('semantic')
   })
 
   test('every mapped token VALUE matches between DESIGN.md and @theme', () => {
@@ -90,29 +164,37 @@ describe('icon hue contract (ADR-0035)', () => {
     }
   })
 
-  test('hueClass spells its utilities out — no generated class names', () => {
-    // Tailwind scans source TEXT for complete class names, so an
-    // interpolated `text-${token}` emits no CSS and the icon ships
-    // uncoloured (in dark mode only, which is why it slips through).
-    for (const role of ICON_ROLES) {
-      const cls = hueClass(role)
-      expect(cls).not.toContain('${')
-      expect(cls).toBe(`text-${ICON_HUES[role].token} dark:text-${ICON_HUES[role].darkToken}`)
-      expect(cls.split(' ')).toHaveLength(2)
+  test('the dark theme RE-POINTS each role at its -soft token', () => {
+    // The structural guarantee behind "dark mode cannot be forgotten per
+    // component": under `.dark` the same variable name resolves to the
+    // soft value, so a component written once is correct in both themes.
+    for (const role of ALL_ROLES) {
+      const spec = ICON_ROLES[role]
+      const flip = styleCss.match(
+        new RegExp(`\\.dark[^{]*\\{[^}]*--color-${spec.token}:\\s*var\\(--color-${spec.darkToken}\\s*(,[^)]*)?\\)`),
+      )
+      expect(flip, `${spec.token} is not flipped to ${spec.darkToken} under .dark`).not.toBeNull()
+    }
+  })
+
+  test('roleGlyph returns the very glyph the registry names', () => {
+    for (const role of ALL_ROLES) {
+      expect(roleGlyph(role)).toBe(ROLE_GLYPHS[ICON_ROLES[role].glyph])
     }
   })
 })
 
-describe('ingredient type roles', () => {
-  test('the three catalog categories map to their hue', () => {
+describe('ingredient, protein and diet roles', () => {
+  test('the catalog categories map to their own hue', () => {
     expect(ingredientRole('meat')).toBe('meat')
     expect(ingredientRole('fish')).toBe('fish')
-    expect(ingredientRole('vegetarian')).toBe('vegan')
+    expect(ingredientRole('vegetarian')).toBe('vegetarian')
   })
 
   test('an unknown or absent category gets NO icon rather than a wrong hue', () => {
-    // The catalog publishes exactly three category names; anything else is
-    // a data change, and a wrong hue is worse than no icon.
+    // The catalog publishes exactly three category names; anything else
+    // is a data change, and a wrong hue is worse than no icon.
+    expect(ingredientRole('vegan')).toBeNull()
     expect(ingredientRole('dessert')).toBeNull()
     expect(ingredientRole('')).toBeNull()
     expect(ingredientRole(null)).toBeNull()
@@ -121,7 +203,23 @@ describe('ingredient type roles', () => {
 
   test('the protein filter reuses the same map, and "any" is no icon', () => {
     expect(proteinRole('meat')).toBe('meat')
-    expect(proteinRole('vegetarian')).toBe('vegan')
+    expect(proteinRole('vegetarian')).toBe('vegetarian')
     expect(proteinRole('')).toBeNull()
+    expect(proteinHueClass('vegetarian')).toBe(hueClass('vegetarian'))
+  })
+
+  test('exclusion diets borrow the protein role; positive diets keep their own', () => {
+    expect(dietRole('no-pork')).toBe('meat')
+    expect(dietRole('no-meat')).toBe('meat')
+    expect(dietRole('no-shellfish')).toBe('fish')
+    expect(dietRole('vegetarian')).toBe('vegetarian')
+    expect(dietRole('vegan')).toBe('vegan')
+    expect(dietHueClass('no-shellfish')).toBe(hueClass('fish'))
+    expect(dietHueClass('vegan')).toBe(hueClass('vegan'))
+  })
+
+  test('"any protein" and an unknown diet wear no hue rather than a guessed one', () => {
+    expect(proteinHueClass('')).toBe('')
+    expect(dietHueClass('no-coriander')).toBe('')
   })
 })

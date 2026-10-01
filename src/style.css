@@ -5,77 +5,168 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ------------------------------------------------------------------ *
- * DESIGN TOKENS — the mirror of DESIGN.md (repo root).
+ * DESIGN TOKENS — the mirror of DESIGN.md (repo root), per ADR-0036.
  *
  * `DESIGN.md` is the SINGLE SOURCE OF TRUTH for the visual identity:
- * the palette, its machine-readable tokens and the rationale live
- * there, and this `@theme` block is the compilation of those tokens
- * into Tailwind utilities. Every colour below is transcribed from the
- * `colors:` front-matter of DESIGN.md — change the token there first,
- * then here, and never inline a raw hex in a component.
+ * the palette, its machine-readable tokens AND the composition rules
+ * live there. This `@theme` block is the compilation of those tokens
+ * into Tailwind utilities. Every value below is transcribed from the
+ * `colors:` / `typography:` / `rounded:` / `spacing:` front-matter of
+ * DESIGN.md — change the token there first, then here, and never inline
+ * a raw hex in a component.
  *
- * Neutral ramp mapping (DESIGN.md -> Tailwind's stock stone scale, which
- * is already exactly those values, so no duplication is needed here):
- *   surface #FAFAF9 -> stone-50      surface-dark        -> stone-950
- *   surface-raised  -> stone-100    surface-dark-raised -> stone-900
- *   surface-sunken  -> stone-200    surface-dark-sunken -> stone-800
- *   border          -> stone-200    border-dark         -> stone-700
- *   border-strong   -> stone-300    text                -> stone-800
- *   text            -> stone-800    text-dark           -> stone-50
- *   text-muted #57534E -> stone-600 text-dark-muted     -> stone-400
- *   text-subtle #78716C -> stone-500
+ * TWO deliberate translations, both documented here once (DESIGN.md
+ * Components/Verification contract, item 2):
  *
- * Contrast: every hue below is >= 4.5:1 against the light surface
- * (#FAFAF9) and its `-soft` counterpart is >= 4.5:1 against the dark
- * surface (#1C1917). Verified when the token was added; re-check if a
- * value changes. `DESIGN.md` holds the numbers.
+ * 1. `primary` -> `brand`. The Tailwind colour is `--color-brand`, so a
+ *    `primary` utility cannot shadow the theme token and every action
+ *    utility reads as `bg-brand` / `text-brand-strong`. The values are
+ *    DESIGN.md's, unchanged.
+ *
+ * 2. LIGHT/DARK PAIRING BY VARIABLE FLIP, not by `dark:` utility pairs.
+ *    Tailwind v4 utilities reference `var(--color-<name>)`, so the
+ *    `.dark` block below re-points each variable at its dark-surface
+ *    counterpart and every utility follows automatically. This is what
+ *    makes "a card that never got its `dark:` variant" structurally
+ *    impossible instead of a review checklist item — the espresso
+ *    surface cannot be forgotten on a component that only ever names
+ *    `bg-surface-raised`. Tokens whose dark value is a DIFFERENT TOKEN
+ *    NAME in DESIGN.md (e.g. `hue-*-soft`, `primary-tint-dark`) are
+ *    also handled here: the light name resolves to the soft value in
+ *    dark mode, so `text-hue-fish` is legible in both themes and the
+ *    role never ships an unstyled dark state.
+ *
+ * The one exception is deliberate and named: `primary-tint` (the
+ * selected-chip / active-nav surface) and `primary-soft` (dark action
+ * text) KEEP both utilities in markup where a component needs the
+ * literal dark token, because those pairings are design decisions, not
+ * a theme flip.
  * ------------------------------------------------------------------ */
 @theme {
-  /* Primary — tomato (`primary` in DESIGN.md). The app's ONE action
-     colour: primary buttons, the active nav tab, focus rings, selection.
-     This replaces the pre-DESIGN.md brand orange (`--color-primary`,
-     #f27930), whose white-on-orange pairing measured 2.8:1 — below WCAG
-     AA. Every former usage now wears this token. */
+  /* --- Brand: the app's ONE action colour (DESIGN.md `primary`) --- */
   --color-brand: #b3381f;
   --color-brand-strong: #8e2c17;
   --color-brand-soft: #f08a6a;
+  /* Brand FOREGROUND for text/outlines on a surface: DESIGN.md pairs
+     `primary-strong` on the light surfaces with `primary-soft` on the
+     dark ones. One alias, so no component has to remember which token
+     is legible in which theme. */
+  --color-brand-text: #8e2c17;
   --color-brand-tint: #fbeae5;
+  --color-brand-tint-dark: #44241d;
   --color-on-brand: #ffffff;
 
-  /* Categorical ingredient-TYPE hues. A hue is the icon's identity,
-     never its state: a selected chip is still its own food hue. */
+  /* --- Light surfaces & neutrals (DESIGN.md `colors`) --- */
+  --color-surface: #fff8f0;
+  --color-surface-raised: #ffffff;
+  --color-surface-sunken: #fff0e6;
+  --color-border: #e5d8cb;
+  --color-border-strong: #8c7a6b;
+  --color-text: #292524;
+  --color-text-muted: #63574e;
+
+  /* --- Dark surfaces & neutrals. Declared here so `dark:` utilities
+     exist for the rare component that needs the literal token (e.g. a
+     photo scrim that must stay espresso in BOTH themes), and so the
+     parity test can check the pair; the active dark values come from
+     the `.dark` flip block further down. --- */
+  --color-surface-dark: #171310;
+  --color-surface-dark-raised: #241c18;
+  --color-surface-dark-sunken: #32261f;
+  --color-border-dark: #564438;
+  --color-border-dark-strong: #a28e80;
+  --color-text-dark: #fff8f0;
+  --color-text-dark-muted: #c7b5a6;
+
+  /* --- Food & nutrition IDENTITIES (DESIGN.md `hue-*`, `nutrition-*`).
+     A hue is an icon's identity, never its state. --- */
   --color-hue-meat: #b3381f;
   --color-hue-meat-soft: #f08a6a;
   --color-hue-fish: #0e7490;
   --color-hue-fish-soft: #5cc0d8;
-  --color-hue-vegan: #3f7a33;
-  --color-hue-vegan-soft: #7fc97a;
-
-  /* Semantic NUTRITION hues — deliberately outside the categorical
-     family so an energy icon is never mistaken for an ingredient. */
-  --color-nutrition-energy: #c2410c;
+  --color-hue-vegetarian: #137a38;
+  --color-hue-vegetarian-soft: #86efac;
+  --color-hue-vegan: #047857;
+  --color-hue-vegan-soft: #6ee7b7;
+  --color-nutrition-energy: #b83a0a;
   --color-nutrition-energy-soft: #fbbf6e;
   --color-nutrition-sodium: #4f46e5;
   --color-nutrition-sodium-soft: #a5b4fc;
 
-  /* Status. */
+  /* --- Status. Not food identity: never a "what kind of food" cue. --- */
   --color-warning: #9a3412;
+  --color-warning-soft: #fdba74;
   --color-danger: #b91c1c;
+  --color-danger-soft: #fca5a5;
   --color-favourite: #e11d48;
   --color-favourite-soft: #fb7185;
 
-  /* Layout: the fluid app container (DESIGN.md `spacing.container`) and
-     the immersive reading column kept by the cooking view
-     (`spacing.reading`). */
+  /* --- Layout: the fluid app container (DESIGN.md `spacing.container`)
+     and the immersive reading column kept by the cooking view
+     (`spacing.reading`). --- */
   --container-app: 1100px;
   --container-reading: 672px;
 
-  /* Shapes (DESIGN.md `rounded`): sm 6px, md 8px, lg 12px, xl 16px,
+  /* --- Shapes (DESIGN.md `rounded`): sm 6px, md 8px, lg 12px, xl 16px,
      full 9999px -> Tailwind's rounded-md / rounded-lg / rounded-xl /
-     rounded-2xl / rounded-full. */
+     rounded-2xl / rounded-full. Recipe cards and dialogs take xl. --- */
+
+  /* --- Typography (DESIGN.md `typography`). The app is offline-first,
+     so the stack is system-ui: no webfont, no network request, no
+     claim that Inter exists on the user's device. Hierarchy comes from
+     these sizes, not from a second typeface. --- */
+  --text-headline-lg: 32px;
+  --text-headline-lg--line-height: 1.15;
+  --text-headline-lg--font-weight: 700;
+  --text-headline-md: 24px;
+  --text-headline-md--line-height: 1.25;
+  --text-headline-md--font-weight: 700;
+  --text-title: 16px;
+  --text-title--line-height: 1.4;
+  --text-title--font-weight: 600;
+  --text-body-md: 16px;
+  --text-body-md--line-height: 1.55;
+  --text-body-sm: 14px;
+  --text-body-sm--line-height: 1.5;
+  --text-label-md: 12px;
+  --text-label-md--line-height: 1.4;
+  --text-label-md--font-weight: 500;
+  --text-cooking-step: 20px;
+  --text-cooking-step--line-height: 1.6;
+  --text-cooking-step--font-weight: 500;
+
   --font-sans:
-    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, sans-serif;
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+}
+
+/* --- Theme flip: the DARK column of DESIGN.md. ------------------------ *
+ * Every variable re-points at its dark counterpart, so the whole app
+ * follows without a single `dark:` utility in the component layer. */
+.dark {
+  --color-surface: var(--color-surface-dark);
+  --color-surface-raised: var(--color-surface-dark-raised);
+  --color-surface-sunken: var(--color-surface-dark-sunken);
+  --color-border: var(--color-border-dark);
+  --color-border-strong: var(--color-border-dark-strong);
+  --color-text: var(--color-text-dark);
+  --color-text-muted: var(--color-text-dark-muted);
+
+  /* Hues keep their identity and become their legible dark variants. */
+  --color-hue-meat: var(--color-hue-meat-soft, #f08a6a);
+  --color-hue-fish: var(--color-hue-fish-soft, #5cc0d8);
+  --color-hue-vegetarian: var(--color-hue-vegetarian-soft, #86efac);
+  --color-hue-vegan: var(--color-hue-vegan-soft, #6ee7b7);
+  --color-nutrition-energy: var(--color-nutrition-energy-soft, #fbbf6e);
+  --color-nutrition-sodium: var(--color-nutrition-sodium-soft, #a5b4fc);
+  --color-warning: var(--color-warning-soft, #fdba74);
+  --color-danger: var(--color-danger-soft, #fca5a5);
+
+  /* Selected surfaces: DESIGN.md pairs `primary-tint` in light with the
+     deliberately darker `primary-tint-dark` in dark, because a cream
+     tint would glare against espresso. */
+  --color-brand-tint: var(--color-brand-tint-dark);
+  --color-brand-text: var(--color-brand-soft);
 }
 
 html {
@@ -83,7 +174,48 @@ html {
 }
 
 body {
-  @apply bg-stone-50 text-stone-800 antialiased dark:bg-stone-950 dark:text-stone-100;
+  @apply bg-surface text-text antialiased;
+  font-family: var(--font-sans);
+}
+
+/* Native checkboxes and radios are the one control the platform paints
+   for us, so their accent has to be told explicitly — otherwise the app
+   ships a cold system blue inside a warm kitchen. `var(--color-brand)`
+   follows the theme flip, so the tick is the tomato in both themes. */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--color-brand);
+}
+
+/* Keyboard focus must be VISIBLE everywhere, on any device, hover
+   capable or not (DESIGN.md Navigation and motion). A 2px brand ring
+   with an offset so it separates from the component it outlines. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm, 6px);
+}
+
+/* ------------------------------------------------------------------ *
+ * Recipe card link: the title is the ONLY link, and its ::after
+ * stretches over the whole tile so the entire card is one target while
+ * the heart and the rating stay independent controls (never nested
+ * interactive elements inside a link).
+ *
+ * Focus is therefore drawn on the STRETCHED layer, not on the text: a
+ * 2px brand ring around the title glyphs alone would read as a link
+ * about words, not about the card. The rule overrides the global
+ * focus-visible ring for exactly this one class.
+ * ------------------------------------------------------------------ */
+.recipe-card-stretch:focus-visible {
+  outline: none;
+  border-radius: 0;
+}
+
+.recipe-card-stretch:focus-visible::after {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: inherit;
 }
 
 /* Safe-area padding for the bottom nav on notched phones */
@@ -146,13 +278,14 @@ body {
     cursor: not-allowed;
   }
 
-  /* Nav icon hover: a 2px lift + a tint to the primary token. Same
+  /* Nav icon hover (DESIGN.md `nav-tab-icon-hover`): a 2px lift + a
+   * tint to the theme's brand foreground over 150ms ease. Same
    * reasoning as the cursor rule above — a hover state is a MOUSE
    * affordance, so the whole animation lives inside this media query
    * and can never be left stuck under a finger on touch. No hit area,
-   * label or padding is touched (ADR-0016's 82px/tab fit is e2e-pinned);
-   * the icon is a flex item of the tab button, so the transform applies
-   * without changing layout. DESIGN.md: `nav-tab-icon-hover`. */
+   * label or backplate is touched (ADR-0016's 82px/tab fit is
+   * e2e-pinned); the icon is a flex item of the tab button, so the
+   * transform applies without changing layout. */
   .nav-tab-icon {
     transition:
       transform 150ms ease,

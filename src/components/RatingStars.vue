@@ -46,62 +46,62 @@ function starLabel(value: number): string {
 function rate(value: number) {
   ratingStore.setRating(props.variantId, value)
   ui.showToast(
-    value % 1 === 0 ? `Rated ${value} of 5` : `Rated ${value.toFixed(1)} of 5`,
-    { duration: 2000 },
+  value % 1 === 0 ? `Rated ${value} of 5` : `Rated ${value.toFixed(1)} of 5`,
+  { duration: 2000 },
   )
 }
 </script>
 
 <template>
   <div
-    class="flex items-center gap-1"
-    data-test="rating-stars"
-    :data-variant-id="variantId"
-    :data-rating="mine"
-    :aria-label="
-      count > 0
-        ? `Your rating: ${mine} of 5 stars`
-        : 'Not rated by your household yet'
-    "
-    role="group"
+  class="flex items-center gap-1"
+  data-test="rating-stars"
+  :data-variant-id="variantId"
+  :data-rating="mine"
+  :aria-label="
+  count > 0
+  ? `Your rating: ${mine} of 5 stars`
+  : 'Not rated by your household yet'
+  "
+  role="group"
   >
-    <span
-      v-for="slot in slots"
-      :key="slot.n"
-      class="relative inline-flex shrink-0"
-      :style="{ width: `${size ?? 18}px`, height: `${size ?? 18}px` }"
-    >
-      <Star
-        :size="size ?? 18"
-        class="absolute inset-0 text-stone-300 dark:text-stone-600"
-        aria-hidden="true"
-      />
-      <!-- The filled portion is a clipped overlay, so a half star reads
-           as a half star without shipping half-star glyphs. -->
-      <span
-        class="pointer-events-none absolute inset-0 overflow-hidden text-amber-400"
-        :style="{ width: `${fillPercent(slot.n)}%` }"
-        aria-hidden="true"
-      >
-        <Star :size="size ?? 18" :fill="'currentColor'" class="absolute inset-0" />
-      </span>
-      <button
-        v-for="half in slot.halves"
-        :key="half"
-        type="button"
-        class="absolute top-0 h-full"
-        :style="{ left: half % 1 === 0.5 ? '0' : '50%', width: '50%' }"
-        :aria-label="starLabel(half)"
-        data-test="rating-star"
-        @click.stop.prevent="rate(half)"
-      />
-    </span>
-    <span
-      v-if="!compact && count === 0 && catalogRating"
-      class="ml-0.5 text-[11px] text-stone-400 dark:text-stone-500"
-      data-test="rating-catalog-hint"
-    >
-      {{ Math.round(catalogRating * 5 * 10) / 10 }}★
-    </span>
+  <span
+  v-for="slot in slots"
+  :key="slot.n"
+  class="relative inline-flex shrink-0"
+  :style="{ width: `${size ?? 18}px`, height: `${size ?? 18}px` }"
+  >
+  <Star
+  :size="size ?? 18"
+  class="absolute inset-0 text-text"
+  aria-hidden="true"
+  />
+  <!-- The filled portion is a clipped overlay, so a half star reads
+  as a half star without shipping half-star glyphs. -->
+  <span
+  class="pointer-events-none absolute inset-0 overflow-hidden text-warning-soft"
+  :style="{ width: `${fillPercent(slot.n)}%` }"
+  aria-hidden="true"
+  >
+  <Star :size="size ?? 18" :fill="'currentColor'" class="absolute inset-0" />
+  </span>
+  <button
+  v-for="half in slot.halves"
+  :key="half"
+  type="button"
+  class="absolute top-0 h-full"
+  :style="{ left: half % 1 === 0.5 ? '0' : '50%', width: '50%' }"
+  :aria-label="starLabel(half)"
+  data-test="rating-star"
+  @click.stop.prevent="rate(half)"
+  />
+  </span>
+  <span
+  v-if="!compact && count === 0 && catalogRating"
+  class="ml-0.5 text-[11px] text-text-muted"
+  data-test="rating-catalog-hint"
+  >
+  {{ Math.round(catalogRating * 5 * 10) / 10 }}★
+  </span>
   </div>
 </template>

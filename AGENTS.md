@@ -96,7 +96,7 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   selected filter chip is still its own food hue, and selection itself is
   always the primary token. The two families never mix, and colour is
   never the only signal (the label stays).
-- **Design tokens (DESIGN.md, ADR-0035)**: `DESIGN.md` at the repo root
+- **Design tokens (DESIGN.md, ADR-0036)**: `DESIGN.md` at the repo root
   is the SINGLE SOURCE OF TRUTH for the visual identity (palette,
   typography, shapes, spacing, components + the prose Overview/Do's &
   Don'ts). Its YAML front-matter is compiled into the `@theme` block of
@@ -106,13 +106,31 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   BOTH surfaces (light + dark) — `src/lib/palette.test.ts` fails when the
   two files drift. Validate the file itself with
   `npx -y @google/design.md lint DESIGN.md`; its WCAG contrast findings
-  must be fixed, not waived. The neutral ramp is Tailwind's stock
-  `stone-*` scale (mapped in a comment in `style.css`); the legacy
-  `--color-primary` orange is GONE (white-on-orange was 2.8:1) — the
-  primary is the verified tomato (`--color-brand`).
+  must be fixed, not waived. `DESIGN.tokens.json` is the generated DTCG
+  export (`npx -y @google/design.md@0.4.0 export --format dtcg
+  DESIGN.md`) and is refreshed with the token, never hand-edited.
+- **Dark mode is a THEME FLIP, not `dark:` pairs (ADR-0036)**: the `.dark`
+  block in `src/style.css` re-points each `--color-*` variable at its dark
+  counterpart (surfaces, text, borders, `hue-*` → `*-soft`, `brand-text` →
+  `brand-soft`). Write `bg-surface-raised` and it is correct in both
+  themes; a component must NOT add a `dark:` utility for a colour the flip
+  already covers. The only places a literal dark token belongs are the two
+  documented design decisions (the selected-chip tint and the dark action
+  text). A new token pair goes in DESIGN.md, `@theme`, AND the `.dark`
+  block, with a parity test.
+- **One role registry (`src/lib/palette.ts`)**: every food/nutrition icon
+  takes its glyph, accessible name and colour from `ICON_ROLES` /
+  `ROLE_GLYPHS`; no component keeps its own icon→hue map. Vegetarian and
+  vegan are SEPARATE roles (different tokens AND different glyphs) so the
+  pair reads apart in monochrome; exclusion diets (`no-pork`, `no-meat`,
+  `no-shellfish`) borrow the protein role but keep their explicit wording.
+  A role's class name is a literal string in source, because Tailwind scans
+  for complete class names.
 - **Layout width**: the app shell, header, nav, ShopView and Plan sheets
-  are `max-w-app` (fluid, capped at 1100px); the recipe grid is
-  2/3/4/5 columns at base/`sm`/`lg`/`xl`. Desktop richness is ALWAYS
+  are `max-w-app` (fluid, capped at 1100px); cooking keeps the 672px
+  `max-w-reading` measure. The recipe grid steps 1/2/3/4 columns at
+  <360/360/720/1024 — there is deliberately NO five-column stage. Desktop
+  richness is ALWAYS
   `lg:`/`xl:`-gated — mobile padding, tap targets and ADR-0016's
   82px/tab fit never change to serve a desktop. The immersive cooking
   view keeps `max-w-reading` (672px) on purpose: a step read at arm's
@@ -305,8 +323,9 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
 - **Toasts**: `ui.showToast(message, { actions, duration, onDismiss })`.
   `onDismiss` fires exactly once on every end path (timeout, replacement,
   dismiss) — anything guarded around a toast must reset via `onDismiss`.
-- **Dark mode**: Tailwind `dark:` class strategy; `useDark` from
-  `@vueuse/core` (system preference default, manual override persisted).
+- **Dark mode**: the `dark` class on `<html>` (set by `useDark` from
+  `@vueuse/core`, system preference default, manual override persisted)
+  plus the variable flip described above; components stay theme-agnostic.
 - Every interactive element gets an `aria-label`; every view must work in
   dark mode.
 - **Clickable affordance**: every clickable surface gets a pointer cursor,
@@ -333,7 +352,8 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   icon stack, Auto-Plan preview, household favourites + ratings, cooked
   history shared by default, Auto-Plan regenerate seed, cook anytime,
   the DESIGN.md token layer + categorical food hues + wider desktop
-  (ADR-0035)). Skim them before
+  (ADR-0035, superseded for visual direction), and the kitchen-companion
+  redesign (ADR-0036)). Skim them before
   proposing changes; new lasting decisions get a new
   `ADR-NNNN-slug.md` (never rewrite an accepted one in place).
 
