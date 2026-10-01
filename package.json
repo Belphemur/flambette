@@ -13,7 +13,7 @@
     "data:verify": "bun run scripts/verify_pack_index_parity.ts"
   },
   "dependencies": {
-    "@vueuse/core": "^14.4.0",
+    "@vueuse/core": "^15.0.0",
     "lucide-vue-next": "^1.0.0",
     "minisearch": "^7.2.0",
     "pinia": "^4.0.3",
