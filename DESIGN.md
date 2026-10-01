@@ -184,9 +184,9 @@ components:
     rounded: "{rounded.sm}"
     padding: 6px
   recipe-card:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.xl}"
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.text-dark}"
+    rounded: "{rounded.lg}"
   recipe-card-dark:
     backgroundColor: "{colors.surface-dark-raised}"
     textColor: "{colors.text-dark}"
@@ -362,7 +362,7 @@ scale, and short line-heights. Numerals (calories, minutes, sodium) are
 It is fluid, not fixed: on a 1400px window it fills 1100px of centred
 content; on a tablet it is simply the window. A 672px **reading** token
 stays reserved for the immersive cooking view, where a long measure would be
-tired to read.
+tiring to read.
 
 **Mobile is the reference.** 2-column recipe grid, 3-up from `sm`, 4-up at
 `lg`, 5-up at `xl` (the wider the card, the more of the desktop meta band it
@@ -388,11 +388,13 @@ radii inside one component; never introduce a sharp 2px corner.
 
 ## Components
 
-- **Recipe card:** photo on top (4:3), then title, then a metadata row. On
-  mobile the metadata row is time + calories; from `lg` the card gains a
-  **horizontal metadata band** across the bottom — ingredient-TYPE icon,
-  energy, time and sodium all on one row — and a larger image. Mobile
-  layout, padding and tap targets are never changed to serve desktop.
+- **Recipe card:** photo on top (4:3), then title, then a metadata row.
+  The card itself carries no light fill (the photo is the surface) and is
+  `rounded-lg` (12px); the dark surface is `surface-dark-raised`. From
+  `lg` the card gains a **horizontal metadata band** across the bottom —
+  ingredient-TYPE icon, energy, time and sodium all on one row — and a
+  larger image. Mobile layout, padding and tap targets are never changed
+  to serve desktop.
 - **Bottom nav:** five tabs, icon above a 12px label, `min-height: 56px`
   per tab (82px wide at Pixel 7 — measured, e2e-pinned, ADR-0016). The
   active tab is brand-strong; idle tabs are `text-subtle`.
@@ -401,8 +403,10 @@ radii inside one component; never introduce a sharp 2px corner.
   `@media (hover: hover)` only, and the transform is dropped under
   `prefers-reduced-motion` (the tint stays — it carries no motion).
 - **Quick-filter chips:** 36px tall, full-round, brand fill when selected.
-  Their food icons keep their categorical hue in BOTH states, because the
-  hue is the icon's identity, not its state.
+  A food icon wears its categorical hue in the IDLE state; when the chip
+  is SELECTED it takes the chip's text colour instead, because a hue-600
+  icon on a `primary` fill is invisible. Selection is still signalled by
+  the fill, not by the icon's hue.
 - **Iconography (ADR-0029):** Lucide, bundled, no glyph characters. A
   decorative icon is `aria-hidden`; an icon that carries state is
   queryable (`aria-label` / `aria-expanded`).

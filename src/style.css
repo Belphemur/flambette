@@ -172,8 +172,13 @@ body {
 }
 
 /* Reduced motion: the LIFT is the motion, so it goes; the tint carries
-   no motion and stays, so the hover state is still legible. */
-@media (prefers-reduced-motion: reduce) {
+   no motion and stays, so the hover state is still legible.
+
+   The query is COMBINED with `(hover: hover)` on purpose: these
+   declarations exist only to relax the hover animation above, so
+   emitting them on a touch viewport would install a transition that the
+   pointer-only contract says must never reach one. */
+@media (hover: hover) and (prefers-reduced-motion: reduce) {
   .nav-tab-icon {
     transition: color 150ms ease;
   }

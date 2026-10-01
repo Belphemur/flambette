@@ -28,29 +28,56 @@ export interface IconHue {
   token: string
   /** DESIGN.md token name for the dark surface. */
   darkToken: string
-  /** Tailwind text utilities: light, then the dark-surface variant. */
+  /**
+   * Tailwind text utilities: light, then the dark-surface variant.
+   *
+   * These strings are spelled out LITERALLY, never interpolated from
+   * `token`. Tailwind scans source text for complete class names, so a
+   * generated `text-${token}-soft` produces no CSS at all and the icon
+   * would ship uncoloured (silently, and only in dark mode).
+   */
   className: string
   /** Accessible name for the icon wherever it is the only carrier of meaning. */
   label: string
 }
 
-function hue(kind: IconHue['kind'], token: string, label: string): IconHue {
-  return {
-    kind,
-    token,
-    darkToken: `${token}-soft`,
-    className: `text-${token} dark:text-${token}-soft`,
-    label,
-  }
-}
-
 /** The whole palette contract: role -> design tokens. Exhaustive by type. */
 export const ICON_HUES: Record<IconRole, IconHue> = {
-  meat: hue('categorical', 'hue-meat', 'Meat'),
-  fish: hue('categorical', 'hue-fish', 'Fish'),
-  vegan: hue('categorical', 'hue-vegan', 'Vegetarian'),
-  energy: hue('semantic', 'nutrition-energy', 'Energy'),
-  sodium: hue('semantic', 'nutrition-sodium', 'Sodium'),
+  meat: {
+    kind: 'categorical',
+    token: 'hue-meat',
+    darkToken: 'hue-meat-soft',
+    className: 'text-hue-meat dark:text-hue-meat-soft',
+    label: 'Meat',
+  },
+  fish: {
+    kind: 'categorical',
+    token: 'hue-fish',
+    darkToken: 'hue-fish-soft',
+    className: 'text-hue-fish dark:text-hue-fish-soft',
+    label: 'Fish',
+  },
+  vegan: {
+    kind: 'categorical',
+    token: 'hue-vegan',
+    darkToken: 'hue-vegan-soft',
+    className: 'text-hue-vegan dark:text-hue-vegan-soft',
+    label: 'Vegetarian',
+  },
+  energy: {
+    kind: 'semantic',
+    token: 'nutrition-energy',
+    darkToken: 'nutrition-energy-soft',
+    className: 'text-nutrition-energy dark:text-nutrition-energy-soft',
+    label: 'Energy',
+  },
+  sodium: {
+    kind: 'semantic',
+    token: 'nutrition-sodium',
+    darkToken: 'nutrition-sodium-soft',
+    className: 'text-nutrition-sodium dark:text-nutrition-sodium-soft',
+    label: 'Sodium',
+  },
 }
 
 export const ICON_ROLES = Object.keys(ICON_HUES) as IconRole[]

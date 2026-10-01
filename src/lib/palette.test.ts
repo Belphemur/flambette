@@ -8,8 +8,57 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const styleCss = readFileSync(resolve(REPO_ROOT, 'src/style.css'), 'utf8')
 const designMd = readFileSync(resolve(REPO_ROOT, 'DESIGN.md'), 'utf8')
 
+/** The colours DESIGN.md declares and `@theme` mirrors, token -> variable.
+ *  `primary` is the only RENAMED pair (the CSS side is `--color-brand`, so
+ *  the legacy `primary` utility does not shadow the theme token). */
+const COLOR_TOKENS: Record<string, string> = {
+  primary: '--color-brand',
+  'primary-strong': '--color-brand-strong',
+  'primary-soft': '--color-brand-soft',
+  'primary-tint': '--color-brand-tint',
+  'on-primary': '--color-on-brand',
+  'hue-meat': '--color-hue-meat',
+  'hue-meat-soft': '--color-hue-meat-soft',
+  'hue-fish': '--color-hue-fish',
+  'hue-fish-soft': '--color-hue-fish-soft',
+  'hue-vegan': '--color-hue-vegan',
+  'hue-vegan-soft': '--color-hue-vegan-soft',
+  'nutrition-energy': '--color-nutrition-energy',
+  'nutrition-energy-soft': '--color-nutrition-energy-soft',
+  'nutrition-sodium': '--color-nutrition-sodium',
+  'nutrition-sodium-soft': '--color-nutrition-sodium-soft',
+  warning: '--color-warning',
+  danger: '--color-danger',
+  favourite: '--color-favourite',
+  'favourite-soft': '--color-favourite-soft',
+}
+
+/** Non-colour tokens that must also stay in step. */
+const DIMENSION_TOKENS: Record<string, string> = {
+  'spacing.container': '--container-app',
+  'spacing.reading': '--container-reading',
+}
+
+const FRONTMATTER = designMd.split('---')[1] ?? ''
+
+function designColor(token: string): string | null {
+  const m = FRONTMATTER.match(new RegExp(`^\\s{2}${token}:\\s*"([^"]+)"`, 'm'))
+  return m ? m[1].toLowerCase() : null
+}
+
+function designDimension(token: string): string | null {
+  const key = token.split('.')[1]
+  const m = FRONTMATTER.match(new RegExp(`^\\s{2}${key}:\\s*"?([\\d.]+px)"?`, 'm'))
+  return m ? m[1] : null
+}
+
+function themeVar(cssVar: string): string | null {
+  const m = styleCss.match(new RegExp(`${cssVar}:\\s*([^;]+);`))
+  return m ? m[1].trim().toLowerCase() : null
+}
+
 describe('icon hue contract (ADR-0035)', () => {
-  test('every role owns a distinct token pair and a label', () => {
+  test('each role owns a distinct token pair and a label', () => {
     const tokens = ICON_ROLES.map((r) => ICON_HUES[r].token)
     expect(new Set(tokens).size).toBe(tokens.length)
     for (const role of ICON_ROLES) {
@@ -26,27 +75,31 @@ describe('icon hue contract (ADR-0035)', () => {
     expect(ICON_HUES.sodium.kind).toBe('semantic')
   })
 
-  test('every token is mirrored into the @theme block of src/style.css', () => {
-    // DESIGN.md -> style.css is a hand-maintained transcription; a token
-    // added to one and not the other silently loses its colour.
-    for (const role of ICON_ROLES) {
-      const { token, darkToken } = ICON_HUES[role]
-      expect(styleCss).toContain(`--color-${token}:`)
-      expect(styleCss).toContain(`--color-${darkToken}:`)
+  test('every mapped token VALUE matches between DESIGN.md and @theme', () => {
+    // Name-only checks would let a colour drift silently: the whole point
+    // of the mirror is that the CSS var carries the documented value.
+    for (const [token, cssVar] of Object.entries(COLOR_TOKENS)) {
+      const declared = designColor(token)
+      expect(declared, `${token} missing from DESIGN.md`).not.toBeNull()
+      expect(themeVar(cssVar), `${cssVar} missing from src/style.css`).not.toBeNull()
+      expect(themeVar(cssVar)).toBe(declared)
+    }
+    for (const [token, cssVar] of Object.entries(DIMENSION_TOKENS)) {
+      expect(designDimension(token), `${token} missing from DESIGN.md`).not.toBeNull()
+      expect(themeVar(cssVar)).toBe(designDimension(token))
     }
   })
 
-  test('every token is declared in the DESIGN.md front-matter', () => {
+  test('hueClass spells its utilities out — no generated class names', () => {
+    // Tailwind scans source TEXT for complete class names, so an
+    // interpolated `text-${token}` emits no CSS and the icon ships
+    // uncoloured (in dark mode only, which is why it slips through).
     for (const role of ICON_ROLES) {
-      const { token, darkToken } = ICON_HUES[role]
-      expect(designMd).toMatch(new RegExp(`^\\s{2}${token}: "#`, 'm'))
-      expect(designMd).toMatch(new RegExp(`^\\s{2}${darkToken}: "#`, 'm'))
+      const cls = hueClass(role)
+      expect(cls).not.toContain('${')
+      expect(cls).toBe(`text-${ICON_HUES[role].token} dark:text-${ICON_HUES[role].darkToken}`)
+      expect(cls.split(' ')).toHaveLength(2)
     }
-  })
-
-  test('hueClass derives both the light and the dark utility from the token', () => {
-    expect(hueClass('meat')).toBe('text-hue-meat dark:text-hue-meat-soft')
-    expect(hueClass('sodium')).toBe('text-nutrition-sodium dark:text-nutrition-sodium-soft')
   })
 })
 

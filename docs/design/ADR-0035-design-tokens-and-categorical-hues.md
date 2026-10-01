@@ -95,9 +95,10 @@ split between them is the point:
 Rules that the code holds to:
 
 - **A hue is an icon's identity, never its state.** A selected filter chip
-  is still its own food hue in the idle state; selection itself is always
-  the primary token, and a selected chip switches its icon to the chip's
-  text colour (a `hue-meat` icon on a `primary` fill would be invisible).
+  switches its icon to the chip's own text colour, because a hue-600 icon
+  on a `primary` fill is unreadable; selection itself is still signalled
+  by the fill, and the primary token always means "this is the chosen
+  one".
 - **Categorical and semantic families never mix.** A calorie icon may
   never wear the fish teal; that is the whole reason the semantic hues
   live in their own names.
