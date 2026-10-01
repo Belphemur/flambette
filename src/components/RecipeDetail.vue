@@ -14,6 +14,7 @@ import { onMounted, onUnmounted } from 'vue'
 import {
   ArrowLeft,
   ChefHat,
+  ChevronDown,
   Clock,
   Droplet,
   Flame,
@@ -69,6 +70,14 @@ const inPlan = computed(() => (meta.value ? plan.planContains(meta.value.id) : f
 /** Personal cooked history (this device only, ADR-0011). */
 const cooked = useCookHistory()
 const cookCount = computed(() => (meta.value ? cooked.count(meta.value.id) : 0))
+/**
+ * Every cook EVENT of this recipe, newest first (ADR-0034). The count line
+ * above answers "how often"; the spoiler below answers "when exactly",
+ * which the per-variant aggregate has already thrown away. Collapsed by
+ * default: it is a detail, not a headline.
+ */
+const cookEvents = computed(() => (meta.value ? cooked.events(meta.value.id) : []))
+const cookSpoilerOpen = ref(false)
 const cookLine = computed(() => {
   if (cookCount.value === 0) return null
   const times = cookCount.value === 1 ? '1 time' : `${cookCount.value} times`
@@ -198,6 +207,41 @@ function startCooking() {
         >
           <ChefHat :size="14" aria-hidden="true" class="mr-1 inline align-[-2px]" />{{ cookLine }}
         </p>
+        <!-- Per-cook spoiler: one row per cook EVENT, relative AND absolute
+             date, so "cooked twice" can be told apart into "last night" and
+             "the Sunday before" (ADR-0034). -->
+        <div v-if="cookEvents.length" class="mt-1" data-test="cook-history-spoiler">
+          <button
+            class="flex items-center gap-1 text-xs font-medium text-stone-500 dark:text-stone-400"
+            :aria-expanded="cookSpoilerOpen"
+            aria-controls="cook-history-events"
+            data-test="cook-history-toggle"
+            @click="cookSpoilerOpen = !cookSpoilerOpen"
+          >
+            <ChevronDown
+              :size="14"
+              aria-hidden="true"
+              class="transition-transform"
+              :class="cookSpoilerOpen ? '' : '-rotate-90'"
+            />
+            {{ cookSpoilerOpen ? 'Hide' : 'Show' }} cook history
+          </button>
+          <ul
+            v-if="cookSpoilerOpen"
+            id="cook-history-events"
+            class="mt-1 space-y-0.5"
+            data-test="cook-history-events"
+          >
+            <li
+              v-for="(at, i) in cookEvents"
+              :key="`${at}-${i}`"
+              class="text-xs text-stone-500 dark:text-stone-400"
+              data-test="cook-history-event"
+            >
+              {{ formatRelative(at) }} · {{ formatAbsolute(at) }}
+            </li>
+          </ul>
+        </div>
       </header>
 
       <!-- Servings + add to plan -->

@@ -116,7 +116,7 @@ real plan.
 
 ### 5. One Finish button, mark-as-cooked available at any step
 
-- **At any step** (including the last) the footer carries a
+- **At any step up to the last**, the footer carries a
   **Mark as cooked** button, `data-test="mark-cooked"`. It runs the same
   `confirmTimerBeforeLeaving()` gate the Finish button runs today
   (ADR-0020), records the cook event, and **stays in cooking mode** — the
@@ -126,8 +126,11 @@ real plan.
   (`data-test="finish"`, `bg-primary`, PartyPopper icon). **Finish is one
   action**: it records the cook event AND drops the meal from the plan
   (`markCooked` already does both, so "the change is in the buttons, not the
-  store"), then closes. There is no second button on the last step: **Finish
-  is the mark.** Toast: "Enjoy! Marked as cooked", with an **Undo** action.
+  store"), then closes. The second **Mark as cooked** button is deleted, and
+  it is NOT shown on the last step either: there Finish already IS the
+  mark, and a second button offering the same action is the two-buttons-
+  for-one-action problem this change exists to remove. Toast: "Enjoy!
+  Marked as cooked", with an **Undo** action.
 - The old `v-if="isLast"` **Mark as cooked** button (the second one) is
   deleted. Mid-cook marking is reachable from step 1 onward, which is where
   the new `data-test="mark-cooked"` lives.

@@ -47,14 +47,86 @@ export function lastCooked(events: CookedEntry[], variantId: number): number | n
   return last
 }
 
+/**
+ * Every cook EVENT of one variant, newest first (ADR-0034). The count
+ * line answers "how often"; this answers "when exactly", which a
+ * per-variant aggregate has thrown away.
+ */
+export function cookEventsFor(events: CookedEntry[], variantId: number): number[] {
+  return events
+    .filter((e) => e.variantId === variantId)
+    .map((e) => e.cookedAt)
+    .sort((a, b) => b - a)
+}
+
+/* ---------- Plan provenance (ADR-0034) ---------- */
+
+/**
+ * One plan's worth of cook events, derived on the read side. Storage is
+ * NOT multiplied: a cook event belongs to exactly ONE plan and carries only
+ * that plan's id + creation time, so a plan's membership stays recoverable
+ * from the plan itself and the history cannot drift away from it.
+ */
+export interface PlanHistoryGroup {
+  /** The plan's stable id, or null for rows written before ADR-0034. */
+  planId: string | null
+  /** When the plan was put together, or null for legacy rows. */
+  planCreatedAt: number | null
+  /** Most recent cook in the group — the sort key fallback. */
+  lastAt: number
+  events: CookedEntry[]
+  /** Per-recipe rows for this group, most recent first. */
+  entries: HistoryEntry[]
+}
+
+/** Group key for rows that carry no plan identity (older peers/backups). */
+const LEGACY_GROUP_KEY = '\u0000legacy'
+
+/**
+ * Group cook events by the plan they were cooked under, most recent plan
+ * first. Events without a plan id (written by an older peer, or imported
+ * from an older backup) collapse into a single trailing "earlier cooks"
+ * group rather than being dropped or faked into a plan.
+ */
+export function groupHistoryByPlan(events: CookedEntry[]): PlanHistoryGroup[] {
+  const byPlan = new Map<string, PlanHistoryGroup>()
+  for (const e of events) {
+    const key = e.planId ?? LEGACY_GROUP_KEY
+    let group = byPlan.get(key)
+    if (!group) {
+      group = {
+        planId: e.planId ?? null,
+        planCreatedAt: Number.isFinite(e.planCreatedAt as number) ? (e.planCreatedAt as number) : null,
+        lastAt: e.cookedAt,
+        events: [],
+        entries: [],
+      }
+      byPlan.set(key, group)
+    }
+    group.events.push(e)
+    group.lastAt = Math.max(group.lastAt, e.cookedAt)
+  }
+  for (const group of byPlan.values()) {
+    group.events.sort((a, b) => b.cookedAt - a.cookedAt)
+    group.entries = aggregateHistory(group.events)
+  }
+  return [...byPlan.values()].sort(
+    (a, b) =>
+      (b.planCreatedAt ?? b.lastAt) - (a.planCreatedAt ?? a.lastAt) || b.lastAt - a.lastAt,
+  )
+}
+
 /** Bind the selectors to the live plan store (reactive). */
 export function useCookHistory() {
   const plan = usePlanStore()
   return {
     /** Aggregated per-recipe rows, most recent first. */
     historyEntries: computed(() => aggregateHistory(plan.cookedHistory)),
+    /** The same events grouped by the plan they were cooked under. */
+    planGroups: computed(() => groupHistoryByPlan(plan.cookedHistory)),
     count: (variantId: number) => cookCount(plan.cookedHistory, variantId),
     last: (variantId: number) => lastCooked(plan.cookedHistory, variantId),
+    events: (variantId: number) => cookEventsFor(plan.cookedHistory, variantId),
   }
 }
 

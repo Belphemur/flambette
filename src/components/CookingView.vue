@@ -22,7 +22,7 @@ import {
   remainingSeconds,
 } from '../lib/stepTimer'
 import type { RecipeDoc } from '../lib/types'
-import { usePlanStore } from '../stores/plan'
+import { usePlanStore, type CookedEntry, type PlanEntry, type PlanIdentity } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
 
 const plan = usePlanStore()
@@ -221,18 +221,62 @@ function confirmTimerBeforeLeaving(): boolean {
   return true
 }
 
-function finish() {
-  if (!confirmTimerBeforeLeaving()) return
-  close()
-  ui.showToast('Enjoy!')
+/**
+ * Plan provenance of THIS cook session (ADR-0034), captured on first use
+ * so it is taken while the meal is still in the plan: the real plan's
+ * identity when the recipe is planned, else a freshly minted ad-hoc
+ * one-recipe plan (owner rule). Cached, not recomputed — a mid-step mark
+ * and the session's Finish must land in the SAME ad-hoc plan, and the
+ * ad-hoc identity is never stored as the store's own plan id.
+ */
+let sessionPlan: PlanIdentity | null = null
+function cookContext(): PlanIdentity {
+  sessionPlan ??= plan.cookPlanIdentity(props.id)
+  return sessionPlan
 }
 
-/** Finish cooking AND record the meal in the personal cooked history. */
+/**
+ * Record this cook, with an undo that restores the exact prior state
+ * (ADR-0034). The snapshot is taken at press time, before markCooked
+ * drops the meal from the plan and forgets its cleared ingredients —
+ * afterwards neither is knowable.
+ */
+function recordCook(opts: { message: string; close: boolean }): boolean {
+  if (!confirmTimerBeforeLeaving()) return false
+  const id = props.id
+  const entry = plan.plan.find((e) => e.variantId === id)
+  const cleared = plan.clearedIngredients[id]
+  const prior: { entry: PlanEntry | null; cleared: string[] | null } = {
+    entry: entry ? { ...entry } : null,
+    cleared: cleared ? [...cleared] : null,
+  }
+  const event: CookedEntry = plan.markCooked(id, cookContext())
+  ui.showToast(opts.message, {
+    actions: [
+      {
+        label: 'Undo',
+        run: () => plan.undoMarkCooked(event, prior),
+        testId: 'cook-undo',
+      },
+    ],
+    duration: 6000,
+  })
+  if (opts.close) close()
+  return true
+}
+
+/** Mid-cook mark: record the event and KEEP COOKING (ADR-0034). */
+function markCookedEarly() {
+  recordCook({ message: 'Marked as cooked', close: false })
+}
+
+/**
+ * Finish on the last step is ONE action: record the cook event AND take
+ * the meal off the plan (markCooked already does both — the change is in
+ * the buttons, not the store), then close (ADR-0034).
+ */
 function finishCooked() {
-  if (!confirmTimerBeforeLeaving()) return
-  if (meta.value) plan.markCooked(meta.value.id)
-  close()
-  ui.showToast('Marked as cooked')
+  recordCook({ message: 'Enjoy! Marked as cooked', close: true })
 }
 
 function onKey(e: KeyboardEvent) {
@@ -520,17 +564,23 @@ function onTouchEnd(e: TouchEvent) {
           <button
             v-else
             class="h-14 flex-[2] rounded-xl bg-primary text-base font-semibold text-white shadow-sm active:bg-primary-dark"
-            @click="finish"
+            data-test="finish"
+            aria-label="Finish cooking and mark as cooked"
+            @click="finishCooked"
           >
             Finish
             <PartyPopper :size="18" aria-hidden="true" class="ml-1 inline" />
           </button>
         </div>
+        <!-- Mark as cooked is reachable from ANY step; on the last step
+             Finish above IS the mark, so there is never a second button
+             offering the same action (ADR-0034). -->
         <button
-          v-if="isLast"
+          v-if="!isLast"
           class="h-12 rounded-xl border dark:border-stone-600 dark:bg-stone-900 text-sm font-semibold text-primary-dark dark:text-primary active:bg-stone-100 dark:active:bg-stone-800"
           data-test="mark-cooked"
-          @click="finishCooked"
+          aria-label="Mark as cooked and keep cooking"
+          @click="markCookedEarly"
         >
           <Check :size="16" aria-hidden="true" class="mr-1 inline" />
           Mark as cooked

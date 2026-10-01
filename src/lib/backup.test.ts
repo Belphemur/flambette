@@ -197,6 +197,103 @@ describe('cooked-history slice (ADR-0032 registry)', () => {
 })
 
 /**
+ * ADR-0034 — plan provenance on cook events, and the plan's own identity.
+ * A cook's `planId` is the event's identity ACROSS THE HOUSEHOLD, exactly
+ * like the per-device `id` was in ADR-0032: a restored install that dropped
+ * it would file every historical cook under "earlier cooks" while its peers
+ * filed them under the real plan, and the two halves of a household backup
+ * would disagree. The plan identity itself round-trips in `plan.json` so a
+ * restored plan's FUTURE cooks group under the plan its history already
+ * names. Rows/peers predating ADR-0034 stay valid with the fields absent.
+ */
+describe('plan provenance on cook events (ADR-0034 registry)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    ;(globalThis as Record<string, unknown>).localStorage = memoryStorage()
+  })
+
+  const historySlice = () => {
+    const slice = STORE_SLICES.find((s) => s.file === 'cooked-history.json')
+    if (!slice) throw new Error('cooked-history.json slice missing from STORE_SLICES')
+    return slice
+  }
+  const planSlice = () => {
+    const slice = STORE_SLICES.find((s) => s.file === 'plan.json')
+    if (!slice) throw new Error('plan.json slice missing from STORE_SLICES')
+    return slice
+  }
+
+  test('export PRESERVES the plan provenance, and omits it for legacy rows', () => {
+    usePlanStore().replaceCookedHistory([
+      { variantId: 5, cookedAt: 100, id: 'dev-1', planId: 'plan-a', planCreatedAt: 50 },
+      { variantId: 6, cookedAt: 90 },
+    ])
+    expect(historySlice().read()).toEqual([
+      { variantId: 5, cookedAt: 100, id: 'dev-1', planId: 'plan-a', planCreatedAt: 50 },
+      { variantId: 6, cookedAt: 90 },
+    ])
+  })
+
+  test('import preserves provenance; legacy rows stay valid without it', () => {
+    const store = usePlanStore()
+    historySlice().write([
+      { variantId: 5, cookedAt: 100, id: 'peer-9', planId: 'plan-a', planCreatedAt: 50 },
+      { variantId: 6, cookedAt: 90 },
+    ] as never)
+    expect(store.cookedHistory).toEqual([
+      { variantId: 5, cookedAt: 100, id: 'peer-9', planId: 'plan-a', planCreatedAt: 50 },
+      { variantId: 6, cookedAt: 90 },
+    ])
+    expect(historySlice().validate([{ variantId: 5, cookedAt: 100 }])).toBeNull()
+    expect(
+      historySlice().validate([
+        { variantId: 5, cookedAt: 100, planId: 'plan-a', planCreatedAt: 50 },
+      ]),
+    ).toBeNull()
+  })
+
+  test('validate rejects HALF a provenance (a planId with no creation time)', () => {
+    expect(historySlice().validate([{ variantId: 5, cookedAt: 100, planId: 'plan-a' }])).toContain(
+      'plan provenance',
+    )
+    expect(
+      historySlice().validate([
+        { variantId: 5, cookedAt: 100, planId: '', planCreatedAt: 50 },
+      ]),
+    ).toContain('plan provenance')
+    expect(
+      historySlice().validate([
+        { variantId: 5, cookedAt: 100, planId: 'plan-a', planCreatedAt: 'soon' },
+      ]),
+    ).toContain('plan provenance')
+  })
+
+  test('plan.json round-trips the plan identity; a legacy backup clears it', () => {
+    const store = usePlanStore()
+    store.addToPlan({ id: 5, serving_count: 4 } as never, 6)
+    const exported = planSlice().read() as { planIdentity?: unknown }
+    expect(exported.planIdentity).toEqual({
+      planId: store.planId,
+      planCreatedAt: store.planCreatedAt,
+    })
+
+    // A backup written before ADR-0034 has no planIdentity: restoring it
+    // must CLEAR the identity rather than silently keeping the old plan's.
+    planSlice().write({ entries: [{ variantId: 5, servings: 6 }] } as never)
+    expect(store.planId).toBe('')
+    expect(store.planCreatedAt).toBe(0)
+
+    // A malformed identity is refused outright (import is validate-first).
+    expect(
+      planSlice().validate({ entries: [], planIdentity: { planId: 5, planCreatedAt: 1 } }),
+    ).toContain('planIdentity')
+    expect(
+      planSlice().validate({ entries: [], planIdentity: { planId: 'p', planCreatedAt: 'now' } }),
+    ).toContain('planIdentity')
+  })
+})
+
+/**
  * ADR-0031 — the household ratings slice. Round-trip + validation, the
  * "opinion is never seeded from the catalog" rule, and the per-record
  * reconciliation that import inherits (newer `updatedAt` wins, so an

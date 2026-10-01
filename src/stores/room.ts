@@ -64,6 +64,18 @@ interface SharedState {
    * "nothing to say", not "clear the household").
    */
   ratings?: Record<string, { rating: number; count: number; updatedAt: number }>
+  /**
+   * ADR-0034 — the identity of the household's CURRENT plan (the id it was
+   * minted with and when it was started). Plain whole-state state, not a
+   * reconciled record: both phones that plan the same week mean the same
+   * plan, and a cook's provenance is only comparable across peers if they
+   * agree on which plan that is. OPTIONAL and additive — a peer running
+   * older code sends no `planIdentity` and its absence means "don't touch",
+   * never "clear the plan's identity"; the events it writes simply carry no
+   * `planId` and group as "earlier cooks". Emitted only when a plan
+   * identity exists (an empty plan has none).
+   */
+  planIdentity?: { planId: string; planCreatedAt: number }
 }
 
 const PUSH_DEBOUNCE_MS = 300
@@ -213,6 +225,12 @@ export const useRoomStore = defineStore('room', () => {
       // Household state (ADR-0028): the shared half of the quick filters.
       filters: toSharedFilters(ui.quickFilters),
     }
+    // ADR-0034: the current plan's identity, so a cook event written on one
+    // phone groups under the same plan on the other. Emitted only when the
+    // plan has one (an empty plan has no identity to share).
+    if (plan.planId) {
+      state.planIdentity = { planId: plan.planId, planCreatedAt: plan.planCreatedAt }
+    }
     // ADR-0031: the favourites RECORDS (with delete markers) and the star
     // ratings are emitted ONLY when non-empty — an absent key means
     // "nothing to merge", never "clear the household", so a peer that
@@ -244,6 +262,10 @@ export const useRoomStore = defineStore('room', () => {
     let localRowsMissingFromRoom = false
     try {
       plan.replacePlan(state.plan ?? [], state.customItems ?? [])
+      // ADR-0034: adopt the household's plan identity when the snapshot
+      // carries one; an ABSENT key means "don't touch" (ADR-0028), so a
+      // peer on older code leaves ours alone rather than blanking it.
+      if (state.planIdentity) plan.setPlanIdentity(state.planIdentity)
       const checked: Record<string, boolean> = {}
       for (const [key, value] of Object.entries(state.checked ?? {})) {
         if (value) checked[key] = true

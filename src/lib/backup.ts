@@ -84,6 +84,13 @@ export const STORE_SLICES: SliceDef<any>[] = [
         entries: plan.plan.map((e) => ({ variantId: e.variantId, servings: e.servings })),
         customItems: [...plan.customItems],
         clearedIngredients: { ...plan.clearedIngredients },
+        // ADR-0034: the plan's identity travels with it, so a restored
+        // plan's future cooks group under the plan the rows already name.
+        // Omitted entirely for a plan that has no identity yet (an empty
+        // plan, or one that has never been minted).
+        ...(plan.planId
+          ? { planIdentity: { planId: plan.planId, planCreatedAt: plan.planCreatedAt } }
+          : {}),
       }
     },
     validate(value) {
@@ -109,6 +116,16 @@ export const STORE_SLICES: SliceDef<any>[] = [
       if (v.clearedIngredients !== undefined && !isClearedMap(v.clearedIngredients)) {
         return 'plan.json clearedIngredients must map ids to string arrays'
       }
+      if (v.planIdentity !== undefined) {
+        const id = v.planIdentity as { planId?: unknown; planCreatedAt?: unknown }
+        if (
+          typeof id !== 'object' || id === null ||
+          typeof id.planId !== 'string' || !id.planId ||
+          typeof id.planCreatedAt !== 'number' || !Number.isFinite(id.planCreatedAt)
+        ) {
+          return 'plan.json planIdentity must be {planId: string, planCreatedAt: number}'
+        }
+      }
       return null
     },
     write(value) {
@@ -117,12 +134,16 @@ export const STORE_SLICES: SliceDef<any>[] = [
         entries: PlanEntry[]
         customItems?: string[]
         clearedIngredients?: Record<number, string[]>
+        planIdentity?: { planId: string; planCreatedAt: number } | null
       }
       plan.clearPlan()
       plan.clearCustomItems()
       plan.setClearedIngredients({})
       plan.replacePlan(v.entries, v.customItems ?? [])
       if (v.clearedIngredients) plan.setClearedIngredients(v.clearedIngredients)
+      // ADR-0034: absent/null clears the identity, which is what a legacy
+      // backup means — it predates plan identities.
+      plan.setPlanIdentity(v.planIdentity ?? null)
     },
   },
   /* Grocery checkbox map (grocery store). */
@@ -164,21 +185,34 @@ export const STORE_SLICES: SliceDef<any>[] = [
     label: 'cooked-meal history',
     persistKeys: ['mealime-planner:v1:plan'],
     read: () =>
-      usePlanStore().cookedHistory.map((h) =>
-        h.id !== undefined
-          ? { variantId: h.variantId, cookedAt: h.cookedAt, id: h.id }
-          : { variantId: h.variantId, cookedAt: h.cookedAt },
-      ),
+      usePlanStore().cookedHistory.map((h) => ({
+        variantId: h.variantId,
+        cookedAt: h.cookedAt,
+        ...(h.id !== undefined ? { id: h.id } : {}),
+        // ADR-0034: plan provenance is exported and imported for the same
+        // reason `id` is — it is the event's identity across the household,
+        // and a rebuilt row without it would file the cook under "earlier
+        // cooks" on the restored device only.
+        ...(h.planId !== undefined ? { planId: h.planId } : {}),
+        ...(h.planCreatedAt !== undefined ? { planCreatedAt: h.planCreatedAt } : {}),
+      })),
     validate(value) {
       if (!Array.isArray(value)) return 'cooked-history.json must be an array'
       for (const r of value) {
+        const row = r as CookedEntry
         if (
           typeof r !== 'object' || r === null ||
-          typeof (r as CookedEntry).variantId !== 'number' || !Number.isFinite((r as CookedEntry).variantId) ||
-          typeof (r as CookedEntry).cookedAt !== 'number' || !Number.isFinite((r as CookedEntry).cookedAt) ||
-          ((r as CookedEntry).id !== undefined && typeof (r as CookedEntry).id !== 'string')
+          typeof row.variantId !== 'number' || !Number.isFinite(row.variantId) ||
+          typeof row.cookedAt !== 'number' || !Number.isFinite(row.cookedAt) ||
+          (row.id !== undefined && typeof row.id !== 'string') ||
+          // ADR-0034: the plan provenance pair is optional, but when a row
+          // carries one it must be BOTH a non-empty string and a finite
+          // number — half a provenance is a group header with no key.
+          (row.planId !== undefined &&
+            (typeof row.planId !== 'string' || !row.planId ||
+              typeof row.planCreatedAt !== 'number' || !Number.isFinite(row.planCreatedAt)))
         ) {
-          return 'cooked history rows must be {variantId, cookedAt} numbers + optional id string'
+          return 'cooked history rows must be {variantId, cookedAt} numbers + optional id string + optional {planId, planCreatedAt} plan provenance'
         }
       }
       return null

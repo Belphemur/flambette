@@ -731,3 +731,78 @@ describe('room store — terminal errors stop the loop', () => {
     expect(sockets).toHaveLength(1)
   })
 })
+
+describe('room store — the plan identity is household state (ADR-0034)', () => {
+  test('a peer adopts the room\'s plan identity, so cooks group the same way on both phones', async () => {
+    const plan = usePlanStore()
+    const { socket } = await startRoom()
+    socket.receive({
+      type: 'state',
+      rev: 99,
+      state: {
+        plan: [{ variantId: 7, servings: 6 }],
+        customItems: [],
+        checked: {},
+        planIdentity: { planId: 'plan-household', planCreatedAt: 1000 },
+      },
+    })
+    expect(plan.planId).toBe('plan-household')
+    expect(plan.planCreatedAt).toBe(1000)
+    // The adopted plan is the one a cook here is attributed to.
+    expect(plan.cookPlanIdentity(7).planId).toBe('plan-household')
+  })
+
+  test('an ABSENT planIdentity is "don\'t touch" (ADR-0028), never a wipe', async () => {
+    const plan = usePlanStore()
+    plan.addToPlan({ id: 1, serving_count: 6 } as never, 6)
+    const mine = plan.ensurePlanIdentity()
+    const { socket } = await startRoom()
+    // A peer running older code sends no planIdentity key at all.
+    socket.receive({
+      type: 'state',
+      rev: 99,
+      state: { plan: [], customItems: [], checked: {} },
+    })
+    expect(plan.planId).toBe(mine.planId)
+  })
+
+  test('a plan with an identity publishes it; an empty plan publishes none', async () => {
+    const plan = usePlanStore()
+    const { socket } = await startRoom()
+    await sleep(500) // let the join push flush
+    expect((socket.frames('state').at(-1)!.state as { planIdentity?: unknown }).planIdentity)
+      .toBeUndefined()
+
+    plan.addToPlan({ id: 3, serving_count: 4 } as never, 4)
+    const identity = plan.ensurePlanIdentity()
+    plan.removeFromPlan(3)
+    plan.addToPlan({ id: 3, serving_count: 4 } as never, 4)
+    await sleep(500) // PUSH_DEBOUNCE_MS
+    // Cooking the meal out emptied the plan and ended that identity, so
+    // the plan is published with the NEW one it was restarted under.
+    expect(plan.planId).not.toBe(identity.planId)
+    const pushed = socket.frames('state').at(-1)!.state as {
+      planIdentity?: { planId: string; planCreatedAt: number }
+    }
+    expect(pushed.planIdentity).toEqual({
+      planId: plan.planId,
+      planCreatedAt: plan.planCreatedAt,
+    })
+  })
+
+  test('cook events keep their plan provenance across the wire', async () => {
+    const plan = usePlanStore()
+    const { socket } = await startRoom()
+    plan.addToPlan({ id: 4, serving_count: 4 } as never, 4)
+    const identity = plan.ensurePlanIdentity()
+    plan.markCooked(4)
+    await sleep(500) // PUSH_DEBOUNCE_MS
+    const sent = socket.frames('state').at(-1)!.state as {
+      cookedHistory: { planId?: string; planCreatedAt?: number }[]
+    }
+    // Cooking the last meal out ENDS that plan, so the event must name
+    // the identity captured before the mark, not the (now empty) one.
+    expect(sent.cookedHistory[0].planId).toBe(identity.planId)
+    expect(sent.cookedHistory[0].planCreatedAt).toBe(identity.planCreatedAt)
+  })
+})
