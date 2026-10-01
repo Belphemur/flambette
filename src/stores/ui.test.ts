@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { createPinia, setActivePinia } from 'pinia'
+import { MAX_SERVINGS } from '../lib/servings'
 import { useUiStore } from './ui'
 
 /**
@@ -152,5 +153,91 @@ describe('auto-plan seed generation (ADR-0033)', () => {
       expect(ui.nextAutoPlanGeneration()).toBe(seed + 1)
     }
     expect(ui.autoPlanGeneration).toBe(start + 4)
+  })
+})
+
+/**
+ * The remembered default serving size (ADR-0037). The store owns two
+ * invariants the components rely on: a change is remembered, and a value
+ * that reached the ref by any route other than a setter is repaired
+ * before it can scale a recipe.
+ */
+describe('default servings (ADR-0037)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  test('a fresh install starts at the authored 6', () => {
+    // The whole point of the fallback: an install that never touches the
+    // control behaves exactly as it did before this existed.
+    expect(useUiStore().defaultServings).toBe(6)
+  })
+
+  test('an explicit change is remembered', () => {
+    const ui = useUiStore()
+    ui.setDefaultServings(4)
+    expect(ui.defaultServings).toBe(4)
+    ui.setDefaultServings(2)
+    expect(ui.defaultServings).toBe(2)
+  })
+
+  test('a stepper at the floor is a no-op, not a reset to 1', () => {
+    // `servings--` at 1 sends 0. Storing that would re-scope every future
+    // recipe to a single portion — the floor belongs to the row, not the
+    // remembered default.
+    const ui = useUiStore()
+    ui.setDefaultServings(4)
+    ui.setDefaultServings(0)
+    expect(ui.defaultServings).toBe(4)
+  })
+
+  test('an out-of-range write is clamped', () => {
+    const ui = useUiStore()
+    ui.setDefaultServings(1e9)
+    expect(ui.defaultServings).toBe(MAX_SERVINGS)
+  })
+
+  test('a stepper at the ceiling stores the ceiling, never one past it', () => {
+    // Both steppers clamp BEFORE writing (CodeRabbit + qodo round 1): a
+    // sheet showing 100 while the memory held 99 would display one number
+    // and cook another, since CookingView freezes from the stored value.
+    const ui = useUiStore()
+    ui.setDefaultServings(MAX_SERVINGS - 1)
+    ui.setDefaultServings(MAX_SERVINGS) // a `+` press AT the cap
+    expect(ui.defaultServings).toBe(MAX_SERVINGS)
+  })
+
+  test('repairDefaultServings replaces a hydrated value that cannot scale a recipe', () => {
+    // Hydration is a raw `$patch` of localStorage, so a hand-edited or
+    // truncated blob lands verbatim. Unlike a label, this value is
+    // arithmetic: 0 collapses a recipe, 1e9 makes quantities unusable.
+    for (const bad of [0, -4, NaN, 1e9, 'four', null]) {
+      const ui = useUiStore()
+      ;(ui as unknown as Record<string, unknown>).defaultServings = bad
+      ui.repairDefaultServings()
+      expect(ui.defaultServings).toBe(6)
+    }
+  })
+
+  test('repairDefaultServings leaves a good value alone', () => {
+    const ui = useUiStore()
+    ui.setDefaultServings(4)
+    ui.repairDefaultServings()
+    expect(ui.defaultServings).toBe(4)
+  })
+
+  test('a backup carrying a default restores it', () => {
+    const ui = useUiStore()
+    ui.applySettings({ defaultServings: 3 })
+    expect(ui.defaultServings).toBe(3)
+  })
+
+  test('an ABSENT defaultServings is "don\'t touch" — a legacy backup keeps the device value', () => {
+    const ui = useUiStore()
+    ui.setDefaultServings(5)
+    // A settings.json written before ADR-0037 has no key. Restoring it
+    // must not silently discard what this device already remembers.
+    ui.applySettings({ householdRoom: '' })
+    expect(ui.defaultServings).toBe(5)
   })
 })

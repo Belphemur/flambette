@@ -9,6 +9,7 @@ import {
   type QuickFilters,
 } from '../lib/quickFilters'
 import { isRoomCode, normalizeRoomCode } from '../lib/roomWords'
+import { clampServings, FALLBACK_SERVINGS, isServings, MIN_SERVINGS } from '../lib/servings'
 import { clampSeconds, isStepTimer, type StepTimer } from '../lib/stepTimer'
 
 /** Bottom-nav entries, in display order. `to` is the route path; `icon` is
@@ -123,6 +124,21 @@ export const useUiStore = defineStore(
      * browses the same slice of the catalog.
      */
     const quickFilters = ref<QuickFilters>(defaultQuickFilters())
+    /**
+     * The remembered default serving size (ADR-0037) — the household's
+     * usual portion count, used as the starting value for every NEW
+     * recipe, Auto-Plan pack, History re-plan and unplanned cook.
+     *
+     * Device-local on purpose: the PLAN's servings are the household's
+     * shared truth (they ride the room payload as plan entries), while a
+     * default is one person's starting point. Syncing it would let a
+     * phone that happens to cook for eight re-open a recipe another member
+     * had deliberately set to four.
+     *
+     * Starts at the authored `serving_count` (6) so an install that never
+     * touches the control behaves exactly as before.
+     */
+    const defaultServings = ref<number>(FALLBACK_SERVINGS)
     /** Persistent household room code the app auto-joins on start (ADR-0019). */
     const householdRoom = ref('')
     /**
@@ -203,6 +219,7 @@ export const useUiStore = defineStore(
       autoPlanRuleset?: unknown
       autoPlanMode?: unknown
       autoPlanGeneration?: unknown
+      defaultServings?: unknown
     }): void {
       if (typeof prefs.shareCookedHistory === 'boolean') {
         shareCookedHistory.value = prefs.shareCookedHistory
@@ -234,6 +251,17 @@ export const useUiStore = defineStore(
       if (filters) quickFilters.value = filters
       if (typeof prefs.householdRoom === 'string') setHouseholdRoom(prefs.householdRoom)
       if (prefs.stepTimers !== undefined) stepTimers.value = sanitizeStepTimers(prefs.stepTimers)
+      // A backup written before ADR-0037 has no key at all: that means
+      // "don't touch", so the device keeps the default it already had. A
+      // value that IS present is normalized by `setDefaultServings`, which
+      // CLAMPS an out-of-range count to MAX_SERVINGS and IGNORES a
+      // non-finite or below-floor one (leaving the current value) rather
+      // than storing a 0 that would re-scope every future recipe to one
+      // portion. A backup carrying a malformed value is rejected upstream by
+      // the slice validator, so this path only ever sees a count or nothing.
+      if (prefs.defaultServings !== undefined) {
+        setDefaultServings(prefs.defaultServings as number)
+      }
     }
 
     /**
@@ -308,6 +336,21 @@ export const useUiStore = defineStore(
     }
 
     /**
+     * Repair a hydrated `defaultServings` (ADR-0037).
+     *
+     * Persistence hydration is a raw `$patch` of whatever localStorage
+     * held, so a hand-edited, truncated or older-build value lands in the
+     * ref verbatim. That value multiplies into every recipe's scale
+     * factor, so unlike a UI label a bad one is arithmetic: `0` would
+     * collapse a recipe, `1e9` would render unusable quantities. Anything
+     * that is not a usable count is replaced by the authored fallback.
+     */
+    function repairDefaultServings(): void {
+      if (isServings(defaultServings.value)) return
+      defaultServings.value = FALLBACK_SERVINGS
+    }
+
+    /**
      * Keep only well-formed timers out of an imported/loaded map
      * (validation-first import: unknown shapes are dropped, not trusted).
      */
@@ -343,6 +386,23 @@ export const useUiStore = defineStore(
     function setHouseholdRoom(code: string) {
       const normalized = normalizeRoomCode(code)
       householdRoom.value = isRoomCode(normalized) ? normalized : ''
+    }
+
+    /**
+     * Remember a new default serving size (ADR-0037). Called by every
+     * surface that changes servings on purpose — the recipe-detail
+     * stepper, the plan-row stepper and the Settings control — so the
+     * next recipe, Auto-Plan pack or re-plan starts where the user left
+     * off instead of at the authored 6.
+     *
+     * The write is CLAMPED, never trusted: this is a persisted, hand-
+     * editable value, and an out-of-range one would scale every future
+     * recipe. `0` from a `servings--` at the floor keeps the current
+     * value rather than resetting the default to 1.
+     */
+    function setDefaultServings(value: number): void {
+      if (!Number.isFinite(value) || value < MIN_SERVINGS) return
+      defaultServings.value = clampServings(value)
     }
 
     /** End the current toast (if any) and fire its onDismiss exactly once. */
@@ -381,6 +441,7 @@ export const useUiStore = defineStore(
       autoPlanRuleset,
       autoPlanMode,
       autoPlanGeneration,
+      defaultServings,
       nextAutoPlanGeneration,
       advanceAutoPlanGeneration,
       setCookingStep,
@@ -393,6 +454,8 @@ export const useUiStore = defineStore(
       applySettings,
       migrateLegacyFilters,
       adoptHistoryShareDefault,
+      setDefaultServings,
+      repairDefaultServings,
       setHouseholdRoom,
       showToast,
       dismissToast,
@@ -420,6 +483,9 @@ export const useUiStore = defineStore(
         'autoPlanRuleset',
         'autoPlanMode',
         'autoPlanGeneration',
+        // The remembered default serving size (ADR-0037): a device-local
+        // preference, restored on the next launch.
+        'defaultServings',
       ],
       // Hydration has already run when this fires, so a v0.12 blob (which
       // has no `quickFilters` and therefore patched nothing) can still be
@@ -429,9 +495,11 @@ export const useUiStore = defineStore(
         const store = context.store as unknown as {
           migrateLegacyFilters: () => void
           adoptHistoryShareDefault: () => void
+          repairDefaultServings: () => void
         }
         store.migrateLegacyFilters()
         store.adoptHistoryShareDefault()
+        store.repairDefaultServings()
       },
     },
   },

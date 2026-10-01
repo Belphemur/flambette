@@ -63,6 +63,51 @@ describe('settings import (ADR-0013 registry)', () => {
     expect(ui.shareCookedHistory).toBe(true)
   })
 
+  /**
+   * The remembered default serving size (ADR-0037) rides settings.json, so
+   * a restored device starts recipes at the household's count. A backup
+   * predating it has no key, which is a valid "don't touch" at the
+   * VALIDATOR but must still reset on write — the dialog promises settings
+   * are overwritten, which is the same rule the other modern keys follow.
+   */
+  test('a legacy backup without defaultServings resets it to the authored 6', () => {
+    settingsSlice().write({ defaultServings: 3 })
+    expect(useUiStore().defaultServings).toBe(3)
+
+    settingsSlice().write({ shareCookedHistory: true })
+    expect(useUiStore().defaultServings).toBe(6)
+  })
+
+  test('a modern backup round-trips the remembered default', () => {
+    settingsSlice().write({ defaultServings: 4 })
+    // Export the whole slice, then restore only the settings half under
+    // test: `read()` also carries the `theme` member, whose write path
+    // dispatches a StorageEvent on `window` — a browser-only call that has
+    // no place in a bun-test case (and is covered by the e2e suite).
+    const { defaultServings } = settingsSlice().read() as { defaultServings: number }
+    expect(defaultServings).toBe(4)
+    expect(settingsSlice().validate({ defaultServings })).toBeNull()
+
+    // Change it, then restore the export: the value comes back.
+    settingsSlice().write({ defaultServings: 2 })
+    expect(useUiStore().defaultServings).toBe(2)
+    settingsSlice().write({ defaultServings })
+    expect(useUiStore().defaultServings).toBe(4)
+  })
+
+  test('an ABSENT defaultServings validates — a pre-ADR-0037 backup is restorable', () => {
+    expect(settingsSlice().validate({ shareCookedHistory: true })).toBeNull()
+  })
+
+  test('a MALFORMED defaultServings is rejected, not repaired', () => {
+    // Import is validation-first and atomic: a bad count must fail the
+    // whole archive rather than be silently clamped into something that
+    // looks like a user choice.
+    for (const bad of [0, -2, 1.5, 1e9, 'four', null, NaN]) {
+      expect(settingsSlice().validate({ defaultServings: bad })).toContain('defaultServings')
+    }
+  })
+
   test('a modern backup still applies its explicit values', () => {
     settingsSlice().write({
       shareCookedHistory: false,

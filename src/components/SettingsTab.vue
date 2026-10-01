@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Download, Link, Dices, Upload } from 'lucide-vue-next'
+import { Download, Link, Dices, Minus, Plus, Upload, Utensils } from 'lucide-vue-next'
 import { applyBackup, backupFileName, buildBackupZip } from '../lib/backup'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
+import { MAX_SERVINGS, MIN_SERVINGS } from '../lib/servings'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
@@ -20,6 +21,25 @@ import { useUiStore } from '../stores/ui'
 const ui = useUiStore()
 const room = useRoomStore()
 const { shareRoomLink, shareableCode } = useShareRoomLink()
+
+/* ---------- Default servings (ADR-0037) ---------- */
+
+/**
+ * Nudge the remembered default serving size.
+ *
+ * Every OTHER surface that changes servings (the recipe-detail stepper,
+ * the plan-row stepper) writes this same store value, so this control is
+ * a direct view of it rather than a second, independent setting. The
+ * store clamps; these bounds just stop the buttons walking into it.
+ */
+function bumpDefaultServings(delta: number) {
+  const next = ui.defaultServings + delta
+  if (next < MIN_SERVINGS || next > MAX_SERVINGS) return
+  ui.setDefaultServings(next)
+}
+
+const canFewerDefault = computed(() => ui.defaultServings > MIN_SERVINGS)
+const canMoreDefault = computed(() => ui.defaultServings < MAX_SERVINGS)
 
 /* ---------- Household sync (ADR-0019) ---------- */
 
@@ -192,6 +212,54 @@ function cancelBackupImport(): void {
 <template>
   <section class="space-y-4 pb-4">
   <h2 class="text-lg font-bold tracking-tight">Settings</h2>
+
+  <!-- Default servings (ADR-0037): the remembered starting count. Set it
+  once here, or just change servings on any recipe and this follows. -->
+  <div class="space-y-2 rounded-xl bg-surface p-3" data-test="default-servings-card">
+  <span class="text-sm font-bold tracking-tight">Default servings</span>
+  <p class="text-xs">
+  New recipes, generated plans and re-planned meals start at this number. Changing servings on a recipe or on a planned meal
+  remembers it here for next time.
+  </p>
+  <div
+  class="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-raised px-3 py-2"
+  data-test="default-servings-row"
+  >
+  <span class="flex min-w-0 items-center gap-2 text-sm font-medium">
+  <Utensils :size="16" aria-hidden="true" class="shrink-0 text-text-muted" />
+  Servings per recipe
+  </span>
+  <div class="flex shrink-0 items-center rounded-lg border">
+  <button
+  class="flex size-11 items-center justify-center"
+  :disabled="!canFewerDefault"
+  aria-label="Fewer default servings"
+  data-test="default-servings-fewer"
+  @click="bumpDefaultServings(-1)"
+  >
+  <Minus :size="16" aria-hidden="true" />
+  </button>
+  <span
+  class="w-8 text-center text-sm font-semibold tabular-nums"
+  aria-label="Default servings"
+  data-test="default-servings-value"
+  >{{ ui.defaultServings }}</span
+  >
+  <button
+  class="flex size-11 items-center justify-center"
+  :disabled="!canMoreDefault"
+  aria-label="More default servings"
+  data-test="default-servings-more"
+  @click="bumpDefaultServings(1)"
+  >
+  <Plus :size="16" aria-hidden="true" />
+  </button>
+  </div>
+  </div>
+  <p class="text-xs text-text-muted" data-test="default-servings-note">
+  Recipes already in your plan keep the servings they were added with.
+  </p>
+  </div>
 
   <!-- Household sync: set a room code once and this device re-joins it
   on every launch, so the other phone needs no share link. The room

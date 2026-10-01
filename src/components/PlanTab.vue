@@ -15,6 +15,7 @@ import { catalog } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
 import { MAX_MEALS, MIN_MEALS, type PackPlan } from '../lib/packPlanner'
 import { planShareUrl } from '../lib/share'
+import { MAX_SERVINGS } from '../lib/servings'
 import type { VariantMeta } from '../lib/types'
 import { runAutoPlan } from '../composables/useAutoPlan'
 import { usePlanStore } from '../stores/plan'
@@ -117,6 +118,31 @@ const totals = computed(() => ({
 
 function openRecipe(id: number) {
   void router.push({ name: 'recipe', params: { id: String(id) } })
+}
+
+/**
+ * Bump one planned meal's servings by `delta` and remember the new count
+ * as the device default (ADR-0037).
+ *
+ * Scaling a meal up for a big dinner is the clearest possible statement of
+ * "this is roughly how we cook", so it updates the default the same way the
+ * detail stepper does. `-1` at the floor is a no-op for both the plan
+ * entry and the default.
+ *
+ * The bound is applied to the PLAN ENTRY too, not just the memory: an
+ * entry that ran to 100 while the default held 99 would be a value the
+ * remembered default could never express, and the two would drift apart.
+ */
+function bumpServings(meal: PlannedMeal, delta: number) {
+  const next = Math.min(MAX_SERVINGS, meal.servings + delta)
+  if (next < 1) return
+  plan.setServings(meal.meta.id, next)
+  ui.setDefaultServings(next)
+}
+
+/** The `+` disables at the cap, matching the detail stepper. */
+function canMore(meal: PlannedMeal): boolean {
+  return meal.servings < MAX_SERVINGS
 }
 
 /* ---------- Auto-Plan (ADR-0024) ---------- */
@@ -297,9 +323,15 @@ function confirmAutoPlan() {
   closeAutoPlan()
   return
   }
+  // Every added meal lands at the remembered default (ADR-0037) instead
+  // of a hardcoded authored 6, so a generated plan is already scaled for
+  // this household. On an install that never set a default this is 6 —
+  // bit-for-bit the previous behaviour, which is what keeps the pinned
+  // e2e pack's servings assertion valid.
+  const generatedServings = ui.defaultServings
   const entries = replacing
-  ? additions.map((variantId) => ({ variantId, servings: 6 }))
-  : [...atConfirm, ...additions.map((variantId) => ({ variantId, servings: 6 }))]
+  ? additions.map((variantId) => ({ variantId, servings: generatedServings }))
+  : [...atConfirm, ...additions.map((variantId) => ({ variantId, servings: generatedServings }))]
   plan.replacePlan(entries, plan.customItems)
   // The generation counter advances AFTER a successful apply so the NEXT
   // run rotates the seed (ADR-0027, kept in ADR-0033). This is the
@@ -408,7 +440,7 @@ function confirmAutoPlan() {
   class="flex size-11 items-center justify-center"
   :disabled="meal.servings <= 1"
   :aria-label="`Fewer servings of ${meal.meta.name}`"
-  @click="plan.setServings(meal.meta.id, meal.servings - 1)"
+  @click="bumpServings(meal, -1)"
   >
   <Minus :size="16" aria-hidden="true" />
   </button>
@@ -416,7 +448,8 @@ function confirmAutoPlan() {
   <button
   class="flex size-11 items-center justify-center"
   :aria-label="`More servings of ${meal.meta.name}`"
-  @click="plan.setServings(meal.meta.id, meal.servings + 1)"
+  :disabled="!canMore(meal)"
+  @click="bumpServings(meal, 1)"
   >
   <Plus :size="16" aria-hidden="true" />
   </button>

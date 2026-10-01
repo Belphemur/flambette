@@ -18,6 +18,7 @@ import type { PlanEntry, CookedEntry } from '../stores/plan'
 import type { CustomIngredient } from '../stores/customIngredients'
 import { DIET_IDS, type DietId } from './dietFilter'
 import { normalizeQuickFilters, type QuickFilters } from './quickFilters'
+import { isServings, FALLBACK_SERVINGS, MAX_SERVINGS, MIN_SERVINGS } from './servings'
 import { isStepTimer } from './stepTimer'
 import { zipStore, unzipStore, type ZipEntry } from './zip'
 
@@ -257,7 +258,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
      importing an old backup is not re-flipped on the next launch). */
   {
     file: 'settings.json',
-    label: 'settings (cooked-history room sharing + quick filters + household room + step timers + theme)',
+    label: 'settings (cooked-history room sharing + quick filters + household room + step timers + theme + default servings)',
     persistKeys: ['mealime-planner:v1:ui'],
     read: () => {
       const ui = useUiStore()
@@ -271,6 +272,10 @@ export const STORE_SLICES: SliceDef<any>[] = [
         autoPlanRuleset: ui.autoPlanRuleset,
         autoPlanMode: ui.autoPlanMode,
         autoPlanGeneration: ui.autoPlanGeneration,
+        // ADR-0037: the remembered default travels with a backup, so a
+        // restored device starts recipes at the household's usual count
+        // instead of the authored 6.
+        defaultServings: ui.defaultServings,
       }
     },
     validate(value) {
@@ -334,6 +339,13 @@ export const STORE_SLICES: SliceDef<any>[] = [
       ) {
         return 'settings.json autoPlanGeneration must be a non-negative integer'
       }
+      // Optional: a backup predating ADR-0037 has no key, which is a
+      // valid "don't touch". A key that IS present must be a real count —
+      // import is validation-first, so a malformed one rejects the whole
+      // archive rather than being silently repaired.
+      if (v.defaultServings !== undefined && !isServings(v.defaultServings)) {
+        return `settings.json defaultServings must be an integer between ${MIN_SERVINGS} and ${MAX_SERVINGS}`
+      }
       return null
     },
     write(value) {
@@ -347,6 +359,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
         autoPlanRuleset?: unknown
         autoPlanMode?: unknown
         autoPlanGeneration?: unknown
+        defaultServings?: unknown
       }
       useUiStore().applySettings({
         shareCookedHistory: v.shareCookedHistory,
@@ -361,6 +374,9 @@ export const STORE_SLICES: SliceDef<any>[] = [
         autoPlanRuleset: v.autoPlanRuleset ?? 'dinner',
         autoPlanMode: v.autoPlanMode ?? 'add',
         autoPlanGeneration: v.autoPlanGeneration ?? 0,
+        // Same rule: a pre-ADR-0037 backup restores the authored 6 rather
+        // than leaving the device's own default in place.
+        defaultServings: v.defaultServings ?? FALLBACK_SERVINGS,
       })
       if (v.theme) writeTheme(v.theme.theme ?? '')
     },
