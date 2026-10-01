@@ -381,7 +381,7 @@ function onTouchEnd(e: TouchEvent) {
         </button>
         <div class="min-w-0 flex-1 text-center">
           <p class="truncate text-sm font-bold tracking-tight">{{ meta.name }}</p>
-          <p class="text-xs dark:text-stone-400" aria-live="polite">
+          <p class="text-xs dark:text-stone-400" aria-live="polite" data-test="cook-serves">
             serves {{ servings }} ·
             <span class="font-semibold" data-test="step-counter">{{ counterLabel }}</span>
           </p>
