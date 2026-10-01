@@ -83,6 +83,23 @@ const DIMENSION_TOKENS: Record<string, string> = {
  */
 const EXTRA_THEME_COLORS: string[] = ['--color-brand-text']
 
+/**
+ * The typography DESIGN.md declares -> the `@theme` variables that carry
+ * it. Tailwind v4 spells a text definition as three variables:
+ * `--text-<name>` (size), `--text-<name>--line-height`,
+ * `--text-<name>--font-weight`. The CSS side uses the same px/unit
+ * values DESIGN.md declares, so the assertion is value equality.
+ */
+const TYPOGRAPHY_TOKENS: Record<string, string> = {
+  'headline-lg': '--text-headline-lg',
+  'headline-md': '--text-headline-md',
+  title: '--text-title',
+  'body-md': '--text-body-md',
+  'body-sm': '--text-body-sm',
+  'label-md': '--text-label-md',
+  'cooking-step': '--text-cooking-step',
+}
+
 const FRONTMATTER = designMd.split('---')[1] ?? ''
 
 function designColor(token: string): string | null {
@@ -105,6 +122,26 @@ function themeVar(cssVar: string): string | null {
 function designColorNames(): string[] {
   const colorsBlock = designMd.slice(designMd.indexOf('colors:'), designMd.indexOf('typography:'))
   return Array.from(colorsBlock.matchAll(/^  ([a-z-]+):\s*"#/gm), (m) => m[1])
+}
+
+/** One DESIGN.md typography definition: `fontSize`/`lineHeight`/
+ *  `fontWeight` under `typography.<name>`. Returns lowercase values. */
+function designType(name: string, prop: 'fontSize' | 'lineHeight' | 'fontWeight'): string | null {
+  const m = designMd.match(
+    new RegExp(`^  ${name}:\\n(?:    .*\\n)*?    ${prop}:\\s*([^\\n]+)$`, 'm'),
+  )
+  return m ? m[1].trim().toLowerCase() : null
+}
+
+/** Every `--text-*` variable name defined in the light `@theme` block,
+ *  parsed line-wise (a naive regex cannot separate `--text-x` from its
+ *  `--text-x--line-height` companions). */
+function themeTypeVars(): string[] {
+  const start = styleCss.indexOf('@theme {')
+  const end = styleCss.indexOf('\n}', start)
+  return Array.from(
+    new Set(Array.from(styleCss.slice(start, end).matchAll(/^\s*(--text-[a-z-]+):/gm), (m) => m[1])),
+  )
 }
 
 /** Every `--color-*` variable name defined in the light `@theme` block. */
@@ -211,6 +248,30 @@ describe('the icon role registry (ADR-0036)', () => {
     for (const cssVar of EXTRA_THEME_COLORS) {
       // Each helper must still carry a DOCUMENTED value.
       expect(themeVar(cssVar)).toBe(designColor('primary-strong'))
+    }
+  })
+
+  test('the typography transcriptions match DESIGN.md, size + leading + weight', () => {
+    // Same contract as the colours: DESIGN.md's `typography:` block is the
+    // source; each definition becomes three `@theme` variables.
+    for (const [name, cssVar] of Object.entries(TYPOGRAPHY_TOKENS)) {
+      for (const [prop, suffix] of [
+        ['fontSize', ''],
+        ['lineHeight', '--line-height'],
+        ['fontWeight', '--font-weight'],
+      ] as const) {
+        const declared = designType(name, prop)
+        expect(declared, `${name}.${prop} missing from DESIGN.md`).not.toBeNull()
+        const carried = themeVar(`${cssVar}${suffix}`)
+        expect(carried, `${cssVar}${suffix} missing from src/style.css`).not.toBeNull()
+        expect(carried).toBe(declared)
+      }
+    }
+    // Reverse direction: a size variable outside the declared set is a
+    // stray transcription (companion vars carry their parent's name).
+    for (const v of themeTypeVars()) {
+      const isCompanion = /--(line-height|font-weight)$/.test(v)
+      if (!isCompanion) expect(Object.values(TYPOGRAPHY_TOKENS)).toContain(v)
     }
   })
 

@@ -433,7 +433,7 @@ onUnmounted(() => observer?.disconnect())
   <component
   :is="PROTEIN_ICONS[p.value].icon"
   :size="14"
-  :class="filters.protein === p.value ? '' : PROTEIN_ICONS[p.value].cls"
+  :class="PROTEIN_ICONS[p.value].cls"
   aria-hidden="true"
   />
   {{ p.label }}
@@ -457,10 +457,13 @@ onUnmounted(() => observer?.disconnect())
   :aria-label="`${DIET_LABELS[d]}: ${DIET_DESCRIPTIONS[d]}`"
   @click="toggleDiet(d)"
   >
+  <!-- The role hue is the icon's IDENTITY and survives selection
+  (DESIGN.md "Selection and actions"): the selected chip is a TINT,
+  never a fill, so the icon keeps `DIET_ICONS[d].cls` in BOTH states. -->
   <component
   :is="DIET_ICONS[d].icon"
   :size="14"
-  :class="activeDiets.includes(d) ? '' : DIET_ICONS[d].cls"
+  :class="DIET_ICONS[d].cls"
   aria-hidden="true"
   />
   {{ dietChipLabel(d, dietCounts[d]) }}

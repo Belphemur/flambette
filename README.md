@@ -13,7 +13,7 @@
 <td width="19%" align="center"><img src="docs/screenshots/recipe-detail-dark.png" width="100%" alt="Recipe detail, dark mode" /><br /><sub>The same tomato action, now keyed for espresso</sub></td>
 <td width="19%" align="center"><img src="docs/screenshots/plan-dark.png" width="100%" alt="Meal plan, dark mode" /><br /><sub>Warm-on-dark, no unstyled light surface</sub></td>
 <td width="19%" align="center"><img src="docs/screenshots/grocery-dark.png" width="100%" alt="Grocery list, dark mode" /><br /><sub>Quantities stay legible in both themes</sub></td>
-<td width="19%" align="center"><img src="docs/screenshots/cooking-dark.png" width="100%" alt="Cooking mode, dark mode" /><br /><sub>Hands-free step reader at the store</sub></td>
+<td width="19%" align="center"><img src="docs/screenshots/cooking-dark.png" width="100%" alt="Cooking mode, dark mode" /><br /><sub>Hands-free step reader at the stove</sub></td>
 </tr>
 </table>
 

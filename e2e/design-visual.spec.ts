@@ -519,25 +519,26 @@ test.describe('nav icon hover (pointer)', () => {
     expect(idle.duration).toContain('0.15s')
 
     await tab.hover()
-    // Poll until the transform has actually SETTLED on the final -2px
-    // translation. Polling only for "started animating" would read the
-    // element mid-transition, where the matrix is an intermediate value.
+    // Poll until the transform has SETTLED on the exact final -2px
+    // translation (translateY(-2px) resolves to matrix f = -2, no
+    // rounding): polling for "started animating" or a rounded value would
+    // pass while the 150ms transition is still running, and a SECOND
+    // read afterwards can still catch an intermediate matrix (CI saw
+    // -1.93871). The poll below both waits for AND captures the settled
+    // value; everything asserted after it reuses that read.
+    let lifted = 0
     await expect
-      .poll(async () =>
-        icon.evaluate((el) => {
-          const t = getComputedStyle(el).transform
-          const m = /matrix\(([^)]+)\)/.exec(t)
-          return m === null ? null : Math.round(Number(m![1].split(',')[5]))
-        }),
-      )
+      .poll(async () => {
+        lifted = await icon.evaluate((el) => {
+          const m = /matrix\(([^)]+)\)/.exec(getComputedStyle(el).transform)
+          return m === null ? 0 : Number(m![1].split(',')[5])
+        })
+        return lifted
+      })
       .toBe(-2)
-    const hovered = await icon.evaluate((el) => {
-      const s = getComputedStyle(el)
-      return { transform: s.transform, color: s.color }
-    })
-    expect(hovered.transform).toContain('matrix')
-    expect(hovered.transform).toContain('-2')
-    expect(hovered.color).not.toBe(idle.color)
+    const hovered = await icon.evaluate((el) => getComputedStyle(el).color)
+    expect(lifted).toBe(-2)
+    expect(hovered).not.toBe(idle.color)
   })
 
   test('reduced motion drops the lift and keeps the tint', async ({ page, isMobile }) => {

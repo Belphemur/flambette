@@ -163,7 +163,7 @@ function customCategory(item: string): string | undefined {
   <p class="text-sm font-semibold" aria-live="polite">
   {{ checkedCount }} / {{ totalCount }} items
   </p>
-  <div class="h-1.5 w-24 overflow-hidden rounded-full">
+  <div class="h-1.5 w-24 overflow-hidden rounded-full bg-surface-sunken">
   <div
   class="h-full rounded-full bg-brand transition-all"
   :style="{ width: totalCount ? `${(checkedCount / totalCount) * 100}%` : '0%' }"
