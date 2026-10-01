@@ -32,25 +32,25 @@ step AND run CONCURRENTLY — a per-step single timer cannot represent
    pre-fills from context (below). Limit 4 concurrent timers (screen
    space on Pixel 7); adding a 5th asks which to replace.
 
-3. **Recipe-detected suggestion (build-time extraction).** Timer hints are
-   extracted OFFLINE from the raw catalog by a stdlib Python script — the
-   repo's existing generated-data pattern (`scripts/extract_ingredients.py`,
-   `scripts/build_pack_index.py` in AGENTS.md). New
-   `scripts/extract_timer_hints.py` scans all 2,730
-   `public/data/recipes/*.json` step texts (incl. measured-amount-bearing
+3. **Recipe-detected suggestion (build-time, per-recipe artifact).** Timer
+   hints are extracted OFFLINE from the raw catalog by a stdlib Python
+   script — the repo's existing generated-data pattern
+   (`scripts/extract_ingredients.py`, `scripts/build_pack_index.py` in
+   AGENTS.md). New `scripts/extract_timer_hints.py` scans each
+   `public/data/recipes/<variantId>.json` step text (incl. measured-amount
    lines) for an explicit cook duration ("Simmer the rice for 12 minutes",
-   "Bake 20–25 min") and emits the COMMITTED artifact
-   `public/data/timer_hints.json`: `{ [variantId]: [{ step: number,
-   seconds: number, label?: string, range?: [number, number] }] }` —
-   ranges record BOTH bounds; the UI suggests the lower bound and says so
-   ("Bake 20 min (of 20–25)"; ADR-0022's no-fabrication rule holds: only
-   authored durations are extracted). The runtime lib
-   (`src/lib/timerSuggest.ts`) becomes a pure LOOKUP over the loaded
-   artifact (per current view's steps, same `imageSrc`-style lazy pattern
-   as the catalog load), NOT a runtime regex — offline behaviour is
-   unchanged because the hints ship in the repo. Register the output in
-   the AGENTS.md generated-data table; label with the food named in the
-   sentence, else "Step N".
+   "Bake 20–25 min") and writes the matching sidecar artifact
+   `public/data/recipes/<variantId>.timer.json`:
+   `{ steps: [{ step: number, seconds: number, label?: string,
+   range?: [number, number] }] }` — one file per recipe, sitting NEXT TO
+   the recipe so the UI can `import()` / fetch it ON DEMAND only for the
+   variant being read (no global index load). Ranges record BOTH bounds;
+   the UI suggests the lower bound and says so ("Bake 20 min (of 20–25)";
+   ADR-0022's no-fabrication rule holds: only authored durations are
+   extracted). Absent step has no timer → file is `steps: []` (or omitted
+   entirely). The runtime lib `src/lib/timerSuggest.ts` is a pure lookup
+   over the per-recipe object keyed by current step number. Register the
+   script+artifact convention in the AGENTS.md generated-data table.
 
 4. **Ambiguous anchors do NOT arm silently.** Tapping the suggested chip
    always lands in the confirm shape (name + minutes) with the proposal
