@@ -1,13 +1,14 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:base"],
+  "extends": ["config:recommended"],
   "baseBranches": ["main"],
   "timezone": "America/New_York",
   "schedule": ["at any time"],
   "automerge": true,
   "automergeType": "pr",
+  "automergeStrategy": "squash",
+  "platformAutomerge": true,
   "prCreation": "immediate",
-  "mergeMethod": "squash",
   "rebaseWhen": "behind-base-branch",
   "prConcurrentLimit": 0,
   "ignoreUnstable": true,
@@ -17,9 +18,7 @@
         "Group minor, patch, pin and digest updates (npm/bun, GH Actions, Docker) into one PR, then auto-merge when the full e2e + unit + docker CI gate is green — keeps the 288-test e2e suite from running once per package."
       ],
       "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
-      "group": {
-        "name": "chore(deps): minor & patch updates"
-      },
+      "groupName": "minor & patch updates",
       "automerge": true,
       "automergeType": "pr"
     },
@@ -38,7 +37,6 @@
   "vulnerabilityAlerts": {
     "enabled": true,
     "automerge": true,
-    "prCreation": "immediate",
-    "mergeMethod": "squash"
+    "prCreation": "immediate"
   }
 }
