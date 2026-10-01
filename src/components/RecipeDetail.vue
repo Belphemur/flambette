@@ -7,6 +7,7 @@ import { scaleQuantity } from '../lib/quantity'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
+import { useUiStore } from '../stores/ui'
 import { useFavouritesStore } from '../stores/favourites'
 import RatingStars from './RatingStars.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
@@ -34,7 +35,33 @@ const props = defineProps<{ id: number }>()
 const doc = ref<RecipeDoc | null>(null)
 const loading = ref(false)
 const loadError = ref<string | null>(null)
-const servings = ref(1)
+const ui = useUiStore()
+
+/**
+ * Servings shown for THIS recipe, seeded from the remembered default
+ * (ADR-0037) rather than the authored `serving_count`.
+ *
+ * The catalog's 6 is a recipe fact — "this is how the author wrote it" —
+ * and using it as the starting point on every open meant a household of
+ * four re-dialled the same six-to-four correction on every recipe, every
+ * time. The remembered default is that correction, made once.
+ */
+const servings = ref(ui.defaultServings)
+
+/**
+ * Change the servings for this recipe AND remember it as the new default
+ * (ADR-0037), so the next recipe, pack and re-plan start here.
+ *
+ * One function for both writes, deliberately: a stepper that adjusted the
+ * sheet but not the memory would look like it worked and quietly revert to
+ * 6 on the next recipe, which is exactly the complaint this replaces. The
+ * floor is the local ref's concern (the `-` button is disabled at 1); the
+ * store ignores a below-floor write rather than storing 1.
+ */
+function setServings(next: number) {
+  servings.value = Math.max(1, next)
+  ui.setDefaultServings(servings.value)
+}
 
 const meta = computed<VariantMeta | null>(
   () => catalog.value?.byId.get(props.id) ?? null,
@@ -103,7 +130,10 @@ async function loadDoc() {
   loading.value = true
   loadError.value = null
   doc.value = null
-  servings.value = meta.value.serving_count
+  // Seed from the remembered default (ADR-0037), not the authored
+  // `serving_count`. Re-read per load so a recipe opened after the user
+  // changed the default elsewhere starts at the current one.
+  servings.value = ui.defaultServings
   try {
   doc.value = await getRecipe(meta.value)
   } catch (e) {
@@ -290,7 +320,7 @@ function startCooking() {
   class="flex size-11 items-center justify-center text-lg"
   :disabled="servings <= 1"
   aria-label="Fewer servings"
-  @click="servings--"
+  @click="setServings(servings - 1)"
   >
   <Minus :size="18" aria-hidden="true" />
   </button>
@@ -300,7 +330,7 @@ function startCooking() {
   <button
   class="flex size-11 items-center justify-center text-lg"
   :aria-label="`More servings`"
-  @click="servings++"
+  @click="setServings(servings + 1)"
   >
   <Plus :size="18" aria-hidden="true" />
   </button>

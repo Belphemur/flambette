@@ -38,7 +38,8 @@ const meta = computed(() => catalog.value?.byId.get(props.id) ?? null)
 
 /**
  * Servings source: the plan entry's servings when the recipe is planned,
- * otherwise the recipe's base serving_count. No stepper here — change
+ * otherwise the remembered default (ADR-0037), and the authored
+ * `serving_count` only as the last resort. No stepper here — change
  * servings from the detail sheet.
  *
  * Frozen at the first successful resolution (ADR-0034). It USED to be a
@@ -54,8 +55,8 @@ const servings = computed(() => {
   const id = meta.value?.id
   if (id === undefined) return 1
   if (frozenServings === null) {
-  const entry = plan.plan.find((e) => e.variantId === id)
-  frozenServings = entry?.servings ?? meta.value!.serving_count
+    const entry = plan.plan.find((e) => e.variantId === id)
+    frozenServings = entry?.servings ?? ui.defaultServings
   }
   return frozenServings
 })

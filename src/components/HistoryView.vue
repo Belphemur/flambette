@@ -69,9 +69,11 @@ function openRecipe(id: number) {
   void router.push({ name: 'recipe', params: { id: String(id) } })
 }
 
-/** Re-plan the meal at its default servings — same flow as the detail view. */
+/** Re-plan the meal at the remembered default servings (ADR-0037) — same
+ *  flow as the detail view, and no per-recipe stepper is offered here, so
+ *  this is the only sensible count. Was the authored `serving_count`. */
 function addToPlan(row: Row) {
-  plan.addToPlan(row.meta, row.meta.serving_count)
+  plan.addToPlan(row.meta, ui.defaultServings)
   ui.showToast(`Added ${row.meta.name} to plan`)
 }
 </script>

@@ -153,10 +153,21 @@ export const usePlanStore = defineStore(
       return { planId: nextPlanId(), planCreatedAt: Date.now() }
     }
 
-    function addToPlan(meta: VariantMeta, servings = meta.serving_count): void {
+    /**
+     * Add (or re-scale) a planned meal.
+     *
+     * `servings` is REQUIRED (ADR-0037). It used to default to
+     * `meta.serving_count`, which is how the authored 6 leaked into every
+     * add path; the remembered default lives in the ui store, and a
+     * required argument makes each caller state which count it means
+     * instead of inheriting a recipe fact. An invalid count still floors
+     * at 1, as the UI's own stepper does.
+     */
+    function addToPlan(meta: VariantMeta, servings: number): void {
+      const count = Number.isFinite(servings) ? Math.max(1, Math.round(servings)) : 1
       const existing = plan.value.find((e) => e.variantId === meta.id)
       if (existing) {
-        existing.servings = servings
+        existing.servings = count
         return
       }
       // Fresh planning = fresh ingredients: forget any cleared snapshot.
@@ -167,7 +178,7 @@ export const usePlanStore = defineStore(
         planId.value = ''
         planCreatedAt.value = 0
       }
-      plan.value.push({ variantId: meta.id, servings })
+      plan.value.push({ variantId: meta.id, servings: count })
       ensurePlanIdentity()
     }
 
