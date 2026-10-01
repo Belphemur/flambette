@@ -205,10 +205,11 @@ export const STORE_SLICES: SliceDef<any>[] = [
           typeof row.variantId !== 'number' || !Number.isFinite(row.variantId) ||
           typeof row.cookedAt !== 'number' || !Number.isFinite(row.cookedAt) ||
           (row.id !== undefined && typeof row.id !== 'string') ||
-          // ADR-0034: the plan provenance pair is optional, but when a row
-          // carries one it must be BOTH a non-empty string and a finite
-          // number — half a provenance is a group header with no key.
-          (row.planId !== undefined &&
+          // ADR-0034: the plan provenance pair is optional, but it is
+          // ALL-OR-NOTHING — the check triggers when EITHER field is
+          // present, so a row carrying only a planCreatedAt (which would
+          // import as a legacy group with a plan date) is refused.
+          ((row.planId !== undefined || row.planCreatedAt !== undefined) &&
             (typeof row.planId !== 'string' || !row.planId ||
               typeof row.planCreatedAt !== 'number' || !Number.isFinite(row.planCreatedAt)))
         ) {

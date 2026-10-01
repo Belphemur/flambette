@@ -256,6 +256,11 @@ describe('plan provenance on cook events (ADR-0034 registry)', () => {
     expect(historySlice().validate([{ variantId: 5, cookedAt: 100, planId: 'plan-a' }])).toContain(
       'plan provenance',
     )
+    // The check triggers on EITHER field: a lone planCreatedAt would
+    // otherwise import as a legacy row that nevertheless carries a date.
+    expect(
+      historySlice().validate([{ variantId: 5, cookedAt: 100, planCreatedAt: 50 }]),
+    ).toContain('plan provenance')
     expect(
       historySlice().validate([
         { variantId: 5, cookedAt: 100, planId: '', planCreatedAt: 50 },

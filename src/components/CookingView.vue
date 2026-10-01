@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Check,
@@ -222,26 +222,38 @@ function confirmTimerBeforeLeaving(): boolean {
 }
 
 /**
- * Plan provenance of THIS cook session (ADR-0034), captured on first use
- * so it is taken while the meal is still in the plan: the real plan's
- * identity when the recipe is planned, else a freshly minted ad-hoc
- * one-recipe plan (owner rule). Cached, not recomputed — a mid-step mark
- * and the session's Finish must land in the SAME ad-hoc plan, and the
- * ad-hoc identity is never stored as the store's own plan id.
+ * Plan provenance of THIS cook session (ADR-0034), captured WHEN THE
+ * SESSION OPENS — not on the first press. A peer can change the plan while
+ * the dialog is open (someone cooks the meal on the other phone, or adds
+ * it), and the answer to "which plan was this cook made under" is the plan
+ * the cook STARTED under. Lazy capture would answer with whatever the plan
+ * happened to be at press time, which flips a household cook into an ad-hoc
+ * one for no reason. The identity is the real plan's when the recipe is
+ * planned, else a freshly minted ad-hoc one-recipe plan (owner rule); it is
+ * never stored as the store's own plan id.
  */
-let sessionPlan: PlanIdentity | null = null
-function cookContext(): PlanIdentity {
-  sessionPlan ??= plan.cookPlanIdentity(props.id)
-  return sessionPlan
-}
+const sessionPlan: PlanIdentity = plan.cookPlanIdentity(props.id)
+
+/** The cook event THIS session has already recorded, if any. */
+const sessionCooked = ref<CookedEntry | null>(null)
+const sessionRecorded = computed(() => sessionCooked.value !== null)
 
 /**
  * Record this cook, with an undo that restores the exact prior state
  * (ADR-0034). The snapshot is taken at press time, before markCooked
  * drops the meal from the plan and forgets its cleared ingredients —
  * afterwards neither is knowable.
+ *
+ * A session records at most ONE cook: marking mid-way and then pressing
+ * Finish is one cook, not two, and the button is disabled after the mark so
+ * the user is never asked to choose. Finish after a mid-cook mark therefore
+ * just closes — the cook is already recorded and the plan already updated.
  */
 function recordCook(opts: { message: string; close: boolean }): boolean {
+  if (sessionCooked.value) {
+    if (opts.close) close()
+    return true
+  }
   if (!confirmTimerBeforeLeaving()) return false
   const id = props.id
   const entry = plan.plan.find((e) => e.variantId === id)
@@ -250,12 +262,19 @@ function recordCook(opts: { message: string; close: boolean }): boolean {
     entry: entry ? { ...entry } : null,
     cleared: cleared ? [...cleared] : null,
   }
-  const event: CookedEntry = plan.markCooked(id, cookContext())
+  const event: CookedEntry = plan.markCooked(id, sessionPlan)
+  sessionCooked.value = event
   ui.showToast(opts.message, {
     actions: [
       {
         label: 'Undo',
-        run: () => plan.undoMarkCooked(event, prior),
+        // Undo hands the session back its un-recorded state, so a Finish
+        // after it records the cook properly instead of being swallowed by
+        // the "already marked" guard.
+        run: () => {
+          plan.undoMarkCooked(event, prior)
+          sessionCooked.value = null
+        },
         testId: 'cook-undo',
       },
     ],
@@ -329,6 +348,21 @@ async function loadDoc() {
     doc.value = null
   }
 }
+
+/**
+ * A cooking link to an id the catalog does not have is a dead end: the
+ * route is ungated for real recipes (ADR-0034), not for ids that do not
+ * exist, and cooking mode hides the app's navigation — so hand it to the
+ * detail view, which owns the not-found state. Waits for the catalog to be
+ * loaded first, so a slow boot is never mistaken for a missing recipe.
+ */
+watch(
+  () => Boolean(catalog.value) && !meta.value,
+  (missing) => {
+    if (missing) void router.replace({ name: 'recipe', params: { id: String(props.id) } })
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   void loadDoc()
@@ -574,16 +608,19 @@ function onTouchEnd(e: TouchEvent) {
         </div>
         <!-- Mark as cooked is reachable from ANY step; on the last step
              Finish above IS the mark, so there is never a second button
-             offering the same action (ADR-0034). -->
+             offering the same action (ADR-0034). A session records ONE
+             cook: after the mid-cook mark the button reports that and
+             stops inviting a second one. -->
         <button
           v-if="!isLast"
-          class="h-12 rounded-xl border dark:border-stone-600 dark:bg-stone-900 text-sm font-semibold text-primary-dark dark:text-primary active:bg-stone-100 dark:active:bg-stone-800"
+          class="h-12 rounded-xl border dark:border-stone-600 dark:bg-stone-900 text-sm font-semibold text-primary-dark dark:text-primary active:bg-stone-100 dark:active:bg-stone-800 disabled:opacity-60"
           data-test="mark-cooked"
           aria-label="Mark as cooked and keep cooking"
+          :disabled="sessionRecorded"
           @click="markCookedEarly"
         >
-          <Check :size="16" aria-hidden="true" class="mr-1 inline" />
-          Mark as cooked
+          <Check v-if="!sessionRecorded" :size="16" aria-hidden="true" class="mr-1 inline" />
+          {{ sessionRecorded ? 'Marked as cooked' : 'Mark as cooked' }}
         </button>
       </div>
     </footer>

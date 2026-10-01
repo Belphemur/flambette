@@ -226,12 +226,19 @@ test('mark as cooked also asks before discarding a running timer', async ({ page
   page.once('dialog', (d) => void d.dismiss())
   await cooking.getByTestId('mark-cooked').click()
   await expect(cooking).toBeVisible()
-  await expect(page.getByText('Marked as cooked')).toHaveCount(0)
+  // The toast is the assertion surface: the button ALSO reads "Marked as
+  // cooked" once recorded, so a bare getByText would match both.
+  await expect(page.getByTestId('toast')).toHaveCount(0)
+  await expect(cooking.getByTestId('mark-cooked')).toBeEnabled()
 
   page.once('dialog', (d) => void d.accept())
   await cooking.getByTestId('mark-cooked').click()
-  await expect(page.getByText('Marked as cooked')).toBeVisible()
-  // Recording the cook mid-way does not end the cook.
+  await expect(page.getByTestId('toast')).toContainText('Marked as cooked')
+  // Recording the cook mid-way does not end the cook…
   await expect(cooking).toBeVisible()
+  // …and the session records ONE cook: the button now reports it and
+  // stops inviting a second one (ADR-0034).
+  await expect(cooking.getByTestId('mark-cooked')).toContainText('Marked as cooked')
+  await expect(cooking.getByTestId('mark-cooked')).toBeDisabled()
   await expectZeroMealimeRequests(page)
 })

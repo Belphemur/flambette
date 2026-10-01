@@ -385,7 +385,11 @@ export const usePlanStore = defineStore(
       if (!planContains(prior.entry.variantId)) {
         plan.value.push({ ...prior.entry })
       }
-      if (event.planId) {
+      // Restore the identity ONLY if this device is still on that plan.
+      // If the cook emptied the plan and a new meal has since started
+      // another one, the newer plan is the truth: overwriting its id would
+      // relabel an unrelated batch as the undone cook's plan.
+      if (event.planId && !planId.value) {
         planId.value = event.planId
         planCreatedAt.value = event.planCreatedAt ?? 0
       }
@@ -401,6 +405,14 @@ export const usePlanStore = defineStore(
         servings: Math.max(1, Math.round(e.servings)),
       }))
       customItems.value = custom
+      // A wholesale replacement IS a new plan (Auto-Plan in replace mode,
+      // a `?p=` share import, an inbound room snapshot). Keeping the
+      // previous identity would file the next cook under a plan this
+      // device no longer has — and would publish that stale id to every
+      // peer. Mint (or clear) exactly like the empty -> non-empty rule.
+      planId.value = ''
+      planCreatedAt.value = 0
+      if (plan.value.length > 0) ensurePlanIdentity()
     }
 
     return {

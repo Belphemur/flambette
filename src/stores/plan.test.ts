@@ -50,6 +50,24 @@ describe('plan identity (ADR-0034)', () => {
     plan.clearPlan()
     expect(plan.planId).toBe('')
   })
+
+  test('replacePlan is a NEW plan: it never keeps the previous identity', () => {
+    // Auto-Plan in replace mode, a `?p=` share import and an inbound room
+    // snapshot all go through replacePlan. Keeping the old id would file
+    // the next cook under a plan this device no longer has, and would
+    // publish that stale id to every peer.
+    const plan = usePlanStore()
+    plan.addToPlan(meta(1))
+    const before = plan.planId
+    plan.replacePlan([{ variantId: 2, servings: 3 }], ['milk'])
+    expect(plan.planId).not.toBe(before)
+    expect(plan.planCreatedAt).toBeGreaterThan(0)
+
+    // Replacing with an empty plan ends the identity outright.
+    plan.replacePlan([], [])
+    expect(plan.planId).toBe('')
+    expect(plan.planCreatedAt).toBe(0)
+  })
 })
 
 describe('cook provenance (ADR-0034)', () => {
@@ -156,6 +174,22 @@ describe('undoing a cook (ADR-0034)', () => {
     // The unrelated planned meal — and its plan — are untouched.
     expect(plan.plan).toEqual([{ variantId: 2, servings: 4 }])
     expect(plan.planId).not.toBe('')
+  })
+
+  test('undo does not relabel a plan that has since started anew', () => {
+    const plan = usePlanStore()
+    plan.addToPlan(meta(1), 4)
+    const event = plan.markCooked(1)
+    // The cook emptied the plan; a new meal has since started ANOTHER one.
+    plan.addToPlan(meta(2), 2)
+    const current = plan.planId
+
+    plan.undoMarkCooked(event, { entry: { variantId: 1, servings: 4 }, cleared: null })
+    // The meal is back, but the identity stays the newer plan's: the older
+    // cook's plan is genuinely over, and relabelling it would file an
+    // unrelated batch under a plan the user already finished.
+    expect(plan.plan.map((e) => e.variantId)).toEqual([2, 1])
+    expect(plan.planId).toBe(current)
   })
 
   test('unmarkCooked is a no-op for an event we do not hold', () => {

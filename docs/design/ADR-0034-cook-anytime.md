@@ -54,6 +54,12 @@ Servings come from the plan entry when there is one and from the recipe's
 own `serving_count` otherwise — no change needed in `CookingView`, which
 already resolves exactly that.
 
+A finite id that is NOT in the catalog is still a dead end, and cooking mode
+hides the app's navigation, so `CookingView` hands such a link to the recipe
+detail view (which owns the not-found state) once the catalog has loaded —
+after the load, so a slow boot is never mistaken for a missing recipe. The
+route is ungated for real recipes, not for ids that do not exist.
+
 ### 2. The plan has an identity, persisted
 
 The plan store gains two persisted members alongside `plan`:
@@ -71,6 +77,14 @@ meal added starts a NEW plan with a new id — which is the correct reading of
 Persisted members that predate this ADR simply have no `planId`/
 `planCreatedAt`; the store mints them lazily on first use rather than running
 a migration, so a legacy install needs no write step to be consistent.
+
+The rule lives in ONE place, and every path that can start a plan goes
+through it: `addToPlan` (empty → non-empty) and `replacePlan`. A wholesale
+replacement — Auto-Plan in replace mode, a `?p=` share import, an inbound
+room snapshot — IS a new plan, so `replacePlan` drops the previous identity
+and mints a new one exactly like the empty → non-empty rule. Keeping the old
+id there would file the next cook under a plan the device no longer has, and
+would publish that stale id to every peer.
 
 ### 3. `CookedEntry` carries plan provenance
 
@@ -101,6 +115,13 @@ The Plan-tab **Mark as cooked** button (an existing second entry point, and
 one that always marks a meal that IS in the plan) therefore records the
 current plan's identity for free.
 
+The cook session captures that identity **when the session opens**, not on
+the first press. A peer can change the plan while the dialog is open (the
+other phone cooks the meal, or adds it), and "which plan was this cook made
+under" is the plan the cook STARTED under; resolving it at press time would
+silently reclassify a household cook as ad-hoc because somebody else was
+busy.
+
 ### 4. An ad-hoc cook is its own one-recipe plan
 
 Owner rule: a cook started without a plan is treated as if a plan had been
@@ -121,7 +142,11 @@ real plan.
   `confirmTimerBeforeLeaving()` gate the Finish button runs today
   (ADR-0020), records the cook event, and **stays in cooking mode** — the
   user is marking the meal while still cooking it. Toast: "Marked as
-  cooked", with an **Undo** action.
+  cooked", with an **Undo** action. A session records **at most one** cook:
+  after the mid-cook mark the button reads "Marked as cooked" and is
+  disabled, so a user who marks at step 2 and presses Finish at step 12 has
+  cooked the meal ONCE, not twice. (The store-level guard behind the
+  disabled button exists too — the count in History is load-bearing.)
 - **On the last step only**, the `Next` slot becomes **Finish**
   (`data-test="finish"`, `bg-primary`, PartyPopper icon). **Finish is one
   action**: it records the cook event AND drops the meal from the plan
@@ -147,8 +172,23 @@ taken at press time, before `markCooked` mutates anything: the plan entry for
 the recipe (or `null` if it was unplanned) with its servings, and the
 `clearedIngredients` row for the variant. Undo re-adds the plan entry
 verbatim, restores the cleared row, and drops the event via the new
-`unmarkCooked(eventId)`. Undo of an ad-hoc cook (no plan entry to restore)
-just removes the event.
+`unmarkCooked(event)`. Undo of an ad-hoc cook (no plan entry to restore)
+just removes the event, and hands the session back its un-recorded state so a
+later Finish records properly.
+
+The plan IDENTITY is restored only if this device is still on that plan. If
+the cook emptied the plan and a new meal has since started another one, the
+newer plan is the truth: relabelling it with the finished cook's id would file
+an unrelated batch under a plan the user already finished.
+
+**Known boundary — undo is a local revert.** Cooked history is an
+append-only log with no delete semantic (ADR-0032), and the push debounce is
+far shorter than the 6s undo window, so an undone cook has usually already
+reached the room: a peer that still holds the event can republish it and the
+cook comes back. Making undo distributed means tombstoning events — the FIRST
+delete semantic in that log, with its own merge rules — which is a decision
+of its own and deliberately not smuggled in here. Single-device undo (the
+overwhelmingly common case) is exact.
 
 ### 7. History reads by plan
 
@@ -192,11 +232,21 @@ silently drop provenance on import:
 - `src/stores/plan.ts`: `replaceCookedHistory` and `mergeCookedHistory`;
 - `src/lib/backup.ts`: the `cooked-history.json` slice's `read()` and
   `validate()` (which today names exactly `{variantId, cookedAt} + optional
-  id` in its error string).
+  id` in its error string). The provenance pair is validated
+  ALL-OR-NOTHING — the check triggers when EITHER field is present, so a row
+  carrying only a `planCreatedAt` cannot slip in as a legacy row that
+  nevertheless carries a date.
 
-Both accept the new fields as optional and preserve them; a peer or backup
-that lacks them is still valid, and absence still means "don't touch"
-(ADR-0028), never a wipe.
+The plan identity itself is household state (`SharedState.planIdentity`,
+watched by the push list so a lazily minted id is actually published), and it
+is **explicitly nullable**: `null` is a real answer ("there is no current
+plan") and replaces wholesale, while an ABSENT key means "a peer running
+older code has nothing to say". Collapsing the two would make an older
+peer's push either wipe the household's identity or — if omission were
+preserved — keep an identity for a plan that has ended, and one batch would
+split into two History groups depending on which phone pushed last. So the
+relay preserves a stored `planIdentity` **only when the key is absent**,
+mirroring the rule it already applies to `cookedHistory`.
 
 ## Consequences
 
@@ -213,7 +263,9 @@ that lacks them is still valid, and absence still means "don't touch"
 - ADR-0032's union-merge still holds; `mergeCookedHistory` and the room
   reconciliation are unchanged apart from carrying two more fields.
 - The plan store's persisted shape grows by two members, so the backup
-  registry's plan slice must round-trip them (`STORE_SLICES`, ADR-0013).
+  registry's plan slice must round-trip them (`STORE_SLICES`, ADR-0013) —
+  and a pre-ADR-0034 backup, which carries no identity, must CLEAR the
+  identity on restore rather than silently keep the local one.
 
 ## Alternatives considered
 
@@ -234,8 +286,9 @@ that lacks them is still valid, and absence still means "don't touch"
 - **Make Finish not mark cooked, keeping two buttons on the last step.**
   Rejected by the owner: one action, one button — "Finish records the cook
   and takes the meal off the plan".
-- **Mid-cook mark closes cooking mode.** Rejected: the user is marking the
-  meal and still cooking it; closing would be a second, hidden Finish.
+- **A second Finish.** Rejected: one action, one button — the owner rule.
+  A session that already recorded its cook makes Finish a plain close, so
+  the two paths cannot double-count.
 - **A new ADR for the ungate alone.** Rejected: the three changes are one
   decision (cook any recipe ⇒ mark it where you are ⇒ remember what it was
   part of) and splitting them would produce two records arguing with each

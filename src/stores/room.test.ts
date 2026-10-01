@@ -752,26 +752,33 @@ describe('room store — the plan identity is household state (ADR-0034)', () =>
     expect(plan.cookPlanIdentity(7).planId).toBe('plan-household')
   })
 
-  test('an ABSENT planIdentity is "don\'t touch" (ADR-0028), never a wipe', async () => {
+  test('an ABSENT planIdentity is "don\'t touch" — and never a stale id either', async () => {
     const plan = usePlanStore()
     plan.addToPlan({ id: 1, serving_count: 6 } as never, 6)
     const mine = plan.ensurePlanIdentity()
     const { socket } = await startRoom()
-    // A peer running older code sends no planIdentity key at all.
+    // A peer running older code sends no planIdentity key at all. It DID
+    // replace the plan, so the plan's own rules re-derive the identity: a
+    // fresh id for the plan it just sent us. What must never happen is
+    // adopting a STALE id (this device's, before the replace) or one the
+    // peer never said.
     socket.receive({
       type: 'state',
       rev: 99,
-      state: { plan: [], customItems: [], checked: {} },
+      state: { plan: [{ variantId: 2, servings: 3 }], customItems: [], checked: {} },
     })
-    expect(plan.planId).toBe(mine.planId)
+    expect(plan.plan.map((e) => e.variantId)).toEqual([2])
+    expect(plan.planId).not.toBe('')
+    expect(plan.planId).not.toBe(mine.planId)
   })
 
-  test('a plan with an identity publishes it; an empty plan publishes none', async () => {
+  test('a plan identity is ALWAYS published: the object, or null for no plan', async () => {
     const plan = usePlanStore()
     const { socket } = await startRoom()
     await sleep(500) // let the join push flush
-    expect((socket.frames('state').at(-1)!.state as { planIdentity?: unknown }).planIdentity)
-      .toBeUndefined()
+    // An empty plan publishes null — "there is no current plan" is an
+    // answer, distinct from the absent key an older peer sends.
+    expect((socket.frames('state').at(-1)!.state as { planIdentity?: unknown }).planIdentity).toBeNull()
 
     plan.addToPlan({ id: 3, serving_count: 4 } as never, 4)
     const identity = plan.ensurePlanIdentity()
@@ -788,6 +795,20 @@ describe('room store — the plan identity is household state (ADR-0034)', () =>
       planId: plan.planId,
       planCreatedAt: plan.planCreatedAt,
     })
+  })
+
+  test('a planIdentity of null CLEARS the identity (the plan is empty)', async () => {
+    const plan = usePlanStore()
+    plan.addToPlan({ id: 1, serving_count: 6 } as never, 6)
+    plan.ensurePlanIdentity()
+    const { socket } = await startRoom()
+    socket.receive({
+      type: 'state',
+      rev: 99,
+      state: { plan: [], customItems: [], checked: {}, planIdentity: null },
+    })
+    expect(plan.planId).toBe('')
+    expect(plan.planCreatedAt).toBe(0)
   })
 
   test('cook events keep their plan provenance across the wire', async () => {

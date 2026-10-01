@@ -174,6 +174,16 @@ test('mark as cooked is available at EVERY step and keeps you cooking (ADR-0034)
   await expect(page.getByTestId('toast').getByText('Marked as cooked')).toBeVisible()
   await expect(cooking).toBeVisible()
   await expect(cooking.getByText(/Step 1 \/ \d+/)).toBeVisible()
+  await expect(cooking.getByTestId('mark-cooked')).toBeDisabled()
+
+  // A session records ONE cook: finishing after the mid-cook mark closes
+  // without writing a second event (ADR-0034).
+  await gotoLastStep(cooking)
+  await cooking.getByTestId('finish').click()
+  await expect(cooking).not.toBeVisible()
+  await gotoTab(page, 'Recipes')
+  await openRecipeDetail(page, name)
+  await expect(page.getByTestId('cook-history')).toContainText('Cooked 1 time')
 
   // Undo takes the cook back.
   await page.getByTestId('cook-undo').click()
@@ -186,7 +196,6 @@ test('mark as cooked is available at EVERY step and keeps you cooking (ADR-0034)
   await expect(page.getByTestId('cook-history')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
-
 test('cooking position is not persisted across a reload', async ({ page }) => {
   const { cooking } = await startCooking(page)
   await cooking.getByRole('button', { name: /Next/ }).click()
