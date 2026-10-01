@@ -122,14 +122,14 @@ function customCategory(item: string): string | undefined {
 
   <template v-else-if="loading && items.length === 0">
   <div class="space-y-2" aria-busy="true">
-  <div v-for="i in 6" :key="i" class="h-10 animate-pulse rounded-lg" />
+  <div v-for="i in 6" :key="i" class="h-10 animate-pulse rounded-lg bg-surface-sunken" />
   </div>
   </template>
 
-  <div v-else-if="loadError" class="rounded-xl bg-surface p-4 text-center text-sm text-favourite-soft">
+  <div v-else-if="loadError" class="rounded-xl bg-surface p-4 text-center text-sm text-danger">
   <p class="font-medium">Couldn't build the grocery list</p>
   <p class="mt-1 text-xs">{{ loadError }}</p>
-  <button class="mt-2 rounded-lg bg-favourite px-3 py-1.5 text-on-brand" @click="ensureDocs">Retry</button>
+  <button class="mt-2 rounded-lg bg-brand px-3 py-1.5 text-on-brand" @click="ensureDocs">Retry</button>
   </div>
 
   <template v-else>
@@ -154,8 +154,11 @@ function customCategory(item: string): string | undefined {
   Start shopping
   </button>
 
+  <!-- Solid surface, real border: DESIGN.md bans translucent control
+  surfaces, and without a fill the rows scrolled behind this toolbar
+  showed straight through the progress text. -->
   <div
-  class="sticky top-12 z-10 -mx-4 flex items-center justify-between border-b/95 px-4 py-2 backdrop-blur"
+  class="sticky top-12 z-10 -mx-4 flex items-center justify-between border-b border-border bg-surface px-4 py-2"
   >
   <p class="text-sm font-semibold" aria-live="polite">
   {{ checkedCount }} / {{ totalCount }} items

@@ -174,7 +174,7 @@ function startCooking() {
   <!-- Solid espresso discs over the photo (DESIGN.md Elevation):
   the contrast never depends on the photograph's brightness. -->
   <button
-  class="absolute top-3 left-3 flex size-11 items-center justify-center rounded-full bg-surface-dark text-text shadow"
+  class="absolute top-3 left-3 flex size-11 items-center justify-center rounded-full bg-surface-dark text-text-dark shadow"
   aria-label="Back"
   @click="close"
   >
@@ -190,7 +190,7 @@ function startCooking() {
   :size="22"
   aria-hidden="true"
   :fill="favourites.isFavourite(meta.id) ? 'currentColor' : 'none'"
-  :class="favourites.isFavourite(meta.id) ? 'text-favourite-soft' : 'text-text'"
+  :class="favourites.isFavourite(meta.id) ? 'text-favourite-soft' : 'text-text-dark'"
   />
   </button>
   </figure>

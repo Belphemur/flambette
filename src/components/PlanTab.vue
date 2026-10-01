@@ -522,7 +522,7 @@ function confirmAutoPlan() {
   Share…
   </button>
   </div>
-  <p v-if="shareUrl === null" class="text-xs text-warning text-warning-soft">
+  <p v-if="shareUrl === null" class="text-xs text-warning">
   Plan too large for a one-time link — share it live instead.
   </p>
 
@@ -738,7 +738,7 @@ function confirmAutoPlan() {
   <template v-if="plan.plan.length > 0">({{ plan.plan.length }} meals)</template>.
   </template>
   </p>
-  <p v-if="!previewComplete" class="text-xs text-warning text-warning-soft">
+  <p v-if="!previewComplete" class="text-xs text-warning">
   Showing {{ pendingMeals.length }} of {{ pendingPlan.variantIds.length }} meals — the rest are still
   loading, so this plan cannot be confirmed yet.
   </p>

@@ -79,7 +79,7 @@ function rate(value: number) {
   <!-- The filled portion is a clipped overlay, so a half star reads
   as a half star without shipping half-star glyphs. -->
   <span
-  class="pointer-events-none absolute inset-0 overflow-hidden text-warning-soft"
+  class="pointer-events-none absolute inset-0 overflow-hidden text-warning"
   :style="{ width: `${fillPercent(slot.n)}%` }"
   aria-hidden="true"
   >

@@ -166,6 +166,7 @@
   --color-nutrition-sodium: var(--color-nutrition-sodium-soft, #a5b4fc);
   --color-warning: var(--color-warning-soft, #fdba74);
   --color-danger: var(--color-danger-soft, #fca5a5);
+  --color-favourite: var(--color-favourite-soft);
 
   /* Selected surfaces: DESIGN.md pairs `primary-tint` in light with the
      deliberately darker `primary-tint-dark` in dark, because a cream

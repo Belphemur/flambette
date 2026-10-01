@@ -55,7 +55,10 @@ const ROOM_STATUS_ICONS: Record<RoomStatus, Component> = {
   idle: TriangleAlert,
 }
 const ROOM_STATUS_CLS: Record<RoomStatus, string> = {
-  live: 'text-hue-vegetarian',
+  // Status is NOT food identity (DESIGN.md): a live room keeps the calm
+  // primary foreground and relies on the glyph (CircleDot) + the "Live"
+  // label for its signal; amber is reserved for the failure states.
+  live: 'text-text',
   connecting: 'text-text-muted',
   error: 'text-warning',
   idle: 'text-warning',
@@ -241,7 +244,7 @@ onMounted(async () => {
   v-for="(action, i) in ui.toast.actions ?? []"
   :key="action.label"
   class="rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide"
-  :class="i === 0 ? 'bg-brand text-on-brand' : 'text-text hover:text-on-brand'"
+  :class="i === 0 ? 'bg-brand text-on-brand' : 'text-text-dark-muted hover:text-on-brand'"
   :data-test="action.testId ?? (i === 0 ? 'toast-action-primary' : 'toast-action-secondary')"
   @click="action.run()"
   >

@@ -108,7 +108,7 @@ function exitShopping() {
   <div class="flex min-h-dvh flex-col">
   <!-- Sticky progress bar -->
   <div
-  class="sticky top-0 z-20 border-b border-border bg-surface-raised/95 backdrop-blur/95"
+  class="sticky top-0 z-20 border-b border-border bg-surface-raised"
   >
   <div class="mx-auto flex max-w-app items-center gap-3 px-4 py-3">
   <button
@@ -148,16 +148,16 @@ function exitShopping() {
 
   <main class="mx-auto w-full max-w-app flex-1 px-4 pb-24 pt-4">
   <div v-if="loading && totalCount === 0" class="space-y-2" aria-busy="true">
-  <div v-for="i in 6" :key="i" class="h-12 animate-pulse rounded-lg" />
+  <div v-for="i in 6" :key="i" class="h-12 animate-pulse rounded-lg bg-surface-sunken" />
   </div>
 
   <div
   v-else-if="loadError"
-  class="rounded-xl bg-surface p-4 text-center text-sm text-favourite-soft"
+  class="rounded-xl bg-surface p-4 text-center text-sm text-danger"
   >
   <p class="font-medium">Couldn't build the grocery list</p>
   <p class="mt-1 text-xs">{{ loadError }}</p>
-  <button class="mt-2 rounded-lg bg-favourite px-3 py-1.5 text-on-brand" @click="ensureDocs">
+  <button class="mt-2 rounded-lg bg-brand px-3 py-1.5 text-on-brand" @click="ensureDocs">
   Retry
   </button>
   </div>

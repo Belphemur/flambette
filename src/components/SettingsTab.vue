@@ -204,7 +204,7 @@ function cancelBackupImport(): void {
   </p>
   <p
   v-if="householdCode"
-  class="text-xs font-semibold text-hue-vegetarian text-hue-vegetarian"
+  class="text-xs font-semibold text-text"
   data-test="household-room-status"
   >
   Household sync active — {{ householdCode }}

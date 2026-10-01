@@ -323,13 +323,18 @@ onUnmounted(() => observer?.disconnect())
 
   <button
   class="flex h-11 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors"
-  :class="filters.favOnly ? 'border-favourite bg-brand-tint text-favourite-soft' : ''"
+  :class="filters.favOnly ? 'border-favourite bg-brand-tint text-text' : ''"
   :aria-pressed="filters.favOnly"
   aria-label="Favourites only"
   data-test="favourites-filter"
   @click="patchFilters({ favOnly: !filters.favOnly })"
   >
-  <Heart :size="16" :fill="filters.favOnly ? 'currentColor' : 'none'" aria-hidden="true" />
+  <Heart
+  :size="16"
+  :fill="filters.favOnly ? 'currentColor' : 'none'"
+  :class="filters.favOnly ? 'text-favourite' : ''"
+  aria-hidden="true"
+  />
   <span class="truncate">Favourites</span>
   </button>
 

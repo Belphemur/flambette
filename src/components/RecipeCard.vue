@@ -46,7 +46,7 @@ const isFavourite = computed(() => favourites.isFavourite(props.meta.id))
   nested inside the link, it stops propagation, and it carries its
   own 44px hit area (DESIGN.md Components/Selection). -->
   <button
-  class="absolute top-2 right-2 z-10 flex size-11 items-center justify-center rounded-full bg-surface-dark"
+  class="absolute top-2 right-2 z-10 flex size-11 items-center justify-center rounded-full bg-surface-dark text-text-dark"
   :aria-label="isFavourite ? 'Remove from favourites' : 'Add to favourites'"
   :aria-pressed="isFavourite"
   @click.stop="favourites.toggleFavourite(meta.id)"
@@ -54,7 +54,7 @@ const isFavourite = computed(() => favourites.isFavourite(props.meta.id))
   <Heart
   :size="20"
   :fill="isFavourite ? 'currentColor' : 'none'"
-  :class="isFavourite ? 'text-favourite-soft' : 'text-text'"
+  :class="isFavourite ? 'text-favourite-soft' : 'text-text-dark'"
   aria-hidden="true"
   />
   </button>
@@ -79,7 +79,7 @@ const isFavourite = computed(() => favourites.isFavourite(props.meta.id))
   absent — it belongs to the recipe's nutrition detail, not to a
   glanceable browse tile. The type icon carries its own name
   (role="img") and the category word is NOT printed beside it. -->
-  <p class="mt-1.5 flex items-center gap-3 text-label-md text-text-muted">
+  <p class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-label-md text-text-muted">
   <span v-if="typeRole" class="flex items-center">
   <HueIcon :role="typeRole" :size="16" :label="ICON_ROLES[typeRole].label" />
   </span>

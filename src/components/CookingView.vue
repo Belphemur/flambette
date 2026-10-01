@@ -453,8 +453,8 @@ function onTouchEnd(e: TouchEvent) {
   @touchend.passive="onTouchEnd"
   >
   <div v-if="!doc" class="mx-auto max-w-reading space-y-3" aria-busy="true">
-  <div class="h-10 w-3/4 animate-pulse rounded" />
-  <div class="h-6 w-1/2 animate-pulse rounded" />
+  <div class="h-10 w-3/4 animate-pulse rounded bg-surface-sunken" />
+  <div class="h-6 w-1/2 animate-pulse rounded bg-surface-sunken" />
   </div>
 
   <div
