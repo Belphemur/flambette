@@ -78,6 +78,43 @@ async function setGeneration(page: Page, generation: number): Promise<void> {
   }, generation)
 }
 
+/** Read the persisted Auto-Plan seed generation (via Pinia). */
+async function readGeneration(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const pinia = document.querySelector('#app')?.__vue_app__?.config?.globalProperties?.$pinia
+    return pinia?.state?.value?.ui?.autoPlanGeneration as number
+  })
+}
+
+/**
+ * Click the dialog's Generate/Regenerate button. The previous pack's
+ * tiles stay mounted for the whole await, so "a tile is visible" is NOT
+ * a completion signal (qodo PR #14 thread 2) — waiting on it let a
+ * Regenerate press read the old pack back. `previewIds` below waits on
+ * the dialog's busy state, which IS the only honest "this pack is final"
+ * signal, so the press helper stays a plain click.
+ */
+async function pressGenerate(page: Page): Promise<void> {
+  await page.getByTestId('auto-plan-generate').click()
+}
+
+/** Variant ids of the pack currently shown in the open preview. */
+async function previewIds(page: Page): Promise<number[]> {
+  await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+  // A finished run leaves "Generating…"; a FAILED one leaves the previous
+  // preview up, which is also a settled state to read.
+  await expect(page.getByTestId('auto-plan-generate')).not.toHaveText('Generating…', { timeout: 20_000 })
+  await expect(page.getByTestId('auto-plan-confirm')).toBeVisible({ timeout: 20_000 })
+  const tiles = await page.locator('[data-test^="auto-plan-meal-"]').all()
+  if (tiles.length === 0) throw new Error('no preview tiles')
+  const ids: number[] = []
+  for (const t of tiles) {
+    const raw = await t.getAttribute('data-test')
+    if (raw) ids.push(Number(raw.replace('auto-plan-meal-', '')))
+  }
+  return ids
+}
+
 /** Category (builder_data) for each variant id. */
 async function metaFor(page: Page, ids: number[]): Promise<Array<{ category?: string; ruleset?: string }>> {
   return page.evaluate(async (variantIds) => {
@@ -144,21 +181,59 @@ test('determinism: same generation → same ids across regenerations', async ({ 
   await expectZeroMealimeRequests(page)
 })
 
-test('rotation: successive generations change the seed, each stays stable', async ({ page }) => {
+test('rotation: a Regenerate press rolls the seed, every apply rotates it (ADR-0033)', async ({
+  page,
+}) => {
+  await page.goto('/plan')
+  await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
+  await setGeneration(page, 0)
+
+  // The FIRST press of a dialog reads "Generate" and has no earlier pack
+  // to differ from, so it keeps the stored generation (0 → the pinned
+  // default pack's seed). This is what keeps the load-bearing pins honest.
+  await page.getByTestId('auto-plan-button').first().click()
+  await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+  await page.getByTestId('auto-plan-generate').click()
+  const first = await previewIds(page)
+  expect(first[0]).toBe(PINNED_DEFAULT_IDS[0])
+  expect(await readGeneration(page)).toBe(0)
+
+  // From here the button reads "Regenerate" and EVERY press must roll the
+  // seed: re-running the same generation would rebuild the identical pack,
+  // which makes the affordance dead. No confirm, no apply — the advance
+  // happens on the press itself.
+  await expect(page.getByTestId('auto-plan-generate')).toHaveText('Regenerate')
+  await pressGenerate(page)
+  const second = await previewIds(page)
+  expect(await readGeneration(page)).toBe(1)
+  expect(second).not.toEqual(first)
+
+  await pressGenerate(page)
+  const third = await previewIds(page)
+  expect(await readGeneration(page)).toBe(2)
+  expect(third).not.toEqual(second)
+
+  // The apply-time advance is KEPT: confirming the pack shown at
+  // generation 2 leaves the counter at 3 for the next dialog, so the
+  // next pack is never a replay of the one just applied.
+  await confirm(page)
+  expect(await plannedIds(page)).toEqual(third)
+  expect(await readGeneration(page)).toBe(3)
+  await expectZeroMealimeRequests(page)
+})
+
+test('rotation: a FIXED generation stays stable, successive ones differ', async ({ page }) => {
   await page.goto('/plan')
   await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
 
-  // Read the FIRST pick from the preview tiles (no confirm → the plan
-  // stays empty and the persisted generation stays put).
+  // Open, read the first pick from the preview tiles, then close WITHOUT
+  // confirming. Each open is a first press, so the pinned generation is
+  // what the run uses — the determinism control for the seed itself.
   async function firstPreviewId(): Promise<number> {
-    await generate(page)
-    const tiles = await page.locator('[data-test^="auto-plan-meal-"]').all()
-    if (tiles.length === 0) throw new Error('no preview tiles')
-    const ids: number[] = []
-    for (const t of tiles) {
-      const raw = await t.getAttribute('data-test')
-      if (raw) ids.push(Number(raw.replace('auto-plan-meal-', '')))
-    }
+    await page.getByTestId('auto-plan-button').first().click()
+    await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+    await pressGenerate(page)
+    const ids = await previewIds(page)
     await page.getByTestId('auto-plan-cancel').click()
     await page.getByRole('button', { name: 'Close auto-plan' }).click()
     await expect(page.getByTestId('auto-plan-dialog')).toBeHidden()

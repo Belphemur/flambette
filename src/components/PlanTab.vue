@@ -170,6 +170,20 @@ watch(
 async function generateAutoPlan() {
   if (autoPlanBusy.value) return
   autoPlanBusy.value = true
+  // A REGENERATE press must roll the seed: re-running the stored
+  // generation would rebuild the IDENTICAL pack, which makes the button a
+  // dead affordance (ADR-0033) — the user's mental model is "this rolls a
+  // new plan". The first press of a dialog still reads "Generate" and has
+  // no earlier pack to differ from, so it keeps the stored generation
+  // (fresh state → generation 0 → the pinned default pack).
+  //
+  // The advance is SYNCHRONOUS, before the planner runs, so the generation
+  // captured below is already the fresh one and the staleness re-check
+  // after the await still works: every press bumps the counter exactly
+  // once, and a failed or raced rebuild only costs a skipped seed value
+  // (the seed is `generation mod ROTATION_K`, so a gap changes which pack
+  // comes next, never the integrity of one that did resolve).
+  if (pendingPlan.value) ui.advanceAutoPlanGeneration()
   // Pin the choices this run was made with; a result coming back after
   // the user changed any control is stale and must not apply.
   const wanted = {
@@ -222,10 +236,19 @@ const pendingMeals = computed(() => {
  * Confirming would then replace the plan with a meal the user never saw,
  * so the confirm button stays disabled until the preview is complete
  * (the counts line still reports the planner's own number).
+ *
+ * A REGENERATION in flight also blocks it (ADR-0033, qodo PR #14 thread
+ * 1): the press already advanced the seed, so the pack on screen is the
+ * one the user just asked to replace. Confirming it would advance the
+ * counter a SECOND time (once for the press, once for the apply) and
+ * land a pack that is stale by two generations. The old preview returns
+ * to being confirmable on its own if the rebuild fails, because the busy
+ * flag clears in the `finally`.
  */
 const previewComplete = computed(
   () =>
     !!pendingPlan.value &&
+    !autoPlanBusy.value &&
     // An EMPTY pack (pool exhausted under the active filters) must never
     // be confirmable: in replace mode it would erase the plan (qodo
     // round 1, thread 2).
@@ -239,6 +262,10 @@ const previewComplete = computed(
 function confirmAutoPlan() {
   const result = pendingPlan.value
   if (!result) return
+  // Belt-and-braces with the `previewComplete` gate: a regeneration in
+  // flight means the pack on screen is already superseded, and applying
+  // it would double-advance the seed (ADR-0033).
+  if (autoPlanBusy.value) return
   // An EMPTY pack (pool exhausted under the active filters) must never
   // apply: in replace mode replacePlan([]) would ERASE the user's plan
   // (qodo round 1, thread 2); in add mode it would be a no-op anyway.
@@ -274,8 +301,11 @@ function confirmAutoPlan() {
     ? additions.map((variantId) => ({ variantId, servings: 6 }))
     : [...atConfirm, ...additions.map((variantId) => ({ variantId, servings: 6 }))]
   plan.replacePlan(entries, plan.customItems)
-  // The generation counter advances AFTER a successful apply so the next
-  // run rotates the seed (ADR-0027).
+  // The generation counter advances AFTER a successful apply so the NEXT
+  // run rotates the seed (ADR-0027, kept in ADR-0033). This is the
+  // generation the preview was BUILT with that gets applied — the counter
+  // is never re-read here, so a pack shown at generation N lands as
+  // shown and simply leaves the counter at N+1 for the next dialog.
   ui.advanceAutoPlanGeneration()
   // Undo restores the EXACT pre-apply state (ids + servings + the
   // cleared-ingredient map) from copies taken at confirm time — not from
@@ -731,7 +761,7 @@ function confirmAutoPlan() {
                 class="h-10 flex-1 rounded-xl bg-primary text-sm font-semibold text-white active:bg-primary-dark"
                 data-test="auto-plan-confirm"
                 :disabled="!previewComplete"
-                :title="previewComplete ? undefined : 'Waiting for the preview to load'"
+                :title="previewComplete ? undefined : autoPlanBusy ? 'Waiting for the new plan…' : 'Waiting for the preview to load'"
                 @click="confirmAutoPlan"
               >
                 {{ ui.autoPlanMode === 'add' ? 'Add these meals' : 'Use this plan' }}
