@@ -26,11 +26,18 @@
     },
     {
       "description": [
-        "Major bumps land one per PR; auto-merge only when CI is green (never on a red run)."
+        "Major bumps land one per PR, but NEVER auto-merge: a major can break the toolchain in ways CI does not cover (vite/peer ranges), so a human reads the release notes and merges."
       ],
       "matchUpdateTypes": ["major"],
-      "automerge": true,
-      "automergeType": "pr"
+      "automerge": false,
+      "dependencyDashboardApproval": false
+    },
+    {
+      "description": [
+        "TypeScript is held back until vue-tsc (@vue/language-tools) ships support for TS 7's native Go compiler (vuejs/language-tools#6124): vue-tsc imports typescript/lib/tsc, removed in TS 7, so the build dies with ERR_PACKAGE_PATH_NOT_EXPORTED. Remove this restriction when vue-tsc supports TS 7."
+      ],
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<7.0.0"
     }
   ],
   "lockFileMaintenance": {
