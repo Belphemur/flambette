@@ -197,6 +197,16 @@ describe('default servings (ADR-0037)', () => {
     expect(ui.defaultServings).toBe(MAX_SERVINGS)
   })
 
+  test('a stepper at the ceiling stores the ceiling, never one past it', () => {
+    // Both steppers clamp BEFORE writing (CodeRabbit + qodo round 1): a
+    // sheet showing 100 while the memory held 99 would display one number
+    // and cook another, since CookingView freezes from the stored value.
+    const ui = useUiStore()
+    ui.setDefaultServings(MAX_SERVINGS - 1)
+    ui.setDefaultServings(MAX_SERVINGS) // a `+` press AT the cap
+    expect(ui.defaultServings).toBe(MAX_SERVINGS)
+  })
+
   test('repairDefaultServings replaces a hydrated value that cannot scale a recipe', () => {
     // Hydration is a raw `$patch` of localStorage, so a hand-edited or
     // truncated blob lands verbatim. Unlike a label, this value is

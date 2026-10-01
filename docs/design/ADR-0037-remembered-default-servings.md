@@ -8,7 +8,7 @@ and `CookingView`, and the servings half of `plan.addToPlan`'s signature.
 
 Every one of the 2,730 recipes in the frozen catalog is authored
 `serving_count = 6`. That is a **recipe** fact — it is how the author wrote
-the quantities — and the app used it as a **household** fact, on four
+the quantities — and the app used it as a **household** fact, on five
 surfaces at once:
 
 - the recipe detail sheet seeded its stepper from `meta.serving_count`;

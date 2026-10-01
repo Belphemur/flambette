@@ -15,6 +15,7 @@ import { catalog } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
 import { MAX_MEALS, MIN_MEALS, type PackPlan } from '../lib/packPlanner'
 import { planShareUrl } from '../lib/share'
+import { MAX_SERVINGS } from '../lib/servings'
 import type { VariantMeta } from '../lib/types'
 import { runAutoPlan } from '../composables/useAutoPlan'
 import { usePlanStore } from '../stores/plan'
@@ -127,12 +128,21 @@ function openRecipe(id: number) {
  * "this is roughly how we cook", so it updates the default the same way the
  * detail stepper does. `-1` at the floor is a no-op for both the plan
  * entry and the default.
+ *
+ * The bound is applied to the PLAN ENTRY too, not just the memory: an
+ * entry that ran to 100 while the default held 99 would be a value the
+ * remembered default could never express, and the two would drift apart.
  */
 function bumpServings(meal: PlannedMeal, delta: number) {
-  const next = meal.servings + delta
+  const next = Math.min(MAX_SERVINGS, meal.servings + delta)
   if (next < 1) return
   plan.setServings(meal.meta.id, next)
   ui.setDefaultServings(next)
+}
+
+/** The `+` disables at the cap, matching the detail stepper. */
+function canMore(meal: PlannedMeal): boolean {
+  return meal.servings < MAX_SERVINGS
 }
 
 /* ---------- Auto-Plan (ADR-0024) ---------- */
@@ -438,6 +448,7 @@ function confirmAutoPlan() {
   <button
   class="flex size-11 items-center justify-center"
   :aria-label="`More servings of ${meal.meta.name}`"
+  :disabled="!canMore(meal)"
   @click="bumpServings(meal, 1)"
   >
   <Plus :size="16" aria-hidden="true" />

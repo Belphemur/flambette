@@ -45,9 +45,16 @@ export const MAX_SERVINGS = 99
  *
  * Accepts unknown on purpose: this is the single gate every inbound value
  * passes — a persisted blob, a backup `settings.json`, or a number a
- * caller computed. A non-finite, fractional, zero or negative value falls
- * back rather than clamping to 1, because "garbage in" should not read as
- * "the user wants one serving".
+ * caller computed. A non-finite, zero or negative value falls back rather
+ * than clamping to 1, because "garbage in" should not read as "the user
+ * wants one serving".
+ *
+ * A FRACTIONAL value is ROUNDED, not rejected: 4.6 becomes 5. Rounding is
+ * the honest reading of a count, and the UI can produce one (a `+` press on
+ * a half-stepped control), so rejecting it would turn a harmless value into
+ * a silent reset to the fallback. Note this differs from `isServings`, which
+ * the backup VALIDATOR uses and which does reject a fraction — a malformed
+ * archive must fail loudly, while a live value is repaired.
  */
 export function clampServings(value: unknown, fallback: number = FALLBACK_SERVINGS): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback

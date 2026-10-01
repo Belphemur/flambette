@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
 import { scaleQuantity } from '../lib/quantity'
+import { MAX_SERVINGS } from '../lib/servings'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
@@ -38,15 +39,22 @@ const loadError = ref<string | null>(null)
 const ui = useUiStore()
 
 /**
- * Servings shown for THIS recipe, seeded from the remembered default
- * (ADR-0037) rather than the authored `serving_count`.
+ * Servings shown for THIS recipe: the plan entry's count when the recipe
+ * IS planned, else the remembered default (ADR-0037), else the authored
+ * `serving_count`.
  *
  * The catalog's 6 is a recipe fact — "this is how the author wrote it" —
  * and using it as the starting point on every open meant a household of
  * four re-dialled the same six-to-four correction on every recipe, every
  * time. The remembered default is that correction, made once.
+ *
+ * A PLANNED recipe leads with its plan entry, not the default. The sheet's
+ * stepper and **Start cooking** must agree: `CookingView` freezes the
+ * session's servings from the plan entry, so a sheet seeded from the
+ * default would display one number and cook another. The default applies
+ * to recipes with no plan entry — the ones the user is choosing now.
  */
-const servings = ref(ui.defaultServings)
+const servings = ref(1)
 
 /**
  * Change the servings for this recipe AND remember it as the new default
@@ -54,14 +62,23 @@ const servings = ref(ui.defaultServings)
  *
  * One function for both writes, deliberately: a stepper that adjusted the
  * sheet but not the memory would look like it worked and quietly revert to
- * 6 on the next recipe, which is exactly the complaint this replaces. The
- * floor is the local ref's concern (the `-` button is disabled at 1); the
- * store ignores a below-floor write rather than storing 1.
+ * 6 on the next recipe, which is exactly the complaint this replaces.
+ *
+ * BOTH values are clamped to `MAX_SERVINGS`, and the LOCAL ref is set from
+ * the same normalization the store applied. Letting the sheet show 100
+ * while the memory holds 99 would be worse than either value alone: the
+ * displayed quantities and the remembered default would silently disagree,
+ * and Start cooking would then cook a different number from the one on
+ * screen. One bound, applied once, to both.
  */
 function setServings(next: number) {
-  servings.value = Math.max(1, next)
-  ui.setDefaultServings(servings.value)
+  const count = Math.min(MAX_SERVINGS, Math.max(1, next))
+  servings.value = count
+  ui.setDefaultServings(count)
 }
+
+/** The `+` is disabled at the cap, so the user never hits a dead press. */
+const canMoreServings = computed(() => servings.value < MAX_SERVINGS)
 
 const meta = computed<VariantMeta | null>(
   () => catalog.value?.byId.get(props.id) ?? null,
@@ -126,16 +143,20 @@ const cookLastTitle = computed(() => {
 })
 
 async function loadDoc() {
-  if (!meta.value) return
+  const m = meta.value
+  if (!m) return
   loading.value = true
   loadError.value = null
   doc.value = null
-  // Seed from the remembered default (ADR-0037), not the authored
-  // `serving_count`. Re-read per load so a recipe opened after the user
-  // changed the default elsewhere starts at the current one.
-  servings.value = ui.defaultServings
+  // A PLANNED recipe shows its plan entry (that is what CookingView will
+  // cook); an unplanned one starts at the remembered default
+  // (ADR-0037). Only the latter was the authored-6 complaint. Re-read per
+  // load so a recipe opened after the user changed the default elsewhere
+  // starts at the current one.
+  const entry = plan.plan.find((e) => e.variantId === m.id)
+  servings.value = entry?.servings ?? ui.defaultServings
   try {
-  doc.value = await getRecipe(meta.value)
+  doc.value = await getRecipe(m)
   } catch (e) {
   loadError.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -329,6 +350,7 @@ function startCooking() {
   }}</span>
   <button
   class="flex size-11 items-center justify-center text-lg"
+  :disabled="!canMoreServings"
   :aria-label="`More servings`"
   @click="setServings(servings + 1)"
   >

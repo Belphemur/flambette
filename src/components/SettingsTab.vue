@@ -218,8 +218,8 @@ function cancelBackupImport(): void {
   <div class="space-y-2 rounded-xl bg-surface p-3" data-test="default-servings-card">
   <span class="text-sm font-bold tracking-tight">Default servings</span>
   <p class="text-xs">
-  New recipes, generated plans and re-planned meals start at this number. Change servings while cooking a recipe and this
-  remembers it for next time.
+  New recipes, generated plans and re-planned meals start at this number. Changing servings on a recipe or on a planned meal
+  remembers it here for next time.
   </p>
   <div
   class="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-raised px-3 py-2"

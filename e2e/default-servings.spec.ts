@@ -151,6 +151,83 @@ test('the Settings control cannot be walked below one serving', async ({ page })
   await expectZeroMealimeRequests(page)
 })
 
+test('an Auto-Plan pack lands at the remembered default, not the authored 6', async ({ page }) => {
+  // The third newly-routed surface. Without this, a regression that sent
+  // the pack back to a hardcoded 6 would pass: the existing auto-plan
+  // spec only ever runs on a fresh install, where the default IS 6.
+  await page.goto('/')
+  await waitForCatalog(page)
+
+  await gotoTab(page, 'Settings')
+  for (let i = 0; i < 2; i++) await page.getByTestId('default-servings-fewer').click()
+  await expect(page.getByTestId('default-servings-value')).toHaveText('4')
+
+  await gotoTab(page, 'Plan')
+  await page.getByTestId('auto-plan-button').first().click()
+  await page.getByTestId('auto-plan-generate').click()
+  await expect(page.getByTestId('auto-plan-generate')).not.toHaveText('Generating…', {
+    timeout: 20_000,
+  })
+  await expect(page.getByTestId('auto-plan-confirm')).toBeVisible({ timeout: 20_000 })
+  await page.getByTestId('auto-plan-confirm').click()
+
+  // Every generated meal, at 4 — read from the plan list, not the store.
+  const servings = await page
+    .locator('main ul > li')
+    .getByLabel('Servings', { exact: true })
+    .allTextContents()
+  expect(servings.length).toBeGreaterThan(0)
+  for (const s of servings) expect(Number(s)).toBe(4)
+  await expectZeroMealimeRequests(page)
+})
+
+test('an unplanned cook scales to the remembered default', async ({ page }) => {
+  // The fourth newly-routed surface: CookingView's fallback when the recipe
+  // has no plan entry. Asserted through the servings the cook resolved,
+  // which is the value that scales every step it shows.
+  await page.addInitScript(() => {
+    const blob = { defaultServings: 4, stepTimers: {} }
+    localStorage.setItem('mealime-planner:v1:ui', JSON.stringify(blob))
+  })
+  await page.goto('/')
+  await waitForCatalog(page)
+  await openFirstRecipeDetail(page)
+  // No plan entry exists, so the sheet itself shows the remembered default.
+  await expect(page.getByRole('dialog').getByTestId('serves-label')).toHaveText('serves 4')
+
+  await page.getByTestId('start-cooking').click()
+  const cooking = page.getByRole('dialog', { name: /Cooking/ })
+  await expect(cooking).toBeVisible()
+  // The cook's own header (`data-test="cook-serves"`) is the resolved
+  // value that scales every step — not a re-read of the sheet.
+  await expect(cooking.getByTestId('cook-serves')).toContainText('serves 4')
+  await expectZeroMealimeRequests(page)
+})
+
+test('a History re-plan adds at the remembered default', async ({ page }) => {
+  // The fifth newly-routed surface. HistoryView has no stepper, so the
+  // stored default is the only count it can use.
+  await page.addInitScript(() => {
+    const piniaState = { defaultServings: 4, stepTimers: {} }
+    localStorage.setItem('mealime-planner:v1:ui', JSON.stringify(piniaState))
+    // One cooked row to re-plan from.
+    localStorage.setItem(
+      'mealime-planner:v1:plan',
+      JSON.stringify({
+        plan: [],
+        cookedHistory: [{ variantId: 17452, cookedAt: Date.now(), id: 'hist-1' }],
+      }),
+    )
+  })
+  await page.goto('/history')
+  await expect(page.getByTestId('history-empty')).toBeHidden({ timeout: 15_000 })
+
+  await page.getByTestId('history-add-17452').first().click()
+  await gotoTab(page, 'Plan')
+  await expect(page.locator('main ul > li').getByLabel('Servings', { exact: true })).toHaveText('4')
+  await expectZeroMealimeRequests(page)
+})
+
 test('a hand-edited default is repaired on load, never scaled by', async ({ page }) => {
   // Hydration is a raw $patch of localStorage, so a corrupted value reaches
   // the ref verbatim. It multiplies into every recipe's scale factor, so it

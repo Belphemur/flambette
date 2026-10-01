@@ -38,9 +38,16 @@ const meta = computed(() => catalog.value?.byId.get(props.id) ?? null)
 
 /**
  * Servings source: the plan entry's servings when the recipe is planned,
- * otherwise the remembered default (ADR-0037), and the authored
- * `serving_count` only as the last resort. No stepper here — change
+ * otherwise the remembered default (ADR-0037). No stepper here — change
  * servings from the detail sheet.
+ *
+ * There is deliberately NO `meta.serving_count` fallback in this computed.
+ * The default starts at 6, the authored count of every catalog recipe, so
+ * the two coincide on a fresh install — but naming the recipe value here
+ * would be a second, silently-divergent source for the same arithmetic, and
+ * the detail sheet that owns the stepper already resolves plan-entry →
+ * default. `RecipeDetail` uses the same two-source order, which is what
+ * keeps the number on screen and the number being cooked identical.
  *
  * Frozen at the first successful resolution (ADR-0034). It USED to be a
  * live computed over the plan, which quietly corrupted the cook: marking

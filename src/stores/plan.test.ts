@@ -34,19 +34,19 @@ describe('plan identity (ADR-0034)', () => {
 
   test('emptying the plan ends that plan; the next meal starts a NEW one', () => {
     const plan = usePlanStore()
-    plan.addToPlan(meta(1))
+    plan.addToPlan(meta(1), 4)
     const first = plan.planId
     plan.removeFromPlan(1)
     expect(plan.planId).toBe('')
     expect(plan.planCreatedAt).toBe(0)
 
-    plan.addToPlan(meta(3))
+    plan.addToPlan(meta(3), 4)
     expect(plan.planId).not.toBe(first)
   })
 
   test('clearPlan ends the plan identity too', () => {
     const plan = usePlanStore()
-    plan.addToPlan(meta(1))
+    plan.addToPlan(meta(1), 4)
     plan.clearPlan()
     expect(plan.planId).toBe('')
   })
@@ -57,7 +57,7 @@ describe('plan identity (ADR-0034)', () => {
     // the next cook under a plan this device no longer has, and would
     // publish that stale id to every peer.
     const plan = usePlanStore()
-    plan.addToPlan(meta(1))
+    plan.addToPlan(meta(1), 4)
     const before = plan.planId
     plan.replacePlan([{ variantId: 2, servings: 3 }], ['milk'])
     expect(plan.planId).not.toBe(before)
@@ -106,7 +106,7 @@ describe('cook provenance (ADR-0034)', () => {
 
   test('ad-hoc plan ids never collide with a persisted plan identity', () => {
     const plan = usePlanStore()
-    plan.addToPlan(meta(1))
+    plan.addToPlan(meta(1), 4)
     const real = plan.cookPlanIdentity(1) // planned: the store's own plan
     const adHoc = plan.cookPlanIdentity(2)
     expect(adHoc.planId).not.toBe(real.planId)

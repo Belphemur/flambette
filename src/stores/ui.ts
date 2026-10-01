@@ -252,8 +252,13 @@ export const useUiStore = defineStore(
       if (typeof prefs.householdRoom === 'string') setHouseholdRoom(prefs.householdRoom)
       if (prefs.stepTimers !== undefined) stepTimers.value = sanitizeStepTimers(prefs.stepTimers)
       // A backup written before ADR-0037 has no key at all: that means
-      // "don't touch", so the device keeps the default it already had.
-      // A malformed one is clamped by the shared helper.
+      // "don't touch", so the device keeps the default it already had. A
+      // value that IS present is normalized by `setDefaultServings`, which
+      // CLAMPS an out-of-range count to MAX_SERVINGS and IGNORES a
+      // non-finite or below-floor one (leaving the current value) rather
+      // than storing a 0 that would re-scope every future recipe to one
+      // portion. A backup carrying a malformed value is rejected upstream by
+      // the slice validator, so this path only ever sees a count or nothing.
       if (prefs.defaultServings !== undefined) {
         setDefaultServings(prefs.defaultServings as number)
       }
