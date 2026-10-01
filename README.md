@@ -1,4 +1,9 @@
-# Flambette
+<table>
+<tr>
+<td width="72px" align="center"><img src="docs/logo/flambette.svg" width="64" alt="Flambette logo — a flame rising off a stacked dinner plate" /></td>
+<td><h1>Flambette</h1></td>
+</tr>
+</table>
 
 <table>
 <tr>
