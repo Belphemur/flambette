@@ -40,6 +40,18 @@ nutrition facts" control) that opens a dedicated modal
 Escape-closes like every other dialog in the app). Deferred detail stays
 out of the initial view: the section's chrome does not grow.
 
+`aria-modal="true"` is a PROMISE, so the modal keeps focus: it records
+`document.activeElement` before moving focus into the panel, TRAPS Tab /
+Shift+Tab inside the panel (the modal is teleported to `<body>`, so
+without the trap Tab walks into the still-mounted detail behind the
+backdrop), and restores focus to the recorded element on every close
+path (close button, Escape, scrim, parent-driven close — unmount covers
+all of them). Because `RecipeDetail` mounts it `v-if`-gated, one mount
+is exactly one open, which is what makes the component-level
+`onMounted`/`onUnmounted` pair sufficient. The `nutritionOpen` flag is
+also cleared on every doc load, so navigating to another recipe starts
+with the modal closed instead of remounting it for the next recipe.
+
 ### 2. The modal shows the per-serving nutrition, ALL of it by group
 
 One serving — never scaled by servings (ADR-0004). The full

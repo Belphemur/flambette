@@ -153,6 +153,11 @@ async function loadDoc() {
   loading.value = true
   loadError.value = null
   doc.value = null
+  // Every load starts with the facts modal CLOSED. `nutritionOpen` used to
+  // survive a recipe-id change, and since the modal is `v-if`-gated on
+  // `doc`, clearing the doc only unmounted it briefly — the new document
+  // remounted it for the next recipe (ADR-0039).
+  nutritionOpen.value = false
   // A PLANNED recipe shows its plan entry (that is what CookingView will
   // cook); an unplanned one starts at the remembered default
   // (ADR-0037). Only the latter was the authored-6 complaint. Re-read per
