@@ -54,12 +54,11 @@ export const TIME_OPTIONS: readonly (number | null)[] = [null, 20, 30, 45]
 /**
  * The HALF of the quick filters that is household state (ADR-0028).
  *
- * `favOnly` is deliberately absent. The favourites set itself is PERSONAL
- * (it lives in the favourites store and never crosses the wire), so
- * sharing the switch would impose one device's "show only my
- * favourites" on a device that has a different — or empty — set and
- * render its Recipes tab blank. The switch persists locally; it does not
- * travel.
+ * `favOnly` is deliberately absent. As of ADR-0031 the favourites SET
+ * itself IS shared, but the SWITCH is still personal: sharing it would
+ * impose one device's "show only favourites" on a device that has
+ * starred nothing yet and render its Recipes tab blank. The switch
+ * persists locally; it does not travel.
  */
 export type SharedQuickFilters = Omit<QuickFilters, 'favOnly'>
 

@@ -41,6 +41,7 @@ export interface BackupCounts {
   ingredients: number
   checks: number
   favourites: number
+  ratings: number
 }
 
 export interface ApplyResult {
@@ -329,6 +330,51 @@ export const STORE_SLICES: SliceDef<any>[] = [
       useFavouritesStore().replaceAll(value as number[])
     },
   },
+  /* Household per-recipe stars (ratings store, ADR-0031). Ratings are
+     opinion, so this file is the ONLY carrier — the catalog rating stays
+     read-only in builder_data and is never written here. Rows carry the
+     id and the `updatedAt` merge key, and import RECONCILES per record
+     (newer wins) so restoring an older backup cannot clobber household
+     ratings written since. */
+  {
+    file: 'ratings.json',
+    label: 'your recipe ratings',
+    persistKeys: ['mealime-planner:v1:ratings'],
+    read: () => ratingsToRows(useRatingStore().map),
+    validate(value) {
+      if (!Array.isArray(value)) return 'ratings.json must be an array of rating records'
+      for (const row of value) {
+        if (typeof row !== 'object' || row === null || Array.isArray(row)) {
+          return 'ratings.json rows must be objects'
+        }
+        const { id, rating, count, updatedAt } = row as Record<string, unknown>
+        if (typeof id !== 'number' || !Number.isFinite(id)) {
+          return 'ratings.json rows need a numeric id'
+        }
+        if (typeof rating !== 'number' || !Number.isFinite(rating) || rating <= 0 || rating > 5) {
+          return 'ratings.json ratings must be numbers in (0, 5]'
+        }
+        if (typeof count !== 'number' || !Number.isFinite(count) || count < 1) {
+          return 'ratings.json counts must be numbers >= 1'
+        }
+        if (typeof updatedAt !== 'number' || !Number.isFinite(updatedAt) || updatedAt < 0) {
+          return 'ratings.json updatedAt must be a finite, non-negative timestamp'
+        }
+      }
+      return null
+    },
+    write(value) {
+      // Merge, never replace: an older backup must not erase a rating
+      // this device took after the backup was written (ADR-0031). The
+      // per-record merge adopts each row verbatim — including its count —
+      // so importing never inflates the smoothing weight.
+      useRatingStore().mergeRemote(
+        Object.fromEntries(
+          (value as RatingFileRow[]).map((row) => [String(row.id), row]),
+        ),
+      )
+    },
+  },
 ]
 
 function isStepTimersMap(value: unknown): boolean {  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
@@ -509,6 +555,7 @@ export function applyBackup(zipBytes: Uint8Array): ApplyResult {
     ingredients: (byFile.get('custom-ingredients.json') as CustomIngredient[] | undefined)?.length ?? 0,
     checks: Object.keys((byFile.get('checked.json') as Record<string, boolean> | undefined) ?? {}).length,
     favourites: (byFile.get('favourites.json') as number[] | undefined)?.length ?? 0,
+    ratings: ((byFile.get('ratings.json') as unknown[]) ?? []).length,
   }
   return { ok: true, counts }
 }
@@ -520,3 +567,4 @@ import { useGroceryStore } from '../stores/grocery'
 import { AUTO_PLAN_RULESETS, useUiStore } from '../stores/ui'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
 import { useFavouritesStore } from '../stores/favourites'
+import { ratingsToRows, useRatingStore, type RatingFileRow } from '../stores/rating'

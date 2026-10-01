@@ -7,6 +7,8 @@ import {
   type PackPlan,
 } from '../lib/packPlanner'
 import { usePlanStore } from '../stores/plan'
+import { useFavouritesStore } from '../stores/favourites'
+import { useRatingStore } from '../stores/rating'
 import { useUiStore } from '../stores/ui'
 
 /**
@@ -21,7 +23,8 @@ import { useUiStore } from '../stores/ui'
  * - meals already planned are excluded (they are already in the plan)
  *
  * Ratings come from builder_data.variant_meta (the pack index deliberately
- * carries no recipe metadata — see scripts/build_pack_index.py).
+ * carries no recipe metadata — see scripts/build_pack_index.py), blended
+ * with the HOUSEHOLD's own stars and favourites (ADR-0031).
  */
 
 const PACK_INDEX_URL = `${import.meta.env.BASE_URL}data/pack_index.json`
@@ -74,6 +77,20 @@ export interface AutoPlanResult extends PackPlan {
 
 /** Bayesian prior weight for rating smoothing (ADR-0027 §smoothing). */
 export const RATING_PRIOR_WEIGHT = 10
+
+/**
+ * ADR-0031: the prior weight for a HOUSEHOLD rating, in rating (0..1)
+ * units. Deliberately tiny next to the catalog's RATING_PRIOR_WEIGHT of
+ * 10 — one 5-star cast by one person must outrank a catalog mean, while
+ * the eligible slice's mean still floors it. The catalog's Bayesian mean
+ * therefore stays the COLD-START floor (unrated recipes keep their v2
+ * smoothed value, bit for bit) and the household only ever pulls rated
+ * recipes toward its own opinion.
+ */
+export const HOUSEHOLD_PRIOR_WEIGHT = 1
+
+/** Highest star value the rating store accepts (5). */
+const MAX_STARS = 5
 
 /**
  * Bayesian shrinkage toward the catalog mean: a 1.0 from 2 votes must not
@@ -133,6 +150,18 @@ export async function runAutoPlan(options: AutoPlanOptions): Promise<AutoPlanRes
   const ratings = new Map<number, number>(
     metas.map((m) => [m.id, eligible.has(m.id) ? smoothedRating(m, mean) : 0]),
   )
+  // ADR-0031: household stars OVERRIDE the catalog-smoothed rating for the
+  // recipes that have them, shrunk toward the same eligible-slice mean.
+  // A recipe nobody rated keeps its v2 value exactly — the blend only
+  // touches keys the household actually rated.
+  const ratingStore = useRatingStore()
+  for (const [key, entry] of Object.entries(ratingStore.map)) {
+    const id = Number(key)
+    if (!eligible.has(id)) continue
+    const stars = Math.min(MAX_STARS, Math.max(0, entry.rating)) / MAX_STARS
+    const count = Math.max(1, entry.count)
+    ratings.set(id, (stars * count + mean * HOUSEHOLD_PRIOR_WEIGHT) / (count + HOUSEHOLD_PRIOR_WEIGHT))
+  }
   const tags = new Map<number, number[]>(
     metas.map((m) => [m.id, m.variety_tag_ids ?? []]),
   )
@@ -159,6 +188,10 @@ export async function runAutoPlan(options: AutoPlanOptions): Promise<AutoPlanRes
     baseIds,
     baseServings,
     seedGeneration: options.seedGeneration ?? ui.nextAutoPlanGeneration(),
+    // ADR-0031: household favourites are a preference signal (+0.05 off a
+    // candidate's score). The set is read whole — the planner only ever
+    // consults it for candidates it is already considering.
+    favoriteIds: new Set(useFavouritesStore().ids),
   })
   return { ...result, eligibleCount: eligible.size }
 }

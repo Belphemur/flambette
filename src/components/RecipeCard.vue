@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { imageSrc, onImgError } from '../lib/images'
+import RatingStars from './RatingStars.vue'
 import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
 import { useRouter } from 'vue-router'
-import { Clock, Flame, Star } from 'lucide-vue-next'
+import { Clock, Flame, Heart } from 'lucide-vue-next'
 
 const props = defineProps<{ meta: VariantMeta }>()
 
@@ -37,14 +38,14 @@ function openDetail() {
         PRO
       </span>
       <button
-        class="absolute top-1.5 right-1.5 flex size-11 items-center justify-center text-xl drop-shadow transition-transform active:scale-90"
+        class="absolute top-1.5 right-1.5 flex size-9 items-center justify-center rounded-full bg-stone-900/70 shadow backdrop-blur-sm transition-transform active:scale-90"
         :aria-label="favourites.isFavourite(meta.id) ? 'Remove from favourites' : 'Add to favourites'"
         @click.stop="favourites.toggleFavourite(meta.id)"
       >
-        <Star
-          :size="22"
+        <Heart
+          :size="18"
           :fill="favourites.isFavourite(meta.id) ? 'currentColor' : 'none'"
-          :class="favourites.isFavourite(meta.id) ? 'text-amber-400' : 'text-white/80'"
+          :class="favourites.isFavourite(meta.id) ? 'text-rose-500' : 'text-white/90'"
           aria-hidden="true"
         />
       </button>
@@ -59,6 +60,9 @@ function openDetail() {
           <Clock :size="14" aria-hidden="true" />{{ meta.cooking_minutes }} min
         </span>
       </p>
+      <div class="mt-1.5">
+        <RatingStars :variant-id="meta.id" :catalog-rating="meta.rating" :size="15" compact />
+      </div>
     </div>
   </article>
 </template>

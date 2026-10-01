@@ -18,6 +18,7 @@ import { planShareUrl } from '../lib/share'
 import type { VariantMeta } from '../lib/types'
 import { runAutoPlan } from '../composables/useAutoPlan'
 import { usePlanStore } from '../stores/plan'
+import { useFavouritesStore } from '../stores/favourites'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 
@@ -25,6 +26,11 @@ const plan = usePlanStore()
 const room = useRoomStore()
 const router = useRouter()
 const ui = useUiStore()
+const favourites = useFavouritesStore()
+
+/** ADR-0031: the favourites set is a ranking signal, so the preview says
+ *  how many of them are in play. */
+const favouritesCount = computed(() => favourites.ids.size)
 
 /* ---------- Share sheet ---------- */
 
@@ -693,6 +699,12 @@ function confirmAutoPlan() {
             <p v-if="!previewComplete" class="text-xs text-amber-700 dark:text-amber-400">
               Showing {{ pendingMeals.length }} of {{ pendingPlan.variantIds.length }} meals — the rest are still
               loading, so this plan cannot be confirmed yet.
+            </p>
+            <!-- ADR-0031: household stars and favourites nudge the ranking
+                 (see useAutoPlan) — say so, or the ranking looks arbitrary. -->
+            <p class="text-xs text-stone-400 dark:text-stone-500" data-test="auto-plan-household-note">
+              Ranked with your household’s ratings
+              <template v-if="favouritesCount > 0"> and {{ favouritesCount }} favourite{{ favouritesCount === 1 ? '' : 's' }}</template>.
             </p>
             <ul class="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Meals in this auto-plan">
               <li

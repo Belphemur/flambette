@@ -149,6 +149,7 @@ test('full round-trip: seed, export, fresh context, import — everything is res
     'favourites.json',
     'meta.json',
     'plan.json',
+    'ratings.json',
     'settings.json',
   ])
   const map = entries as Map<string, Uint8Array>
@@ -161,6 +162,9 @@ test('full round-trip: seed, export, fresh context, import — everything is res
   expect(Object.keys(json('checked.json'))).toEqual(seed.checkedKeys)
   expect(json('custom-ingredients.json').length).toBeGreaterThan(0)
   expect(json('favourites.json')).toContain(seed.newFav)
+  // ADR-0031: household stars travel in their own slice, and an UNRATED
+  // profile exports an empty object (never a missing key, never a wipe).
+  expect(json('ratings.json')).toEqual([])
   // Scrub-target sweep: no tokens / PII anywhere in the export.
   const raw = decoder.decode(bytes)
   expect(raw).not.toMatch(/_BB8sG3|newmail|ab0047d4|\.pi\//)
