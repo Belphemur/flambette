@@ -247,14 +247,14 @@ const ariaLabel = 'Add a custom grocery item'
         aria-autocomplete="list"
         :aria-controls="open && rows.length > 0 ? listboxId : undefined"
         :aria-activedescendant="activeIndex >= 0 ? optionId(activeIndex) : undefined"
-        class="h-11 w-full rounded-xl border dark:border-stone-700 dark:bg-stone-900 px-4 text-sm outline-none focus:border-primary"
+        class="h-11 w-full rounded-xl border dark:border-stone-700 dark:bg-stone-900 px-4 text-sm outline-none focus:border-brand"
         data-test="add-bar-input"
         @input="onInput"
         @keydown="onKeydown"
       />
       <button
         type="submit"
-        class="h-11 shrink-0 rounded-xl bg-primary px-4 text-sm font-semibold text-white active:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+        class="h-11 shrink-0 rounded-xl bg-brand px-4 text-sm font-semibold text-white active:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-50"
         :disabled="!canSubmit"
         data-test="ingredient-submit"
       >
@@ -291,20 +291,20 @@ const ariaLabel = 'Add a custom grocery item'
         :aria-selected="i === activeIndex"
         :aria-label="`Add '${rowAt(i)!.name}' — ${rowAt(i)!.category}`"
         class="flex hovercap:cursor-pointer items-center gap-2 px-4 py-2 text-sm"
-        :class="i === activeIndex ? 'bg-primary/10 dark:bg-primary/20' : ''"
+        :class="i === activeIndex ? 'bg-brand/10 dark:bg-brand/20' : ''"
         :data-test="i === 0 ? 'add-suggestion-first' : 'add-suggestion-row'"
         @mousedown.prevent
         @click="addRow(rowAt(i)!)"
       >
         <span
-          class="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary-dark dark:bg-primary/20 dark:text-primary"
+          class="flex size-5 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand-strong dark:bg-brand/20 dark:text-brand-soft"
           aria-hidden="true"
           ><Plus :size="14" /></span
         >
         <span class="min-w-0 flex-1 truncate font-medium">{{ row.name }}</span>
         <span
           v-if="rowAt(i)!.mine"
-          class="shrink-0 rounded-full bg-primary/15 px-1.5 py-px text-[10px] font-semibold text-primary-dark dark:bg-primary/20 dark:text-primary"
+          class="shrink-0 rounded-full bg-brand/15 px-1.5 py-px text-[10px] font-semibold text-brand-strong dark:bg-brand/20 dark:text-brand-soft"
           data-test="mine-badge"
           aria-label="Remembered from your own adds"
           >mine</span

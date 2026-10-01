@@ -86,7 +86,37 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   placeholder data URL in `src/lib/images.ts`. Decorative icons are
   `aria-hidden`; an icon that carries state must also be queryable
   (`aria-label` / `aria-expanded`), because that is what the specs
-  assert.
+  assert. ICON COLOUR is a semantic decision, not a style choice
+  (ADR-0035): render a role's icon through `<HueIcon role="…">`, which
+  pulls its class from `src/lib/palette.ts` — categorical hues for
+  ingredient TYPE (`meat`/`hue-meat`, `fish`/`hue-fish`,
+  `vegetarian`→`hue-vegan`) and semantic hues for NUTRITION
+  (`energy`/`nutrition-energy` on the flame, `sodium`/`nutrition-sodium`
+  on the droplet). A hue is the icon's IDENTITY, never its state: a
+  selected filter chip is still its own food hue, and selection itself is
+  always the primary token. The two families never mix, and colour is
+  never the only signal (the label stays).
+- **Design tokens (DESIGN.md, ADR-0035)**: `DESIGN.md` at the repo root
+  is the SINGLE SOURCE OF TRUTH for the visual identity (palette,
+  typography, shapes, spacing, components + the prose Overview/Do's &
+  Don'ts). Its YAML front-matter is compiled into the `@theme` block of
+  `src/style.css`, which is why components consume `bg-brand`,
+  `text-hue-fish`, `max-w-app`, … and NEVER a raw hex literal. Add a
+  colour to `DESIGN.md` first, mirror it into `@theme`, and verify it on
+  BOTH surfaces (light + dark) — `src/lib/palette.test.ts` fails when the
+  two files drift. Validate the file itself with
+  `npx -y @google/design.md lint DESIGN.md`; its WCAG contrast findings
+  must be fixed, not waived. The neutral ramp is Tailwind's stock
+  `stone-*` scale (mapped in a comment in `style.css`); the legacy
+  `--color-primary` orange is GONE (white-on-orange was 2.8:1) — the
+  primary is the verified tomato (`--color-brand`).
+- **Layout width**: the app shell, header, nav, ShopView and Plan sheets
+  are `max-w-app` (fluid, capped at 1100px); the recipe grid is
+  2/3/4/5 columns at base/`sm`/`lg`/`xl`. Desktop richness is ALWAYS
+  `lg:`/`xl:`-gated — mobile padding, tap targets and ADR-0016's
+  82px/tab fit never change to serve a desktop. The immersive cooking
+  view keeps `max-w-reading` (672px) on purpose: a step read at arm's
+  length wants a measure, not a page.
 - **Household room (ADR-0019)**: `ui.householdRoom` is a persisted
   default join target; the app auto-joins it after config load unless a
   session resume or `?room=` link already won. Room failures toast and
@@ -301,7 +331,9 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   amounts, three-word room codes, share-room link, room lifecycle,
   unified quick filters, filter sync + join reconciliation, the Lucide
   icon stack, Auto-Plan preview, household favourites + ratings, cooked
-  history shared by default, Auto-Plan regenerate seed). Skim them before
+  history shared by default, Auto-Plan regenerate seed, cook anytime,
+  the DESIGN.md token layer + categorical food hues + wider desktop
+  (ADR-0035)). Skim them before
   proposing changes; new lasting decisions get a new
   `ADR-NNNN-slug.md` (never rewrite an accepted one in place).
 

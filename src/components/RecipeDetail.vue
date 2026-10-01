@@ -10,14 +10,14 @@ import { usePlanStore } from '../stores/plan'
 import { useFavouritesStore } from '../stores/favourites'
 import RatingStars from './RatingStars.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
+import { ingredientRole } from '../lib/palette'
+import HueIcon from './HueIcon.vue'
 import { onMounted, onUnmounted } from 'vue'
 import {
   ArrowLeft,
   ChefHat,
   ChevronDown,
   Clock,
-  Droplet,
-  Flame,
   Heart,
   Minus,
   Plus,
@@ -38,6 +38,11 @@ const servings = ref(1)
 
 const meta = computed<VariantMeta | null>(
   () => catalog.value?.byId.get(props.id) ?? null,
+)
+
+/** Categorical ingredient-TYPE hue beside the category name (ADR-0035). */
+const typeRole = computed(() =>
+  ingredientRole(catalog.value?.dataById.get(props.id)?.category_name),
 )
 
 /** Scale factor for ingredients/instructions vs. the recipe's base servings. */
@@ -174,10 +179,11 @@ function startCooking() {
       </button>
     </div>
 
-    <div class="mx-auto max-w-2xl space-y-6 p-4 pb-24">
+    <div class="mx-auto max-w-app space-y-6 p-4 pb-24">
       <header class="space-y-2">
         <div class="flex items-center gap-2 text-xs dark:text-stone-400">
           <span v-if="meta.is_pro" class="rounded bg-stone-900 px-1.5 py-0.5 font-bold text-amber-300">PRO</span>
+          <HueIcon v-if="typeRole" :role="typeRole" :size="14" />
           <span class="capitalize">{{ catalog?.dataById.get(meta.id)?.category_name ?? meta.ruleset }}</span>
         </div>
         <h2 class="text-2xl font-bold tracking-tight">{{ meta.name }}</h2>
@@ -187,7 +193,7 @@ function startCooking() {
         </div>
         <p class="flex flex-wrap gap-3 text-sm dark:text-stone-400">
           <span class="flex items-center gap-1">
-            <Flame :size="14" aria-hidden="true" />{{ Math.round(meta.calories) }} kcal / serving
+            <HueIcon role="energy" :size="14" />{{ Math.round(meta.calories) }} kcal / serving
           </span>
           <span class="flex items-center gap-1">
             <Clock :size="14" aria-hidden="true" />{{ meta.cooking_minutes }} min
@@ -196,12 +202,12 @@ function startCooking() {
             <Utensils :size="14" aria-hidden="true" />serves {{ servings }}
           </span>
           <span v-if="meta.sodium_mg" class="flex items-center gap-1">
-            <Droplet :size="14" aria-hidden="true" />{{ Math.round(meta.sodium_mg) }} mg sodium
+            <HueIcon role="sodium" :size="14" />{{ Math.round(meta.sodium_mg) }} mg sodium
           </span>
         </p>
         <p
           v-if="cookLine"
-          class="text-sm font-medium text-primary-dark dark:text-primary"
+          class="text-sm font-medium text-brand-strong dark:text-brand-soft"
           :title="cookLastTitle"
           data-test="cook-history"
         >
@@ -269,7 +275,7 @@ function startCooking() {
             </div>
           </div>
           <button
-            class="h-11 flex-1 max-w-48 rounded-xl bg-primary px-4 text-sm font-semibold text-white shadow-sm active:bg-primary-dark"
+            class="h-11 flex-1 max-w-48 rounded-xl bg-brand px-4 text-sm font-semibold text-white shadow-sm active:bg-brand-strong"
             @click="addToPlan"
           >
             {{ inPlan ? 'Update in plan' : 'Add to plan' }}
@@ -321,6 +327,11 @@ function startCooking() {
           </ul>
         </section>
 
+        <!-- Ingredients + Instructions. The wider desktop container earns
+             a two-column reading (ADR-0035): the ingredient list is a
+             reference beside the prose, instead of one 1100px ribbon. The
+             single column below `lg` is the phone layout, untouched. -->
+        <div class="grid gap-6 lg:grid-cols-2 lg:items-start">
         <!-- Ingredients -->
         <section>
           <h3 class="mb-2 text-sm font-semibold tracking-wide dark:text-stone-400 uppercase">
@@ -328,7 +339,7 @@ function startCooking() {
           </h3>
           <ul class="divide-y dark:divide-stone-800 rounded-xl dark:bg-stone-900 ring-1 dark:ring-stone-700">
             <li v-for="item in scaledIngredients" :key="item.id" class="flex gap-3 px-4 py-2.5 text-sm">
-              <span class="w-24 shrink-0 font-medium text-primary-dark">{{ item.quantity || '—' }}</span>
+              <span class="w-24 shrink-0 font-medium text-brand-strong">{{ item.quantity || '—' }}</span>
               <span>{{ item.ingredient_name }}</span>
             </li>
           </ul>
@@ -340,7 +351,7 @@ function startCooking() {
           <ol class="space-y-3">
             <li v-for="(step, i) in scaledSteps" :key="i" class="rounded-xl dark:bg-stone-900 p-4 ring-1 dark:ring-stone-700">
               <div class="flex gap-3">
-                <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
                   {{ i + 1 }}
                 </span>
                 <p class="text-sm leading-5">{{ step.primary }}</p>
@@ -351,6 +362,7 @@ function startCooking() {
             </li>
           </ol>
         </section>
+        </div>
       </template>
     </div>
   </div>

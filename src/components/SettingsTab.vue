@@ -246,10 +246,10 @@ function cancelBackupImport(): void {
           data-test="household-room-input"
           @input="onRoomInput"
           @blur="onRoomBlur"
-          class="h-11 min-w-0 flex-1 rounded-xl border bg-white px-3 text-sm outline-none focus:border-primary dark:border-stone-700 dark:bg-stone-900"
+          class="h-11 min-w-0 flex-1 rounded-xl border bg-white px-3 text-sm outline-none focus:border-brand dark:border-stone-700 dark:bg-stone-900"
         />
         <button
-          class="h-11 rounded-xl bg-primary px-3 text-sm font-semibold text-white active:bg-primary-dark disabled:opacity-50"
+          class="h-11 rounded-xl bg-brand px-3 text-sm font-semibold text-white active:bg-brand-strong disabled:opacity-50"
           data-test="household-room-save"
           aria-label="Save household room code"
           :disabled="!canSaveRoom"
@@ -317,7 +317,7 @@ function cancelBackupImport(): void {
       </p>
       <div class="flex gap-2">
         <button
-          class="flex h-11 flex-1 items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-white active:bg-primary-dark"
+          class="flex h-11 flex-1 items-center justify-center rounded-xl bg-brand px-4 text-sm font-semibold text-white active:bg-brand-strong"
           data-test="export-settings"
           aria-label="Download backup file"
           @click="downloadBackup"
@@ -379,7 +379,7 @@ function cancelBackupImport(): void {
             Cancel
           </button>
           <button
-            class="h-11 flex-1 rounded-xl bg-primary text-sm font-semibold text-white active:bg-primary-dark"
+            class="h-11 flex-1 rounded-xl bg-brand text-sm font-semibold text-white active:bg-brand-strong"
             data-test="import-settings-confirm"
             aria-label="Restore backup"
             @click="confirmBackupImport"

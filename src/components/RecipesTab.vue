@@ -23,6 +23,7 @@ import {
   type SortBy,
 } from '../lib/quickFilters'
 import { popularityScore } from '../lib/quantity'
+import { hueClass } from '../lib/palette'
 import { searchVariantIds } from '../lib/search'
 import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
@@ -177,20 +178,23 @@ const sortText = computed(() => sortLabel(filters.value.sortBy))
 
 /* ---------- Icon maps (WS5: one Lucide icon per filter) ---------- */
 
-/** Protein chips carry the food icon; "Any" is a neutral sparkle. */
-const PROTEIN_ICONS: Record<ProteinFilter, Component> = {
-  '': Sparkles,
-  fish: Fish,
-  meat: Beef,
-  vegetarian: Wheat,
+/** Each food icon wears its CATEGORICAL hue in every state (ADR-0035):
+ *  the hue is the icon's identity, while SELECTION is always the primary
+ *  token — a red-on-red chip would be invisible, so the selected state
+ *  switches the icon to the chip's own text colour instead. */
+const PROTEIN_ICONS: Record<ProteinFilter, { icon: Component; cls: string }> = {
+  '': { icon: Sparkles, cls: '' }, // "Any" is not a food, so it has no hue
+  fish: { icon: Fish, cls: hueClass('fish') },
+  meat: { icon: Beef, cls: hueClass('meat') },
+  vegetarian: { icon: Wheat, cls: hueClass('vegan') },
 }
 
-const DIET_ICONS: Record<DietId, Component> = {
-  'no-pork': Ham,
-  'no-shellfish': Shrimp,
-  'no-meat': Drumstick,
-  vegetarian: Salad,
-  vegan: Vegan,
+const DIET_ICONS: Record<DietId, { icon: Component; cls: string }> = {
+  'no-pork': { icon: Ham, cls: hueClass('meat') },
+  'no-shellfish': { icon: Shrimp, cls: hueClass('fish') },
+  'no-meat': { icon: Drumstick, cls: hueClass('vegan') },
+  vegetarian: { icon: Salad, cls: hueClass('vegan') },
+  vegan: { icon: Vegan, cls: hueClass('vegan') },
 }
 
 /* ---------- Result pipeline ---------- */
@@ -293,7 +297,7 @@ onUnmounted(() => observer?.disconnect())
       v-model="query"
       type="search"
       placeholder="Search recipes or ingredients…"
-      class="h-11 w-full rounded-xl border dark:border-stone-700 dark:bg-stone-900 px-4 text-sm outline-none focus:border-primary"
+      class="h-11 w-full rounded-xl border dark:border-stone-700 dark:bg-stone-900 px-4 text-sm outline-none focus:border-brand"
       aria-label="Search recipes or ingredients"
     />
 
@@ -377,7 +381,7 @@ onUnmounted(() => observer?.disconnect())
               <Check
                 v-if="filters.sortBy === option.value"
                 :size="16"
-                class="shrink-0 text-primary"
+                class="shrink-0 text-brand"
                 aria-hidden="true"
               />
               <span v-else class="w-4 shrink-0" aria-hidden="true" />
@@ -405,14 +409,19 @@ onUnmounted(() => observer?.disconnect())
         class="flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors"
         :class="
           filters.protein === p.value
-            ? 'border-primary bg-primary text-white'
+            ? 'border-brand bg-brand text-white'
             : 'dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'
         "
         :aria-pressed="filters.protein === p.value"
         :aria-label="`Protein: ${p.label}`"
         @click="setProtein(p.value)"
       >
-        <component :is="PROTEIN_ICONS[p.value]" :size="14" aria-hidden="true" />
+        <component
+          :is="PROTEIN_ICONS[p.value].icon"
+          :size="14"
+          :class="filters.protein === p.value ? 'text-white' : PROTEIN_ICONS[p.value].cls"
+          aria-hidden="true"
+        />
         {{ p.label }}
       </button>
 
@@ -430,14 +439,19 @@ onUnmounted(() => observer?.disconnect())
           class="flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors"
           :class="
             activeDiets.includes(d)
-              ? 'border-primary bg-primary text-white'
+              ? 'border-brand bg-brand text-white'
               : 'dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'
           "
           :aria-pressed="activeDiets.includes(d)"
           :aria-label="`${DIET_LABELS[d]}: ${DIET_DESCRIPTIONS[d]}`"
           @click="toggleDiet(d)"
         >
-          <component :is="DIET_ICONS[d]" :size="14" aria-hidden="true" />
+          <component
+            :is="DIET_ICONS[d].icon"
+            :size="14"
+            :class="activeDiets.includes(d) ? 'text-white' : DIET_ICONS[d].cls"
+            aria-hidden="true"
+          />
           {{ dietChipLabel(d, dietCounts[d]) }}
         </button>
       </div>
@@ -447,14 +461,14 @@ onUnmounted(() => observer?.disconnect())
       {{ results.length }} recipe{{ results.length === 1 ? '' : 's' }}
       <button
         v-if="filtersActive"
-        class="ml-2 text-primary-dark underline"
+        class="ml-2 text-brand-strong underline"
         @click="clearFilters"
       >
         Clear filters
       </button>
     </p>
 
-    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
       <RecipeCard v-for="meta in visibleResults" :key="meta.id" :meta="meta" />
     </div>
 

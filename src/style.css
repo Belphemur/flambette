@@ -4,10 +4,75 @@
    useDark toggles the `dark` class on <html>. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ------------------------------------------------------------------ *
+ * DESIGN TOKENS — the mirror of DESIGN.md (repo root).
+ *
+ * `DESIGN.md` is the SINGLE SOURCE OF TRUTH for the visual identity:
+ * the palette, its machine-readable tokens and the rationale live
+ * there, and this `@theme` block is the compilation of those tokens
+ * into Tailwind utilities. Every colour below is transcribed from the
+ * `colors:` front-matter of DESIGN.md — change the token there first,
+ * then here, and never inline a raw hex in a component.
+ *
+ * Neutral ramp mapping (DESIGN.md -> Tailwind's stock stone scale, which
+ * is already exactly those values, so no duplication is needed here):
+ *   surface #FAFAF9 -> stone-50      surface-dark        -> stone-950
+ *   surface-raised  -> stone-100    surface-dark-raised -> stone-900
+ *   surface-sunken  -> stone-200    surface-dark-sunken -> stone-800
+ *   border          -> stone-200    border-dark         -> stone-700
+ *   border-strong   -> stone-300    text                -> stone-800
+ *   text            -> stone-800    text-dark           -> stone-50
+ *   text-muted #57534E -> stone-600 text-dark-muted     -> stone-400
+ *   text-subtle #78716C -> stone-500
+ *
+ * Contrast: every hue below is >= 4.5:1 against the light surface
+ * (#FAFAF9) and its `-soft` counterpart is >= 4.5:1 against the dark
+ * surface (#1C1917). Verified when the token was added; re-check if a
+ * value changes. `DESIGN.md` holds the numbers.
+ * ------------------------------------------------------------------ */
 @theme {
-  --color-primary-*: initial;
-  --color-primary: oklch(0.705 0.17 47.6);
-  --color-primary-dark: oklch(0.6 0.17 47.6);
+  /* Primary — tomato (`primary` in DESIGN.md). The app's ONE action
+     colour: primary buttons, the active nav tab, focus rings, selection.
+     This replaces the pre-DESIGN.md brand orange (`--color-primary`,
+     #f27930), whose white-on-orange pairing measured 2.8:1 — below WCAG
+     AA. Every former usage now wears this token. */
+  --color-brand: #b3381f;
+  --color-brand-strong: #8e2c17;
+  --color-brand-soft: #f08a6a;
+  --color-brand-tint: #fbeae5;
+  --color-on-brand: #ffffff;
+
+  /* Categorical ingredient-TYPE hues. A hue is the icon's identity,
+     never its state: a selected chip is still its own food hue. */
+  --color-hue-meat: #b3381f;
+  --color-hue-meat-soft: #f08a6a;
+  --color-hue-fish: #0e7490;
+  --color-hue-fish-soft: #5cc0d8;
+  --color-hue-vegan: #3f7a33;
+  --color-hue-vegan-soft: #7fc97a;
+
+  /* Semantic NUTRITION hues — deliberately outside the categorical
+     family so an energy icon is never mistaken for an ingredient. */
+  --color-nutrition-energy: #c2410c;
+  --color-nutrition-energy-soft: #fbbf6e;
+  --color-nutrition-sodium: #4f46e5;
+  --color-nutrition-sodium-soft: #a5b4fc;
+
+  /* Status. */
+  --color-warning: #9a3412;
+  --color-danger: #b91c1c;
+  --color-favourite: #e11d48;
+  --color-favourite-soft: #fb7185;
+
+  /* Layout: the fluid app container (DESIGN.md `spacing.container`) and
+     the immersive reading column kept by the cooking view
+     (`spacing.reading`). */
+  --container-app: 1100px;
+  --container-reading: 672px;
+
+  /* Shapes (DESIGN.md `rounded`): sm 6px, md 8px, lg 12px, xl 16px,
+     full 9999px -> Tailwind's rounded-md / rounded-lg / rounded-xl /
+     rounded-2xl / rounded-full. */
   --font-sans:
     'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, sans-serif;
@@ -79,5 +144,42 @@ body {
   input:disabled,
   [aria-disabled='true'] {
     cursor: not-allowed;
+  }
+
+  /* Nav icon hover: a 2px lift + a tint to the primary token. Same
+   * reasoning as the cursor rule above — a hover state is a MOUSE
+   * affordance, so the whole animation lives inside this media query
+   * and can never be left stuck under a finger on touch. No hit area,
+   * label or padding is touched (ADR-0016's 82px/tab fit is e2e-pinned);
+   * the icon is a flex item of the tab button, so the transform applies
+   * without changing layout. DESIGN.md: `nav-tab-icon-hover`. */
+  .nav-tab-icon {
+    transition:
+      transform 150ms ease,
+      color 150ms ease;
+  }
+
+  .nav-tab:hover .nav-tab-icon,
+  .nav-tab:focus-visible .nav-tab-icon {
+    transform: translateY(-2px);
+    color: var(--color-brand);
+  }
+
+  .dark .nav-tab:hover .nav-tab-icon,
+  .dark .nav-tab:focus-visible .nav-tab-icon {
+    color: var(--color-brand-soft);
+  }
+}
+
+/* Reduced motion: the LIFT is the motion, so it goes; the tint carries
+   no motion and stays, so the hover state is still legible. */
+@media (prefers-reduced-motion: reduce) {
+  .nav-tab-icon {
+    transition: color 150ms ease;
+  }
+
+  .nav-tab:hover .nav-tab-icon,
+  .nav-tab:focus-visible .nav-tab-icon {
+    transform: none;
   }
 }

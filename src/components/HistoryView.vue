@@ -94,7 +94,7 @@ function addToPlan(row: Row) {
       <p class="mt-2 font-medium">Nothing cooked yet</p>
       <p class="mt-1 text-sm">Mark meals as cooked when you finish them.</p>
       <button
-        class="mt-4 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white"
+        class="mt-4 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white"
         @click="router.push('/')"
       >
         Browse recipes
@@ -142,7 +142,7 @@ function addToPlan(row: Row) {
                 :title="formatAbsolute(row.lastAt)"
               >
                 <span
-                  class="mr-1 rounded bg-primary/10 px-1.5 py-px text-[10px] font-bold text-primary-dark dark:bg-stone-800 dark:text-primary"
+                  class="mr-1 rounded bg-brand/10 px-1.5 py-px text-[10px] font-bold text-brand-strong dark:bg-stone-800 dark:text-brand-soft"
                   :data-test="`history-count-${row.variantId}`"
                 >
                   {{ row.count === 1 ? 'cooked once' : `cooked ${row.count} times` }}
@@ -151,7 +151,7 @@ function addToPlan(row: Row) {
               </p>
             </div>
             <button
-              class="shrink-0 rounded-lg border border-stone-200 px-3 py-2 text-xs font-semibold text-primary-dark hover:bg-stone-50 dark:border-stone-700 dark:text-primary dark:hover:bg-stone-800"
+              class="shrink-0 rounded-lg border border-stone-200 px-3 py-2 text-xs font-semibold text-brand-strong hover:bg-stone-50 dark:border-stone-700 dark:text-brand-soft dark:hover:bg-stone-800"
               :aria-label="`Add ${row.meta.name} to plan`"
               :data-test="`history-add-${row.variantId}`"
               @click="addToPlan(row)"

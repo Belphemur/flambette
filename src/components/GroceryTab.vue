@@ -111,7 +111,7 @@ function customCategory(item: string): string | undefined {
       <p class="mt-2 font-medium">Nothing to buy yet</p>
       <p class="mt-1 text-sm">Add meals to your plan and the grocery list builds itself.</p>
       <button
-        class="mt-4 mb-8 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white"
+        class="mt-4 mb-8 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white"
         @click="router.push('/')"
       >
         Browse recipes
@@ -146,7 +146,7 @@ function customCategory(item: string): string | undefined {
 
       <template v-else>
         <button
-          class="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-bold text-white shadow-sm active:bg-primary-dark"
+          class="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand text-base font-bold text-white shadow-sm active:bg-brand-strong"
           data-test="start-shopping"
           @click="router.push('/shop')"
         >
@@ -162,7 +162,7 @@ function customCategory(item: string): string | undefined {
           </p>
           <div class="h-1.5 w-24 overflow-hidden rounded-full dark:bg-stone-700">
             <div
-              class="h-full rounded-full bg-primary transition-all"
+              class="h-full rounded-full bg-brand transition-all"
               :style="{ width: totalCount ? `${(checkedCount / totalCount) * 100}%` : '0%' }"
             />
           </div>
@@ -205,7 +205,7 @@ function customCategory(item: string): string | undefined {
             <label class="flex min-w-0 flex-1 hovercap:cursor-pointer items-center gap-3">
               <input
                 type="checkbox"
-                class="size-5 shrink-0 accent-primary"
+                class="size-5 shrink-0 accent-brand"
                 :checked="!!checked.map[`custom||${item.toLowerCase()}`]"
                 @change="checked.toggleChecked(`custom||${item.toLowerCase()}`)"
               />
@@ -219,7 +219,7 @@ function customCategory(item: string): string | undefined {
                    ITEMS — this is a label, not a move. -->
               <span
                 v-if="customCategory(item)"
-                class="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary-dark dark:bg-primary/20 dark:text-primary"
+                class="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand-strong dark:bg-brand/20 dark:text-brand-soft"
                 data-test="extra-item-category-tag"
                 :aria-label="`Category: ${customCategory(item)} (stays in Extra items)`"
               >#{{ customCategory(item) }}</span>
@@ -280,7 +280,7 @@ function customCategory(item: string): string | undefined {
               <label class="flex min-w-0 flex-1 hovercap:cursor-pointer items-center gap-3">
                 <input
                   type="checkbox"
-                  class="size-5 shrink-0 accent-primary"
+                  class="size-5 shrink-0 accent-brand"
                   :checked="!!checked.map[line.key]"
                   @change="checked.toggleChecked(line.key)"
                 />
@@ -290,7 +290,7 @@ function customCategory(item: string): string | undefined {
                 >
                   <span
                     v-if="line.display"
-                    class="mr-1.5 font-medium text-primary-dark"
+                    class="mr-1.5 font-medium text-brand-strong"
                     :class="checked.map[line.key] ? 'text-stone-400 line-through' : ''"
                   >{{ line.display }}</span>
                   <span :class="checked.map[line.key] ? 'text-stone-400 line-through' : ''">{{ item.name }}</span>
@@ -309,7 +309,7 @@ function customCategory(item: string): string | undefined {
                     tabindex="0"
                     role="note"
                     :aria-label="`Used by ${item.recipes.length} planned meals: ${item.recipes.join(', ')}`"
-                    class="cursor-help whitespace-nowrap rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary-dark outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-primary/20 dark:text-primary"
+                    class="cursor-help whitespace-nowrap rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand-strong outline-none focus-visible:ring-2 focus-visible:ring-brand dark:bg-brand/20 dark:text-brand-soft"
                   >{{ item.recipes.length }} recipes</span>
                   <span
                     class="pointer-events-none absolute bottom-full right-0 z-20 mb-1.5 hidden w-56 rounded-lg bg-stone-900 px-2.5 py-1.5 text-[11px] leading-snug text-white shadow-lg group-hover/pill:block group-focus-within/pill:block dark:bg-stone-700"

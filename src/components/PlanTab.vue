@@ -339,13 +339,13 @@ function confirmAutoPlan() {
       <p class="mt-1 text-sm">Add recipes from the Recipes tab to build your week.</p>
       <div class="mt-4 flex items-center justify-center gap-2">
         <button
-          class="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white"
+          class="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white"
           @click="router.push('/')"
         >
           Browse recipes
         </button>
         <button
-          class="rounded-xl border border-primary px-4 py-2.5 text-sm font-semibold text-primary-dark dark:text-primary"
+          class="rounded-xl border border-brand px-4 py-2.5 text-sm font-semibold text-brand-strong dark:text-brand-soft"
           data-test="auto-plan-button"
           @click="openAutoPlan"
         >
@@ -358,15 +358,15 @@ function confirmAutoPlan() {
     <template v-else>
       <div class="grid grid-cols-3 gap-2 rounded-xl dark:bg-stone-900 p-4 text-center ring-1 dark:ring-stone-700">
         <div>
-          <p class="text-lg font-bold text-primary-dark">{{ totals.meals }}</p>
+          <p class="text-lg font-bold text-brand-strong">{{ totals.meals }}</p>
           <p class="text-xs dark:text-stone-400">{{ totals.meals === 1 ? 'meal' : 'meals' }}</p>
         </div>
         <div>
-          <p class="text-lg font-bold text-primary-dark">{{ Math.round(totals.calories).toLocaleString() }}</p>
+          <p class="text-lg font-bold text-brand-strong">{{ Math.round(totals.calories).toLocaleString() }}</p>
           <p class="text-xs dark:text-stone-400">kcal total</p>
         </div>
         <div>
-          <p class="text-lg font-bold text-primary-dark">{{ totals.cookTime }}</p>
+          <p class="text-lg font-bold text-brand-strong">{{ totals.cookTime }}</p>
           <p class="text-xs dark:text-stone-400">min to cook</p>
         </div>
       </div>
@@ -412,7 +412,7 @@ function confirmAutoPlan() {
             </button>
           </div>
           <button
-            class="flex size-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:text-primary"
+            class="flex size-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:text-brand"
             :aria-label="`Mark ${meal.meta.name} as cooked`"
             data-test="mark-cooked"
             @click="plan.markCooked(meal.meta.id)"
@@ -430,7 +430,7 @@ function confirmAutoPlan() {
       </ul>
 
       <button
-        class="w-full rounded-xl border border-primary py-3 text-sm font-semibold text-primary-dark dark:text-primary"
+        class="w-full rounded-xl border border-brand py-3 text-sm font-semibold text-brand-strong dark:text-brand-soft"
         data-test="auto-plan-button"
         @click="openAutoPlan"
       >
@@ -446,7 +446,7 @@ function confirmAutoPlan() {
           Clear plan
         </button>
         <button
-          class="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-white shadow-sm active:bg-primary-dark"
+          class="w-full rounded-xl bg-brand py-3 text-sm font-semibold text-white shadow-sm active:bg-brand-strong"
           title="Share your plan via a link or a live room"
           @click="openShareSheet"
         >
@@ -468,7 +468,7 @@ function confirmAutoPlan() {
         @click.self="closeShareSheet"
       >
         <div
-          class="w-full max-w-2xl space-y-3 rounded-t-2xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl dark:bg-stone-900"
+          class="w-full max-w-app space-y-3 rounded-t-2xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl dark:bg-stone-900"
           role="dialog"
           aria-label="Share your meal plan"
         >
@@ -486,7 +486,7 @@ function confirmAutoPlan() {
             Anyone with this link gets your current plan loaded into their app.
           </p>
           <input
-            class="h-11 w-full rounded-lg border border-stone-200 bg-stone-50 px-3 text-xs text-stone-700 outline-none focus:border-primary dark:border-stone-700 dark:bg-stone-950 dark:text-stone-300"
+            class="h-11 w-full rounded-lg border border-stone-200 bg-stone-50 px-3 text-xs text-stone-700 outline-none focus:border-brand dark:border-stone-700 dark:bg-stone-950 dark:text-stone-300"
             type="text"
             readonly
             :value="shareUrl ?? ''"
@@ -495,7 +495,7 @@ function confirmAutoPlan() {
           />
           <div class="flex gap-2">
             <button
-              class="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-stone-900 px-4 text-sm font-semibold text-amber-300 active:bg-stone-800 dark:bg-stone-800 dark:text-primary"
+              class="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-stone-900 px-4 text-sm font-semibold text-amber-300 active:bg-stone-800 dark:bg-stone-800 dark:text-brand-soft"
               :disabled="shareUrl === null"
               data-test="copy-share-link"
               @click="copyShareUrl"
@@ -504,7 +504,7 @@ function confirmAutoPlan() {
             </button>
             <button
               v-if="nativeShareSupported"
-              class="flex h-11 flex-1 items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-white active:bg-primary-dark"
+              class="flex h-11 flex-1 items-center justify-center rounded-xl bg-brand px-4 text-sm font-semibold text-white active:bg-brand-strong"
               @click="nativeShare"
             >
               Share…
@@ -533,7 +533,7 @@ function confirmAutoPlan() {
             <input
               type="checkbox"
               data-test="share-history-toggle"
-              class="mt-0.5 size-4 accent-[color:var(--color-primary,#16a34a)]"
+              class="mt-0.5 size-4 accent-brand"
               :aria-label="`Share cooked history with room (${ui.shareCookedHistory ? 'on, default' : 'off, opt-out'})`"
               v-model="ui.shareCookedHistory"
             />
@@ -544,7 +544,7 @@ function confirmAutoPlan() {
           </label>
           <template v-if="room.inRoom">
             <input
-              class="h-11 w-full rounded-lg border border-stone-200 bg-stone-50 px-3 text-xs text-stone-700 outline-none focus:border-primary dark:border-stone-700 dark:bg-stone-950 dark:text-stone-300"
+              class="h-11 w-full rounded-lg border border-stone-200 bg-stone-50 px-3 text-xs text-stone-700 outline-none focus:border-brand dark:border-stone-700 dark:bg-stone-950 dark:text-stone-300"
               type="text"
               readonly
               :value="roomLink ?? ''"
@@ -553,7 +553,7 @@ function confirmAutoPlan() {
             />
             <div class="flex gap-2">
               <button
-                class="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-stone-900 px-4 text-sm font-semibold text-amber-300 active:bg-stone-800 dark:bg-stone-800 dark:text-primary"
+                class="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-stone-900 px-4 text-sm font-semibold text-amber-300 active:bg-stone-800 dark:bg-stone-800 dark:text-brand-soft"
                 data-test="copy-room-link"
                 @click="copyRoomLink"
               >
@@ -570,7 +570,7 @@ function confirmAutoPlan() {
           </template>
           <button
             v-else
-            class="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-semibold text-white active:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
+            class="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-brand px-4 text-sm font-semibold text-white active:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-60"
             data-test="start-room"
             :disabled="room.status === 'connecting'"
             @click="startLiveRoom"
@@ -594,7 +594,7 @@ function confirmAutoPlan() {
         @click.self="closeAutoPlan"
       >
         <div
-          class="w-full max-w-2xl space-y-4 rounded-t-2xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl dark:bg-stone-900"
+          class="w-full max-w-app space-y-4 rounded-t-2xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl dark:bg-stone-900"
           role="dialog"
           aria-label="Generate an auto-plan"
           data-test="auto-plan-dialog"
@@ -630,7 +630,7 @@ function confirmAutoPlan() {
                 ]"
                 :key="m.value"
                 class="px-3 py-2 text-xs font-semibold first:rounded-l-lg last:rounded-r-lg"
-                :class="ui.autoPlanMode === m.value ? 'bg-primary text-white' : 'dark:text-stone-300 dark:hover:bg-stone-800'"
+                :class="ui.autoPlanMode === m.value ? 'bg-brand text-white' : 'dark:text-stone-300 dark:hover:bg-stone-800'"
                 role="radio"
                 :aria-checked="ui.autoPlanMode === m.value"
                 :data-test="`auto-plan-mode-${m.value}`"
@@ -701,7 +701,7 @@ function confirmAutoPlan() {
           </div>
 
           <button
-            class="h-11 w-full rounded-xl bg-primary text-sm font-semibold text-white active:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
+            class="h-11 w-full rounded-xl bg-brand text-sm font-semibold text-white active:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-60"
             data-test="auto-plan-generate"
             :disabled="autoPlanBusy"
             @click="generateAutoPlan"
@@ -758,7 +758,7 @@ function confirmAutoPlan() {
             </ul>
             <div class="flex gap-2">
               <button
-                class="h-10 flex-1 rounded-xl bg-primary text-sm font-semibold text-white active:bg-primary-dark"
+                class="h-10 flex-1 rounded-xl bg-brand text-sm font-semibold text-white active:bg-brand-strong"
                 data-test="auto-plan-confirm"
                 :disabled="!previewComplete"
                 :title="previewComplete ? undefined : autoPlanBusy ? 'Waiting for the new plan…' : 'Waiting for the preview to load'"

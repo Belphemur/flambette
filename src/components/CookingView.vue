@@ -417,7 +417,7 @@ function onTouchEnd(e: TouchEvent) {
   >
     <!-- Header: name, servings, progress + thin progress bar -->
     <header class="border-b dark:border-stone-700 dark:bg-stone-900">
-      <div class="mx-auto flex max-w-2xl items-center justify-between gap-2 px-4 py-3">
+      <div class="mx-auto flex max-w-reading items-center justify-between gap-2 px-4 py-3">
         <button
           class="flex size-11 shrink-0 items-center justify-center rounded-full text-lg dark:text-stone-400 dark:hover:bg-stone-800"
           aria-label="Close cooking mode"
@@ -434,9 +434,9 @@ function onTouchEnd(e: TouchEvent) {
         </div>
         <span class="size-11 shrink-0" aria-hidden="true"></span>
       </div>
-      <div class="mx-auto mb-2 h-1 max-w-2xl overflow-hidden rounded-full dark:bg-stone-700">
+      <div class="mx-auto mb-2 h-1 max-w-reading overflow-hidden rounded-full dark:bg-stone-700">
         <div
-          class="h-full rounded-full bg-primary transition-all"
+          class="h-full rounded-full bg-brand transition-all"
           :style="{
             width: currentView
               ? `${(((currentView.partner ?? currentView.leader) + 1) / total) * 100}%`
@@ -452,20 +452,20 @@ function onTouchEnd(e: TouchEvent) {
       @touchstart.passive="onTouchStart"
       @touchend.passive="onTouchEnd"
     >
-      <div v-if="!doc" class="mx-auto max-w-2xl space-y-3" aria-busy="true">
+      <div v-if="!doc" class="mx-auto max-w-reading space-y-3" aria-busy="true">
         <div class="h-10 w-3/4 animate-pulse rounded dark:bg-stone-700" />
         <div class="h-6 w-1/2 animate-pulse rounded dark:bg-stone-700" />
       </div>
 
       <div
         v-else-if="visibleSteps.length"
-        class="mx-auto max-w-2xl space-y-6"
+        class="mx-auto max-w-reading space-y-6"
         :data-test="visibleSteps.length > 1 ? 'step-pair' : 'step-single'"
       >
         <template v-for="(vs, i) in visibleSteps" :key="i">
           <div
             v-if="vs.partner"
-            class="flex items-center gap-3 text-sm font-semibold text-primary-dark dark:text-primary"
+            class="flex items-center gap-3 text-sm font-semibold text-brand-strong dark:text-brand-soft"
             role="separator"
             aria-label="Meanwhile — do this at the same time"
             data-test="meanwhile-divider"
@@ -533,11 +533,11 @@ function onTouchEnd(e: TouchEvent) {
       class="border-t px-4 py-2 dark:border-stone-700 dark:bg-stone-900"
       data-test="step-timer-bar"
     >
-      <div class="mx-auto flex max-w-2xl items-center gap-2">
+      <div class="mx-auto flex max-w-reading items-center gap-2">
         <button
           v-if="timer"
           class="flex h-11 min-w-24 shrink-0 items-center justify-center gap-1 rounded-xl border px-3 font-mono text-base font-semibold tabular-nums dark:border-stone-600 dark:bg-stone-950"
-          :class="timerRunning ? 'text-primary-dark dark:text-primary' : 'dark:text-stone-200'"
+          :class="timerRunning ? 'text-brand-strong dark:text-brand-soft' : 'dark:text-stone-200'"
           data-test="step-timer"
           aria-live="polite"
           :aria-label="timerRunning ? `Pause timer, ${timerLabel} left` : `Start timer, ${timerLabel} left`"
@@ -589,7 +589,7 @@ function onTouchEnd(e: TouchEvent) {
 
     <!-- Big navigation buttons -->
     <footer class="border-t dark:border-stone-700 dark:bg-stone-900 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-      <div class="mx-auto flex max-w-2xl flex-col gap-2">
+      <div class="mx-auto flex max-w-reading flex-col gap-2">
         <div class="flex gap-3">
           <button
             class="h-14 min-w-28 flex-1 rounded-xl border dark:border-stone-600 dark:bg-stone-900 text-base font-semibold dark:text-stone-200 transition-opacity disabled:opacity-40"
@@ -601,7 +601,7 @@ function onTouchEnd(e: TouchEvent) {
           </button>
           <button
             v-if="!isLast"
-            class="h-14 flex-[2] rounded-xl bg-primary text-base font-semibold text-white shadow-sm active:bg-primary-dark"
+            class="h-14 flex-[2] rounded-xl bg-brand text-base font-semibold text-white shadow-sm active:bg-brand-strong"
             @click="next"
           >
             Next
@@ -609,7 +609,7 @@ function onTouchEnd(e: TouchEvent) {
           </button>
           <button
             v-else
-            class="h-14 flex-[2] rounded-xl bg-primary text-base font-semibold text-white shadow-sm active:bg-primary-dark"
+            class="h-14 flex-[2] rounded-xl bg-brand text-base font-semibold text-white shadow-sm active:bg-brand-strong"
             data-test="finish"
             aria-label="Finish cooking and mark as cooked"
             @click="finishCooked"
@@ -625,7 +625,7 @@ function onTouchEnd(e: TouchEvent) {
              stops inviting a second one. -->
         <button
           v-if="!isLast"
-          class="h-12 rounded-xl border dark:border-stone-600 dark:bg-stone-900 text-sm font-semibold text-primary-dark dark:text-primary active:bg-stone-100 dark:active:bg-stone-800 disabled:opacity-60"
+          class="h-12 rounded-xl border dark:border-stone-600 dark:bg-stone-900 text-sm font-semibold text-brand-strong dark:text-brand-soft active:bg-stone-100 dark:active:bg-stone-800 disabled:opacity-60"
           data-test="mark-cooked"
           aria-label="Mark as cooked and keep cooking"
           :disabled="sessionRecorded"

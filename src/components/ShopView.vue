@@ -110,7 +110,7 @@ function exitShopping() {
     <div
       class="sticky top-0 z-20 border-b border-stone-200 bg-white/95 backdrop-blur dark:border-stone-700 dark:bg-stone-900/95"
     >
-      <div class="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3">
+      <div class="mx-auto flex max-w-app items-center gap-3 px-4 py-3">
         <button
           class="flex h-10 shrink-0 items-center rounded-xl border dark:border-stone-700 px-3 text-sm font-medium dark:text-stone-300 active:bg-stone-100 dark:active:bg-stone-800"
           data-test="exit-shopping"
@@ -128,7 +128,7 @@ function exitShopping() {
           </div>
           <div class="mt-1 h-2 overflow-hidden rounded-full dark:bg-stone-700 bg-stone-200">
             <div
-              class="h-full rounded-full bg-primary transition-all"
+              class="h-full rounded-full bg-brand transition-all"
               :style="{ width: `${progressPct}%` }"
             />
           </div>
@@ -146,7 +146,7 @@ function exitShopping() {
       </div>
     </div>
 
-    <main class="mx-auto w-full max-w-2xl flex-1 px-4 pb-24 pt-4">
+    <main class="mx-auto w-full max-w-app flex-1 px-4 pb-24 pt-4">
       <div v-if="loading && totalCount === 0" class="space-y-2" aria-busy="true">
         <div v-for="i in 6" :key="i" class="h-12 animate-pulse rounded-lg dark:bg-stone-700" />
       </div>
@@ -192,7 +192,7 @@ function exitShopping() {
               >
                 <span
                   class="flex size-8 shrink-0 items-center justify-center rounded-full border-2 dark:border-stone-600 text-xl"
-                  :class="checked.map[`custom||${item.toLowerCase()}`] ? 'border-primary bg-primary text-white' : ''"
+                  :class="checked.map[`custom||${item.toLowerCase()}`] ? 'border-brand bg-brand text-white' : ''"
                   aria-hidden="true"
                 >
                   <Check
@@ -254,7 +254,7 @@ function exitShopping() {
                 >
                   <span
                     class="flex size-8 shrink-0 items-center justify-center rounded-full border-2 dark:border-stone-600 text-xl"
-                    :class="checked.map[entry.line.key] ? 'border-primary bg-primary text-white' : ''"
+                    :class="checked.map[entry.line.key] ? 'border-brand bg-brand text-white' : ''"
                     aria-hidden="true"
                   >
                     <Check v-if="checked.map[entry.line.key]" :size="18" />
@@ -262,7 +262,7 @@ function exitShopping() {
                   <span class="min-w-0 flex-1 truncate">
                     <span
                       v-if="entry.line.display"
-                      class="mr-2 font-semibold text-primary-dark"
+                      class="mr-2 font-semibold text-brand-strong"
                       :class="checked.map[entry.line.key] ? 'text-stone-400' : ''"
                     >{{ entry.line.display }}</span>
                     <span :class="checked.map[entry.line.key] ? 'text-stone-400 line-through' : ''">{{

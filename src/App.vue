@@ -165,13 +165,13 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="mx-auto flex min-h-dvh max-w-2xl flex-col">
+  <div class="mx-auto flex min-h-dvh max-w-app flex-col" data-test="app-shell">
     <header
       v-if="!isFullscreenMode"
       class="sticky top-0 z-20 border-b border-stone-200 bg-white/90 backdrop-blur dark:border-stone-700 dark:bg-stone-900/90"
     >
       <div class="flex items-center justify-between px-4 py-2">
-        <h1 class="flex items-center gap-2 py-1 text-lg font-bold tracking-tight text-primary-dark dark:text-primary">
+        <h1 class="flex items-center gap-2 py-1 text-lg font-bold tracking-tight text-brand-strong dark:text-brand-soft">
           <Salad :size="22" aria-hidden="true" />
           Mealime Planner
         </h1>
@@ -206,13 +206,13 @@ onMounted(async () => {
       <CircleAlert :size="40" class="mx-auto" aria-hidden="true" />
       <p class="font-semibold">Couldn't load the recipe catalog</p>
       <p class="text-sm text-stone-500">{{ loadError }}</p>
-      <button class="mt-2 rounded-lg bg-primary px-4 py-2 font-semibold text-white" @click="reload()">
+      <button class="mt-2 rounded-lg bg-brand px-4 py-2 font-semibold text-white" @click="reload()">
         Retry
       </button>
     </main>
 
     <main v-else-if="loading" class="flex flex-1 items-center justify-center">
-      <div class="size-8 animate-spin rounded-full border-4 border-stone-200 border-t-primary" role="status">
+      <div class="size-8 animate-spin rounded-full border-4 border-stone-200 border-t-brand" role="status">
         <span class="sr-only">Loading…</span>
       </div>
     </main>
@@ -241,7 +241,7 @@ onMounted(async () => {
           v-for="(action, i) in ui.toast.actions ?? []"
           :key="action.label"
           class="rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide"
-          :class="i === 0 ? 'bg-primary text-white' : 'text-stone-300 hover:text-white'"
+          :class="i === 0 ? 'bg-brand text-white' : 'text-stone-300 hover:text-white'"
           :data-test="action.testId ?? (i === 0 ? 'toast-action-primary' : 'toast-action-secondary')"
           @click="action.run()"
         >
@@ -255,12 +255,12 @@ onMounted(async () => {
       class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-900"
       aria-label="Main navigation"
     >
-      <div class="mx-auto flex max-w-2xl">
+      <div class="mx-auto flex max-w-app">
         <button
           v-for="tab in TABS"
           :key="tab.id"
-          class="flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors"
-          :class="route.path === tab.to ? 'text-primary-dark' : 'text-stone-400'"
+          class="nav-tab flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium transition-colors"
+          :class="route.path === tab.to ? 'text-brand-strong dark:text-brand-soft' : 'text-stone-500 dark:text-stone-400'"
           :aria-current="route.path === tab.to ? 'page' : undefined"
           @click="router.push(tab.to)"
         >
@@ -268,7 +268,7 @@ onMounted(async () => {
             :is="tab.icon"
             :size="22"
             aria-hidden="true"
-            class="leading-none"
+            class="nav-tab-icon leading-none"
           />
           {{ tab.label }}
         </button>
