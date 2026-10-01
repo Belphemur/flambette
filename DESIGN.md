@@ -1,90 +1,83 @@
 ---
 version: alpha
 name: Mealime Kitchen
-description: >
-  Warm & appetizing visual identity for the Mealime Planner SPA: a stone
-  neutral foundation with food-site accent energy — tomato, herb, ocean and
-  mushroom warmth — applied as categorical and semantic colour on an
-  offline-first, mobile-first planner.
+description: 'A warm, photo-led kitchen companion: cream and espresso surfaces, confident tomato
+  actions, clear food iconography, and generous responsive layouts.'
 colors:
-  # Primary — tomato. Actions, the active nav tab, focus rings, selection.
   primary: "#B3381F"
   primary-strong: "#8E2C17"
   primary-soft: "#F08A6A"
   primary-tint: "#FBEAE5"
+  primary-tint-dark: "#44241D"
   on-primary: "#FFFFFF"
-  # Neutral foundation (stone) — the app's surfaces, text and dividers.
-  surface: "#FAFAF9"
+  surface: "#FFF8F0"
   surface-raised: "#FFFFFF"
-  surface-sunken: "#F5F5F4"
-  border: "#E7E5E4"
-  border-strong: "#D6D3D1"
+  surface-sunken: "#FFF0E6"
+  border: "#E5D8CB"
+  border-strong: "#8C7A6B"
   text: "#292524"
-  text-muted: "#57534E"
-  text-subtle: "#78716C"
-  # Dark-mode counterparts of the same ramp.
-  surface-dark: "#0C0A09"
-  surface-dark-raised: "#1C1917"
-  surface-dark-sunken: "#292524"
-  border-dark: "#44403C"
-  text-dark: "#FAFAF9"
-  text-dark-muted: "#A8A29E"
-  # Categorical ingredient-type hues (light + the -soft dark-mode variant).
+  text-muted: "#63574E"
+  surface-dark: "#171310"
+  surface-dark-raised: "#241C18"
+  surface-dark-sunken: "#32261F"
+  border-dark: "#564438"
+  border-dark-strong: "#A28E80"
+  text-dark: "#FFF8F0"
+  text-dark-muted: "#C7B5A6"
   hue-meat: "#B3381F"
   hue-meat-soft: "#F08A6A"
   hue-fish: "#0E7490"
   hue-fish-soft: "#5CC0D8"
-  hue-vegan: "#3F7A33"
-  hue-vegan-soft: "#7FC97A"
-  # Semantic nutrition hues.
-  nutrition-energy: "#C2410C"
+  hue-vegetarian: "#137A38"
+  hue-vegetarian-soft: "#86EFAC"
+  hue-vegan: "#047857"
+  hue-vegan-soft: "#6EE7B7"
+  nutrition-energy: "#B83A0A"
   nutrition-energy-soft: "#FBBF6E"
   nutrition-sodium: "#4F46E5"
   nutrition-sodium-soft: "#A5B4FC"
-  # Status.
   warning: "#9A3412"
+  warning-soft: "#FDBA74"
   danger: "#B91C1C"
+  danger-soft: "#FCA5A5"
   favourite: "#E11D48"
   favourite-soft: "#FB7185"
 typography:
   headline-lg:
-    fontFamily: Inter
+    fontFamily: system-ui
+    fontSize: 32px
+    fontWeight: 700
+    lineHeight: 1.15
+  headline-md:
+    fontFamily: system-ui
     fontSize: 24px
     fontWeight: 700
-    lineHeight: 1.2
-    letterSpacing: -0.01em
-  headline-md:
-    fontFamily: Inter
-    fontSize: 18px
-    fontWeight: 700
     lineHeight: 1.25
-    letterSpacing: -0.01em
   title:
-    fontFamily: Inter
-    fontSize: 14px
+    fontFamily: system-ui
+    fontSize: 16px
     fontWeight: 600
     lineHeight: 1.4
   body-md:
-    fontFamily: Inter
+    fontFamily: system-ui
+    fontSize: 16px
+    fontWeight: 400
+    lineHeight: 1.55
+  body-sm:
+    fontFamily: system-ui
     fontSize: 14px
     fontWeight: 400
     lineHeight: 1.5
-  body-sm:
-    fontFamily: Inter
-    fontSize: 13px
-    fontWeight: 400
-    lineHeight: 1.45
   label-md:
-    fontFamily: Inter
+    fontFamily: system-ui
     fontSize: 12px
     fontWeight: 500
-    lineHeight: 1.3
-  label-caps:
-    fontFamily: Inter
-    fontSize: 10px
-    fontWeight: 700
-    lineHeight: 1
-    letterSpacing: 0.08em
+    lineHeight: 1.4
+  cooking-step:
+    fontFamily: system-ui
+    fontSize: 20px
+    fontWeight: 500
+    lineHeight: 1.6
 rounded:
   sm: 6px
   md: 8px
@@ -101,333 +94,473 @@ spacing:
   2xl: 32px
   container: 1100px
   reading: 672px
-  gutter: 12px
+  gutter-mobile: 16px
+  gutter-desktop: 24px
+  touch-target: 44px
 components:
+  app-surface:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+  app-surface-dark:
+    backgroundColor: "{colors.surface-dark}"
+    textColor: "{colors.text-dark}"
   button-primary:
     backgroundColor: "{colors.primary}"
     textColor: "{colors.on-primary}"
-    rounded: "{rounded.md}"
-    padding: 12px
-  button-ghost:
-    textColor: "{colors.text}"
-    rounded: "{rounded.md}"
-    padding: 12px
-  chip-selected:
+    height: 48px
+    rounded: "{rounded.lg}"
+  button-primary-hover:
+    backgroundColor: "{colors.primary-strong}"
+    textColor: "{colors.on-primary}"
+  button-primary-dark:
     backgroundColor: "{colors.primary}"
     textColor: "{colors.on-primary}"
-    rounded: "{rounded.full}"
-    padding: 12px
+    height: 48px
+    rounded: "{rounded.lg}"
+  button-secondary:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.primary-strong}"
+    height: 44px
+    rounded: "{rounded.lg}"
+  button-secondary-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.primary-soft}"
+    height: 44px
+    rounded: "{rounded.lg}"
   chip-idle:
     backgroundColor: "{colors.surface-raised}"
     textColor: "{colors.text}"
+    height: 44px
     rounded: "{rounded.full}"
-    padding: 12px
   chip-idle-dark:
     backgroundColor: "{colors.surface-dark-raised}"
-    textColor: "{colors.text-dark-muted}"
-    rounded: "{rounded.full}"
-    padding: 12px
-  card:
-    backgroundColor: "{colors.surface-raised}"
-    rounded: "{rounded.xl}"
-  card-dark:
-    backgroundColor: "{colors.surface-dark-raised}"
-    rounded: "{rounded.xl}"
-  card-sunken:
-    backgroundColor: "{colors.surface-sunken}"
-    rounded: "{rounded.md}"
-  card-sunken-dark:
-    backgroundColor: "{colors.surface-dark-sunken}"
-    rounded: "{rounded.md}"
-  card-border:
-    backgroundColor: "{colors.border}"
-    height: 1px
-  card-border-dark:
-    backgroundColor: "{colors.border-dark}"
-    height: 1px
-  divider:
-    backgroundColor: "{colors.border-strong}"
-    height: 1px
-  divider-dark:
-    backgroundColor: "{colors.border-dark}"
-    height: 1px
-  app-surface:
-    backgroundColor: "{colors.surface}"
-  app-surface-dark:
-    backgroundColor: "{colors.surface-dark}"
-  favourite-heart-active:
-    backgroundColor: "{colors.text}"
-    textColor: "{colors.favourite-soft}"
-    size: 36px
-  favourite-heart-idle:
-    backgroundColor: "{colors.text}"
-    textColor: "{colors.on-primary}"
-    size: 36px
-  badge-warning:
-    backgroundColor: "{colors.primary-tint}"
-    textColor: "{colors.warning}"
-    rounded: "{rounded.sm}"
-    padding: 6px
-  badge-danger:
-    backgroundColor: "{colors.primary-tint}"
-    textColor: "{colors.danger}"
-    rounded: "{rounded.sm}"
-    padding: 6px
-  badge-favourite:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.favourite}"
-    rounded: "{rounded.sm}"
-    padding: 6px
-  promo-badge-pro:
-    backgroundColor: "{colors.text}"
-    textColor: "{colors.nutrition-energy-soft}"
-    rounded: "{rounded.sm}"
-    padding: 6px
-  recipe-card:
-    backgroundColor: "{colors.surface-dark-raised}"
     textColor: "{colors.text-dark}"
-    rounded: "{rounded.lg}"
+    height: 44px
+    rounded: "{rounded.full}"
+  chip-selected:
+    backgroundColor: "{colors.primary-tint}"
+    textColor: "{colors.primary-strong}"
+    height: 44px
+    rounded: "{rounded.full}"
+  chip-selected-dark:
+    backgroundColor: "{colors.primary-tint-dark}"
+    textColor: "{colors.primary-soft}"
+    height: 44px
+    rounded: "{rounded.full}"
+  recipe-card:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.xl}"
   recipe-card-dark:
     backgroundColor: "{colors.surface-dark-raised}"
     textColor: "{colors.text-dark}"
     rounded: "{rounded.xl}"
-  recipe-card-title:
-    textColor: "{colors.text}"
-    typography: "{typography.title}"
   recipe-card-meta:
+    backgroundColor: "{colors.surface-sunken}"
     textColor: "{colors.text-muted}"
     typography: "{typography.label-md}"
   recipe-card-meta-dark:
-    textColor: "{colors.text-dark-muted}"
-    typography: "{typography.label-md}"
-  recipe-card-meta-band:
-    backgroundColor: "{colors.surface-sunken}"
-    textColor: "{colors.text-muted}"
-    rounded: "{rounded.md}"
-    typography: "{typography.label-md}"
-  recipe-card-meta-band-dark:
     backgroundColor: "{colors.surface-dark-sunken}"
     textColor: "{colors.text-dark-muted}"
-    rounded: "{rounded.md}"
     typography: "{typography.label-md}"
-  icon-hue-meat:
-    textColor: "{colors.hue-meat}"
-    size: 16px
-  icon-hue-meat-dark:
-    textColor: "{colors.hue-meat-soft}"
-    size: 16px
-  icon-hue-fish:
-    textColor: "{colors.hue-fish}"
-    size: 16px
-  icon-hue-fish-dark:
-    textColor: "{colors.hue-fish-soft}"
-    size: 16px
-  icon-hue-vegan:
-    textColor: "{colors.hue-vegan}"
-    size: 16px
-  icon-hue-vegan-dark:
-    textColor: "{colors.hue-vegan-soft}"
-    size: 16px
-  icon-nutrition-energy:
-    textColor: "{colors.nutrition-energy}"
-    size: 16px
-  icon-nutrition-energy-dark:
-    textColor: "{colors.nutrition-energy-soft}"
-    size: 16px
-  icon-nutrition-sodium:
-    textColor: "{colors.nutrition-sodium}"
-    size: 16px
-  icon-nutrition-sodium-dark:
-    textColor: "{colors.nutrition-sodium-soft}"
-    size: 16px
+  divider:
+    backgroundColor: "{colors.border}"
+    height: 1px
+  divider-dark:
+    backgroundColor: "{colors.border-dark}"
+    height: 1px
+  control-border:
+    backgroundColor: "{colors.border-strong}"
+    height: 1px
+  control-border-dark:
+    backgroundColor: "{colors.border-dark-strong}"
+    height: 1px
   nav-bar:
     backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.text-muted}"
+    height: 56px
   nav-bar-dark:
     backgroundColor: "{colors.surface-dark-raised}"
-  nav-tab:
-    textColor: "{colors.text-subtle}"
-    typography: "{typography.label-md}"
+    textColor: "{colors.text-dark-muted}"
     height: 56px
   nav-tab-active:
+    backgroundColor: "{colors.primary-tint}"
     textColor: "{colors.primary-strong}"
-    typography: "{typography.label-md}"
+  nav-tab-active-dark:
+    backgroundColor: "{colors.primary-tint-dark}"
+    textColor: "{colors.primary-soft}"
   nav-tab-icon-hover:
     textColor: "{colors.primary}"
-    height: 28px
   nav-tab-icon-hover-dark:
     textColor: "{colors.primary-soft}"
-    height: 28px
+  badge-warning:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.warning}"
+  badge-warning-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.warning-soft}"
+  badge-danger:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.danger}"
+  badge-danger-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.danger-soft}"
+  favourite-filter:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.favourite}"
+  favourite-filter-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.favourite-soft}"
+  photo-control:
+    backgroundColor: "{colors.surface-dark}"
+    textColor: "{colors.on-primary}"
+    size: 44px
+    rounded: "{rounded.full}"
+  photo-heart-active:
+    backgroundColor: "{colors.surface-dark}"
+    textColor: "{colors.favourite-soft}"
+    size: 44px
+    rounded: "{rounded.full}"
+  icon-hue-meat:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.hue-meat}"
+    size: 18px
+  icon-hue-meat-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.hue-meat-soft}"
+    size: 18px
+  icon-hue-fish:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.hue-fish}"
+    size: 18px
+  icon-hue-fish-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.hue-fish-soft}"
+    size: 18px
+  icon-hue-vegetarian:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.hue-vegetarian}"
+    size: 18px
+  icon-hue-vegetarian-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.hue-vegetarian-soft}"
+    size: 18px
+  icon-hue-vegan:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.hue-vegan}"
+    size: 18px
+  icon-hue-vegan-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.hue-vegan-soft}"
+    size: 18px
+  icon-nutrition-energy:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.nutrition-energy}"
+    size: 18px
+  icon-nutrition-energy-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.nutrition-energy-soft}"
+    size: 18px
+  icon-nutrition-sodium:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.nutrition-sodium}"
+    size: 18px
+  icon-nutrition-sodium-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.nutrition-sodium-soft}"
+    size: 18px
 ---
 
 # Mealime Planner — Design System
 
 ## Overview
 
-Mealime Planner is an **offline-first kitchen planner**, and it should look
-like one: warm, appetizing, and a little editorial — the energy of a good
-food site, engineered down to something that survives a 412px phone and a
-1400px desktop with the same bone structure.
+**Direction: a warm, photo-led kitchen companion, not a grey utility with coloured icons.**
+**Product promise: choose meals together, buy what you need, and cook without
+friction.** This is a household meal-planning tool with a recipe library, not a
+recipe-content feed or a calorie-tracking app. Its distinctive value is the path
+from appetising choices to a practical, waste-aware plan and one usable grocery list.
 
-The identity is **"warm & appetizing"**. The whole app is built on a
-**stone neutral foundation** — warm greys, never blue-greys — because the
-content is photography and text, and the chrome must never compete with a
-food photo. Over that foundation sit **food-site accents**: a tomato red
-that reads as ripe and hot, an herb green that reads as fresh, an ocean
-teal that reads as fresh fish, and a saffron ember for energy. Colour is an
-**accent layer, never a re-theme**: at most one accent hue is visible per
-surface region, and the stone ramp does all the structural work.
+The entry surface is **Explore** (find food). Plan and grocery are **Operate**
+(assemble meals, adjust servings, shop together); cooking is **Command / Inspect**
+(one step, ingredients and timers at arm's length). Settings is **Configure**.
+Compose for the job of each surface, not one repeated card template. No marketing
+hero, weekday calendar, engagement streaks, invented savings dashboard or AI branding.
 
-**Who it is for.** A household planning the week from two phones and a
-laptop; a cook standing at a counter with greasy hands; someone reading a
-recipe at arm's length. **Emotional target:** "this app was made by someone
-who cooks" — appetising, legible, fast, and never fussy.
+### Product basis and precedence
 
-**Vibrancy.** Restrained. The vibrancy lives in the **photo**, in the
-**hue of a 16px icon**, and in a **2px hover lift** on the nav. Everything
-else is quiet: stone surfaces, hairline borders, soft shadows. A planner is
-a tool you use daily; novelty wears out in a week, appetite does not.
+- [README](README.md), Features: browse → plan → derived grocery → shopping →
+  cooking, local catalog/images, adjustable servings, backup and household sync.
+- [ADR-0024](docs/design/ADR-0024-auto-plan-pack-builder.md): the differentiator is
+  assembling a useful set of meals with fewer extra packages, not merely showing
+  recipes. Plans are explicitly unscheduled lists, never day-assigned calendars.
+- [ADR-0033](docs/design/ADR-0033-auto-plan-regenerate-seed.md): Auto-Plan is
+  deterministic for its inputs including generation; Regenerate offers another
+  pack. Preserve preview, add/replace choice, confirmation and undo.
+- [ADR-0032](docs/design/ADR-0032-cooked-history-shared-by-default.md): household
+  history sharing is on by default with an explicit send-side opt-out. Do not copy
+  the README's stale personal-by-default wording into new UI.
+- [ADR-0034](docs/design/ADR-0034-cook-anytime.md): any recipe can be cooked now;
+  cooking need not wait for planning. History retains plan identity, creation date
+  and individual cook events, including ad-hoc single-recipe plans.
+- [AGENTS](AGENTS.md): local assets, bundled Lucide, shared filters, derived
+  grocery, existing state/room rules and five labelled navigation tabs.
 
-**Mobile first, desktop generous.** The phone layout is the reference: five
-bottom tabs, 82px per tab, everything reachable with a thumb. Desktop is
-not a stretched phone — it gets a **fluid container capped at 1100px** and
-richer cards, while the immersive cooking view keeps its narrow reading
-column because a step you are reading at arm's length wants a measure, not a
-page.
+Newer accepted behaviour ADRs and tested implementation outrank old README prose;
+this visual specification does not authorise business-logic changes. No new accounts,
+onboarding requirement, external service, runtime AI or mandatory room connection.
+Household sharing improves the workflow but offline/local use remains complete.
+
+This revision replaces the previous accent-only direction. The owner permits a
+complete visual rethink. Typography, surfaces, layout and component hierarchy can
+change on desktop AND mobile. Preserve behaviour, routes, data and accessibility,
+not accidental old CSS. Use the existing Vue/Tailwind/Lucide stack; no new runtime
+library, external font request, invented dietary classification or storage migration.
+
+**Character:** cream paper, white recipe cards, espresso dark mode, ripe tomato
+primary actions, fresh greens and ocean-blue food cues. Colour should be visible
+in meaningful areas (selection, action panels, navigation), not only tiny glyphs.
+Real recipe photographs remain the focal point. Avoid gradients, glass effects,
+fake metrics, ornamental icons and rainbow panels.
+
+**Authority:** the YAML defines token values; the sections below define their use.
+`src/style.css` must mirror the tokens, not redefine them. `DESIGN.tokens.json` is
+a generated DTCG export, never a second source. [ADR-0036](docs/design/ADR-0036-kitchen-companion-redesign.md)
+supersedes ADR-0035's accent-only, frozen-mobile and five-column decisions. This
+document specifies the target; it is NOT a claim that existing components conform.
 
 ## Colors
 
-The palette is rooted in **warm stone neutrals** with a single evocative
-accent family, plus a small set of **categorical** and **semantic** hues.
-Every hue below is contrast-verified on BOTH the light surface
-(`#FAFAF9`) and the dark surface (`#1C1917`) — 4.5:1 or better, so an
-accent icon is never decoration that disappears.
+### Roles and theme pairing
 
-- **Primary — Tomato (`#B3381F` / strong `#8E2C17` / soft `#F08A6A`):**
-  the app's one action colour. Primary buttons, the active bottom-nav tab,
-  focus rings, the selected quick-filter chip. The soft variant is the dark
-  mode stand-in (7.1:1 on `#1C1917`); the strong variant is the accessible
-  tomato for tomato text on light surfaces.
-- **Neutral — Stone (`#FAFAF9` → `#292524`):** the foundation. Surfaces,
-  dividers, body text, muted metadata. Warm greys, never blue-greys — the
-  whole app should feel like a stone counter, not a dashboard.
-- **Categorical — Herb (`#3F7A33`), Ocean (`#0E7490`), Tomato (`#B3381F`):**
-  the ingredient-TYPE hues. They answer "what kind of food is this" at a
-  glance on a recipe card and on the protein/diet filter chips. They are
-  never used for state — a chip that is *selected* is brand, not herb.
-- **Semantic — Saffron Ember (`#C2410C`) and Iris (`#4F46E5`):** the
-  nutrition hues. Ember is energy (the flame, calories); iris is sodium (the
-  droplet). They are deliberately NOT in the categorical family so a calorie
-  icon can never be mistaken for an ingredient type.
-- **Status:** amber for warnings, red for destructive, rose for the
-  favourite heart (a household favourite is a preference, not an error).
+| Role | Light | Dark | Intended use |
+| --- | --- | --- | --- |
+| Page | `surface` cream | `surface-dark` espresso | Background around content |
+| Card / nav / dialog | `surface-raised` white | `surface-dark-raised` warm charcoal | A clear raised surface, never transparent by accident |
+| Metadata / grouped controls | `surface-sunken` peach-cream | `surface-dark-sunken` cocoa | Secondary bands, not primary actions |
+| Main text | `text` | `text-dark` | Headlines, paragraphs, values |
+| Secondary text | `text-muted` | `text-dark-muted` | Metadata, hints, idle navigation; still readable |
+| Main action | `primary` with `on-primary` | SAME pairing | Filled tomato buttons, including Start cooking |
+| Action hover / pressed | `primary-strong` with `on-primary` | SAME pairing | A darker tomato, not an opacity fade |
+| Action text / selection | `primary-strong` on `primary-tint` | `primary-soft` on `primary-tint-dark` | Secondary actions, selected chips, active nav |
+| Control boundary | `border-strong` | `border-dark-strong` | Inputs and controls whose outlines carry meaning |
+| Decorative divider | `border` | `border-dark` | Grouping only, never the sole affordance |
 
-**Legacy note — the brand orange is RETIRED.** Before this system the app
-shipped a single brand orange (`#F27930`) as `--color-primary`. White text
-on it measured **2.8:1** — below WCAG AA — so every `bg-primary text-white`
-button in the app was quietly failing contrast. This system replaces it
-with the verified tomato (`#B3381F`, 6.0:1) and every legacy `primary` /
-`primary-dark` usage now wears the new token; the old variables are gone
-from `src/style.css`. Do not reintroduce an orange-on-white pairing.
+The dark `primary-soft` is for text, icon tints and keylines, NOT a pale button
+fill with white text. In dark mode add a `primary-soft` keyline to the filled
+primary action: white text on tomato is readable, but the tomato fill alone is
+not a sufficiently clear boundary against every dark panel. Secondary buttons
+use a real surface and a visible outline in both themes.
 
-**Tokens are the law.** `DESIGN.md` is the single source of truth; every
-token is mirrored into the Tailwind v4 `@theme` block in `src/style.css`,
-and components consume `text-*` / `bg-*` utilities derived from those
-variables. A raw hex literal in a component is a bug.
+### Food and nutrition identities
 
-**Contrast.** Every token pairing declared above was checked with a WCAG
-calculator against the surface it ships on: 6.0:1 for white on primary,
-4.4–8.8:1 for the categorical and nutrition hues on `#FAFAF9`, and
-6.0–10.6:1 for their `-soft` counterparts on `#1C1917`. Metadata text uses
-`text-muted` (`#57534E`, 7.0:1 on the sunken band) rather than
-`text-subtle`, which is reserved for nav labels on a raised surface.
+| Meaning | Glyph (Lucide) | Light / dark | Where it belongs |
+| --- | --- | --- | --- |
+| Meat | Beef | `hue-meat` / `hue-meat-soft` | Catalog category and matching filters |
+| Fish | Fish | `hue-fish` / `hue-fish-soft` | Catalog category and matching filters |
+| Vegetarian | Salad | `hue-vegetarian` / `hue-vegetarian-soft` | Green salad bowl; NEVER the vegan glyph |
+| Vegan | Sprout | `hue-vegan` / `hue-vegan-soft` | Distinct mint-green sprout in the existing vegan diet filter |
+| Energy / calories | Flame | `nutrition-energy` / `nutrition-energy-soft` | Card metadata and recipe nutrition |
+| Sodium | Droplet | `nutrition-sodium` / `nutrition-sodium-soft` | Recipe nutrition only; NOT browse cards |
+
+Vegetarian is fresh green, not the old yellow/olive. Vegan is a separate green
+and a different silhouette. Glyph + accessible name carry the distinction even
+when colour is indistinguishable. Do not use an arbitrary hue-angle threshold as
+proof of accessibility. ONE role-to-glyph-and-token mapping drives all call sites;
+no hand-written competing glyphs in filter chips, cards, details or plan previews.
+An exclusion filter keeps its explicit wording/strike treatment: a red meat icon
+alone must not mean "no meat". Do not claim a recipe is vegan from a vegetarian
+category; the published categories and existing diet heuristics stay unchanged.
+
+**Measured palette, not blanket accessibility claims.** WCAG sRGB calculations
+for the values above give white on tomato **6.00:1** (hover **8.32:1**). Across
+all four allowed light backgrounds (page, card, band, selected tint), the six
+food/nutrition foregrounds are at least **4.59:1**; their dark counterparts are
+at least **5.64:1** across the four dark equivalents. Muted text is at least
+**5.99:1** light / **6.99:1** dark. These are token-pair checks; rendered states,
+opacity, imagery, inheritance and focus must still be tested in the browser.
+
+Status is not food identity: warnings use `warning` / `warning-soft`, destructive
+controls use `danger` / `danger-soft`, favourites remain rose hearts. These
+foregrounds use raised surfaces; do not assume every status tint works on every
+coloured panel. Keep labels or shapes as a second signal. No raw colour literals
+in components, ad-hoc Tailwind palette substitutions or undocumented gradients.
 
 ## Typography
 
-Inter, and only Inter. The type system is small because the app is dense
-with metadata: **two weights only (400 / 600-700)**, a tight tracking
-scale, and short line-heights. Numerals (calories, minutes, sodium) are
-`label-md` — small, medium weight, tabular where possible.
+Use a deliberate **system-ui sans stack** (system-ui, -apple-system, Segoe UI,
+Roboto, sans-serif). The app is offline-first; do not claim Inter is available
+without shipping it, and do not introduce a network font. Hierarchy, size and
+measure provide the editorial character, not an extra typeface.
 
-- **Headlines:** 24px/700 (recipe title), 18px/700 (app header), tracking
-  -0.01em. Tight enough to feel editorial, never compressed.
-- **Body:** 14px/400 at 1.5 — the reading size everywhere, including
-  recipe steps.
-- **Labels:** 12px/500 for metadata rows (the desktop recipe-card meta
-  band), 10px/700 uppercase +0.08em for the PRO badge.
+- Main recipe title: 24px on phones, 32px at desktop; 700, compact line height.
+- Page/section hierarchy: 24px / 18px, with sentence case rather than an entire
+  screen of small uppercase headings.
+- Card title: 14px on compact two-column phones, 16px desktop, 600; reserve two
+  lines so metadata aligns. Never reduce it to fit a five-column desktop grid.
+- Reading body: 16px / 1.55. Cooking step text: 20px / 1.6 where space allows,
+  never less than 18px. Metadata: 12px minimum; secondary prose: 14px.
+- Use tabular numerals for servings, minutes, nutrition and timers. Units remain
+  visible (`kcal`, `min`, `mg sodium`) and do not disappear to save a row.
+- Support 200% zoom and long titles without clipped controls or horizontal scroll.
 
 ## Layout
 
-**Fluid container, 1100px cap.** One shell container token
-(`--container-app`) drives the app frame, the header and the bottom nav.
-It is fluid, not fixed: on a 1400px window it fills 1100px of centred
-content; on a tablet it is simply the window. A 672px **reading** token
-stays reserved for the immersive cooking view, where a long measure would be
-tiring to read.
+### Shared frame
 
-**Mobile is the reference.** 2-column recipe grid, 3-up from `sm`, 4-up at
-`lg`, 5-up at `xl` (the wider the card, the more of the desktop meta band it
-can carry). Controls sit on a 2-column grid on phones so nothing is orphaned
-on its own line.
+One fluid `container` token caps the app at **1100px border-box**. Header, main
+content and bottom-navigation alignment share it. Use 16px mobile / 24px desktop
+internal gutters without adding another narrower container inside the recipe grid.
+The bottom bar may have a full-window background; its tabs align with the shell.
+At 1440px and 1920px desktop widths the app remains centred and actually uses the
+1100px allowance. At narrower widths it fits the viewport without horizontal scroll.
 
-**Spacing** is a 4px scale (`xs` 4 / `sm` 8 / `md` 12 / `lg` 16 / `xl` 24 /
-`2xl` 32). Cards are internally padded at 12px on mobile.
+Recipe grid: **one column below 360px, two from 360px, three from 720px, four from
+1024px**. There is no five-column stage at this cap: the earlier layout made cards
+narrower just when their metadata grew. Use 12px gaps on compact phones and 20px
+on desktop. Keep food photography at 4:3, larger titles and comfortable padding
+(12px mobile / 16px desktop). Do not replace a dense phone grid with giant tiles.
+
+### Recipe detail and task views
+
+At desktop, compose the recipe introduction as photo beside title, key facts and
+action panel; stop stretching the photograph into a shallow, screen-wide ribbon.
+Below it, ingredients and instructions form an approximately 1:1.5 two-column
+reading layout. On phones stack photo, introduction, actions and sections in that
+order. Nutrition belongs after the action area, not ahead of the next useful action.
+
+Start cooking is the single primary action. Servings and Add/Update in plan stay
+available but are visually secondary. On desktop place actions near the recipe
+introduction; on phones use a full-width cooking button and compact secondary
+row. A sticky action area is allowed only if it clears the actual app-header
+height, does not cover content/focus, and does not consume most of a short screen.
+It must reflow for zoom/landscape rather than overlap the navigation.
+
+### One visual language, different jobs
+
+| Surface | Composition and priority | Preserve / avoid |
+| --- | --- | --- |
+| Recipes | Clear search, compact labelled filters, result count and food grid. Filter groups can breathe without hiding active choices. | Keep sorting, favourites, load-more and a useful zero-results reset. No promotional hero above the controls. |
+| Plan | A working list of meal rows with thumbnails, titles and servings; compact summary of existing totals. Auto-Plan is a prominent route to building/completing a plan. | Never introduce weekday slots. Keep add/replace and plan editing distinct from cooking now. Destructive clear is secondary and confirmed. |
+| Auto-Plan dialog | Preferences → generate/regenerate → food preview → confirm. Group controls separately from preview; wider two-zone layout on desktop, logical single column on phones. | Show real pending/busy/error state; a visible old preview is not a finished regeneration. No invented waste percentages or AI sparkles. Preserve undo. |
+| Grocery | Store-section headings, strong ingredient names and quantities, provenance beside rather than inside truncated text, real completion progress; Start shopping is the primary action. | Preserve Extra items first, checked/clear semantics and accessible provenance. Amounts come from existing aggregation; never make up savings or quantities. |
+| Shopping | Large, high-contrast checkable rows, lightweight section headers, reachable Exit and honest progress. | Keep auto-collapse behaviour, not recipe tiles; no ornamental chrome in a supermarket. |
+| Cooking | A focused step reader with measured amounts, visible timers and reachable previous/next/mark/finish controls. | Keep **672px reading measure**, not a narrow browse shell. Never obscure an active timer or add two final completion actions. |
+| History | A legible chronological log grouped by plan with plan-created date, recipe thumbnails and individual cook dates/counts. | Preserve ad-hoc and legacy groups. No streak gamification and no invented plan names. |
+| Settings | Labelled sections for household sync/privacy, preferences and backup/restore; explicit destructive confirmations. | Local use never requires joining a room. Keep the history-sharing opt-out and backup accessible. |
+
+A live-room status chip is a calm status, not a persistent alarm banner; loss of
+sync must never block finding a recipe or checking groceries. Empty states name
+one useful next action (browse/add meals or generate a plan), without fake data.
+Loading/error states use the same surfaces and retain retry affordances.
+Keep the existing five labelled bottom tabs and full-screen cooking/shopping
+modes. Do not change cooking/history/undo/timer/room/backup semantics.
 
 ## Elevation & Depth
 
-Depth is **tonal, not shadowed**. Cards are one step off the page surface
-(`#FFFFFF` on `#FAFAF9`; `#1C1917` on `#0C0A09`) with a hairline ring, plus
-a soft `shadow-sm` that only grows to `shadow-md` when a pointer is
-hovering. Scrims (`bg-stone-900/70`) sit under overlaid controls (favourite
-heart, PRO badge) so they read on any photo brightness.
+Use a small shadow and a quiet border for recipe cards, solid contrasting surfaces
+for dialogs and toolbars, and tonal grouping for metadata. Do not wrap every
+paragraph in its own card. Hover can strengthen a card's shadow without moving
+the grid. Photo controls use a **solid espresso disc** so the contrast does not
+depend on photograph brightness; favourite is an outline heart when idle and a
+filled `favourite-soft` heart when selected in BOTH themes. No orange favourite.
+Avoid global backdrop blur or translucent text/control surfaces.
 
 ## Shapes
 
-**Softly rounded, consistently so**: 8px controls, 12px chips' inner
-elements, 16px cards, fully-round chips, hearts and scrim discs. Never mix
-radii inside one component; never introduce a sharp 2px corner.
+16px recipe cards and dialogs; 12px buttons/inputs; fully rounded filter chips and
+photo-control discs; 6px small badges. Related elements share radii and alignment.
+Controls have a minimum **44 × 44px hit target**, even where the visible glyph is
+18–22px. Five nav tabs remain at least 56px high and fit a 412px Pixel 7 without
+label clipping or requiring horizontal navigation scrolling.
 
 ## Components
 
-- **Recipe card:** photo on top (4:3), then title, then a metadata row.
-  The card itself carries no light fill (the photo is the surface) and is
-  `rounded-lg` (12px); the dark surface is `surface-dark-raised`. From
-  `lg` the card gains a **horizontal metadata band** across the bottom —
-  ingredient-TYPE icon, energy, time and sodium all on one row — and a
-  larger image. Mobile layout, padding and tap targets are never changed
-  to serve desktop.
-- **Bottom nav:** five tabs, icon above a 12px label, `min-height: 56px`
-  per tab (82px wide at Pixel 7 — measured, e2e-pinned, ADR-0016). The
-  active tab is brand-strong; idle tabs are `text-subtle`.
-- **Nav icon hover (desktop only):** on a hover-capable pointer, the icon
-  rises 2px and tints to brand over 150ms ease. Inside
-  `@media (hover: hover)` only, and the transform is dropped under
-  `prefers-reduced-motion` (the tint stays — it carries no motion).
-- **Quick-filter chips:** 36px tall, full-round, brand fill when selected.
-  A food icon wears its categorical hue in the IDLE state; when the chip
-  is SELECTED it takes the chip's text colour instead, because a hue-600
-  icon on a `primary` fill is invisible. Selection is still signalled by
-  the fill, not by the icon's hue.
-- **Iconography (ADR-0029):** Lucide, bundled, no glyph characters. A
-  decorative icon is `aria-hidden`; an icon that carries state is
-  queryable (`aria-label` / `aria-expanded`).
+### Cards and icon labels
+
+A recipe card has photograph, favourite control, title, compact facts and rating.
+Facts are category icon, calories and minutes; use the same hierarchy on phone
+and desktop with more breathing room on desktop. Sodium is absent from EVERY
+browse card and card-like preview that reuses that compact fact row.
+
+Do not print "Vegetarian", "Meat" or "Fish" beside an already informative type
+icon in cards or recipe headers. Keep `role="img"` and an accessible name. Provide
+an optional category tooltip on hover/keyboard focus without turning the icon
+into a separate action; preserve the full recipe title as the card link name.
+Filter buttons KEEP their visible labels because they name a choice. Nutrition
+values KEEP units and sodium wording. Decorative icons beside labels are hidden
+from assistive technology, so nothing is announced twice.
+
+The whole card must be keyboard navigable with visible focus. Favourite and
+rating remain separate real controls, not nested interactive elements inside a
+link/button. Touching them must never accidentally open the detail. Preserve
+existing load-more and empty/error/loading behaviours.
+
+### Selection and actions
+
+Selected filters use a tinted surface, brand outline/check and pressed semantics,
+NOT solid tomato behind category-coloured icons. Food icons therefore keep their
+identity and remain legible in both states. Apply the same selected treatment to
+diet, protein, favourite and other filters; it must not imply all filter values
+are food categories. No ambiguous colour-only state and no pill width jump.
+
+Start cooking uses a filled tomato surface, white ChefHat + label, 48px minimum
+height, and the dark-mode keyline described above. Add/Update in plan uses the
+secondary outlined surface. Loading/disabled/focus/hover/pressed states are explicit;
+disabled must not look clickable and loading must not collapse the control.
+Back and favourite controls stay visible over any photo.
+
+### Navigation and motion
+
+Keep five icons plus visible labels. An active tab has a modest rounded tinted
+icon backplate, brand foreground and `aria-current`, not only a text-colour change.
+Idle labels use the readable muted token. Tab sizing and hit area stay stable.
+
+Within `@media (hover: hover)` ONLY, hovering the whole tab lifts its icon by
+**2px** and tints it to the theme's brand foreground over **150ms ease**. Do not
+move its label/backplate, resize its hit area or animate a whole navigation bar.
+`prefers-reduced-motion: reduce` removes the transform; tint may remain. Apply
+hover-only affordances only to enabled controls. Keyboard focus has a clear
+2px ring with separation from the component in either theme even on devices
+without hover. Review other active-scale/pulse transitions for reduced motion.
+
+### Verification and implementation contract
+
+1. Read ADR-0036 before new semantic implementation; it records why this revision
+   supersedes the accent-only, frozen-mobile and five-column constraints. Keep
+   ADR-0035 as history with a superseded-by pointer, not a rewritten decision.
+2. Mirror ALL used design tokens (including surfaces/text/borders) into Tailwind;
+   use static complete class strings for roles so dark CSS is emitted. Document
+   the small `primary` → `brand` naming translation once. Update the generated
+   DTCG export and deterministic token-parity checks together.
+3. Use one role registry for glyph, accessible name and colours. Test vegetarian
+   and vegan as distinct roles/glyphs and exclusion labels as exclusions, not as
+   guessed ingredients. Test actual computed SVG styles, not source strings alone.
+4. Cover light AND dark browser states at 360px/412px phones, 768px tablet and
+   1440px/1920px desktop, plus a narrow 320px viewport and 200% zoom. Check grid
+   columns, full-shell width, wrapping, overlays, labels, hit areas and navigation.
+5. Add regressions for readable Start cooking background/foreground/keyline;
+   primary-vs-secondary hierarchy; no repeated type labels; sodium absent from
+   cards but present when supplied in nutrition; consistent icons; hover lift,
+   keyboard focus and reduced motion. Check pressed filters, not only idle icons.
+6. Capture and REVIEW before/after screenshots in both themes (browse, detail,
+   representative plan/grocery/history/settings and cooking). A screenshot saved
+   but not inspected is not visual verification. Do not bless blank/loading pages.
+7. Run document lint, build, unit tests and the complete Playwright suite serially
+   against the built bundle. No previously passing result proves the new revision.
+   Report actual counts/skips/failures; never weaken a behavioural test just to
+   match new markup. Use existing offline request guards and `data-test` hooks.
 
 ## Do's and Don'ts
 
-- Do reach for exactly ONE accent hue per surface region — a card shows one
-  categorical icon, a chip row shows one family.
-- Do use the categorical hues for ingredient TYPE and the semantic hues for
-  nutrition; never swap them, never let a calorie icon wear the fish teal.
-- Do keep every accent at 4.5:1 or better on the surface it sits on, in
-  both light and dark mode. Check the dark variant before shipping.
-- Do keep tap targets and mobile padding exactly as they are; desktop
-  richness is added with `lg:`/`xl:` only.
-- Do gate every hover affordance behind `@media (hover: hover)` and honour
-  `prefers-reduced-motion`.
-- Don't re-theme the stone foundation — the neutrals are what makes the
-  photography and the accents sing.
-- Don't introduce a second font, a new font weight, or raw hex in a
-  component.
-- Don't use colour as the only signal: every coloured icon keeps its text
-  label or its `aria-label`.
-- Don't use brand tomato for "selected" state and a categorical hue for the
-  same thing in another surface — selection is always brand.
+- Do rethink composition and hierarchy where it helps cooking or choosing food.
+- Do keep a warm coherent light theme AND a fully legible dark theme.
+- Do colour meaningful actions and selections as well as icons; several semantic
+  icon colours may coexist in a metadata row without making the whole card rainbow.
+- Do preserve data, quantities, dietary-filter semantics and existing workflows.
+- Don't restore the old grey-only or forced-dark card treatment in light mode.
+- Don't shrink desktop cards to five columns or body text to squeeze in more facts.
+- Don't duplicate category words, put sodium back on browse cards, or reuse the
+  vegan sprout as the vegetarian icon.
+- Don't confuse a token lint pass with rendered accessibility or implementation
+  completion. Verify real surfaces and all entry points before making that claim.

@@ -1,6 +1,6 @@
 # ADR-0035: A design-token layer (DESIGN.md), categorical food hues, and a wider desktop
 
-**Status:** Accepted (2026-10-01)
+**Status:** Superseded for visual direction by [ADR-0036](ADR-0036-kitchen-companion-redesign.md). The original accepted decision (2026-10-01) is preserved below as history.
 **Refines:** the "Icons (ADR-0029)" convention in `AGENTS.md` (categorical
 hues on the icon stack) and the layout note in ADR-0016 (tab fit is still
 pinned; only the surrounding container changed).
