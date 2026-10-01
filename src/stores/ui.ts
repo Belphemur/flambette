@@ -98,16 +98,20 @@ export const useUiStore = defineStore(
      */
     const historyShareDefaultMigrated = ref(false)
     /** Auto-Plan settings (ADR-0027): last ruleset choice + mode, and the
-     *  rotating seed generation (incremented on every successful
-     *  generate). All persisted + carried in backups. */
+     *  rotating seed generation. It advances at TWO points (ADR-0033):
+     *  on every successful apply, and on every Regenerate press. All
+     *  persisted + carried in backups. */
     const autoPlanRuleset = ref<AutoPlanRuleset>('dinner')
     const autoPlanMode = ref<AutoPlanMode>('add')
     const autoPlanGeneration = ref(0)
-    /** Generation a run should use (the stored counter). */
+    /** Generation a run should use (the stored counter). PEEKS: this
+     *  must not advance, or a stale-check that re-reads it after an
+     *  await would compare a run against its own seed. */
     function nextAutoPlanGeneration(): number {
       return autoPlanGeneration.value
     }
-    /** Bump after a successful generate so the next run rotates the seed. */
+    /** Bump so the next run rotates the seed: after a successful apply,
+     *  and synchronously at the start of a Regenerate press. */
     function advanceAutoPlanGeneration(): void {
       autoPlanGeneration.value += 1
     }

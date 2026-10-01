@@ -106,3 +106,51 @@ describe('the one-time default migration', () => {
     expect(ui.shareCookedHistory).toBe(false)
   })
 })
+
+/**
+ * The Auto-Plan seed generation (ADR-0033), which advances at TWO
+ * points: on every successful apply, and on every Regenerate press.
+ * These cases pin the two store-level invariants the Auto-Plan dialog
+ * depends on — the component owns WHEN to advance, but it can only be
+ * correct if peeking and advancing are separate steps.
+ */
+describe('auto-plan seed generation (ADR-0033)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  test('nextAutoPlanGeneration PEEKS — reading the seed never advances it', () => {
+    const ui = useUiStore()
+    expect(ui.nextAutoPlanGeneration()).toBe(0)
+    // Two peeks in a row (a run captures the seed, then re-checks it
+    // after its await for staleness) must see the SAME value.
+    expect(ui.nextAutoPlanGeneration()).toBe(0)
+    expect(ui.autoPlanGeneration).toBe(0)
+  })
+
+  test('a peeked seed survives a failed run — a stale rebuild consumes nothing', () => {
+    const ui = useUiStore()
+    const captured = ui.nextAutoPlanGeneration()
+    // A run that throws (planner failed) or comes back stale advances
+    // nothing on its own: only an explicit advance moves the counter.
+    expect(ui.nextAutoPlanGeneration()).toBe(captured)
+  })
+
+  test('the apply-time advance rotates the seed', () => {
+    const ui = useUiStore()
+    expect(ui.nextAutoPlanGeneration()).toBe(0)
+    ui.advanceAutoPlanGeneration()
+    expect(ui.nextAutoPlanGeneration()).toBe(1)
+  })
+
+  test('repeated Regenerate presses advance EXACTLY once each', () => {
+    const ui = useUiStore()
+    const start = ui.autoPlanGeneration
+    for (let press = 1; press <= 4; press++) {
+      const seed = ui.nextAutoPlanGeneration()
+      ui.advanceAutoPlanGeneration()
+      expect(ui.nextAutoPlanGeneration()).toBe(seed + 1)
+    }
+    expect(ui.autoPlanGeneration).toBe(start + 4)
+  })
+})

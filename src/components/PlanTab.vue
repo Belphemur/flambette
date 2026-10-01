@@ -170,6 +170,20 @@ watch(
 async function generateAutoPlan() {
   if (autoPlanBusy.value) return
   autoPlanBusy.value = true
+  // A REGENERATE press must roll the seed: re-running the stored
+  // generation would rebuild the IDENTICAL pack, which makes the button a
+  // dead affordance (ADR-0033) — the user's mental model is "this rolls a
+  // new plan". The first press of a dialog still reads "Generate" and has
+  // no earlier pack to differ from, so it keeps the stored generation
+  // (fresh state → generation 0 → the pinned default pack).
+  //
+  // The advance is SYNCHRONOUS, before the planner runs, so the generation
+  // captured below is already the fresh one and the staleness re-check
+  // after the await still works: every press bumps the counter exactly
+  // once, and a failed or raced rebuild only costs a skipped seed value
+  // (the seed is `generation mod ROTATION_K`, so a gap changes which pack
+  // comes next, never the integrity of one that did resolve).
+  if (pendingPlan.value) ui.advanceAutoPlanGeneration()
   // Pin the choices this run was made with; a result coming back after
   // the user changed any control is stale and must not apply.
   const wanted = {
@@ -274,8 +288,11 @@ function confirmAutoPlan() {
     ? additions.map((variantId) => ({ variantId, servings: 6 }))
     : [...atConfirm, ...additions.map((variantId) => ({ variantId, servings: 6 }))]
   plan.replacePlan(entries, plan.customItems)
-  // The generation counter advances AFTER a successful apply so the next
-  // run rotates the seed (ADR-0027).
+  // The generation counter advances AFTER a successful apply so the NEXT
+  // run rotates the seed (ADR-0027, kept in ADR-0033). This is the
+  // generation the preview was BUILT with that gets applied — the counter
+  // is never re-read here, so a pack shown at generation N lands as
+  // shown and simply leaves the counter at N+1 for the next dialog.
   ui.advanceAutoPlanGeneration()
   // Undo restores the EXACT pre-apply state (ids + servings + the
   // cleared-ingredient map) from copies taken at confirm time — not from

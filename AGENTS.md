@@ -169,7 +169,14 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   waste is shared), new meals append; replace keeps the confirm-before-
   destroy flow. The Plan-tab dialog persists `autoPlanRuleset`,
   `autoPlanMode` and the rotating `autoPlanGeneration` counter in the ui
-  store (STORE_SLICES registered). e2e pins the v2 default 4-pack
+  store (STORE_SLICES registered). The counter advances at TWO points
+  (ADR-0033): on every successful apply, and synchronously at the START
+  of a press iff `pendingPlan` is already set — so a **Regenerate** press
+  always rolls the seed (the first press reads "Generate" and has no
+  earlier pack to differ from, which is what keeps generation 0 = the
+  pinned default). `nextAutoPlanGeneration()` PEEKS and must never advance;
+  `confirmAutoPlan` only bumps, so a pack previewed at generation N lands
+  as shown. e2e pins the v2 default 4-pack
   `[17452, 6389, 9889, 6167]` — any catalog or scoring change breaks those
   pins loudly. The dialog's confirm step PREVIEWS the pack (image +
   title per meal, `data-test="auto-plan-preview"`, resolved through
@@ -279,7 +286,7 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   amounts, three-word room codes, share-room link, room lifecycle,
   unified quick filters, filter sync + join reconciliation, the Lucide
   icon stack, Auto-Plan preview, household favourites + ratings, cooked
-  history shared by default). Skim them before
+  history shared by default, Auto-Plan regenerate seed). Skim them before
   proposing changes; new lasting decisions get a new
   `ADR-NNNN-slug.md` (never rewrite an accepted one in place).
 
