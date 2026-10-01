@@ -56,10 +56,15 @@ step AND run CONCURRENTLY — a per-step single timer cannot represent
    sits between the step body (instruction + checklist) and the footer.
    The add affordance stays explicit (`timer-add`): tapping it opens the
    panel — **but when the current step has a recipe-detected hint and no
-   timer is yet running for this recipe, the panel opens itself pre-filled
-   with that suggestion instead of the empty add-state** (so "Simmer 15–18
-   min" arms without a tap). An already-running timer for the view is a
-   chip in the strip (never a surprise panel). Explicit user intent gates
+   timer of the SAME TYPE is yet running for this recipe, the panel opens
+   itself pre-filled with that suggestion instead of the empty add-state**
+   (so "Simmer 15–18 min" arms without a tap). "Same type" is matched on
+   the normalized label (case-insensitive suggestion-label vs chip label:
+   a live "Oven" chip does NOT suppress a "Rice" suggestion, and
+   vice versa — the owner's oven/rice example), so one cook can hold both
+   pre-fills at once; the concurrency cap (§2) still applies on top. An
+   already-running timer of a DIFFERENT type is unaffected (its chip stays;
+   the panel still auto-opens for the new type). Explicit user intent gates
    every arm/edge-case, no toast-surface countdown (ADR-0020's rule holds):
    the pre-filled proposal always lands in the confirm shape (name +
    minutes) on open; `timer-confirm` is disabled at 0 minutes; Escape/
