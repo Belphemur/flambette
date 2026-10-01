@@ -5,6 +5,7 @@ import {
   gotoTab,
   openFirstRecipeDetail,
   openRecipeDetail,
+  visibleVariantIds,
   waitForCatalog,
 } from './helpers'
 
@@ -59,16 +60,106 @@ test('cooking a planned meal records it in detail + history, and aggregates', as
   await expect(rows.first()).toContainText(name)
   await expect(page.getByText('cooked once')).toBeVisible()
 
-  // Cook the SAME recipe a second time -> one row, count 2.
+  // Cook the SAME recipe a second time. Cooking the last meal out ENDS
+  // that plan, so the second cook belongs to a NEW one: the History tab
+  // now reads as a batch log, with the recipe under each plan (ADR-0034).
+  // The count pill is per batch; the household total is unchanged and
+  // still lives on the recipe's own line.
   await gotoTab(page, 'Recipes')
   await openRecipeDetail(page, name)
   await page.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
   await gotoTab(page, 'Plan')
   await page.getByRole('button', { name: `Mark ${name} as cooked` }).click()
+
   await gotoTab(page, 'History')
+  await expect(page.getByTestId('history-group-title')).toHaveCount(2)
+  await expect(page.getByTestId('history-row')).toHaveCount(2)
+  await expect(page.getByText('cooked once')).toHaveCount(2)
+
+  await gotoTab(page, 'Recipes')
+  await openRecipeDetail(page, name)
+  await expect(page.getByTestId('cook-history')).toContainText('Cooked 2 times')
+
+  await expectZeroMealimeRequests(page)
+})
+
+test('the per-event spoiler lists every cook, relative AND absolute (ADR-0034)', async ({ page }) => {
+  await blockExternalRequests(page)
+  const name = await planAndCook(page)
+  await planAndCook(page)
+
+  await gotoTab(page, 'Recipes')
+  await openRecipeDetail(page, name)
+  // Collapsed by default: the count line is the headline.
+  await expect(page.getByTestId('cook-history-events')).toHaveCount(0)
+  const toggle = page.getByTestId('cook-history-toggle')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await toggle.click()
+
+  const events = page.getByTestId('cook-history-events')
+  await expect(events).toBeVisible()
+  // One row per cook EVENT, not one per recipe.
+  await expect(events.getByTestId('cook-history-event')).toHaveCount(2)
+  // Every row carries a relative AND an absolute date: "3 days ago" alone
+  // cannot tell last night's cook from the one before it.
+  for (const row of await events.getByTestId('cook-history-event').all()) {
+    await expect(row).toContainText(/ago|just now|yesterday|last |·/)
+    await expect(row).toContainText(/\d{1,2}:\d{2}/)
+  }
+  await expectZeroMealimeRequests(page)
+})
+
+test('an ad-hoc cook is its own one-recipe plan (ADR-0034)', async ({ page }) => {
+  await blockExternalRequests(page)
+  await page.goto('/')
+  await waitForCatalog(page)
+  const name = await openFirstRecipeDetail(page)
+  // No plan at all — the Recipes tab is a complete entry point to cooking.
+  await page.getByRole('dialog').getByRole('button', { name: 'Start cooking' }).click()
+  const cooking = page.getByRole('dialog', { name: /Cooking / })
+  await expect(cooking).toBeVisible()
+  await cooking.getByTestId('mark-cooked').click()
+  await expect(page.getByTestId('toast')).toContainText('Marked as cooked')
+  await expect(cooking).toBeVisible()
+
+  // It is grouped as a plan of its own, and nothing was added to the real
+  // plan behind it.
+  await page.keyboard.press('Escape')
+  await expect(cooking).not.toBeVisible()
+  await gotoTab(page, 'History')
+  await expect(page.getByTestId('history-group-title')).toContainText(/Planned|just now|ago/)
+  await expect(page.getByTestId('history-row')).toHaveCount(1)
+  await expect(page.getByTestId('history-row').first()).toContainText(name)
+  await gotoTab(page, 'Plan')
+  await expect(page.getByText('Your meal plan is empty')).toBeVisible()
+  await expectZeroMealimeRequests(page)
+})
+
+test('events written before plan provenance group as earlier cooks (ADR-0034)', async ({ page }) => {
+  await blockExternalRequests(page)
+  await page.goto('/')
+  await waitForCatalog(page)
+  const ids = await visibleVariantIds(page)
+  // A history written by an older build: rows with no planId at all.
+  await page.evaluate((variantId) => {
+    localStorage.setItem(
+      'mealime-planner:v1:plan',
+      JSON.stringify({
+        plan: [],
+        customItems: [],
+        clearedIngredients: {},
+        cookedHistory: [
+          { variantId, cookedAt: Date.now() - 86_400_000, id: 'legacy-1' },
+          { variantId, cookedAt: Date.now() - 172_800_000, id: 'legacy-2' },
+        ],
+      }),
+    )
+  }, ids[0])
+
+  await page.goto('/history')
+  await expect(page.getByTestId('history-group-title')).toContainText('Earlier cooks')
   await expect(page.getByTestId('history-row')).toHaveCount(1)
   await expect(page.getByText('cooked 2 times')).toBeVisible()
-
   await expectZeroMealimeRequests(page)
 })
 
@@ -78,8 +169,13 @@ test('history and the detail line survive a reload', async ({ page }) => {
 
   await gotoTab(page, 'History')
   await expect(page.getByTestId('history-row').first()).toContainText(name)
+  await expect(page.getByTestId('history-group-title')).toHaveCount(1)
   await page.reload()
   await expect(page.getByTestId('history-row').first()).toContainText(name)
+  // The group identity is persisted with the events, so a reload does not
+  // degrade the log back into an anonymous pile (ADR-0034).
+  await expect(page.getByTestId('history-group-title')).toHaveCount(1)
+  await expect(page.getByTestId('history-group-legacy')).toHaveCount(0)
 
   await gotoTab(page, 'Recipes')
   await openRecipeDetail(page, name)

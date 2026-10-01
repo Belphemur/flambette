@@ -22,14 +22,48 @@ interface Row {
   meta: VariantMeta
 }
 
-const rows = computed<Row[]>(() => {
+/**
+ * The cook events grouped by the plan they were cooked under, most recent
+ * plan first (ADR-0034). A NEW read-side view, not a second storage: the
+ * per-recipe rows above are the same events aggregated by recipe, and both
+ * views are derived from `plan.cookedHistory`. A recipe cooked in two plans
+ * legitimately appears under both.
+ */
+interface Group {
+  key: string
+  planId: string | null
+  planCreatedAt: number | null
+  lastAt: number
+  count: number
+  rows: Row[]
+}
+
+const groups = computed<Group[]>(() => {
   const c = catalog.value
   if (!c) return []
-  return cooked.historyEntries.value.flatMap((e) => {
-    const meta = c.byId.get(e.variantId)
-    return meta ? [{ ...e, meta }] : []
-  })
+  return cooked.planGroups.value.map((g) => {
+    const rows = g.entries.flatMap((e) => {
+      const meta = c.byId.get(e.variantId)
+      return meta ? [{ ...e, meta }] : []
+    })
+    return {
+      key: g.planId ?? 'earlier-cooks',
+      planId: g.planId,
+      planCreatedAt: g.planCreatedAt,
+      lastAt: g.lastAt,
+      count: g.events.length,
+      // A group whose recipes all left the catalog renders nothing; drop
+      // it rather than showing an empty heading.
+      rows,
+    }
+  }).filter((g) => g.rows.length > 0)
 })
+
+/** "Planned 3 days ago" / "Earlier cooks" heading for one group. */
+function groupTitle(g: Group): string {
+  if (g.planCreatedAt === null) return g.planId ? 'Cooked plan' : 'Earlier cooks'
+  return `Planned ${formatRelative(g.planCreatedAt)}`
+}
 
 function openRecipe(id: number) {
   void router.push({ name: 'recipe', params: { id: String(id) } })
@@ -52,7 +86,7 @@ function addToPlan(row: Row) {
     </p>
 
     <div
-      v-if="rows.length === 0"
+      v-if="groups.length === 0"
       class="py-16 text-center text-stone-400"
       data-test="history-empty"
     >
@@ -67,45 +101,66 @@ function addToPlan(row: Row) {
       </button>
     </div>
 
-    <ul v-else class="space-y-2">
-      <li
-        v-for="row in rows"
-        :key="row.variantId"
-        class="flex items-center gap-3 rounded-xl bg-white p-2.5 ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-700"
-        data-test="history-row"
+    <div v-else class="space-y-5">
+      <section
+        v-for="group in groups"
+        :key="group.key"
+        class="space-y-2"
+        :data-test="group.planId ? `history-group-${group.planId}` : 'history-group-legacy'"
       >
-        <img
-          :src="imageSrc(row.meta.thumbnail_image_url)"
-          :alt="row.meta.name"
-          loading="lazy"
-          class="size-16 shrink-0 hovercap:cursor-pointer rounded-lg object-cover dark:bg-stone-800"
-          @error="onImgError"
-          @click="openRecipe(row.variantId)"
-        />
-        <div class="min-w-0 flex-1 hovercap:cursor-pointer" @click="openRecipe(row.variantId)">
-          <h3 class="line-clamp-2 text-sm font-semibold">{{ row.meta.name }}</h3>
-          <p
-            class="mt-0.5 text-xs text-stone-500 dark:text-stone-400"
-            :title="formatAbsolute(row.lastAt)"
+        <!-- What plan this batch was, and when it was put together
+             (ADR-0034). The absolute date lives in the title: the
+             relative one is the one that reads well in a list. -->
+        <h2
+          class="flex items-baseline gap-2 text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400"
+          :title="group.planCreatedAt === null ? undefined : `Planned ${formatAbsolute(group.planCreatedAt)}`"
+          data-test="history-group-title"        >
+          {{ groupTitle(group) }}
+          <span class="font-normal normal-case">
+            {{ group.count === 1 ? '1 cook' : `${group.count} cooks` }}
+          </span>
+        </h2>
+        <ul class="space-y-2">
+          <li
+            v-for="row in group.rows"
+            :key="`${group.key}-${row.variantId}`"
+            class="flex items-center gap-3 rounded-xl bg-white p-2.5 ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-700"
+            data-test="history-row"
           >
-            <span
-              class="mr-1 rounded bg-primary/10 px-1.5 py-px text-[10px] font-bold text-primary-dark dark:bg-stone-800 dark:text-primary"
-              :data-test="`history-count-${row.variantId}`"
+            <img
+              :src="imageSrc(row.meta.thumbnail_image_url)"
+              :alt="row.meta.name"
+              loading="lazy"
+              class="size-16 shrink-0 hovercap:cursor-pointer rounded-lg object-cover dark:bg-stone-800"
+              @error="onImgError"
+              @click="openRecipe(row.variantId)"
+            />
+            <div class="min-w-0 flex-1 hovercap:cursor-pointer" @click="openRecipe(row.variantId)">
+              <h3 class="line-clamp-2 text-sm font-semibold">{{ row.meta.name }}</h3>
+              <p
+                class="mt-0.5 text-xs text-stone-500 dark:text-stone-400"
+                :title="formatAbsolute(row.lastAt)"
+              >
+                <span
+                  class="mr-1 rounded bg-primary/10 px-1.5 py-px text-[10px] font-bold text-primary-dark dark:bg-stone-800 dark:text-primary"
+                  :data-test="`history-count-${row.variantId}`"
+                >
+                  {{ row.count === 1 ? 'cooked once' : `cooked ${row.count} times` }}
+                </span>
+                {{ formatRelative(row.lastAt) }}
+              </p>
+            </div>
+            <button
+              class="shrink-0 rounded-lg border border-stone-200 px-3 py-2 text-xs font-semibold text-primary-dark hover:bg-stone-50 dark:border-stone-700 dark:text-primary dark:hover:bg-stone-800"
+              :aria-label="`Add ${row.meta.name} to plan`"
+              :data-test="`history-add-${row.variantId}`"
+              @click="addToPlan(row)"
             >
-              {{ row.count === 1 ? 'cooked once' : `cooked ${row.count} times` }}
-            </span>
-            {{ formatRelative(row.lastAt) }}
-          </p>
-        </div>
-        <button
-          class="shrink-0 rounded-lg border border-stone-200 px-3 py-2 text-xs font-semibold text-primary-dark hover:bg-stone-50 dark:border-stone-700 dark:text-primary dark:hover:bg-stone-800"
-          :aria-label="`Add ${row.meta.name} to plan`"
-          :data-test="`history-add-${row.variantId}`"
-          @click="addToPlan(row)"
-        >
-          Add to plan
-        </button>
-      </li>
-    </ul>
+              Add to plan
+            </button>
+          </li>
+        </ul>
+      </section>
+    </div>
   </section>
 </template>

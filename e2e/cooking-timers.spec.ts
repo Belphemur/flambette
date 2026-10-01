@@ -216,22 +216,29 @@ test('the header close button routes through the timer confirmation (qodo 412851
 
 
 test('mark as cooked also asks before discarding a running timer', async ({ page }) => {
+  // ADR-0034: the mark is available from the FIRST step now, and a
+  // mid-cook mark keeps you cooking — it is the same timer gate Finish
+  // runs, applied to the mark.
   const cooking = await startCooking(page)
-  const progress = await cooking.getByText(/Step 1 \/ (\d+)/).textContent()
-  const total = Number(progress!.match(/Step 1 \/ (\d+)/)![1])
-  const next = cooking.getByRole('button', { name: /Next/ })
-  for (let i = 1; i < total; i++) await next.click()
   await expect(cooking.getByTestId('mark-cooked')).toBeVisible()
 
   await cooking.getByTestId('timer-preset-5').click()
   page.once('dialog', (d) => void d.dismiss())
   await cooking.getByTestId('mark-cooked').click()
   await expect(cooking).toBeVisible()
-  await expect(page.getByText('Marked as cooked')).toHaveCount(0)
+  // The toast is the assertion surface: the button ALSO reads "Marked as
+  // cooked" once recorded, so a bare getByText would match both.
+  await expect(page.getByTestId('toast')).toHaveCount(0)
+  await expect(cooking.getByTestId('mark-cooked')).toBeEnabled()
 
   page.once('dialog', (d) => void d.accept())
   await cooking.getByTestId('mark-cooked').click()
-  await expect(cooking).not.toBeVisible()
-  await expect(page.getByText('Marked as cooked')).toBeVisible()
+  await expect(page.getByTestId('toast')).toContainText('Marked as cooked')
+  // Recording the cook mid-way does not end the cook…
+  await expect(cooking).toBeVisible()
+  // …and the session records ONE cook: the button now reports it and
+  // stops inviting a second one (ADR-0034).
+  await expect(cooking.getByTestId('mark-cooked')).toContainText('Marked as cooked')
+  await expect(cooking.getByTestId('mark-cooked')).toBeDisabled()
   await expectZeroMealimeRequests(page)
 })

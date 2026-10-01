@@ -222,7 +222,10 @@ test('cooked history is persisted and survives a reload', async ({ page }) => {
   expect(after.cookedHistory).toEqual(before.cookedHistory)
 })
 
-test('cooking view completion offers "Mark as cooked" and records it', async ({ page }) => {
+test('cooking view completion records the cook and takes the meal off the plan', async ({ page }) => {
+  // ADR-0034: on the last step there is ONE button — Finish — and it is
+  // the mark. The separate "Mark as cooked" is reachable from every step
+  // UP TO the last (pinned in cooking.spec.ts), and keeps you cooking.
   const meal = await planFirstRecipe(page)
   await page.getByRole('dialog').getByRole('button', { name: 'Start cooking' }).click()
   const cooking = page.getByRole('dialog', { name: /Cooking / })
@@ -234,7 +237,7 @@ test('cooking view completion offers "Mark as cooked" and records it', async ({ 
   const next = cooking.getByRole('button', { name: /Next/ })
   for (let i = 1; i < total; i++) await next.click()
 
-  await cooking.locator('[data-test=mark-cooked]').click()
+  await cooking.locator('[data-test=finish]').click()
   await expect(cooking).not.toBeVisible()
   await expect(page.getByText('Marked as cooked')).toBeVisible()
 

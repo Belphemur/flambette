@@ -7,12 +7,14 @@ import RecipeDetail from './components/RecipeDetail.vue'
 import CookingView from './components/CookingView.vue'
 import ShopView from './components/ShopView.vue'
 import SettingsTab from './components/SettingsTab.vue'
-import { usePlanStore } from './stores/plan'
 
 /**
- * Deep-linkable navigation. `/cooking/:id` is gated on plan membership —
- * cooking is a plan-driven mode, so a direct link to a recipe that isn't in
- * the plan falls back to the recipe detail view.
+ * Deep-linkable navigation. `/cooking/:id` is open to ANY recipe in the
+ * catalog (ADR-0034): cooking needs nothing from the plan but a servings
+ * number, and CookingView already falls back to the recipe's own
+ * `serving_count`, so the plan-membership gate only made deep links and
+ * "Start cooking" from the Recipes tab bounce. Only a non-numeric id is
+ * refused, and it lands on the detail view, which owns the not-found state.
  */
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -35,9 +37,8 @@ export const router = createRouter({
       component: CookingView,
       props: (route) => ({ id: Number(route.params.id) }),
       beforeEnter: (to) => {
-        const plan = usePlanStore()
         const id = Number(to.params.id)
-        if (!Number.isFinite(id) || !plan.planContains(id)) {
+        if (!Number.isFinite(id)) {
           return { name: 'recipe', params: { id: to.params.id }, replace: true }
         }
       },

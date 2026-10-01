@@ -168,13 +168,27 @@ export function createRoomRegistry({
    * previously stored history into the stored snapshot. A sharing sender
    * always sends the key (even empty), so it still replaces wholesale and
    * can never resurrect rows the sender itself dropped.
+   *
+   * ADR-0034 adds `planIdentity` to the same contract, and it is why the
+   * rule is stated per key rather than as one special case: `planIdentity`
+   * is EXPLICITLY nullable. `null` is a real answer ("there is no current
+   * plan") and replaces wholesale; an ABSENT key is a peer on older code
+   * that has nothing to say, so the stored value is carried forward. Only
+   * an absent key is preserved — a peer that sends `null` really did end
+   * its plan, and honoring that is the whole point.
    */
+  const preservedWhenAbsent = ['cookedHistory', 'planIdentity']
+
   function noteState(room, rev, state) {
     room.rev = rev
-    room.state =
-      state.cookedHistory === undefined && room.state?.cookedHistory !== undefined
-        ? { ...state, cookedHistory: room.state.cookedHistory }
-        : state
+    let next = state
+    for (const key of preservedWhenAbsent) {
+      if (state[key] === undefined && room.state?.[key] !== undefined) {
+        if (next === state) next = { ...state }
+        next[key] = room.state[key]
+      }
+    }
+    room.state = next
     const entry = revFloor.get(room.code)
     if (!entry || rev > entry.rev || now() - entry.at > idleTtlMs) {
       revFloor.set(room.code, { rev, at: now() })

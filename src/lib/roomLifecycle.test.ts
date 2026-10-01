@@ -359,6 +359,35 @@ describe('rev is monotone per CODE, not per room instance (review F4)', () => {
     registry.noteState(other, 1, { plan: [] })
     expect('cookedHistory' in other.state).toBe(false)
   })
+
+  test('noteState preserves a stored plan identity ONLY when the key is absent (ADR-0034)', () => {
+    // `planIdentity` is EXPLICITLY nullable: `null` is a real answer
+    // ("the plan is empty") and replaces wholesale, while an ABSENT key is
+    // an older peer that has nothing to say. Preserving the absent case but
+    // honoring the null is what keeps one household's batch from being
+    // re-identified — and split into two History groups — by whichever
+    // phone pushed last.
+    const { registry } = harness()
+    const room = registry.joinOrCreate('mauve-peacock-candle').room!
+    const identity = { planId: 'plan-household', planCreatedAt: 1000 }
+
+    registry.noteState(room, 1, { plan: [], planIdentity: identity })
+    expect(room.state.planIdentity).toEqual(identity)
+
+    // An older peer's keyless push keeps the household's identity.
+    registry.noteState(room, 2, { plan: [] })
+    expect(room.state.planIdentity).toEqual(identity)
+
+    // `null` is an ANSWER: that phone's plan ended, so the room adopts it
+    // and a later joiner does not keep an identity for a plan that is gone.
+    registry.noteState(room, 3, { plan: [], planIdentity: null })
+    expect(room.state.planIdentity).toBeNull()
+
+    // Nothing stored yet + keyless push → nothing fabricated.
+    const other = registry.joinOrCreate('rose-thistle-moss').room!
+    registry.noteState(other, 1, { plan: [] })
+    expect('planIdentity' in other.state).toBe(false)
+  })
 })
 
 describe('keepalive keeps a room alive (review F1)', () => {

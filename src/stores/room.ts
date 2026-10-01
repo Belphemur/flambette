@@ -64,6 +64,22 @@ interface SharedState {
    * "nothing to say", not "clear the household").
    */
   ratings?: Record<string, { rating: number; count: number; updatedAt: number }>
+  /**
+   * ADR-0034 — the identity of the household's CURRENT plan (the id it was
+   * minted with and when it was started). Plain whole-state state, not a
+   * reconciled record: both phones that plan the same week mean the same
+   * plan, and a cook's provenance is only comparable across peers if they
+   * agree on which plan that is.
+   *
+   * EXPLICITLY NULLABLE, and always sent: `null` means "there is no current
+   * plan" (the plan is empty or ended) and the key being ABSENT means "a
+   * peer running older code has nothing to say about it" (ADR-0028).
+   * Collapsing the two into omission would make an older peer's push either
+   * wipe the household's identity or (if omission were preserved) keep an
+   * identity for a plan that has ended. The relay preserves the previously
+   * stored value ONLY when the key is absent, so the two stay distinct.
+   */
+  planIdentity?: { planId: string; planCreatedAt: number } | null
 }
 
 const PUSH_DEBOUNCE_MS = 300
@@ -213,6 +229,13 @@ export const useRoomStore = defineStore('room', () => {
       // Household state (ADR-0028): the shared half of the quick filters.
       filters: toSharedFilters(ui.quickFilters),
     }
+    // ADR-0034: the current plan's identity, so a cook event written on one
+    // phone groups under the same plan on the other. ALWAYS sent: null is a
+    // real answer ("no current plan"), and only an absent key means "older
+    // peer, nothing to say".
+    state.planIdentity = plan.planId
+      ? { planId: plan.planId, planCreatedAt: plan.planCreatedAt }
+      : null
     // ADR-0031: the favourites RECORDS (with delete markers) and the star
     // ratings are emitted ONLY when non-empty — an absent key means
     // "nothing to merge", never "clear the household", so a peer that
@@ -244,6 +267,10 @@ export const useRoomStore = defineStore('room', () => {
     let localRowsMissingFromRoom = false
     try {
       plan.replacePlan(state.plan ?? [], state.customItems ?? [])
+      // ADR-0034: adopt the household's plan identity. `null` is an answer
+      // ("the plan is empty"), an ABSENT key is silence (an older peer) and
+      // leaves ours alone — the two are deliberately distinct.
+      if (state.planIdentity !== undefined) plan.setPlanIdentity(state.planIdentity)
       const checked: Record<string, boolean> = {}
       for (const [key, value] of Object.entries(state.checked ?? {})) {
         if (value) checked[key] = true
@@ -436,6 +463,13 @@ export const useRoomStore = defineStore('room', () => {
         ui.quickFilters, // quick filters are household state (ADR-0028)
         plan.cookedHistory, // only pushed when ui.shareCookedHistory — snapshot() gates it
         ui.shareCookedHistory, // flipping sharing must trigger a retroactive push
+        // ADR-0034: the plan identity is household state, and it can be
+        // minted LAZILY (a legacy install, an inbound snapshot) long after
+        // the plan itself stopped changing — without these the new id would
+        // sit on one device and one batch would split into two History
+        // groups across the household.
+        plan.planId,
+        plan.planCreatedAt,
       ] as const,
     () => schedulePush(),
     { deep: true, flush: 'sync' },

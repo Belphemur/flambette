@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Check,
@@ -22,7 +22,7 @@ import {
   remainingSeconds,
 } from '../lib/stepTimer'
 import type { RecipeDoc } from '../lib/types'
-import { usePlanStore } from '../stores/plan'
+import { usePlanStore, type CookedEntry, type PlanEntry, type PlanIdentity } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
 
 const plan = usePlanStore()
@@ -40,12 +40,24 @@ const meta = computed(() => catalog.value?.byId.get(props.id) ?? null)
  * Servings source: the plan entry's servings when the recipe is planned,
  * otherwise the recipe's base serving_count. No stepper here — change
  * servings from the detail sheet.
+ *
+ * Frozen at the first successful resolution (ADR-0034). It USED to be a
+ * live computed over the plan, which quietly corrupted the cook: marking
+ * "as cooked" mid-recipe drops the meal from the plan, the computed fell
+ * back to the base `serving_count`, and every remaining step silently
+ * RESCALED under the user mid-cook (a 4-serving cook became 6). The
+ * session's servings are decided when it opens, like everything else about
+ * it, and a mark cannot change the arithmetic of a recipe in progress.
  */
+let frozenServings: number | null = null
 const servings = computed(() => {
   const id = meta.value?.id
   if (id === undefined) return 1
-  const entry = plan.plan.find((e) => e.variantId === id)
-  return entry?.servings ?? meta.value!.serving_count
+  if (frozenServings === null) {
+    const entry = plan.plan.find((e) => e.variantId === id)
+    frozenServings = entry?.servings ?? meta.value!.serving_count
+  }
+  return frozenServings
 })
 
 const factor = computed(() => (doc.value ? servings.value / doc.value.serving_count : 1))
@@ -221,18 +233,81 @@ function confirmTimerBeforeLeaving(): boolean {
   return true
 }
 
-function finish() {
-  if (!confirmTimerBeforeLeaving()) return
-  close()
-  ui.showToast('Enjoy!')
+/**
+ * Plan provenance of THIS cook session (ADR-0034), captured WHEN THE
+ * SESSION OPENS — not on the first press. A peer can change the plan while
+ * the dialog is open (someone cooks the meal on the other phone, or adds
+ * it), and the answer to "which plan was this cook made under" is the plan
+ * the cook STARTED under. Lazy capture would answer with whatever the plan
+ * happened to be at press time, which flips a household cook into an ad-hoc
+ * one for no reason. The identity is the real plan's when the recipe is
+ * planned, else a freshly minted ad-hoc one-recipe plan (owner rule); it is
+ * never stored as the store's own plan id.
+ */
+const sessionPlan: PlanIdentity = plan.cookPlanIdentity(props.id)
+
+/** The cook event THIS session has already recorded, if any. */
+const sessionCooked = ref<CookedEntry | null>(null)
+const sessionRecorded = computed(() => sessionCooked.value !== null)
+
+/**
+ * Record this cook, with an undo that restores the exact prior state
+ * (ADR-0034). The snapshot is taken at press time, before markCooked
+ * drops the meal from the plan and forgets its cleared ingredients —
+ * afterwards neither is knowable.
+ *
+ * A session records at most ONE cook: marking mid-way and then pressing
+ * Finish is one cook, not two, and the button is disabled after the mark so
+ * the user is never asked to choose. Finish after a mid-cook mark therefore
+ * just closes — the cook is already recorded and the plan already updated.
+ */
+function recordCook(opts: { message: string; close: boolean }): boolean {
+  if (sessionCooked.value) {
+    if (opts.close) close()
+    return true
+  }
+  if (!confirmTimerBeforeLeaving()) return false
+  const id = props.id
+  const entry = plan.plan.find((e) => e.variantId === id)
+  const cleared = plan.clearedIngredients[id]
+  const prior: { entry: PlanEntry | null; cleared: string[] | null } = {
+    entry: entry ? { ...entry } : null,
+    cleared: cleared ? [...cleared] : null,
+  }
+  const event: CookedEntry = plan.markCooked(id, sessionPlan)
+  sessionCooked.value = event
+  ui.showToast(opts.message, {
+    actions: [
+      {
+        label: 'Undo',
+        // Undo hands the session back its un-recorded state, so a Finish
+        // after it records the cook properly instead of being swallowed by
+        // the "already marked" guard.
+        run: () => {
+          plan.undoMarkCooked(event, prior)
+          sessionCooked.value = null
+        },
+        testId: 'cook-undo',
+      },
+    ],
+    duration: 6000,
+  })
+  if (opts.close) close()
+  return true
 }
 
-/** Finish cooking AND record the meal in the personal cooked history. */
+/** Mid-cook mark: record the event and KEEP COOKING (ADR-0034). */
+function markCookedEarly() {
+  recordCook({ message: 'Marked as cooked', close: false })
+}
+
+/**
+ * Finish on the last step is ONE action: record the cook event AND take
+ * the meal off the plan (markCooked already does both — the change is in
+ * the buttons, not the store), then close (ADR-0034).
+ */
 function finishCooked() {
-  if (!confirmTimerBeforeLeaving()) return
-  if (meta.value) plan.markCooked(meta.value.id)
-  close()
-  ui.showToast('Marked as cooked')
+  recordCook({ message: 'Enjoy! Marked as cooked', close: true })
 }
 
 function onKey(e: KeyboardEvent) {
@@ -286,6 +361,21 @@ async function loadDoc() {
   }
 }
 
+/**
+ * A cooking link to an id the catalog does not have is a dead end: the
+ * route is ungated for real recipes (ADR-0034), not for ids that do not
+ * exist, and cooking mode hides the app's navigation — so hand it to the
+ * detail view, which owns the not-found state. Waits for the catalog to be
+ * loaded first, so a slow boot is never mistaken for a missing recipe.
+ */
+watch(
+  () => Boolean(catalog.value) && !meta.value,
+  (missing) => {
+    if (missing) void router.replace({ name: 'recipe', params: { id: String(props.id) } })
+  },
+  { immediate: true },
+)
+
 onMounted(() => {
   void loadDoc()
   void acquireWakeLock()
@@ -337,7 +427,7 @@ function onTouchEnd(e: TouchEvent) {
         </button>
         <div class="min-w-0 flex-1 text-center">
           <p class="truncate text-sm font-bold tracking-tight">{{ meta.name }}</p>
-          <p class="text-xs dark:text-stone-400" aria-live="polite">
+          <p class="text-xs dark:text-stone-400" aria-live="polite" data-test="cook-serves">
             serves {{ servings }} ·
             <span class="font-semibold" data-test="step-counter">{{ counterLabel }}</span>
           </p>
@@ -520,20 +610,29 @@ function onTouchEnd(e: TouchEvent) {
           <button
             v-else
             class="h-14 flex-[2] rounded-xl bg-primary text-base font-semibold text-white shadow-sm active:bg-primary-dark"
-            @click="finish"
+            data-test="finish"
+            aria-label="Finish cooking and mark as cooked"
+            @click="finishCooked"
           >
             Finish
             <PartyPopper :size="18" aria-hidden="true" class="ml-1 inline" />
           </button>
         </div>
+        <!-- Mark as cooked is reachable from ANY step; on the last step
+             Finish above IS the mark, so there is never a second button
+             offering the same action (ADR-0034). A session records ONE
+             cook: after the mid-cook mark the button reports that and
+             stops inviting a second one. -->
         <button
-          v-if="isLast"
-          class="h-12 rounded-xl border dark:border-stone-600 dark:bg-stone-900 text-sm font-semibold text-primary-dark dark:text-primary active:bg-stone-100 dark:active:bg-stone-800"
+          v-if="!isLast"
+          class="h-12 rounded-xl border dark:border-stone-600 dark:bg-stone-900 text-sm font-semibold text-primary-dark dark:text-primary active:bg-stone-100 dark:active:bg-stone-800 disabled:opacity-60"
           data-test="mark-cooked"
-          @click="finishCooked"
+          aria-label="Mark as cooked and keep cooking"
+          :disabled="sessionRecorded"
+          @click="markCookedEarly"
         >
-          <Check :size="16" aria-hidden="true" class="mr-1 inline" />
-          Mark as cooked
+          <Check v-if="!sessionRecorded" :size="16" aria-hidden="true" class="mr-1 inline" />
+          {{ sessionRecorded ? 'Marked as cooked' : 'Mark as cooked' }}
         </button>
       </div>
     </footer>

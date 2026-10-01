@@ -23,6 +23,23 @@ export interface CookedEntry {
    * older peer lack it, and mergeCookedHistory falls back to the pair.
    */
   id?: string
+  /**
+   * Identity of the plan this cook was made under (ADR-0034), so the
+   * History tab can answer "what plan and when was it put together".
+   * Optional for back-compat: rows written by an older peer, or imported
+   * from an older backup, lack it and group under "earlier cooks".
+   * Ad-hoc cooks (no plan) get a freshly minted one-recipe plan id.
+   */
+  planId?: string
+  /** When that plan was started (empty -> non-empty), or the cook time for
+   *  an ad-hoc plan. Drives the order of the plan groups in History. */
+  planCreatedAt?: number
+}
+
+/** Provenance of the plan a cook event was recorded under. */
+export interface PlanIdentity {
+  planId: string
+  planCreatedAt: number
 }
 
 /** cookedHistory keeps at most this many entries, newest first. */
@@ -55,6 +72,14 @@ function nextCookedId(): string {
   return `${cookDeviceNonce}-${Date.now().toString(36)}-${cookIdSeq++}`
 }
 
+let planIdSeq = 0
+
+/** Mint a plan identity. The `plan-` prefix keeps ad-hoc plan ids from
+ *  ever colliding with a persisted planId in the same household (ADR-0034). */
+function nextPlanId(): string {
+  return `plan-${cookDeviceNonce}-${Date.now().toString(36)}-${planIdSeq++}`
+}
+
 /**
  * Meal plan: list of {variantId, servings}. Persisted to localStorage under
  * the `mealime-planner:v1:plan` key by pinia-plugin-persistedstate.
@@ -63,6 +88,13 @@ export const usePlanStore = defineStore(
   'plan',
   () => {
     const plan = ref<PlanEntry[]>([])
+    /** Identity of the CURRENT plan instance (ADR-0034): minted when the
+     *  plan goes empty -> non-empty, invalidated when it empties again, so
+     *  the next meal added starts a new plan. Empty means "not yet minted"
+     *  — a legacy install that predates ADR-0034 mints lazily instead of
+     *  running a migration write. */
+    const planId = ref<string>('')
+    const planCreatedAt = ref<number>(0)
     /** Free-form extra grocery items (not tied to any recipe). */
     const customItems = ref<string[]>([])
     /** Cooked history (ADR-0032): shared with the room by default, still
@@ -78,6 +110,49 @@ export const usePlanStore = defineStore(
       return plan.value.some((e) => e.variantId === variantId)
     }
 
+    /**
+     * Adopt a plan identity from the room, or clear it (ADR-0034). Whole
+     * state, not a reconciled record: there is only ever one current plan
+     * in a household, so the newer snapshot simply wins.
+     */
+    function setPlanIdentity(identity: PlanIdentity | null): void {
+      if (identity && identity.planId) {
+        planId.value = identity.planId
+        planCreatedAt.value = Number.isFinite(identity.planCreatedAt) ? identity.planCreatedAt : 0
+      } else {
+        planId.value = ''
+        planCreatedAt.value = 0
+      }
+    }
+
+    /** The current plan's identity, minting it on first use (ADR-0034).
+     * Callers that need the identity of a cook they are ABOUT to record
+     * must read it BEFORE the meal leaves the plan.
+     */
+    function ensurePlanIdentity(): PlanIdentity {
+      if (!planId.value) {
+        planId.value = nextPlanId()
+        planCreatedAt.value = Date.now()
+      }
+      return { planId: planId.value, planCreatedAt: planCreatedAt.value }
+    }
+
+    /**
+     * The plan identity a cook of `variantId` belongs to (ADR-0034):
+     * the real plan when the meal is in it, else a freshly minted ad-hoc
+     * one-recipe plan (owner rule: a cook started without a plan is
+     * treated as a plan containing only that recipe). The ad-hoc identity
+     * is returned but NEVER stored, so an ad-hoc cook can neither adopt
+     * nor become the household's real plan.
+     *
+     * Callers capture this ONCE per cooking session, so a mid-cook mark
+     * and the session's Finish land in the same ad-hoc plan.
+     */
+    function cookPlanIdentity(variantId: number): PlanIdentity {
+      if (planContains(variantId)) return ensurePlanIdentity()
+      return { planId: nextPlanId(), planCreatedAt: Date.now() }
+    }
+
     function addToPlan(meta: VariantMeta, servings = meta.serving_count): void {
       const existing = plan.value.find((e) => e.variantId === meta.id)
       if (existing) {
@@ -86,12 +161,26 @@ export const usePlanStore = defineStore(
       }
       // Fresh planning = fresh ingredients: forget any cleared snapshot.
       delete clearedIngredients.value[meta.id]
+      // First meal of a plan starts a new plan identity (ADR-0034): the
+      // previous one was invalidated when the plan emptied.
+      if (plan.value.length === 0) {
+        planId.value = ''
+        planCreatedAt.value = 0
+      }
       plan.value.push({ variantId: meta.id, servings })
+      ensurePlanIdentity()
     }
 
     function removeFromPlan(variantId: number): void {
       const i = plan.value.findIndex((e) => e.variantId === variantId)
-      if (i >= 0) plan.value.splice(i, 1)
+      if (i < 0) return
+      plan.value.splice(i, 1)
+      // An emptied plan is a finished plan: the next meal added belongs to
+      // a NEW plan, not to this one (ADR-0034).
+      if (plan.value.length === 0) {
+        planId.value = ''
+        planCreatedAt.value = 0
+      }
     }
 
     function setServings(variantId: number, servings: number): void {
@@ -101,6 +190,8 @@ export const usePlanStore = defineStore(
 
     function clearPlan(): void {
       plan.value = []
+      planId.value = ''
+      planCreatedAt.value = 0
     }
 
     /** Add a free-form grocery item (deduped case-insensitively). */
@@ -155,14 +246,41 @@ export const usePlanStore = defineStore(
      * per-variant counts (ADR-0011). Its grocery lines disappear
      * automatically — the list is derived — and its cleared snapshot is
      * forgotten (nothing left to remember).
+     *
+     * The event is stamped with the provenance of the plan it was cooked
+     * under (ADR-0034): the caller passes the session's plan identity
+     * (captured BEFORE the meal left the plan — see `cookPlanIdentity`),
+     * or we resolve it here, which is what the Plan tab's per-meal button
+     * relies on. Returns the event so the caller can undo it.
      */
-    function markCooked(variantId: number): void {
+    function markCooked(variantId: number, ctx?: PlanIdentity): CookedEntry {
+      const identity = ctx ?? cookPlanIdentity(variantId)
+      const event: CookedEntry = {
+        variantId,
+        cookedAt: Date.now(),
+        id: nextCookedId(),
+        planId: identity.planId,
+        planCreatedAt: identity.planCreatedAt,
+      }
       removeFromPlan(variantId)
       restoreIngredients(variantId)
-      cookedHistory.value = [
-        { variantId, cookedAt: Date.now(), id: nextCookedId() },
-        ...cookedHistory.value,
-      ].slice(0, COOKED_HISTORY_CAP)
+      cookedHistory.value = [event, ...cookedHistory.value].slice(0, COOKED_HISTORY_CAP)
+      return event
+    }
+
+    /**
+     * Drop one cook event by id (the undo half of `markCooked`,
+     * ADR-0034). Matching is on the event key, so a row without an id
+     * (legacy import) is still addressable by its (variantId, cookedAt)
+     * pair. Restoring the plan membership is the caller's job — it owns
+     * the prior-plan snapshot the undo toast was built from.
+     */
+    function unmarkCooked(event: CookedEntry): boolean {
+      const key = cookedEventKey(event)
+      const i = cookedHistory.value.findIndex((r) => cookedEventKey(r) === key)
+      if (i < 0) return false
+      cookedHistory.value.splice(i, 1)
+      return true
     }
 
     /** True when the meal was cooked in the last 30 days. */
@@ -180,10 +298,14 @@ export const usePlanStore = defineStore(
         // here would make the restored copy key by the pair — the next
         // merge would count the event twice. Rows without an id (legacy
         // backups) keep the pair fallback.
+        // Plan provenance is preserved too (ADR-0034): rebuilding the row
+        // field-by-field is what would otherwise silently drop it.
         .map((r) => ({
           variantId: r.variantId,
           cookedAt: r.cookedAt,
           ...(r.id !== undefined ? { id: r.id } : {}),
+          ...(r.planId !== undefined ? { planId: r.planId } : {}),
+          ...(r.planCreatedAt !== undefined ? { planCreatedAt: r.planCreatedAt } : {}),
         }))
         .slice(0, COOKED_HISTORY_CAP)
     }
@@ -206,7 +328,7 @@ export const usePlanStore = defineStore(
       // what we already hold don't count as "added" and don't get republished.
       for (const row of [...cookedHistory.value]) {
         seen.add(cookedEventKey(row))
-        merged.push({ variantId: row.variantId, cookedAt: row.cookedAt, id: row.id })
+        merged.push({ ...row })
       }
       // Keys of rows that came in from THIS merge — a row that duplicates a
       // local one is not an addition, and a row the CAP discards must not
@@ -222,7 +344,7 @@ export const usePlanStore = defineStore(
         const key = cookedEventKey(row)
         if (seen.has(key)) continue
         seen.add(key)
-        merged.push({ variantId: row.variantId, cookedAt: row.cookedAt, id: row.id })
+        merged.push({ ...row })
         inboundKeys.add(key)
       }
       // Newest first, with a DETERMINISTIC tie-break: two devices that hold
@@ -243,6 +365,39 @@ export const usePlanStore = defineStore(
       return added > 0
     }
 
+    /**
+     * The undo half of `markCooked` (ADR-0034): drop the event again and
+     * put the plan back exactly as it was. The prior plan entry and its
+     * cleared-ingredient row are captured by the CALLER at press time —
+     * after `markCooked` neither is knowable. The plan IDENTITY is
+     * restored too (from the event, which names the plan the meal was
+     * taken out of), so an undo of a mid-cook mark does not leave the
+     * household's plan looking like a different plan than it is.
+     * An ad-hoc cook has no plan entry to restore, and the event is all
+     * that is removed.
+     */
+    function undoMarkCooked(
+      event: CookedEntry,
+      prior: { entry: PlanEntry | null; cleared: string[] | null },
+    ): void {
+      unmarkCooked(event)
+      if (!prior.entry) return
+      if (!planContains(prior.entry.variantId)) {
+        plan.value.push({ ...prior.entry })
+      }
+      // Restore the identity ONLY if this device is still on that plan.
+      // If the cook emptied the plan and a new meal has since started
+      // another one, the newer plan is the truth: overwriting its id would
+      // relabel an unrelated batch as the undone cook's plan.
+      if (event.planId && !planId.value) {
+        planId.value = event.planId
+        planCreatedAt.value = event.planCreatedAt ?? 0
+      }
+      if (prior.cleared) {
+        clearedIngredients.value[prior.entry.variantId] = [...prior.cleared]
+      }
+    }
+
     /** Replace the whole plan (used when importing a shared plan). */
     function replacePlan(entries: PlanEntry[], custom: string[] = []): void {
       plan.value = entries.map((e) => ({
@@ -250,12 +405,25 @@ export const usePlanStore = defineStore(
         servings: Math.max(1, Math.round(e.servings)),
       }))
       customItems.value = custom
+      // A wholesale replacement IS a new plan (Auto-Plan in replace mode,
+      // a `?p=` share import, an inbound room snapshot). Keeping the
+      // previous identity would file the next cook under a plan this
+      // device no longer has — and would publish that stale id to every
+      // peer. Mint (or clear) exactly like the empty -> non-empty rule.
+      planId.value = ''
+      planCreatedAt.value = 0
+      if (plan.value.length > 0) ensurePlanIdentity()
     }
 
     return {
       plan,
       customItems,
+      planId,
+      planCreatedAt,
       planContains,
+      setPlanIdentity,
+      ensurePlanIdentity,
+      cookPlanIdentity,
       addToPlan,
       removeFromPlan,
       setServings,
@@ -269,6 +437,8 @@ export const usePlanStore = defineStore(
       replaceCookedHistory,
       mergeCookedHistory,
       markCooked,
+      unmarkCooked,
+      undoMarkCooked,
       isCookedRecently,
       replacePlan,
       cookedHistory,
@@ -278,7 +448,14 @@ export const usePlanStore = defineStore(
   {
     persist: {
       key: 'mealime-planner:v1:plan',
-      pick: ['plan', 'customItems', 'cookedHistory', 'clearedIngredients'],
+      pick: [
+        'plan',
+        'planId',
+        'planCreatedAt',
+        'customItems',
+        'cookedHistory',
+        'clearedIngredients',
+      ],
     },
   },
 )
