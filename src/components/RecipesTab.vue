@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
-import { ArrowUpDown, Check, Ham, Salad, Shrimp, Drumstick, Star, Vegan, Beef, Fish, Sparkles, Wheat, SearchX } from 'lucide-vue-next'
+import { ArrowUpDown, Check, Ham, Salad, Shrimp, Drumstick, Heart, Vegan, Beef, Fish, Sparkles, Wheat, SearchX } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { catalog } from '../lib/catalog'
 import {
@@ -325,7 +325,7 @@ onUnmounted(() => observer?.disconnect())
         data-test="favourites-filter"
         @click="patchFilters({ favOnly: !filters.favOnly })"
       >
-        <Star :size="16" :fill="filters.favOnly ? 'currentColor' : 'none'" aria-hidden="true" />
+        <Heart :size="16" :fill="filters.favOnly ? 'currentColor' : 'none'" aria-hidden="true" />
         <span class="truncate">Favourites</span>
       </button>
 
