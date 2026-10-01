@@ -78,11 +78,11 @@ function addToPlan(row: Row) {
           :src="imageSrc(row.meta.thumbnail_image_url)"
           :alt="row.meta.name"
           loading="lazy"
-          class="size-16 shrink-0 cursor-pointer rounded-lg object-cover dark:bg-stone-800"
+          class="size-16 shrink-0 hovercap:cursor-pointer rounded-lg object-cover dark:bg-stone-800"
           @error="onImgError"
           @click="openRecipe(row.variantId)"
         />
-        <div class="min-w-0 flex-1 cursor-pointer" @click="openRecipe(row.variantId)">
+        <div class="min-w-0 flex-1 hovercap:cursor-pointer" @click="openRecipe(row.variantId)">
           <h3 class="line-clamp-2 text-sm font-semibold">{{ row.meta.name }}</h3>
           <p
             class="mt-0.5 text-xs text-stone-500 dark:text-stone-400"
