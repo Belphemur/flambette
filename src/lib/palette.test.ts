@@ -124,6 +124,12 @@ function designColorNames(): string[] {
   return Array.from(colorsBlock.matchAll(/^  ([a-z-]+):\s*"#/gm), (m) => m[1])
 }
 
+/** Every DEFINITION name under DESIGN.md's `typography:` front-matter. */
+function designTypeNames(): string[] {
+  const typeBlock = designMd.slice(designMd.indexOf('typography:'), designMd.indexOf('rounded:'))
+  return Array.from(typeBlock.matchAll(/^  ([a-z-]+):$/gm), (m) => m[1])
+}
+
 /** One DESIGN.md typography definition: `fontSize`/`lineHeight`/
  *  `fontWeight` under `typography.<name>`. Returns lowercase values. */
 function designType(name: string, prop: 'fontSize' | 'lineHeight' | 'fontWeight'): string | null {
@@ -254,6 +260,14 @@ describe('the icon role registry (ADR-0036)', () => {
   test('the typography transcriptions match DESIGN.md, size + leading + weight', () => {
     // Same contract as the colours: DESIGN.md's `typography:` block is the
     // source; each definition becomes three `@theme` variables.
+    const declared = designTypeNames()
+    expect(declared.length).toBeGreaterThan(0)
+    // Key-set parity both ways: a NEW typography definition in DESIGN.md
+    // must be added here, and a removed one must not leave a dead entry.
+    for (const name of declared) {
+      expect(TYPOGRAPHY_TOKENS[name], `DESIGN.md typography '${name}' is not in TYPOGRAPHY_TOKENS`).toBeDefined()
+    }
+    expect(Object.keys(TYPOGRAPHY_TOKENS).sort()).toEqual(declared.sort())
     for (const [name, cssVar] of Object.entries(TYPOGRAPHY_TOKENS)) {
       for (const [prop, suffix] of [
         ['fontSize', ''],
