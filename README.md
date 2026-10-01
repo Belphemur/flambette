@@ -44,75 +44,75 @@ neutral placeholder.
 
 ## Features
 
-- **Recipes** — browse 2,730 variants in a responsive card grid with search
-  (by name or ingredient), category / favourites / cook-time / PRO filters,
-  and sorting by rating, popularity, latest, cook time or calories.
-  Full-screen detail view with presentation image, macro split, cookware,
-  ingredients and instructions, plus a servings stepper that scales
-  quantities (per-serving nutrition stays fixed; only totals scale).
-- **Diet filters** — chips for no-pork, no-shellfish, no-meat, vegetarian and
-  vegan, applied across search, browse and Auto-Plan. The catalog ships no
-  diet metadata, so this is a transparent keyword heuristic over each
-  recipe's ingredient list: a fast suggestion lens, not a guarantee.
-- **Auto-Plan** — complete a week of meals in one tap. A deterministic
-  pack builder scores recipes by *marginal package cost* (how many extra
-  supermarket packages each pick would force you to buy, counting a
-  container as bought whole), weighted against vote-smoothed rating and
-  variety, and skips pantry staples you already have. By default it ADDS
-  to your current plan and reuses what you're already buying; a meal-type
-  selector (Dinner / Breakfast / Dessert / Any) scopes each run. Pick a
-  pack size, optionally exclude categories or diets, confirm, and undo if
-  you don't like the result. Same inputs always produce the same plan —
-  no model, no randomness.
-- **Plan** — add recipes with per-meal serving counts; totals for kcal, cook
-  time and meal count. Persisted to `localStorage`.
+- **2,730 recipes, zero internet** — the whole catalog and every photo ship
+  in the repo. Browse, search and cook with the network cable unplugged.
+- **Auto-Plan** — a week of meals in one tap. It builds your plan around
+  what you're already buying, so two recipes sharing a pack of cheese cost
+  one package, not two. Same inputs, same plan — no randomness.
+- **Grocery list that writes itself** — quantities merge across meals
+  (`2 cloves` + `1 clove` → `3 cloves`), items sort into store aisles, and
+  shared ingredients carry a "N recipes" badge.
+- **Cooking mode** — one step at a time, big text, per-step timers that
+  survive a reload. Built for flour-covered hands.
+- **Cook together** — share a three-word room code (`amber-falcon-lantern`)
+  and every plan change syncs live to everyone's phone.
+- **Your history, yours** — what you cooked, browsable on its own tab.
+  Private until you say otherwise.
+- **Shopping mode** — a full-screen, big-button checklist for the store.
+  Finished aisles collapse themselves.
+- **Diet filters & dark mode** — vegetarian, vegan, no-pork, no-shellfish
+  chips across search and Auto-Plan; a proper dark theme, not inverted
+  colors. Everything works offline, on your own server, no account.
+
+<details>
+<summary>All the details</summary>
+
+- **Recipes** — responsive card grid with search by name or ingredient,
+  category / favourites / cook-time / PRO filters, and sorting by rating,
+  popularity, latest, cook time or calories. Full-screen detail view with
+  presentation image, macro split, cookware, ingredients and instructions,
+  plus a servings stepper that scales quantities (per-serving nutrition
+  stays fixed; only totals scale).
+- **Diet filters** — chips for no-pork, no-shellfish, no-meat, vegetarian
+  and vegan, applied across search, browse and Auto-Plan. The catalog
+  ships no diet metadata, so this is a transparent keyword heuristic over
+  each recipe's ingredient list: a fast suggestion lens, not a guarantee.
+- **Auto-Plan** — a deterministic pack builder scores recipes by *marginal
+  package cost* (how many extra supermarket packages each pick would force
+  you to buy, counting a container as bought whole), weighted against
+  vote-smoothed rating and variety, and skips pantry staples you already
+  have. Default mode ADDS to your current plan; a meal-type selector
+  (Dinner / Breakfast / Dessert / Any) scopes each run. Pick a pack size,
+  optionally exclude categories or diets, confirm, undo if unhappy.
+- **Plan** — add recipes with per-meal serving counts. A remembered
+  default serving size (changeable in Settings) pre-fills every new
+  recipe, generated plan and re-planned meal.
 - **Grocery** — aggregates ingredient line items across the whole plan:
-  quantities are parsed and scaled by each meal's serving factor, grouped by
-  singularized ingredient name (`carrot`/`carrots` merge), summed per
-  normalized unit (`2 cloves` + `1 clove` → `3 cloves`), and bucketed into
-  canonical grocery-store sections via a keyword heuristic (fallback:
-  "Other"). Ingredients shared between several planned meals get a
-  "N recipes" badge (hover/focus shows which). Free-form items not in any
-  recipe can be added as **Extra items** — they render in their own group at
-  the top, tagged with a category pill when one applies. Checkboxes, progress
-  bar and "clear checked" persist to `localStorage`.
-- **Waste-aware quantities** — container-shaped amounts (`½ (142 g) pkg`,
-  `1 small bunch`, `1 head`) are treated as *purchased units* and merged
-  with a ceiling, so two recipes sharing a pack of cheese cost one package,
-  not two. Spoon/measure amounts stay linear, and seasonings scale
-  sub-linearly (doubling a recipe does not double the salt). Recipe and
-  cooking-step text is always left exactly as written.
-- **Cooking mode** — a full-screen, distraction-free step-by-step view
-  (`/cooking/:id`) with one step at a time, per-step scaled ingredients,
-  measured-amount chips where a step needs the quantity, progress
-  (Step N / M) and keyboard/swipe navigation. Each step can carry its own
-  **timer**; a countdown survives a page reload rather than silently
-  restarting, and finishing with a timer still running asks first.
-- **Cooking history** — what you actually cooked, how often, and when,
-  browsable on its own **History** tab with per-recipe stats. Personal by
-  default: it is only shared with a room if you explicitly opt in.
-- **Live room sync** — the Plan tab can start a *live room*: one person
-  creates it, anyone opening `/plan?room=CODE` joins, and every change to the
-  plan, custom grocery items, grocery checkmarks and cleared ingredients
-  propagates instantly both ways (last-write-wins per revision). Room codes
-  are three readable words (`amber-falcon-lantern`), rolled on the client
-  and shareable with one tap. A **household room** can be saved in Settings
-  and is re-joined automatically on every launch. A status chip shows
-  Live / Connecting / Offline; the code is kept for the browser session so
-  reloads re-join automatically. The classic one-time `?p=` share link is
-  still available for offline sharing.
-- **Shopping mode** — a full-screen, big-target checklist of the grocery
-  list, optimized for in-store use: one collapsible section per store
-  section, large tap rows with big custom checkboxes, checked items fade
-  and sink within their section, and a sticky progress bar with an Exit
-  button. Finished sections collapse themselves. Entered from the grocery
-  tab's "Start shopping" button.
-- **Backup & restore** — export everything (plan, checks, favourites,
-  settings, cooked history) to a single JSON file and restore it on another
-  device. Restore validates the whole file before applying anything, so a
-  bad backup can never leave you half-imported.
-- **Dark mode** — follows the OS preference on first load; the header
-  toggle overrides it and the choice persists.
+  parsed and scaled per meal, merged by singularized name
+  (`carrot`/`carrots`), summed per normalized unit, bucketed into
+  canonical grocery-store sections. Free-form **Extra items** render in
+  their own group at the top.
+- **Waste-aware quantities** — container-shaped amounts
+  (`½ (142 g) pkg`, `1 small bunch`) are purchased units, merged with a
+  ceiling; spoon/measure amounts stay linear and seasonings scale
+  sub-linearly. Recipe text is never altered.
+- **Cooking mode** — full-screen step-by-step view with per-step scaled
+  ingredients, measured-amount chips, progress and keyboard/swipe
+  navigation. Timer state survives reloads; finishing with one running
+  asks first.
+- **Cooking history** — per-recipe stats on its own History tab. Personal
+  by default: shared with a room only if you opt in.
+- **Live room sync** — one person creates the room, anyone opening
+  `/plan?room=CODE` joins; plan, custom items, checkmarks and cleared
+  ingredients propagate both ways. Codes are three words, rolled
+  client-side, shareable in one tap; a household room re-joins on every
+  launch. One-time `?p=` links still work offline.
+- **Backup & restore** — export everything to a single JSON file; restore
+  validates first, so a bad backup can never leave you half-imported.
+- **Dark mode** — follows the OS on first load; header toggle overrides
+  and persists.
+
+</details>
 
 Favourites are seeded from the data snapshot and can be toggled per recipe.
 
