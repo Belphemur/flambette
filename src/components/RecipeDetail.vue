@@ -17,9 +17,9 @@ import {
   Clock,
   Droplet,
   Flame,
+  Heart,
   Minus,
   Plus,
-  Star,
   Utensils,
 } from 'lucide-vue-next'
 
@@ -156,11 +156,11 @@ function startCooking() {
         :aria-label="favourites.isFavourite(meta.id) ? 'Remove from favourites' : 'Add to favourites'"
         @click="favourites.toggleFavourite(meta.id)"
       >
-        <Star
+        <Heart
           :size="22"
           aria-hidden="true"
           :fill="favourites.isFavourite(meta.id) ? 'currentColor' : 'none'"
-          :class="favourites.isFavourite(meta.id) ? 'text-amber-400' : 'text-stone-400'"
+          :class="favourites.isFavourite(meta.id) ? 'text-rose-500' : 'text-stone-400'"
         />
       </button>
     </div>
