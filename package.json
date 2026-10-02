@@ -14,7 +14,7 @@
     "dev:relay": "wrangler dev -c server/wrangler.jsonc",
     "deploy:web": "wrangler deploy",
     "deploy:relay": "wrangler deploy -c server/wrangler.jsonc",
-    "types:worker": "wrangler types -c server/wrangler.jsonc server/worker-configuration.d.ts --include-runtime=false",
+    "types:worker": "wrangler types -c server/wrangler.jsonc server/worker-configuration.d.ts --include-runtime=false --strict-vars=false",
     "data:pack": "python3 scripts/build_pack_index.py",
     "data:verify": "bun run scripts/verify_pack_index_parity.ts"
   },
@@ -36,7 +36,7 @@
     "tailwindcss": "^4.3.3",
     "typescript": "6.0.3",
     "vite": "^8.3.0",
-    "vitest": "^5.0.3",
+    "vitest": "^4.1.0",
     "vue-tsc": "^3.3.11",
     "wrangler": "^4"
   }

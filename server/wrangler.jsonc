@@ -9,7 +9,16 @@
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "flambette-relay",
   "main": "./worker/index.ts",
-  "compatibility_date": "2026-10-02",
+  // 2026-05-01, deliberately NOT the newest date: the vitest pool that runs
+  // `bun run test:worker` (@cloudflare/vitest-pool-workers) bundles miniflare
+  // 5.20260815.0-alpha, whose workerd rejects anything past 2026-08-04, and
+  // a config the local test runtime refuses would make the DO specs cover an
+  // aspirational runtime instead of the shipping one. The relay uses nothing
+  // newer than this date (DO SQLite storage, WebSocket hibernation and
+  // idFromName are all long GA), older dates are a floor in production rather
+  // than a rejection, and the cost is only a cosmetic "consider bumping"
+  // warning on deploy. CF-COMPAT-FIX.
+  "compatibility_date": "2026-05-01",
   "durable_objects": {
     "bindings": [
       {
@@ -30,6 +39,12 @@
   },
   "observability": {
     "enabled": true,
+  },
+  // Parity with the Bun relay's env knob (server/throttle.mjs): the e2e suite
+  // raises it for a shared CI IP, and the DO specs pin the boundary at their
+  // own value. `wrangler types` picks this up into Env.
+  "vars": {
+    "RELAY_ATTEMPT_LIMIT": "30",
   },
   "routes": [
     {

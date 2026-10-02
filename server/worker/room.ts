@@ -111,6 +111,24 @@ export class Room extends DurableObject<Env> {
     this.#schemaReady = true
   }
 
+  /**
+   * Re-verify the schema against the actual database. Storage isolation
+   * (vitest-pool-workers rolls each test's storage back) and any future
+   * storage reset can leave an object that remembers `#schemaReady`
+   * looking at a database without its tables, so "did I run the DDL" is
+   * answered from SQLite, not from a flag. Cheap: one indexed lookup.
+   */
+  #ensureTables(): void {
+    const present = this.ctx.storage.sql
+      .exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'room'")
+      .next()
+    if (!present.done) {
+      this.#schemaReady = true
+      return
+    }
+    this.#ensureSchema()
+  }
+
   /** Stored state is our own JSON; a corrupt row must not kill the room. */
   static #parseState(raw: string | null): Record<string, unknown> | null {
     if (raw === null) return null
@@ -122,16 +140,16 @@ export class Room extends DurableObject<Env> {
   }
 
   /**
-   * One row, or undefined. The generated cursor type claims a row is
-   * always there; at runtime `one()` is undefined for an empty result, so
-   * the emptiness check is spelled out once, here.
+   * One row, or undefined. `one()` THROWS on an empty result, which would
+   * turn every "is there a room?" check into an exception, so the row is
+   * pulled through `next()` and its `done` flag is the emptiness check.
    */
   #one(query: string, ...bindings: SqlStorageValue[]): Record<string, SqlStorageValue> | undefined {
-    this.#ensureSchema()
-    const row = this.ctx.storage.sql
+    this.#ensureTables()
+    const step = this.ctx.storage.sql
       .exec<Record<string, SqlStorageValue>>(query, ...bindings)
-      .one() as Record<string, SqlStorageValue> | undefined
-    return row ?? undefined
+      .next()
+    return step.done ? undefined : step.value
   }
 
   // ---------------------------------------------------------------- storage
@@ -152,7 +170,7 @@ export class Room extends DurableObject<Env> {
   }
 
   #writeRoom(row: RoomRow): void {
-    this.#ensureSchema()
+    this.#ensureTables()
     this.ctx.storage.sql.exec(
       `INSERT OR REPLACE INTO room
         (id, code, rev, state, created_at, last_activity, inactivity_at, idle_at, serial)
@@ -175,7 +193,7 @@ export class Room extends DurableObject<Env> {
   }
 
   #writeFloor(rev: number, at: number): void {
-    this.#ensureSchema()
+    this.#ensureTables()
     this.ctx.storage.sql.exec(
       'INSERT OR REPLACE INTO rev_floor (code, rev, at) VALUES (?, ?, ?)',
       this.#code,
@@ -185,7 +203,7 @@ export class Room extends DurableObject<Env> {
   }
 
   #dropFloor(): void {
-    this.#ensureSchema()
+    this.#ensureTables()
     this.ctx.storage.sql.exec('DELETE FROM rev_floor WHERE code = ?', this.#code)
   }
 
@@ -290,7 +308,7 @@ export class Room extends DurableObject<Env> {
    * throttled and routed here. `?mode=create|join&room=<canonical code>`.
    */
   async fetch(request: Request): Promise<Response> {
-    this.#ensureSchema()
+    this.#ensureTables()
     const url = new URL(request.url)
     const mode = url.searchParams.get('mode') === 'create' ? 'create' : 'join'
     // The entry routed by name, so the code in the URL is already
@@ -359,7 +377,7 @@ export class Room extends DurableObject<Env> {
    * `fetch`, so this is where the room rules live.
    */
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
-    this.#ensureSchema()
+    this.#ensureTables()
     const attachment = ws.deserializeAttachment() as PeerAttachment | null
     const member = !!attachment && attachment.code === this.#code && attachment.id.startsWith('p')
 
@@ -393,7 +411,9 @@ export class Room extends DurableObject<Env> {
         const rev = msg.rev
         // Review F2: MEMBERSHIP, not just the code. A socket that was
         // refused (code_taken / not_found) must not write into the room
-        // it was aiming at.
+        // it was aiming at. The Bun relay answers a non-member's state
+        // with bad_state (the membership check is folded into the same
+        // guard), so the two relays speak the same reply here.
         if (
           !member ||
           !this.#readRoom() ||
@@ -487,7 +507,7 @@ export class Room extends DurableObject<Env> {
    * revision history outlives the room until the idle TTL prunes it.
    */
   async alarm(): Promise<void> {
-    this.#ensureSchema()
+    this.#ensureTables()
     const now = Date.now()
     const row = this.#readRoom()
 

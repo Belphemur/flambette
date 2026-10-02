@@ -62,21 +62,42 @@ export { Room }
  */
 let currentAddress: string = 'unknown'
 
-const throttle = makeThrottle({
-  peerAddress: () => currentAddress,
-})
+/**
+ * The per-isolate throttle, built on first use.
+ *
+ * Deliberately lazy: the limit comes from the RELAY_ATTEMPT_LIMIT var, and
+ * a module-scope constant cannot see a binding. This is the same knob the
+ * Bun relay reads from process.env (server/throttle.mjs) — the e2e suite
+ * raises it for a shared CI IP, and the DO specs pin the boundary at their
+ * own value.
+ */
+let throttle: ReturnType<typeof makeThrottle> | null = null
+
+function attemptLimit(env: Env): number {
+  const raw = env.RELAY_ATTEMPT_LIMIT
+  const limit = raw === undefined ? DEFAULT_ATTEMPT_LIMIT : Number(raw)
+  return Number.isFinite(limit) && limit > 0 ? limit : DEFAULT_ATTEMPT_LIMIT
+}
+
+function getThrottle(env: Env): ReturnType<typeof makeThrottle> {
+  throttle ??= makeThrottle({
+    limit: attemptLimit(env),
+    peerAddress: () => currentAddress,
+  })
+  return throttle
+}
 
 /** The edge-set, unforgeable client address. */
 function clientAddress(request: Request): string {
   return request.headers.get('CF-Connecting-IP') ?? 'unknown'
 }
 
-function health(): Response {
+function health(env: Env): Response {
   return Response.json({
     service: RELAY_SERVICE,
     inactivityTtlMs: INACTIVITY_TTL_MS,
     idleTtlMs: IDLE_TTL_MS,
-    attemptLimit: throttle.limit,
+    attemptLimit: getThrottle(env).limit,
   })
 }
 
@@ -102,7 +123,7 @@ function refuseWith(code: string): Response {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (!isUpgrade(request)) return health()
+    if (!isUpgrade(request)) return health(env)
 
     const url = new URL(request.url)
     const rawCode = url.searchParams.get('room') ?? ''
@@ -125,7 +146,7 @@ export default {
     // client that opens a socket per attempt must not get a fresh budget
     // each time.
     currentAddress = clientAddress(request)
-    if (!throttle.allow({ data: { peerId: crypto.randomUUID() } })) {
+    if (!getThrottle(env).allow({ data: { peerId: crypto.randomUUID() } })) {
       return refuseWith('rate_limited')
     }
 

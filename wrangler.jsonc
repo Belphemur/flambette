@@ -9,7 +9,10 @@
   // there is no CI deploy job and no CLOUDFLARE_API_TOKEN in this repo.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "flambette",
-  "compatibility_date": "2026-10-02",
+  // Same date as server/wrangler.jsonc — see the comment there. An assets-only
+  // worker uses even less runtime surface, but two configs disagreeing on the
+  // date would be a reviewer question with no answer.
+  "compatibility_date": "2026-05-01",
   // Single-page app: unknown paths fall back to index.html so vue-router
   // owns deep links (/plan, /recipe/:id, …). Mirrors nginx `try_files`.
   "assets": {
