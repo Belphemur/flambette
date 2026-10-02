@@ -19,6 +19,11 @@ import {
   normalizeTimerLabel,
   type CookTimer,
 } from '../lib/stepTimer'
+// The offered occasions are the ONE taxonomy (ADR-0046 §2.2/2.3): the
+// runtime import feeds AUTO_PLAN_RULESETS; the type comes back from the
+// composable that already derives its filter union from the same source.
+import { OFFERED_MEAL_TYPES } from '../lib/mealTypeFilter'
+import type { AutoPlanRulesetFilter } from '../composables/useAutoPlan'
 
 /** Bottom-nav entries, in display order. `to` is the route path; `icon` is
  *  a Lucide component (WS5), not an emoji or a hand-rolled path — the
@@ -63,14 +68,23 @@ export interface ToastOptions {
   onDismiss?: () => void
 }
 
-/** Auto-Plan ruleset choices (ADR-0027). 'any' imposes no filter. */
-export type AutoPlanRuleset = 'dinner' | 'breakfast' | 'dessert' | 'any'
+/** Auto-Plan ruleset choices. 'any' imposes no filter.
+ *
+ * ADR-0046 §2.3: the union is the shared `AutoPlanRulesetFilter` (the
+ * taxonomy-derived occasion rulesets + 'any') — widened to reach
+ * Lunch/Snack; the persisted value keeps its shape, and a stored
+ * out-of-list string never applies (applySettings leaves the 'dinner'
+ * default in place). Type-only import, so no runtime cycle with the
+ * composable that imports this store.
+ */
+export type AutoPlanRuleset = AutoPlanRulesetFilter
 export type AutoPlanMode = 'add' | 'replace'
+/** Valid values for the persisted setting — the offered occasions + Any,
+ *  derived from the ONE taxonomy (mealTypeFilter); backup validation
+ *  (backup.ts) and applySettings both gate on this list. */
 export const AUTO_PLAN_RULESETS: readonly AutoPlanRuleset[] = [
-  'dinner',
-  'breakfast',
-  'dessert',
   'any',
+  ...OFFERED_MEAL_TYPES.map((o) => o.ruleset),
 ]
 
 /**

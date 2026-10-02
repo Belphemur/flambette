@@ -71,10 +71,15 @@ const props = withDefaults(
     active?: boolean
     /** Popup width utility (the shell's only per-control difference). */
     menuWidth?: string
+    /** Stretch to the filter-bar grid cell (`w-full sm:w-auto`). The
+     *  Auto-Plan sheet's `justify-between` rows pass `false` so the
+     *  trigger stays compact beside its row label (ADR-0046 §2.2). */
+    fullWidth?: boolean
   }>(),
   {
     active: false,
     menuWidth: 'w-48',
+    fullWidth: true,
   },
 )
 
@@ -98,8 +103,10 @@ function choose(option: FilterDropdownOption) {
 
 <template>
   <!-- `w-full` in the phone grid cell, `sm:w-auto` in the wrapping flex
-  row (WS1) — the same footprint the meal-type trigger already had. -->
-  <div :ref="menu.wrapEl" class="relative w-full sm:w-auto">
+  row (WS1) — the same footprint the meal-type trigger already had.
+  `fullWidth: false` (Auto-Plan sheet rows) drops the width utilities
+  only; the Recipes call sites render byte-identically. -->
+  <div :ref="menu.wrapEl" class="relative" :class="fullWidth ? 'w-full sm:w-auto' : ''">
     <button
     :ref="menu.triggerEl"
     type="button"
