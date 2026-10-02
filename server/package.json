@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Zero-dependency in-memory WebSocket relay for Mealime Planner live room sync (Bun native WebSocket)",
   "scripts": {
-    "start": "bun relay.mjs"
+    "start": "bun relay.ts"
   },
   "engines": {
     "bun": ">=1"

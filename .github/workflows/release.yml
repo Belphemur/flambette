@@ -79,7 +79,11 @@ jobs:
 
       - uses: docker/build-push-action@v7
         with:
-          context: ./server
+          # Repo-root context (ADR-0040): the relay core imports the canonical
+          # room-code helper from src/lib/roomWords.ts, which a server-only
+          # context cannot ship.
+          context: .
+          file: ./server/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

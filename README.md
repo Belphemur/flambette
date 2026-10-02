@@ -219,7 +219,7 @@ works via the clipboard `execCommand` fallback.
 ```bash
 bun install
 bun run dev                      # dev server (proxies /ws to the relay)
-bun server/relay.mjs             # relay on :8081 (dev/e2e)
+bun server/relay.ts             # relay on :8081 (dev/e2e)
 bun run build                    # type-check + production build into dist/
 bun run preview                  # serve the production build locally
 bun run test:unit                # unit specs for the pure libs

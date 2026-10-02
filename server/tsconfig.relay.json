@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "noUnusedLocals": true
+  },
+  "include": [
+    "relay.ts",
+    "relay-core/**/*.ts",
+    "../src/lib/roomWords.ts"
+  ],
+  "exclude": ["**/*.test.ts"]
+}

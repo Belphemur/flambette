@@ -12,7 +12,7 @@ install step at all).
 Run it directly:
 
 ```sh
-bun relay.mjs      # listens on :8081 (override with PORT)
+bun relay.ts      # listens on :8081 (override with PORT)
 ```
 
 Env knobs (defaults in brackets): `PORT` [8081], `RELAY_ATTEMPT_LIMIT`

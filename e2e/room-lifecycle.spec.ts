@@ -24,7 +24,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 
 const INACTIVITY_TTL_MS = 1_500
 const KEEPALIVE_EVERY_MS = 300
-/** Mirrors the relay's default idle backstop (server/relayPolicy.mjs: 7 days). */
+/** Mirrors the relay's default idle backstop (server/relay-core/policy.ts: 7 days). */
 const IDLE_TTL_DEFAULT_MS = 7 * 24 * 60 * 60 * 1000
 
 /** Child relays this worker started, killed in afterAll. */
@@ -66,7 +66,7 @@ async function startRelay(slot: number, env: Record<string, string>): Promise<st
       }
       continue // occupied by a DIFFERENT configuration — take the next port
     }
-    const child = spawn('bun', ['server/relay.mjs'], {
+    const child = spawn('bun', ['server/relay.ts'], {
       env: { ...process.env, PORT: String(port), ...env },
       stdio: 'ignore',
     })
@@ -388,4 +388,36 @@ test('a re-created room continues the household revision history (F4)', async ()
   b.send({ type: 'join', code: 'pebble-moss-falcon' })
   expect(await b.waitFor('created')).toMatchObject({ code: 'pebble-moss-falcon', rev: 12 })
   b.close()
+})
+
+test('a peer that re-joins the room it is already in does not delete that room', async () => {
+  // The admission verdict is computed BEFORE the socket is (re)attached, so
+  // the broken path still answered `joined` — with the room's real state —
+  // and only failed afterwards: the room row was gone, so every later push
+  // came back `bad_state` and every keepalive `not_in_room`. The
+  // re-join itself is what clients do on a retry or a reconnect that
+  // races the first frame, so the room has to survive it.
+  const code = 'rustic-otter-lark'
+  const a = await Peer.open()
+  a.send({ type: 'join', code })
+  await a.waitFor('created')
+  a.send({ type: 'state', rev: 4, state: { plan: ['household'] } })
+  await wait(100)
+
+  a.send({ type: 'join', code })
+  expect(await a.waitFor('joined')).toMatchObject({ code, rev: 4 })
+
+  // The room must still be there for a second peer…
+  const b = await Peer.open()
+  b.send({ type: 'join', code })
+  expect(await b.waitFor('joined')).toMatchObject({ code, rev: 4, state: { plan: ['household'] } })
+
+  // …and for the peer that re-joined to keep writing into it.
+  a.send({ type: 'state', rev: 5, state: { plan: ['household', 'more'] } })
+  expect(await b.waitFor('state')).toMatchObject({ rev: 5 })
+  expect(a.received.filter((m) => m.type === 'error')).toEqual([])
+  expect(b.received.filter((m) => m.type === 'error')).toEqual([])
+
+  b.close()
+  a.close()
 })
