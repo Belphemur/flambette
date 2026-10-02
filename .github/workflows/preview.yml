@@ -87,7 +87,14 @@ jobs:
       - name: Build SPA (this PR's relay preview origin)
         run: bun run build
         env:
-          VITE_RELAY_WS_URL: wss://pr-${{ github.event.pull_request.number || 'main' }}.relay.dev.flambette.app/ws
+          # The relay preview's ACTIVE workers.dev host, per Cloudflare's
+          # preview naming convention (verified live on this PR: the relay
+          # preview answers 200 at this host). The dev-host routes
+          # (pr-<N>.relay.dev.flambette.app) only go live after a production
+          # `wrangler deploy` publishes the custom-domain preview routes —
+          # Cloudflare's own warning says so — so the SPA cannot point there
+          # until the first release.
+          VITE_RELAY_WS_URL: wss://pr-${{ github.event.pull_request.number || 'main' }}-flambette-relay-preview-relay-pr-${{ github.event.pull_request.number || 'main' }}.unami.workers.dev/ws
 
       - name: Preview the web worker
         id: preview-web

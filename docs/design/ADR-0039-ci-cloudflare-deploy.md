@@ -61,18 +61,34 @@ never a dashboard-generated token pasted into chat.
    `preview-<PR# or ref>`, cancel-in-progress. Preview deployments never
    touch the production routes or domains.
 
-   The preview SPA talks to ITS OWN preview relay
-   (`VITE_RELAY_WS_URL=wss://pr-<N>.relay.dev.flambette.app/ws`, baked at
-   build time per ADR-0038 §5), so preview rooms live entirely inside the
-   preview's isolated Durable Object namespace — a preview household plays
-   in its own sandbox, never in production data.
+   The preview SPA talks to ITS OWN preview relay, baked at build time per
+   ADR-0038 §5. The relay origin is the relay preview's workers.dev host,
+   `pr-<N>-flambette-relay-preview-relay-pr-<N>.unami.workers.dev` — per
+   Cloudflare's preview naming convention (`{preview-name}-{config-name}
+   {-env}`; verified live: the relay preview answers 200 at that host) and
+   ACTIVE from the first preview, while the dev-host routes
+   (`pr-<N>.relay.dev.flambette.app`) go live only after a production
+   `wrangler deploy` publishes the custom-domain preview routes (Cloudflare's
+   own warning). Until that first release the workers.dev host is the
+   preview surface; the account's workers.dev subdomain (`unami`) is
+   pinned by the workflow.
 
    `wrangler preview` requires a `previews` block in each config, and
    previews do NOT inherit production settings: the assets worker's block is
    empty (`previews: {}` — assets, compatibility settings, migrations and
    placement stay top-level); the relay's restates its vars and placement
    and declares the `ROOM` Durable Object binding, because the worker reads
-   `env.ROOM` — without it the preview would 1101.
+   `env.ROOM` — without it the preview would 1101. The relay's per-preview
+   `ROOM` DO namespace keeps preview rooms inside the preview's own storage.
+
+   Two expected wrangler warnings in the preview jobs, both intentional:
+   the `environment` input feeds wrangler's `--env` AND the GitHub
+   deployment environment, and the per-PR env name (`preview-web-pr-<N>`)
+   deliberately has no env section in the config — it exists to derive the
+   preview worker's name (`{config-name}-preview-{env}`) and the stable
+   per-PR GitHub deployments; wrangler proceeds with the top-level config
+   and the missing-environment warning is noise. The same reason explains
+   the custom-domain warning until the first release.
 
    **Preview rooms are auto-destroyed when the PR is merged or closed:** a
    `cleanup` job (`pull_request: closed`) deletes the preview for BOTH
