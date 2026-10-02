@@ -26,6 +26,9 @@ const wrangler = { configPath: path.join(import.meta.dirname, 'wrangler.jsonc') 
  * vitest over workerd, and the two runners disagree about globals.
  */
 export default defineConfig({
+  // The script runs from the repo root; the DO specs and the wrangler config
+  // both live under server/.
+  root: import.meta.dirname,
   test: {
     projects: [
       {
