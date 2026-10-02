@@ -5,16 +5,17 @@ disk. Stdlib only, like the repo's other scripts.
 
 Credential flow (values live in memory and move only through pipes):
 
-    ONE-TIME bootstrap token                       wrangler OAuth session
-    (owner creates it in the dashboard             (~/.config/.wrangler — the
-    with API Tokens: Edit, deposits it             script keeps its access
-    at ~/.config/flambette/                        token fresh via wrangler
-    cf-bootstrap-token, chmod 600)                 itself, never the dash WAF)
+    ONE-TIME bootstrap ACCOUNT token                wrangler OAuth session
+    (owner creates it in the dashboard with         (~/.config/.wrangler — the
+    Account 'API Tokens: Write' + 'Account          script keeps its access
+    Settings: Read' + Zone 'Zone: Read',            token fresh via wrangler
+    deposits it at ~/.config/flambette/             itself, never the dash WAF)
+    cf-bootstrap-token, chmod 600)
               │                                              │
               ▼                                              ▼
     Cloudflare API: mint a named, minimal    reads: accounts, zone, the
-    token scoped to exactly what the         permission-group catalog
-    workflows need (deploy + preview)
+    ACCOUNT token scoped to exactly what     permission-group catalog
+    the workflows need (deploy + preview)
               │
               ▼
     `gh secret set CLOUDFLARE_API_TOKEN`  ◀─ token value, stdin only
@@ -22,10 +23,13 @@ Credential flow (values live in memory and move only through pipes):
 
 wrangler's OAuth session CANNOT mint API tokens (that right is outside its
 scopes — verified: HTTP 9109 on the tokens API), so the bootstrap token is
-required once; the script then mints the minimal `flambette-ci (github
-actions)` token, which is what CI uses. Re-running the script ROLLS the CI
-token (the previous same-named token is deleted after the new secret lands);
-the bootstrap file can be deleted after the first run.
+required once. The minted token is an ACCOUNT-owned token via
+/accounts/{id}/tokens — account-owned tokens accept ONLY account-scoped
+resources (both zone-scoped resource shapes are rejected with error 1001),
+so the zone groups (Zone Read, Workers Routes Write) attach to the account
+and apply to its zones. Re-running the script ROLLS the CI token (the
+previous same-named token is deleted after the new secret lands); the
+bootstrap file can be deleted after the first run.
 
 Usage (from the repo root):
     python3 scripts/cf_ci_secrets.py --dry-run   # auth + plan; mint nothing
@@ -166,21 +170,22 @@ def _gh_secret_set(name: str, value: str, repo: str) -> None:
         raise CfError(f"gh secret set {name} failed: {proc.stderr.decode().strip()}")
 
 
-def _can_manage_tokens(token: str) -> bool:
-    """Read-only probe: does this credential even see the tokens API?"""
+def _can_manage_tokens(token: str, account: str) -> bool:
+    """Read-only probe on the ACCOUNT token route: does this credential see
+    the account-owned tokens API (the route it must be able to write)?"""
     try:
-        _cf("GET", "/user/tokens?per_page=1", token)
+        _cf("GET", f"/accounts/{account}/tokens?per_page=1", token)
         return True
     except CfError:
         return False
 
 
-def _roll_old(token: str, new_id: str, token_name: str) -> None:
-    listed = _cf("GET", "/user/tokens?per_page=50", token)["result"]
+def _roll_old(token: str, account: str, new_id: str, token_name: str) -> None:
+    listed = _cf("GET", f"/accounts/{account}/tokens?per_page=50", token)["result"]
     for t in listed:
         if t.get("name") == token_name and t.get("id") != new_id and t.get("status") != "deleted":
             try:
-                _cf("DELETE", f"/user/tokens/{t['id']}", token)
+                _cf("DELETE", f"/accounts/{account}/tokens/{t['id']}", token)
                 print(f"  rolled old CI token {t['id']}")
             except CfError as e:
                 print(f"  (could not roll old token {t['id']}: {e})")
@@ -197,26 +202,6 @@ def main() -> int:
     args = ap.parse_args()
 
     token = _access_token()
-    capable = _can_manage_tokens(token)
-    if not capable:
-        print(
-            "This credential cannot manage API tokens (wrangler's OAuth scopes "
-            "never include that right).\n"
-            "One-time bootstrap:\n"
-            "  1. Cloudflare dashboard → My Profile → API Tokens → Create Token\n"
-            "     (custom) with: User 'API Tokens: Edit', Account 'Account "
-            "Settings: Read',\n"
-            "     Zone 'Zone: Read' (All zones).\n"
-            f"  2. Save the token value to {BOOTSTRAP_FILE} (chmod 600) — never "
-            "into a chat.\n"
-            "  3. Re-run this script: it mints the minimal 'flambette-ci' "
-            "token, registers\n"
-            "     the GitHub secrets, rolls the old CI token, and the bootstrap "
-            "file can\n"
-            "     then be deleted."
-        )
-        return 2
-
     accounts = [(a["id"], a.get("name", "?")) for a in _cf("GET", "/accounts", token)["result"]]
     if args.account_id:
         account = args.account_id
@@ -228,7 +213,28 @@ def main() -> int:
             print(f"  {acc_id}  {name}")
         return 2
 
-    groups = {g["name"].lower(): g["id"] for g in _cf("GET", "/user/tokens/permission_groups", token)["result"]}
+    capable = _can_manage_tokens(token, account)
+    if not capable:
+        print(
+            "This credential cannot manage ACCOUNT tokens (the bootstrap must be an\n"
+            "account-owned token with 'API Tokens: Write').\n"
+            "One-time bootstrap:\n"
+            "  1. Cloudflare dashboard → the account's API Tokens page (or My Profile\n"
+            "     → API Tokens, custom token) with: Account 'API Tokens: Write' +\n"
+            "     'Account Settings: Read', Zone 'Zone: Read' (All zones).\n"
+            f"  2. Save the token value to {BOOTSTRAP_FILE} (chmod 600) — never "
+            "into a chat.\n"
+            "  3. Re-run this script: it mints the minimal 'flambette-ci' "
+            "account token,\n"
+            "     registers the GitHub secrets, rolls the old CI token, and the\n"
+            "     bootstrap file can then be deleted."
+        )
+        return 2
+
+    groups = {
+        g["name"].lower(): g["id"]
+        for g in _cf("GET", f"/accounts/{account}/tokens/permission_groups", token)["result"]
+    }
     missing = [g for g in ACCOUNT_GROUPS + ZONE_GROUPS if g.lower() not in groups]
     if missing:
         raise CfError(f"permission groups absent from the catalog: {missing}")
@@ -246,46 +252,45 @@ def main() -> int:
         print("dry-run: auth OK, token management OK — ready to mint + set secrets.")
         return 0
 
-    if not _can_manage_tokens(token):
+    if not _can_manage_tokens(token, account):
         print(
-            "this credential cannot manage API tokens. Remediation: see the "
-            "bootstrap instructions at the top of `--help` (deposit a token "
-            f"with API Tokens: Edit into {BOOTSTRAP_FILE} and re-run)."
+            "this credential cannot manage account tokens. Remediation: see the "
+            "bootstrap instructions at the top of `--help` (deposit an account "
+            f"token with API Tokens: Write into {BOOTSTRAP_FILE} and re-run)."
         )
         return 2
 
     minted = _cf(
         "POST",
-        "/user/tokens",
+        f"/accounts/{account}/tokens",
         token,
         {
             "name": args.token_name,
+            # Account-owned tokens accept ONLY account-scoped resources —
+            # zone-scoped resource strings are rejected with error 1001, so
+            # the zone groups (Zone Read, Workers Routes Write) attach to the
+            # account and apply to its zones.
             "policies": [
                 {
                     "effect": "allow",
                     "resources": {f"com.cloudflare.api.account.{account}": "*"},
-                    "permission_groups": [{"id": groups[g.lower()]} for g in ACCOUNT_GROUPS],
-                },
-                {
-                    "effect": "allow",
-                    "resources": {f"com.cloudflare.api.account.{account}.zone.{zone}": "*"},
-                    "permission_groups": [{"id": groups[g.lower()]} for g in ZONE_GROUPS],
+                    "permission_groups": [
+                        {"id": groups[g.lower()]} for g in ACCOUNT_GROUPS + ZONE_GROUPS
+                    ],
                 },
             ],
         },
     )["result"]
     new_id, value = minted["id"], minted["value"]
 
-    # Verify + a functional probe BEFORE registering the secret.
-    verify = _cf("GET", "/user/tokens/verify", value)["result"]
-    if verify.get("status") != "active":
-        raise CfError(f"minted token {new_id} is not active: {verify.get('status')}")
+    # Functional probe with the NEW token before registering the secret —
+    # the scripts list is the exact right `wrangler deploy`/`preview` build on.
     _cf("GET", f"/accounts/{account}/workers/scripts?per_page=1", value)
 
     repo = args.repo or _repo_from_origin()
     _gh_secret_set("CLOUDFLARE_API_TOKEN", value, repo)
     _gh_secret_set("CLOUDFLARE_ACCOUNT_ID", account, repo)
-    _roll_old(token, new_id, args.token_name)
+    _roll_old(token, account, new_id, args.token_name)
 
     print(f"set secrets CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID on {repo}")
     print(f"minted CI token id {new_id} (named '{args.token_name}')")

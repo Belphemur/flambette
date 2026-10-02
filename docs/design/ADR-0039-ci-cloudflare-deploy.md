@@ -25,18 +25,22 @@ never a dashboard-generated token pasted into chat.
 1. **`cloudflare/wrangler-action@v4` deploys.** It reads repo secrets
    `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Those secrets are
    minted and registered by `scripts/cf_ci_secrets.py`: a ONE-TIME bootstrap
-   token (created by the owner in the dashboard with `API Tokens: Edit`, and
+   **account token** (created by the owner in the dashboard with
+   `API Tokens: Write` + `Account Settings: Read` + `Zone: Read`, and
    deposited at `~/.config/flambette/cf-bootstrap-token`, never pasted into a
-   chat) mints a token named `flambette-ci (github actions)` scoped to
-   exactly what the workflows exercise (`Workers Scripts Write` +
-   `Account Settings Read` on the account; `Zone Read` + `Workers Routes
-   Write` on the `flambette.app` zone), verifies it, and pipes it to
-   `gh secret set` over stdin. The token value is never printed, logged or
-   written to disk. wrangler's own OAuth session cannot mint tokens (that
-   right is outside its scopes — verified live: HTTP 9109 on the tokens
-   API), so the bootstrap is required once; re-running the script ROLLS the
-   CI token (the previous same-named token is deleted after the new secret
-   lands), and the bootstrap file can be deleted afterwards.
+   chat) mints an account-owned token named `flambette-ci (github actions)`
+   scoped to exactly what the workflows exercise (`Workers Scripts Write` +
+   `Account Settings Read` + the zone groups `Zone Read` / `Workers Routes
+   Write`). It is verified functionally and piped to `gh secret set` over
+   stdin — the token value is never printed, logged or written to disk.
+   wrangler's own OAuth session cannot mint tokens (that right is outside
+   its scopes — verified live: HTTP 9109 on the tokens API), so the
+   bootstrap is required once. Account-owned tokens accept ONLY
+   account-scoped resources (both zone-scoped resource shapes are rejected
+   with error 1001), so the zone groups attach to the account and apply to
+   its zones. Re-running the script ROLLS the CI token (the previous
+   same-named token is deleted after the new secret lands), and the
+   bootstrap file can be deleted afterwards.
 2. **Previews (`.github/workflows/preview.yml`, new):** on pull requests and
    pushes to `main`, BOTH workers get a `wrangler preview` deployment
    (`preview --name pr-<PR#>` or `pr-main`; wrangler ≥ 4.136.3 for the
