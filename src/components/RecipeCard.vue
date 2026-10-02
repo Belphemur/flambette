@@ -5,7 +5,7 @@ import RatingStars from './RatingStars.vue'
 import HueIcon from './HueIcon.vue'
 import type { VariantMeta } from '../lib/types'
 import { catalog } from '../lib/catalog'
-import { ICON_ROLES, ingredientRole } from '../lib/palette'
+import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
 import { useFavouritesStore } from '../stores/favourites'
 import { Clock, Heart } from 'lucide-vue-next'
 
@@ -18,6 +18,15 @@ const favourites = useFavouritesStore()
 const typeRole = computed(() =>
   ingredientRole(catalog.value?.dataById.get(props.meta.id)?.category_name),
 )
+
+/**
+ * Meal OCCASION hue (ADR-0043) — a SEPARATE family from the ingredient
+ * type above, because "dinner" and "contains meat" are different
+ * questions and one colour must not answer both. Null for a ruleset we
+ * have no hue for (today only `cpg`), and then the row simply shows no
+ * occasion icon: an absent fact is better than a guessed colour.
+ */
+const mealTypeRole = computed(() => mealRole(props.meta.ruleset))
 
 const isFavourite = computed(() => favourites.isFavourite(props.meta.id))
 </script>
@@ -75,13 +84,18 @@ const isFavourite = computed(() => favourites.isFavourite(props.meta.id))
   </RouterLink>
   </h3>
 
-  <!-- Compact facts: TYPE, energy and time. Sodium is deliberately
-  absent — it belongs to the recipe's nutrition detail, not to a
-  glanceable browse tile. The type icon carries its own name
-  (role="img") and the category word is NOT printed beside it. -->
+  <!-- Compact facts: TYPE, meal OCCASION, energy and time. Sodium is
+  deliberately absent — it belongs to the recipe's nutrition detail, not
+  to a glanceable browse tile. Both icons carry their own name
+  (role="img") and neither redundant word is printed beside them. The
+  occasion is a different question from the ingredient type, so it wears
+  its own hue family (ADR-0043). -->
   <p class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-label-md text-text-muted">
   <span v-if="typeRole" class="flex items-center">
   <HueIcon :role="typeRole" :size="16" :label="ICON_ROLES[typeRole].label" />
+  </span>
+  <span v-if="mealTypeRole" class="flex items-center">
+  <HueIcon :role="mealTypeRole" :size="16" :label="ICON_ROLES[mealTypeRole].label" />
   </span>
   <span class="flex items-center gap-1 whitespace-nowrap" data-test="card-energy">
   <HueIcon role="energy" :size="16" />{{ Math.round(meta.calories) }} kcal

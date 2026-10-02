@@ -13,7 +13,7 @@ import { useFavouritesStore } from '../stores/favourites'
 import RatingStars from './RatingStars.vue'
 import NutritionModal from './NutritionModal.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
-import { ICON_ROLES, ingredientRole } from '../lib/palette'
+import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
 import HueIcon from './HueIcon.vue'
 import { onMounted, onUnmounted } from 'vue'
 import {
@@ -93,6 +93,14 @@ const meta = computed<VariantMeta | null>(
 const typeRole = computed(() =>
   ingredientRole(catalog.value?.dataById.get(props.id)?.category_name),
 )
+
+/**
+ * Meal OCCASION (ADR-0043), shown beside the type for the same reason the
+ * tile shows it: "what is it" and "when is it eaten" are two different
+ * questions, so they carry two different hue families. Null rulesets
+ * (today only `cpg`) simply print nothing.
+ */
+const mealTypeRole = computed(() => mealRole(meta.value?.ruleset))
 
 /** Scale factor for ingredients/instructions vs. the recipe's base servings. */
 const factor = computed(() => (doc.value ? servings.value / doc.value.serving_count : 1))
@@ -282,6 +290,14 @@ function startCooking() {
   <span v-else class="capitalize">{{
   catalog?.dataById.get(meta.id)?.category_name ?? meta.ruleset
   }}</span>
+  <!-- The occasion wears its OWN hue (ADR-0043): never a protein hue,
+  which means "contains X" two rows down the same screen. -->
+  <HueIcon
+  v-if="mealTypeRole"
+  :role="mealTypeRole"
+  :size="18"
+  :label="ICON_ROLES[mealTypeRole].label"
+  />
   </div>
   <h2 class="text-headline-md sm:text-headline-lg" data-test="detail-title">
   {{ meta.name }}

@@ -32,7 +32,7 @@ no 2 759-recipe scan at runtime (the owner's "no big parsing in the client" rule
 | -1  | Breakfast | Sunrise        | `breakfast`| 151   |
 | -2  | Dessert   | IceCreamCone   | `dessert`  | 91    |
 | -3  | Snack     | Cookie         | `snack`    | 89    |
-| -4  | Simple    | Gauge          | `simple`   | 304   |
+| -4  | Lunch     | Soup           | `simple`   | 304   |
 | -5  | Dinner    | UtensilsCrossed| `dinner`   | 2 119 |
 | -6  | Branded   | Tag            | `cpg`      | 5     |
 
@@ -43,7 +43,10 @@ no 2 759-recipe scan at runtime (the owner's "no big parsing in the client" rule
 - Ids are **negative** so an occasion can never collide with a positive
   catalog variant id.
 - The taxonomy is Mealime's, not ours: `Dinner` legitimately covers lunches
-  too (there is no `lunch` ruleset). "Simple" is Mealime's quick-easy bucket.
+  too (there is no `lunch` ruleset). The bucket is the catalog's
+  quick-easy `simple` ruleset and is surfaced as **Lunch** (owner,
+  2026-10-02): the ruleset name is an internal one, and a cook planning
+  a week reads "Lunch". The ruleset string itself is unchanged.
 
 ### Build-time count, static import
 `scripts/extract_recipe_types.py` makes ONE pass over `variant_meta`, tallies
@@ -70,12 +73,19 @@ unlike ADR-0018's diet lens this filter is *exact*, not a suggestion.
   `aria-expanded`, `aria-label="Meal type"`; shows `icon + label` of the
   active type, or `Sparkles + Any` when `null`.
 - Menu `data-test="mealtype-menu"`, `role="listbox"`, options
-  `data-test="mealtype-option-{label}"` (Breakfast/Dessert/Snack/Simple/Dinner),
+  `data-test="mealtype-option-{label}"` (Breakfast/Dessert/Snack/Lunch/Dinner),
   each `role="option"` with icon + label + count, `aria-selected`.
 - Keyboard: reuse the sort-menu handlers (Arrow/Home/End/Escape/Tab).
-- Icon colour **neutral** (meal occasions carry no food hue; the selected
-  option/chip uses the brand-tint rule, DESIGN.md "Selection and actions") —
-  icons keep their colour in both states, pills never resize.
+- Icon colour is the owner's meal-OCCASION family (superseding the
+  original "neutral" call, owner addendum 2026-10-02): five new tokens
+  `meal-breakfast / -dessert / -snack / -lunch / -dinner`, deliberately
+  SEPARATE from the four protein hues — lending `hue-meat` to "Dinner"
+  would make one colour answer "contains meat" and "evening meal" on the
+  same screen. Still rendered through `<HueIcon role="…">` so the
+  registry stays the only glyph/hue source, and still selection-is-a-TINT
+  (the icon keeps its own hue in both states, pills never resize).
+- The same hue shows the occasion on the browse tile and in the detail
+  header, so a colour means one thing wherever it appears.
 - `clearFilters()` resets `mealType` to `null`.
 
 ## Non-goals / hard NOs
@@ -86,7 +96,11 @@ unlike ADR-0018's diet lens this filter is *exact*, not a suggestion.
 - No dish-type chips — `variety_tag_ids` already backs the protein chips.
 - No runtime scan of `variant_meta` for counts.
 - No new store slice (no STORE_SLICES entry — a field on QuickFilters).
-- No new colour token (neutral icons only); `palette.ts` untouched.
+- No colour token invented by the client work: the five meal hues, their
+  dark counterparts and the `mealRole(ruleset)` mapper were added by the
+  owner in DESIGN.md / `@theme` / `.dark` / `palette.ts`, with a WCAG +
+  ΔE proof; this change only CONSUMES them. No `dark:` utility, no raw
+  hex.
 - No 6th bottom tab (ADR-0016 e2e-pinned).
 - No runtime fetching of anything (offline-first): the committed JSON plus the
   `ruleset` already in the loaded catalog are all the filter needs.

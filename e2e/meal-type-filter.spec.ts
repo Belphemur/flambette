@@ -194,6 +194,59 @@ test('the dropdown is keyboard-operable and Escape returns focus to its trigger'
   await expectZeroMealimeRequests(page)
 })
 
+test('the occasion icons wear the five meal hues, and never a protein hue', async ({ page }) => {
+  const menu = await openMenu(page)
+
+  // A hue is the icon's IDENTITY: each bucket wears its own occasion
+  // token, and selection paints the ROW (brand tint + check) rather than
+  // recolouring the glyph. A meal hue is deliberately NOT a protein hue —
+  // "Dinner" must not read as "contains meat" on the same screen as the
+  // protein chips two rows away.
+  for (const [label, token] of [
+    ['Breakfast', 'text-meal-breakfast'],
+    ['Dessert', 'text-meal-dessert'],
+    ['Snack', 'text-meal-snack'],
+    ['Lunch', 'text-meal-lunch'],
+    ['Dinner', 'text-meal-dinner'],
+  ] as const) {
+    const glyph = menu.getByTestId(`mealtype-option-${label}`).locator('svg').first()
+    await expect(glyph).toHaveClass(new RegExp(token))
+    await expect(glyph).not.toHaveClass(/text-hue-(meat|fish|vegetarian|vegan)/)
+  }
+  // "Any" is not an occasion, so it wears no hue at all — a neutral glyph,
+  // never a sixth colour.
+  const anyGlyph = menu.getByTestId('mealtype-option-Any').locator('svg').first()
+  await expect(anyGlyph).not.toHaveClass(/text-meal-/)
+
+  // The SELECTED row keeps its own hue, on the closed trigger too.
+  await page.getByTestId('mealtype-option-Dessert').click()
+  await expect(page.getByTestId('mealtype-button').locator('svg').first()).toHaveClass(
+    /text-meal-dessert/,
+  )
+  await expectZeroMealimeRequests(page)
+})
+
+test('a recipe detail header shows the occasion beside the type, named', async ({ page }) => {
+  // The occasion icon is QUERYABLE (role="img" + label), not a bare
+  // decoration: the word is never printed beside it, so the accessible
+  // name IS the meaning.
+  await page.getByTestId('recipe-card-link').first().click()
+  await expect(page.getByTestId('detail-title')).toBeVisible()
+
+  const headerIcons = page.locator('[data-test="hue-icon"]')
+  const dinner = headerIcons.getByLabel('Dinner')
+  await expect(dinner).toBeVisible()
+  // HueIcon puts the role's accessible name and its hue class on the
+  // SAME element (the glyph), so the label is the query handle.
+  await expect(dinner).toHaveClass(/text-meal-dinner/)
+  // …and it never borrows a protein hue, whichever one is beside it.
+  for (const protein of ['Meat', 'Fish', 'Vegetarian', 'Vegan']) {
+    const icon = headerIcons.getByLabel(protein)
+    if ((await icon.count()) > 0) await expect(icon).not.toHaveClass(/text-meal-/)
+  }
+  await expectZeroMealimeRequests(page)
+})
+
 test('a meal type combines with the other filters by AND, and narrows further', async ({ page }) => {
   const counts = await rulesetCounts(page)
 

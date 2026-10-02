@@ -1,18 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import {
-  ArrowUpDown,
-  Check,
-  Cookie,
-  Gauge,
-  Heart,
-  IceCreamCone,
-  SearchX,
-  Sparkles,
-  Sunrise,
-  Tag,
-  UtensilsCrossed,
-} from 'lucide-vue-next'
+import { ArrowUpDown, Check, Heart, SearchX, Sparkles } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { useListboxMenu } from '../composables/useListboxMenu'
 import { catalog } from '../lib/catalog'
@@ -42,12 +30,20 @@ import {
   mealTypeLabel,
   type MealTypeId,
 } from '../lib/mealTypeFilter'
-import { dietHueClass, dietRole, proteinHueClass, roleGlyph } from '../lib/palette'
+import {
+  dietHueClass,
+  dietRole,
+  mealRole,
+  proteinHueClass,
+  roleGlyph,
+  type IconRole,
+} from '../lib/palette'
 import { searchVariantIds } from '../lib/search'
 import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
 import { useUiStore } from '../stores/ui'
 import RecipeCard from './RecipeCard.vue'
+import HueIcon from './HueIcon.vue'
 
 /** The search box stays device-local: it is a question, not a household
  *  preference (ADR-0027). Everything below it is shared. */
@@ -143,23 +139,30 @@ function setMealType(id: MealTypeId | null) {
 }
 
 /**
- * Icon per bucket, resolved from the committed table's lucide name. The
- * map is a literal record (not a lookup by string) so Tailwind and
- * vue-tsc see real component references; the registry test in
- * `mealTypeFilter.test.ts` fails if a bucket ever names an icon this file
- * does not know.
+ * The meal hue is the icon's IDENTITY, not its state (ADR-0036): the
+ * option row keeps its meal hue whether or not it is the selected one —
+ * selection is painted by the brand tint + check, never by recolouring
+ * the glyph. These are the owner's five SEPARATE occasion hues; a meal
+ * icon never borrows a protein hue (which already means "contains meat"
+ * on the chips two rows away).
+ *
+ * `simple` is Mealime's own ruleset name; the surface calls it Lunch
+ * (ADR-0043), which is exactly why the mapping goes through
+ * `mealRole(ruleset)` instead of through the raw ruleset string.
  */
-const MEAL_TYPE_ICONS: Record<MealTypeId, Component> = {
-  [-1]: Sunrise,
-  [-2]: IceCreamCone,
-  [-3]: Cookie,
-  [-4]: Gauge,
-  [-5]: UtensilsCrossed,
-  [-6]: Tag,
-}
+const selectedMealRole = computed<IconRole | null>(() => {
+  const option = OFFERED_MEAL_TYPES.find((o) => o.id === filters.value.mealType)
+  return option ? mealRole(option.ruleset) : null
+})
 
-/** "Any" is not an occasion, so it borrows the neutral Sparkles glyph. */
-const ANY_MEAL_ICON = Sparkles
+/**
+ * "Any" is not an occasion, so it has NO hue and borrows the neutral
+ * Sparkles glyph (the same rule the protein chips' "Any protein" row
+ * follows). It is deliberately a bare icon, not a `HueIcon`: there is no
+ * role for "no occasion", and inventing one would put a sixth
+ * meaningless colour in the palette.
+ */
+const ANY_MEAL_ICON: Component = Sparkles
 
 /* ---------- Icon maps (WS5: one Lucide icon per filter) ---------- */
 
@@ -403,10 +406,12 @@ onUnmounted(() => observer?.disconnect())
   @click="mealMenu.open.value ? mealMenu.closeMenu({ refocus: true }) : mealMenu.openMenu()"
   >
   <component
-  :is="filters.mealType !== null ? MEAL_TYPE_ICONS[filters.mealType] : ANY_MEAL_ICON"
+  :is="ANY_MEAL_ICON"
+  v-if="selectedMealRole === null"
   :size="16"
   aria-hidden="true"
   />
+  <HueIcon v-else :role="selectedMealRole" :size="16" />
   <span class="truncate">{{ mealTypeLabel(filters.mealType) }}</span>
   </button>
   <ul
@@ -457,7 +462,7 @@ onUnmounted(() => observer?.disconnect())
   aria-hidden="true"
   />
   <span v-else class="w-4 shrink-0" aria-hidden="true" />
-  <component :is="MEAL_TYPE_ICONS[option.id]" :size="16" class="shrink-0" aria-hidden="true" />
+  <HueIcon v-if="mealRole(option.ruleset)" :role="mealRole(option.ruleset)!" :size="16" />
   <span class="min-w-0 flex-1 truncate">{{ option.label }}</span>
   <span class="shrink-0 text-xs tabular-nums text-text-muted">{{ option.count }}</span>
   </button>
