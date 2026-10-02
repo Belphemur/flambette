@@ -68,9 +68,9 @@ function harness(overrides: Record<string, unknown> = {}) {
 const ws = (peerId: number) => ({ data: { peerId, roomCode: undefined as string | undefined } })
 
 describe('relay room codes', () => {
-  test('defaults: 1h inactivity, 12h idle backstop', () => {
-    expect(INACTIVITY_TTL_MS).toBe(60 * 60 * 1000)
-    expect(IDLE_TTL_MS).toBe(12 * 60 * 60 * 1000)
+  test('defaults: 24h inactivity, 7-day idle backstop (ADR-0038 widening ADR-0026)', () => {
+    expect(INACTIVITY_TTL_MS).toBe(24 * 60 * 60 * 1000)
+    expect(IDLE_TTL_MS).toBe(7 * 24 * 60 * 60 * 1000)
   })
 
   test('normalizeCode canonicalizes both ADR-0021 shapes', () => {
@@ -175,7 +175,7 @@ describe('empty rooms are deleted (ADR-0026)', () => {
 })
 
 describe('expiry clocks (ADR-0026)', () => {
-  test('a room with no keepalive is closed after the 1h inactivity window', () => {
+  test('a room with no keepalive is closed after the inactivity window', () => {
     const { registry, timers, expired } = harness()
     const a = ws(1)
     const room = registry.joinOrCreate('mauve-peacock-candle').room!
@@ -199,7 +199,7 @@ describe('expiry clocks (ADR-0026)', () => {
     }
     expect(registry.get('mauve-peacock-candle')).toBe(room)
     expect(expired).toEqual([])
-    // Still armed, one full hour after the LAST keepalive.
+    // Still armed, one full window after the LAST keepalive.
     expect(timers.nextDeadline()).toBe(5 * 60_000 + INACTIVITY_TTL_MS)
   })
 
@@ -214,7 +214,7 @@ describe('expiry clocks (ADR-0026)', () => {
     expect(expired).toEqual([])
   })
 
-  test('the 12h idle backstop fires with reason=idle', () => {
+  test('the idle backstop fires with reason=idle', () => {
     const { registry, timers, expired } = harness({ inactivityTtlMs: 10 * IDLE_TTL_MS })
     registry.joinOrCreate('mauve-peacock-candle')
     timers.advance(IDLE_TTL_MS)

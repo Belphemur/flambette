@@ -1,0 +1,55 @@
+{
+  // The live-room relay as a Durable Object worker (ADR-0038). One DO class
+  // per room code, so a socket physically cannot belong to two rooms and a
+  // room's state lives in that room's own storage instead of a process map.
+  //
+  // The wire protocol is unchanged from server/relay.mjs — see
+  // docs/design/ADR-0038-cloudflare-deployment.md. `main` is resolved
+  // relative to THIS file, i.e. server/worker/index.ts.
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "flambette-relay",
+  "main": "./worker/index.ts",
+  // 2026-05-01, deliberately NOT the newest date: the vitest pool that runs
+  // `bun run test:worker` (@cloudflare/vitest-pool-workers) bundles miniflare
+  // 5.20260815.0-alpha, whose workerd rejects anything past 2026-08-04, and
+  // a config the local test runtime refuses would make the DO specs cover an
+  // aspirational runtime instead of the shipping one. The relay uses nothing
+  // newer than this date (DO SQLite storage, WebSocket hibernation and
+  // idFromName are all long GA), older dates are a floor in production rather
+  // than a rejection, and the cost is only a cosmetic "consider bumping"
+  // warning on deploy. CF-COMPAT-FIX.
+  "compatibility_date": "2026-05-01",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOM",
+        "class_name": "Room",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["Room"],
+    },
+  ],
+  // Spread the rooms over the fleet instead of pinning them to one colo.
+  "placement": {
+    "mode": "smart",
+  },
+  "observability": {
+    "enabled": true,
+  },
+  // Parity with the Bun relay's env knob (server/throttle.mjs): the e2e suite
+  // raises it for a shared CI IP, and the DO specs pin the boundary at their
+  // own value. `wrangler types` picks this up into Env.
+  "vars": {
+    "RELAY_ATTEMPT_LIMIT": "30",
+  },
+  "routes": [
+    {
+      "pattern": "ws.flambette.app",
+      "custom_domain": true,
+    },
+  ],
+}

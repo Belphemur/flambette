@@ -13,10 +13,10 @@
  *   room under the code it asked for, so a room is creatable by whoever
  *   shows up first instead of failing `not_found`.
  * - a room whose last peer leaves is deleted immediately.
- * - a room closes after 1h with no application-level `keepalive` and no
+ * - a room closes after 24h with no application-level `keepalive` and no
  *   state activity; the peers are told `room_expired` so they stop
- *   reconnecting. A 12h idle TTL is the backstop for peers that vanished
- *   without a `leave`.
+ *   reconnecting. A 7-day idle TTL is the backstop for peers that vanished
+ *   without a `leave` (ADR-0038, widening ADR-0026).
  *
  * Heartbeat ping/pong every 30s prunes dead SOCKETS — that is transport
  * liveness only and deliberately does NOT refresh room activity.
@@ -28,7 +28,13 @@ const PORT = Number(process.env.PORT ?? 8081)
 const HEARTBEAT_MS = 30_000
 
 import { makeThrottle, MemoryAttemptBuckets } from './throttle.mjs'
-import { createRoomRegistry, INACTIVITY_TTL_MS, IDLE_TTL_MS, WORD_CODE_RE } from './roomLifecycle.mjs'
+import {
+  createRoomRegistry,
+  INACTIVITY_TTL_MS,
+  IDLE_TTL_MS,
+  normalizeCode,
+  WORD_CODE_RE,
+} from './roomLifecycle.mjs'
 
 /**
  * Brute-force throttle (qodo 4128519648): create/join attempts are
@@ -91,6 +97,69 @@ function send(ws, payload) {
   if (ws.readyState === 1 /* OPEN */) ws.send(JSON.stringify(payload))
 }
 
+/**
+ * Put the socket into a fresh room under `wanted` (already canonical; ''
+ * means mint one). Shared by both transports.
+ */
+function establishRoom(ws, wanted) {
+  if (wanted && rooms.has(wanted)) {
+    send(ws, { type: 'error', code: 'code_taken' })
+    return
+  }
+  const room = registry.createRoom(wanted)
+  registry.attachPeer(ws, room)
+  // `rev` is the per-code floor (review F4): the client seeds ABOVE it, so
+  // a room re-created after an empty-room delete continues the
+  // household's revision history.
+  send(ws, { type: 'created', code: room.code, rev: registry.floorRev(room.code) })
+}
+
+/**
+ * A create, from either transport. The budget is charged HERE so a
+ * URL-carried intent and the legacy message pay the same price.
+ *
+ * The message form predates the URL intent and only ever honoured word
+ * codes (the client rolled them); the URL intent accepts the whole
+ * ADR-0021 union via normalizeCode, because that is what the client now
+ * sends and what the Durable Object relay honours.
+ */
+function performCreate(ws, rawCode, { legacyMessage = false } = {}) {
+  if (!allowAttempt(ws)) {
+    send(ws, { type: 'error', code: 'rate_limited' })
+    return
+  }
+  const wanted = legacyMessage
+    ? typeof rawCode === 'string' && WORD_CODE_RE.test(rawCode.trim())
+      ? rawCode.trim()
+      : ''
+    : normalizeCode(typeof rawCode === 'string' ? rawCode : '')
+  establishRoom(ws, wanted)
+}
+
+/**
+ * A join-or-create, from either transport (ADR-0026). An unusable code
+ * shape answers not_found, which the client maps to "not a room code".
+ */
+function performJoin(ws, rawCode) {
+  if (!allowAttempt(ws)) {
+    send(ws, { type: 'error', code: 'rate_limited' })
+    return
+  }
+  const { room, created } = registry.joinOrCreate(rawCode)
+  if (!room) {
+    send(ws, { type: 'error', code: 'not_found' })
+    return
+  }
+  registry.attachPeer(ws, room)
+  if (created) {
+    // Fresh room: nothing shared yet, so `created` (the same reply shape
+    // as the host path) makes the client seed it.
+    send(ws, { type: 'created', code: room.code, rev: registry.floorRev(room.code) })
+  } else {
+    send(ws, { type: 'joined', code: room.code, rev: room.rev ?? 0, state: room.state ?? null })
+  }
+}
+
 let server
 try {
   server = Bun.serve({
@@ -112,7 +181,20 @@ try {
       const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
       const ip =
         (forwarded || srv.requestIP(req)?.address) ?? 'unknown'
-      if (srv.upgrade(req, { data: { isAlive: true, roomCode: undefined, ip } })) return
+      // URL-carried intent (ADR-0038): the client asks in the upgrade URL,
+      // so the create/join happens the moment the socket opens instead of
+      // racing a first message. Only a query that SAYS something carries
+      // an intent — a bare /ws upgrade (the e2e suite's direct-dial peers)
+      // keeps speaking the message protocol, which stays supported.
+      const url = new URL(req.url)
+      const carriesIntent = url.searchParams.has('op') || url.searchParams.has('room')
+      const intent = carriesIntent
+        ? {
+            op: url.searchParams.get('op') === 'create' ? 'create' : 'join',
+            code: url.searchParams.get('room') ?? '',
+          }
+        : undefined
+      if (srv.upgrade(req, { data: { isAlive: true, roomCode: undefined, ip, intent } })) return
       // The health body echoes the lifecycle configuration so a test (or
       // an operator) can tell two relays apart without guessing: a
       // leftover listener from an earlier run with DIFFERENT TTLs must
@@ -131,6 +213,13 @@ try {
       open(ws) {
         ws.data.peerId = `p${++nextPeerId}`
         sockets.add(ws)
+        // The URL said what this socket wants: establish the room NOW, with
+        // the same throttle and the same replies a message would get.
+        const intent = ws.data.intent
+        if (!intent) return
+        ws.data.intent = undefined
+        if (intent.op === 'create') performCreate(ws, intent.code)
+        else performJoin(ws, intent.code)
       },
 
       message(ws, data) {
@@ -144,54 +233,18 @@ try {
 
         switch (msg.type) {
           case 'create': {
-            if (!throttle.allow(ws)) {
-              send(ws, { type: 'error', code: 'rate_limited' })
-              return
-            }
-            // ADR-0021: the client rolls the three-word code itself so it
-            // can show the user what to share. An already-taken code is
-            // refused so the client can re-roll rather than silently
-            // joining someone else's room.
-            const wanted =
-              typeof msg.code === 'string' && WORD_CODE_RE.test(msg.code.trim())
-                ? msg.code.trim()
-                : ''
-            if (wanted && rooms.has(wanted)) {
-              send(ws, { type: 'error', code: 'code_taken' })
-              return
-            }
-            const room = registry.createRoom(wanted)
-            registry.attachPeer(ws, room)
-            // `rev` is the per-code floor (review F4): the client seeds
-            // ABOVE it, so a room re-created after an empty-room delete
-            // continues the household's revision history.
-            send(ws, { type: 'created', code: room.code, rev: registry.floorRev(room.code) })
+            // Back-compat: the pre-URL-intent protocol. Word codes only
+            // (the client rolled them); see performCreate.
+            performCreate(ws, msg.code, { legacyMessage: true })
             break
           }
 
           case 'join': {
-            if (!throttle.allow(ws)) {
-              send(ws, { type: 'error', code: 'rate_limited' })
-              return
-            }
             // ADR-0026 join-or-create: whoever arrives first ESTABLISHES
             // the room under the code they asked for. This is what makes
             // a household room startable by any peer, and it is why the
-            // "Room not found" dead end is gone. An unusable code shape
-            // (partial word code, empty) still answers not_found.
-            const { room, created } = registry.joinOrCreate(msg.code)
-            if (!room) {
-              send(ws, { type: 'error', code: 'not_found' })
-              return
-            }
-            registry.attachPeer(ws, room)
-            if (created) {
-              // Fresh room: nothing shared yet, so `created` (the same
-              // reply shape as the host path) makes the client seed it.
-              send(ws, { type: 'created', code: room.code, rev: registry.floorRev(room.code) })
-            } else {
-              send(ws, { type: 'joined', code: room.code, rev: room.rev ?? 0, state: room.state ?? null })
-            }
+            // "Room not found" dead end is gone.
+            performJoin(ws, msg.code)
             break
           }
 
@@ -204,7 +257,7 @@ try {
             // named 'pong': that name belongs to the socket-level beat.
             // …and it refreshes BOTH expiry clocks (review F1): a peer
             // that is connected and keepaliving is, by definition, not
-            // an idle room — a 12h-connected household must never be
+            // an idle room — a 7-day-connected household must never be
             // closed by the idle backstop.
             const room = ws.data.roomCode ? registry.get(ws.data.roomCode) : undefined
             if (!room || !room.peers.has(ws)) {

@@ -116,6 +116,14 @@ neutral placeholder.
 
 Favourites are seeded from the data snapshot and can be toggled per recipe.
 
+## Hosted instance
+
+**https://flambette.app** runs the same app, deployed as two Cloudflare
+Workers (ADR-0038): the SPA from static assets on `flambette.app`, and the
+room relay as a Durable Object on `ws.flambette.app`. No setup, no server —
+the household room works exactly as it does self-hosted, and rooms survive
+after the last peer leaves until the expiry clocks fire.
+
 ## Run with Docker Compose (recommended)
 
 `docker-compose.yml` starts two services: **web** (nginx serving the app,
@@ -220,9 +228,38 @@ bunx playwright test             # e2e suite (starts the relay itself)
 
 The relay is a zero-dependency Bun service (`server/`, Bun's native
 WebSocket API, in-memory only — a room is created by whichever client
-arrives first, deleted when its last peer leaves, and expires after 1h
-with no keepalive and no activity, 12h idle being the backstop);
+arrives first, deleted when its last peer leaves, and expires after 24h
+with no keepalive and no activity, a 7-day idle backstop; ADR-0038
+widened ADR-0026's clocks);
 `server/README.md` documents the wire protocol.
+
+## Cloudflare deployment (ADR-0038)
+
+Two Workers, two configs: the root `wrangler.jsonc` serves `dist/` as an
+assets-only worker on `flambette.app`; `server/wrangler.jsonc` runs the
+room relay as a `Room` Durable Object on `ws.flambette.app`. Production
+deploys fire from Cloudflare's Workers Builds on tag creation — there is
+no CI deploy job and no deploy token in the repo.
+
+```bash
+bun run deploy:web              # wrangler deploy (web, needs bun run build first)
+bun run deploy:relay            # wrangler deploy -c server/wrangler.jsonc
+bun run dev:relay               # the DO relay locally on :8787
+bun run test:worker             # DO specs in workerd (vitest-pool-workers)
+bunx wrangler deploy --dry-run  # worker-side gate, run for BOTH configs
+```
+
+The web worker is assets-only — there is no `/ws` on `flambette.app` — so the
+HOSTED build must bake the relay origin in:
+`VITE_RELAY_WS_URL=wss://ws.flambette.app/ws bun run build && bun run deploy:web`
+(ADR-0038 §5; a build-time value, so it belongs in the deploy command or the
+dashboard's build env, never in the source). A plain `bun run build` keeps the
+same-origin default for dev, e2e, LAN and Docker.
+
+The client reaches the relay on its own origin by default (dev, e2e, LAN
+and Docker all proxy `/ws`); set `VITE_RELAY_WS_URL` at build time to
+point it at a relay living elsewhere — `ws://<host>`/`wss://<host>`,
+e.g. the hosted relay or a relay on another machine.
 
 ## Stack
 

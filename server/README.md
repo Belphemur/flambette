@@ -16,8 +16,8 @@ bun relay.mjs      # listens on :8081 (override with PORT)
 ```
 
 Env knobs (defaults in brackets): `PORT` [8081], `RELAY_ATTEMPT_LIMIT`
-[30 per minute per socket/IP], `RELAY_INACTIVITY_TTL_MS` [1h],
-`RELAY_IDLE_TTL_MS` [12h].
+[30 per minute per socket/IP], `RELAY_INACTIVITY_TTL_MS` [24h],
+`RELAY_IDLE_TTL_MS` [7 days] — ADR-0038 widened ADR-0026's clocks.
 
 Or via Docker / from the repo root:
 
@@ -37,7 +37,7 @@ JSON text frames, both directions.
 | `{"type":"create"}` | `{"type":"created","code":"…","rev":<int>}` — `rev` is the per-code floor (see Expiry) |
 | `{"type":"create","code":"<three words>"}` | `{"type":"created","code":"amber-falcon-lantern","rev":<int>}`, or `{"type":"error","code":"code_taken"}` when that code is live |
 | `{"type":"join","code":"ABC123"}` | `{"type":"joined","code":"ABC123","rev":<int\|0>,"state":<obj\|null>}` — for a code the relay does not know: `{"type":"created","code":"…","rev":<int>}` |
-| `{"type":"keepalive"}` | `{"type":"keepalive_ack"}` — refreshes the room's 1h inactivity clock. Not throttled. `{"type":"error","code":"not_in_room"}` when the socket is not in a room |
+| `{"type":"keepalive"}` | `{"type":"keepalive_ack"}` — refreshes the room's 24h inactivity clock. Not throttled. `{"type":"error","code":"not_in_room"}` when the socket is not in a room |
 | `{"type":"state","rev":<int>,"state":<obj>}` | fan-out to every *other* peer in the room: `{"type":"state","rev":<int>,"state":<obj>,"from":"<peerId>"}` |
 | `{"type":"leave"}` (or socket close) | `{"type":"left"}` |
 
@@ -71,9 +71,9 @@ all find the same room.
 - **Expiry (ADR-0026)**: two clocks per room, BOTH refreshed by every
   liveness signal — `keepalive` included, because a connected peer that
   keepalives is not an idle room.
-  - *Inactivity*: 1h with no `keepalive` and no `state` traffic
+  - *Inactivity*: 24h with no `keepalive` and no `state` traffic
     (`RELAY_INACTIVITY_TTL_MS`).
-  - *Idle backstop*: 12h since the last interaction of any kind
+  - *Idle backstop*: 7 days since the last interaction of any kind
     (`RELAY_IDLE_TTL_MS`) — redundant defence in depth for peers that
     vanished without a `leave`.
   On firing, the room closes and every peer gets
@@ -95,7 +95,7 @@ all find the same room.
 - **Liveness**: heartbeat ping/pong every 30s; a socket that misses a
   pong is terminated and removed from its room. This is transport-level
   only and deliberately does **not** refresh room activity — a client
-  behind a half-open socket is exactly what the 1h clock is for.
+  behind a half-open socket is exactly what the 24h clock is for.
 - **Health**: the HTTP response is a JSON echo of the running
   configuration (`inactivityTtlMs`, `idleTtlMs`, `attemptLimit`) so two
   relays can be told apart without guessing.

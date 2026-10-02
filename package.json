@@ -9,6 +9,12 @@
     "preview": "vite preview",
     "test:unit": "bun test src",
     "test:e2e": "playwright test",
+    "test:worker": "vitest run --config server/vitest.config.ts",
+    "typecheck:worker": "tsc -p server/tsconfig.json",
+    "dev:relay": "wrangler dev -c server/wrangler.jsonc",
+    "deploy:web": "wrangler deploy",
+    "deploy:relay": "wrangler deploy -c server/wrangler.jsonc",
+    "types:worker": "wrangler types -c server/wrangler.jsonc server/worker-configuration.d.ts --include-runtime=false --strict-vars=false",
     "data:pack": "python3 scripts/build_pack_index.py",
     "data:verify": "bun run scripts/verify_pack_index_parity.ts"
   },
@@ -22,12 +28,16 @@
     "vue-router": "^5.0.0"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "^5.20261002.1",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-vue": "^6.0.9",
     "tailwindcss": "^4.3.3",
     "typescript": "6.0.3",
     "vite": "^8.3.0",
-    "vue-tsc": "^3.3.11"
+    "vitest": "^4.1.0",
+    "vue-tsc": "^3.3.11",
+    "wrangler": "^4"
   }
 }

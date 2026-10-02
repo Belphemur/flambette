@@ -1,0 +1,23 @@
+# Cache rules ported from nginx.conf (the self-hosted deployment).
+# Workers static assets serve `dist/`, which is what `bun run build`
+# produces: vite's hashed bundles in /assets, the committed catalog and
+# recipe images in /data and /img, both copied straight out of public/.
+
+# Hashed build assets and recipe images: cache forever. The URL changes
+# whenever the bytes do, so a revalidation could never find a surprise.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/img/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The catalog is content-addressed per release but not per file, so it
+# must be revalidated rather than pinned: a deploy that changes it has to
+# be visible to a client that already has the old copy.
+/data/*
+  Cache-Control: public, max-age=300, must-revalidate
+
+# HTML is deliberately NOT given a Cache-Control here. The asset
+# pipeline's own ETag/conditional-request handling is what keeps it
+# correct, and a blanket `no-cache` on top of it only adds a round trip
+# for a page that is tiny to begin with.

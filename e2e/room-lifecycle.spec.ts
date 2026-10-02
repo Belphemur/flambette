@@ -6,7 +6,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
  * with short clocks.
  *
  * The suite's own relay (playwright.config webServer) runs with production
- * TTLs, so the 1h expiry and its `room_expired` reply are unreachable
+ * TTLs, so the 24h expiry and its `room_expired` reply are unreachable
  * there. This spec spawns its own relays and speaks the protocol directly
  * from Node (global WebSocket) — the app always reaches its relay through
  * the /ws proxy on 8081, which cannot be repointed per test.
@@ -24,7 +24,8 @@ import { spawn, type ChildProcess } from 'node:child_process'
 
 const INACTIVITY_TTL_MS = 1_500
 const KEEPALIVE_EVERY_MS = 300
-const IDLE_TTL_DEFAULT_MS = 12 * 60 * 60 * 1000
+/** Mirrors the relay's default idle backstop (server/relayPolicy.mjs: 7 days). */
+const IDLE_TTL_DEFAULT_MS = 7 * 24 * 60 * 60 * 1000
 
 /** Child relays this worker started, killed in afterAll. */
 const spawned: ChildProcess[] = []
@@ -264,7 +265,7 @@ test('keepalive never spends the create/join budget (F7)', async () => {
 test('keepalive keeps a connected room alive past the idle backstop (F1)', async () => {
   // The idle backstop is SHORTER than the inactivity window, so the room
   // can only survive if keepalive refreshes BOTH clocks. Before F1 the
-  // keepalive refreshed only the 1h clock and this peer was closed with
+  // keepalive refreshed only the inactivity clock and this peer was closed with
   // room_expired/idle after 2s of perfectly healthy keepalives.
   const url = await startRelay(2, {
     RELAY_INACTIVITY_TTL_MS: '60000',

@@ -64,11 +64,38 @@ jobs:
       - name: Unit tests
         run: bun run test:unit
 
+  # The Cloudflare relay (ADR-0038): type-check the worker against the
+  # generated runtime types, then drive the Room Durable Object in real
+  # workerd. Without this job a worker type error or a failing DO spec
+  # could merge and only surface on a tag's Workers Build.
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Worker types are up to date
+        run: |
+          bun run types:worker
+          git diff --exit-code -- server/worker-configuration.d.ts
+
+      - name: Type-check the worker
+        run: bun run typecheck:worker
+
+      - name: Durable Object tests (workerd)
+        run: bun run test:worker
+
   # Merge gate: combine the shard blobs into the single HTML report and
   # fail if any shard failed. Every PR must pass this before squash-merge
   # (required status check "merge-gate").
   merge-gate:
-    needs: [e2e, unit]
+    needs: [e2e, unit, worker]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -99,12 +126,13 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-      # Hard gate: e2e and unit jobs must BOTH have succeeded.
+      # Hard gate: e2e, unit and the worker jobs must ALL have succeeded.
       - name: Enforce green
         run: |
           e2e="${{ needs.e2e.result }}"
           unit="${{ needs.unit.result }}"
-          [[ "$e2e" == "success" && "$unit" == "success" ]] || { echo "e2e=$e2e unit=$unit"; exit 1; }
+          worker="${{ needs.worker.result }}"
+          [[ "$e2e" == "success" && "$unit" == "success" && "$worker" == "success" ]] || { echo "e2e=$e2e unit=$unit worker=$worker"; exit 1; }
 
   docker:
     needs: merge-gate

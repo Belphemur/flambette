@@ -1,0 +1,31 @@
+{
+  // The web app: Vue SPA + the committed offline catalog, served entirely
+  // from Workers static assets. There is NO worker script here on purpose —
+  // the app never talks to a server, it only opens a WebSocket to the relay
+  // (server/wrangler.jsonc, `flambette-relay`).
+  //
+  // ADR-0038 §8: the first ship is a CLI `wrangler deploy`; afterwards the
+  // Cloudflare GitHub App's Workers Builds takes over on tag creation, so
+  // there is no CI deploy job and no CLOUDFLARE_API_TOKEN in this repo.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "flambette",
+  // Same date as server/wrangler.jsonc — see the comment there. An assets-only
+  // worker uses even less runtime surface, but two configs disagreeing on the
+  // date would be a reviewer question with no answer.
+  "compatibility_date": "2026-05-01",
+  // Single-page app: unknown paths fall back to index.html so vue-router
+  // owns deep links (/plan, /recipe/:id, …). Mirrors nginx `try_files`.
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+  },
+  "observability": {
+    "enabled": true,
+  },
+  "routes": [
+    {
+      "pattern": "flambette.app",
+      "custom_domain": true,
+    },
+  ],
+}

@@ -86,11 +86,11 @@ const PUSH_DEBOUNCE_MS = 300
 const RECONNECT_MIN_MS = 1000
 const RECONNECT_MAX_MS = 30_000
 /**
- * Application-level keepalive (ADR-0026). The relay closes a room after
- * 1h with no keepalive and no state activity, and tells its peers
- * `room_expired`. 60s is a wide margin on a 1h window while costing one
- * tiny frame a minute; it is NOT throttled server-side, so a long-lived
- * room can never spend its create/join budget on liveness.
+ * Application-level keepalive (ADR-0026; the windows are ADR-0038's). The
+ * relay closes a room after 24h with no keepalive and no state activity,
+ * and tells its peers `room_expired`. 60s is a wide margin on a 24h window
+ * while costing one tiny frame a minute; it is NOT throttled server-side,
+ * so a long-lived room can never spend its create/join budget on liveness.
  */
 const KEEPALIVE_MS = 60_000
 /** Re-rolls of a taken three-word code before falling back to a relay-minted one. */
@@ -134,9 +134,24 @@ function writeRevFloor(code: string | null, rev: number) {
   }
 }
 
-function wsUrl(): string {
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${proto}//${location.host}${import.meta.env.BASE_URL}ws`
+/**
+ * The relay's URL, with the room intent carried in the query (ADR-0038):
+ * the socket knows what it wants before it is open, so there is no first
+ * message to race the handshake — and a room code never has to travel
+ * inside a frame the relay could answer before reading it.
+ *
+ * Without VITE_RELAY_WS_URL the URL is byte-for-byte what it has always
+ * been (plus the query): same origin, the proxy's /ws path — dev, e2e,
+ * LAN and the Docker compose stack never notice.
+ */
+function wsUrl(role: 'create' | 'join', roomCode?: string | null): string {
+  const override = import.meta.env.VITE_RELAY_WS_URL
+  const base =
+    override ??
+    `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}${import.meta.env.BASE_URL}ws`
+  const params = new URLSearchParams({ op: role })
+  if (roomCode) params.set('room', roomCode)
+  return `${base}?${params}`
 }
 
 export const useRoomStore = defineStore('room', () => {
@@ -595,14 +610,16 @@ export const useRoomStore = defineStore('room', () => {
           // The rolled code is live on the relay already: re-roll (a
           // handful of times), then let the relay mint one. Collisions are
           // tolerated by design — ADR-0021.
+          //
+          // The intent is carried in the upgrade URL now, and a re-rolled
+          // code is a DIFFERENT room, so this is a re-dial rather than a
+          // message on a socket whose room was already decided: the
+          // Cloudflare relay is one Durable Object per code, and a socket
+          // cannot move between rooms. `connect` recycles this socket
+          // without a `leave` (review F6), exactly as the message form did.
           codeRerolls++
-          if (codeRerolls <= CODE_REROLL_LIMIT) {
-            wantedCode = generateRoomCode()
-            ws.send(JSON.stringify({ type: 'create', code: wantedCode }))
-          } else {
-            wantedCode = null
-            ws.send(JSON.stringify({ type: 'create' }))
-          }
+          wantedCode = codeRerolls <= CODE_REROLL_LIMIT ? generateRoomCode() : null
+          connect('create')
         } else {
           // Every other relay error, including `room_expired` (ADR-0026)
           // and `not_in_room`. The decision is pure + unit-tested in
@@ -651,16 +668,13 @@ export const useRoomStore = defineStore('room', () => {
     status.value = 'connecting'
     error.value = null
 
-    const socket = new WebSocket(wsUrl())
+    const socket = new WebSocket(
+      // create carries the rolled code (or nothing, for the relay to mint
+      // one); join carries the code it is aiming at.
+      wsUrl(role, role === 'create' ? wantedCode : joinCode),
+    )
     ws = socket
 
-    socket.onopen = () => {
-      if (role === 'create') {
-        socket.send(JSON.stringify(wantedCode ? { type: 'create', code: wantedCode } : { type: 'create' }))
-      } else {
-        socket.send(JSON.stringify({ type: 'join', code: joinCode }))
-      }
-    }
     socket.onmessage = (event) => {
       try {
         handleMessage(JSON.parse(event.data as string))
