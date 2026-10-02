@@ -269,6 +269,12 @@ export const localizeLine = localizeQuantity
  * Localize scaled instruction steps for display. ONE helper, called by
  * both RecipeDetail and CookingView, so the two surfaces cannot drift.
  *
+ * Runs in BOTH systems: the catalog's dual notation reads badly in metric
+ * too (`220°C (425°F)`), and collapsing it to the target system is the
+ * point of the setting. `localizeText` is a no-op on a step that mentions
+ * no temperature and no length, so such a step is still bit-for-bit the
+ * authored string.
+ *
  * Structural on purpose: the caller owns its `ScaledStep` type, and this
  * module stays free of a runtime import of `recipe.ts`.
  */
@@ -276,7 +282,6 @@ export function localizeSteps<T extends { primary: string; details: string[] }>(
   steps: readonly T[],
   system: UnitSystem,
 ): T[] {
-  if (system === 'metric') return steps as T[]
   return steps.map((step) => ({
     ...step,
     primary: localizeText(step.primary, system),

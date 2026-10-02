@@ -183,8 +183,23 @@ describe('scaled steps (one shared helper, ADR-0047 §4)', () => {
     ])
   })
 
-  test('metric is the same array object — the unscaled authoring path is untouched', () => {
-    expect(localizeSteps(steps, 'metric')).toBe(steps)
+  test('metric collapses the dual notation too — the catalog reads badly in BOTH systems', () => {
+    expect(localizeSteps(steps, 'metric')).toEqual([
+      {
+        primary: 'Preheat oven to 220°C.',
+        // A detail line's authored MASS is prose, not a quantity: the
+        // ingredient list and the grocery list are the converted surfaces.
+        details: ['Chop 450 g of beef.'],
+        concurrent: false,
+      },
+      { primary: 'Meanwhile, preheat oven to 232°C.', details: [], concurrent: true },
+    ])
+  })
+
+  test('a step with no temperature and no length is the authored string, in BOTH systems', () => {
+    const plain = [{ primary: 'Fold in the flour until just combined.', details: ['Serve warm.'], concurrent: false }]
+    expect(localizeSteps(plain, 'metric')).toEqual(plain)
+    expect(localizeSteps(plain, 'imperial')).toEqual(plain)
   })
 
   test('structural: unrelated members survive the spread', () => {
