@@ -19,7 +19,11 @@ import {
  * pin loudly — that is the point.
  */
 
-const PINNED_DEFAULT_IDS = [17452, 6389, 9889, 6167]
+// Re-pinned after the 2,759-recipe catalog sync (2026-10-02): the 29 new
+// recipes change the eligible-slice rating mean AND enter the candidate pool,
+// so the arithmetic legitimately moves. Verified with
+// `bun run scripts/probe_autoplan_pin.ts`, which mirrors runAutoPlan.
+const PINNED_DEFAULT_IDS = [17452, 23775, 19678, 22308]
 
 /** Open + generate in the Auto-Plan dialog with the DEFAULT count 4. */
 async function generate(page: Page): Promise<void> {
