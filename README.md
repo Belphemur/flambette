@@ -220,8 +220,9 @@ bunx playwright test             # e2e suite (starts the relay itself)
 
 The relay is a zero-dependency Bun service (`server/`, Bun's native
 WebSocket API, in-memory only — a room is created by whichever client
-arrives first, deleted when its last peer leaves, and expires after 1h
-with no keepalive and no activity, 12h idle being the backstop);
+arrives first, deleted when its last peer leaves, and expires after 24h
+with no keepalive and no activity, a 7-day idle backstop; ADR-0038
+widened ADR-0026's clocks);
 `server/README.md` documents the wire protocol.
 
 ## Stack

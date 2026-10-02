@@ -44,9 +44,9 @@ interface RoomRow {
   state: string | null
   created_at: number
   last_activity: number
-  /** Absolute deadline of the 1h inactivity clock. */
+  /** Absolute deadline of the 24h inactivity clock. */
   inactivity_at: number
-  /** Absolute deadline of the 12h idle backstop. */
+  /** Absolute deadline of the 7-day idle backstop. */
   idle_at: number
   /** Monotonic peer counter, so `state.from` is stable and unique. */
   serial: number

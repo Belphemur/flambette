@@ -16,11 +16,11 @@
  * constant that drags a dependency in stops being shared.
  */
 
-/** Rooms close after 1h with no keepalive and no state activity (ADR-0026). */
-export const INACTIVITY_TTL_MS = 60 * 60 * 1000
+/** Rooms close after 24h with no keepalive and no state activity (ADR-0038, widening ADR-0026). */
+export const INACTIVITY_TTL_MS = 24 * 60 * 60 * 1000
 
 /** Backstop TTL for a room whose peers vanished without `leave`. */
-export const IDLE_TTL_MS = 12 * 60 * 60 * 1000
+export const IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 /**
  * Legacy relay-minted room codes: Crockford base32 with every vowel

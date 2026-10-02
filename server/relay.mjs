@@ -13,10 +13,10 @@
  *   room under the code it asked for, so a room is creatable by whoever
  *   shows up first instead of failing `not_found`.
  * - a room whose last peer leaves is deleted immediately.
- * - a room closes after 1h with no application-level `keepalive` and no
+ * - a room closes after 24h with no application-level `keepalive` and no
  *   state activity; the peers are told `room_expired` so they stop
- *   reconnecting. A 12h idle TTL is the backstop for peers that vanished
- *   without a `leave`.
+ *   reconnecting. A 7-day idle TTL is the backstop for peers that vanished
+ *   without a `leave` (ADR-0038, widening ADR-0026).
  *
  * Heartbeat ping/pong every 30s prunes dead SOCKETS — that is transport
  * liveness only and deliberately does NOT refresh room activity.
@@ -204,7 +204,7 @@ try {
             // named 'pong': that name belongs to the socket-level beat.
             // …and it refreshes BOTH expiry clocks (review F1): a peer
             // that is connected and keepaliving is, by definition, not
-            // an idle room — a 12h-connected household must never be
+            // an idle room — a 7-day-connected household must never be
             // closed by the idle backstop.
             const room = ws.data.roomCode ? registry.get(ws.data.roomCode) : undefined
             if (!room || !room.peers.has(ws)) {

@@ -153,11 +153,12 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   that returns re-joins, which re-creates it. The client sends
   `{type:'keepalive'}` once a minute while live (one interval per
   socket, cleared on every end path) and the relay closes a room after
-  1h of no keepalive AND no state activity; the 12h idle TTL is a
+  24h of no keepalive AND no state activity; the 7-day idle TTL is a
   redundant backstop refreshed by the SAME signals (keepalive included —
   a connected peer is not an idle room), and either clock firing tells
   the peers `room_expired` and clears their room code so a stale socket
-  can never write into, or delete, a room re-created under that code. A
+  can never write into, or delete, a room re-created under that code
+  (the windows are ADR-0038's, widening ADR-0026). A
   socket belongs to at most one room: join/create detaches it from the
   previous one, so a client that moved on is never notified about the
   room it left. `rev` is monotone per CODE (the floor survives the room

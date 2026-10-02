@@ -86,11 +86,11 @@ const PUSH_DEBOUNCE_MS = 300
 const RECONNECT_MIN_MS = 1000
 const RECONNECT_MAX_MS = 30_000
 /**
- * Application-level keepalive (ADR-0026). The relay closes a room after
- * 1h with no keepalive and no state activity, and tells its peers
- * `room_expired`. 60s is a wide margin on a 1h window while costing one
- * tiny frame a minute; it is NOT throttled server-side, so a long-lived
- * room can never spend its create/join budget on liveness.
+ * Application-level keepalive (ADR-0026; the windows are ADR-0038's). The
+ * relay closes a room after 24h with no keepalive and no state activity,
+ * and tells its peers `room_expired`. 60s is a wide margin on a 24h window
+ * while costing one tiny frame a minute; it is NOT throttled server-side,
+ * so a long-lived room can never spend its create/join budget on liveness.
  */
 const KEEPALIVE_MS = 60_000
 /** Re-rolls of a taken three-word code before falling back to a relay-minted one. */

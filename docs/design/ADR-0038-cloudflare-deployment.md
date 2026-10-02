@@ -87,10 +87,13 @@ room code:
   `{rev, at}` keeps the household's revision history for the idle TTL, then
   is pruned — the same promise the Bun relay's in-memory `revFloor` map makes.
 - **Expiry by DO alarms**, not timers: one alarm scheduled at the earlier of
-  the two clocks — 1h without `keepalive` AND without `state` activity
-  (ADR-0026), and the 12h idle backstop refreshed by the SAME signals. On
-  fire: push `room_expired` to every hibernating socket, close them, clear
-  the room row, keep the floor row until its own TTL. `keepalive` is never
+  the two clocks — 24h without `keepalive` AND without `state` activity, and
+  a 7-day idle backstop refreshed by the SAME signals. **This ADR widens
+  ADR-0026's clocks (1h / 12h) for BOTH relay backends**: durable storage
+  removes the memory pressure the short clocks were sized for, and one
+  lifecycle promise should not fork per platform. On fire: push
+  `room_expired` to every hibernating socket, close them, clear the room
+  row, keep the floor row until its own TTL. `keepalive` is never
   throttled and always refreshes both clocks, exactly as today.
 - **Hibernation**: `ctx.acceptWebSocket()` + `webSocketMessage` /
   `webSocketClose` handlers; the peer set is `ctx.getWebSockets()`.

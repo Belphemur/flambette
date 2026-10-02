@@ -12,13 +12,14 @@
  * - a room whose LAST peer leaves is deleted immediately, so "nobody is
  *   there" never needs to wait for a timer (its state goes with it; the
  *   returning client re-seeds the room on `joined`).
- * - two expiry clocks per room: a 1h INACTIVITY clock and the older 12h
- *   IDLE backstop. BOTH are refreshed by any liveness signal —
- *   keepalive included (review F1: a connected peer that keepalives is
- *   definitionally not an idle room, so a 12h-connected household must
- *   not be closed by the backstop). The 12h clock is therefore a
- *   redundant safety net that only matters if the 1h path ever breaks;
- *   the effective rule is "1h without keepalive or state traffic".
+ * - two expiry clocks per room: a 24h INACTIVITY clock and the older 7-day
+ *   IDLE backstop (ADR-0038, widening ADR-0026). BOTH are refreshed by any
+ *   liveness signal — keepalive included (review F1: a connected peer that
+ *   keepalives is definitionally not an idle room, so a 7-day-connected
+ *   household must not be closed by the backstop). The 7-day clock is
+ *   therefore a redundant safety net that only matters if the 24h path
+ *   ever breaks; the effective rule is "24h without keepalive or state
+ *   traffic".
  *   Firing either closes the room and tells its peers `room_expired`.
  * - a socket belongs to AT MOST ONE room: `attachPeer` detaches it from
  *   its previous room first (review F3), so a peer can never linger in
@@ -58,7 +59,7 @@ import {
  */
 export { CODE_ALPHABET, CODE_LENGTH, WORD_CODE_RE }
 
-/** Rooms close after 1h with no keepalive and no state activity (ADR-0026). */
+/** Rooms close after 24h with no keepalive and no state activity (ADR-0038, widening ADR-0026). */
 export const INACTIVITY_TTL_MS = Number(process.env.RELAY_INACTIVITY_TTL_MS ?? POLICY_INACTIVITY_TTL_MS)
 
 /** Backstop TTL for a room whose peers vanished without `leave`. */
@@ -132,7 +133,7 @@ export function createRoomRegistry({
     dropRoom(code)
   }
 
-  /** Restart the 1h inactivity clock. */
+  /** Restart the 24h inactivity clock. */
   function touchActivity(room) {
     clearTimer(room.inactivityTimer)
     room.inactivityTimer = setTimer(() => expireRoom(room.code, 'inactive'), inactivityTtlMs)
@@ -141,8 +142,8 @@ export function createRoomRegistry({
   /**
    * Restart BOTH clocks. Every liveness signal funnels through here —
    * create, join, state AND keepalive (review F1). The two clocks are
-   * now refreshed by the same events, so 12h is pure defence in depth;
-   * "1h of silence closes the room" is the promise the client relies on.
+   * now refreshed by the same events, so 7 days is pure defence in depth;
+   * "24h of silence closes the room" is the promise the client relies on.
    */
   function touchRoom(room) {
     touchActivity(room)
