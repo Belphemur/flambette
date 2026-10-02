@@ -1,4 +1,4 @@
-# Mealime Planner — two-service deployment.
+# Flambette — two-service deployment.
 #
 #   web   nginx serving the built SPA (the whole offline catalog + image
 #         archive is baked into the image; no volumes, no runtime fetches)
