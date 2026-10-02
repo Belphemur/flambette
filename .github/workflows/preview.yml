@@ -53,6 +53,13 @@ jobs:
           wranglerVersion: "4.136.3"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           command: preview --name pr-${{ github.event.pull_request.number || 'main' }}
+        # `wrangler preview` reads its credential from the ENVIRONMENT, not
+        # from the action's apiToken input (verified live on this PR's first
+        # run: "In a non-interactive environment, it's necessary to set a
+        # CLOUDFLARE_API_TOKEN environment variable").
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
   relay:
     runs-on: ubuntu-latest
@@ -75,3 +82,8 @@ jobs:
           wranglerVersion: "4.136.3"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           command: preview --name pr-${{ github.event.pull_request.number || 'main' }} --config server/wrangler.jsonc
+        # Same as the web job: the preview command reads CLOUDFLARE_API_TOKEN
+        # from the environment.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
