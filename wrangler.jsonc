@@ -19,8 +19,19 @@
     "directory": "./dist",
     "not_found_handling": "single-page-application",
   },
+  // Workers Observability: logs (incl. per-invocation logs) surfaced in the
+  // dashboard's Insights view for this worker; traces stay off.
   "observability": {
+    // `enabled` is the Insights master switch — omitted in the requested
+    // block, it would default to false and turn the feature OFF.
     "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+    },
+    "traces": {
+      "enabled": false,
+    },
   },
   "routes": [
     {
