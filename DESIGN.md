@@ -32,10 +32,26 @@ colors:
   hue-vegetarian-soft: "#86EFAC"
   hue-vegan: "#047857"
   hue-vegan-soft: "#6EE7B7"
+  meal-breakfast: "#946200"
+  meal-breakfast-soft: "#FBBF24"
+  meal-dessert: "#A81E6B"
+  meal-dessert-soft: "#F472B6"
+  meal-snack: "#8C5F33"
+  meal-snack-soft: "#EBC49A"
+  meal-lunch: "#3730A3"
+  meal-lunch-soft: "#A5B4FC"
+  meal-dinner: "#571814"
+  meal-dinner-soft: "#FDBCBC"
   nutrition-energy: "#B83A0A"
   nutrition-energy-soft: "#FBBF6E"
   nutrition-sodium: "#4F46E5"
   nutrition-sodium-soft: "#A5B4FC"
+  nutrition-protein: "#7C4DBE"
+  nutrition-protein-soft: "#C4A8F5"
+  nutrition-carbs: "#0E7490"
+  nutrition-carbs-soft: "#5CC0D8"
+  nutrition-fat: "#7A5F0C"
+  nutrition-fat-soft: "#E8C86A"
   warning: "#9A3412"
   warning-soft: "#FDBA74"
   danger: "#B91C1C"
@@ -253,6 +269,46 @@ components:
     backgroundColor: "{colors.surface-dark-raised}"
     textColor: "{colors.hue-vegan-soft}"
     size: 18px
+  icon-meal-breakfast:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.meal-breakfast}"
+    size: 18px
+  icon-meal-breakfast-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.meal-breakfast-soft}"
+    size: 18px
+  icon-meal-dessert:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.meal-dessert}"
+    size: 18px
+  icon-meal-dessert-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.meal-dessert-soft}"
+    size: 18px
+  icon-meal-snack:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.meal-snack}"
+    size: 18px
+  icon-meal-snack-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.meal-snack-soft}"
+    size: 18px
+  icon-meal-lunch:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.meal-lunch}"
+    size: 18px
+  icon-meal-lunch-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.meal-lunch-soft}"
+    size: 18px
+  icon-meal-dinner:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.meal-dinner}"
+    size: 18px
+  icon-meal-dinner-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.meal-dinner-soft}"
+    size: 18px
   icon-nutrition-energy:
     backgroundColor: "{colors.surface-raised}"
     textColor: "{colors.nutrition-energy}"
@@ -269,6 +325,24 @@ components:
     backgroundColor: "{colors.surface-dark-raised}"
     textColor: "{colors.nutrition-sodium-soft}"
     size: 18px
+  donut-protein:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.nutrition-protein}"
+  donut-protein-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.nutrition-protein-soft}"
+  donut-carbs:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.nutrition-carbs}"
+  donut-carbs-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.nutrition-carbs-soft}"
+  donut-fat:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.nutrition-fat}"
+  donut-fat-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.nutrition-fat-soft}"
 ---
 
 # Mealime Planner — Design System
@@ -362,6 +436,14 @@ use a real surface and a visible outline in both themes.
 | Vegan | Sprout | `hue-vegan` / `hue-vegan-soft` | Distinct mint-green sprout in the existing vegan diet filter |
 | Energy / calories | Flame | `nutrition-energy` / `nutrition-energy-soft` | Card metadata and recipe nutrition |
 | Sodium | Droplet | `nutrition-sodium` / `nutrition-sodium-soft` | Recipe nutrition only; NOT browse cards |
+| Protein (calories) | — (no glyph) | `nutrition-protein` / `nutrition-protein-soft` | Nutrition-facts macro donut arc + legend only |
+| Carbohydrates (calories) | — (no glyph) | `nutrition-carbs` / `nutrition-carbs-soft` | Nutrition-facts macro donut arc + legend only |
+| Fat (calories) | — (no glyph) | `nutrition-fat` / `nutrition-fat-soft` | Nutrition-facts macro donut arc + legend only |
+
+The three macro tokens are ARC/LEGEND identities, not food identities: a
+recipe is never "the violet one", so they appear nowhere outside the nutrition
+facts modal. They carry NO glyph and NO `IconRole` — the legend word beside the
+arc is the name, exactly as a labelled control's word is.
 
 Vegetarian is fresh green, not the old yellow/olive. Vegan is a separate green
 and a different silhouette. Glyph + accessible name carry the distinction even
@@ -376,7 +458,10 @@ category; the published categories and existing diet heuristics stay unchanged.
 for the values above give white on tomato **6.00:1** (hover **8.32:1**). Across
 all four allowed light backgrounds (page, card, band, selected tint), the six
 food/nutrition foregrounds are at least **4.59:1**; their dark counterparts are
-at least **5.64:1** across the four dark equivalents. Muted text is at least
+at least **5.64:1** across the four dark equivalents. The three macro tokens
+(`nutrition-protein` **4.92:1**, `nutrition-carbs` **4.59:1**,
+`nutrition-fat` **5.19:1** light; **6.77 / 6.59 / 8.51:1** dark) are measured
+against the same four surfaces. Muted text is at least
 **5.99:1** light / **6.99:1** dark. These are token-pair checks; rendered states,
 opacity, imagery, inheritance and focus must still be tested in the browser.
 

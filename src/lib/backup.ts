@@ -301,7 +301,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
         return 'settings.json householdRoom must be a string'
       }
       if (v.stepTimers !== undefined && !isStepTimersMap(v.stepTimers)) {
-        return 'settings.json stepTimers must map variant ids to { viewIndex: timer }'
+        return 'settings.json stepTimers must map variant ids to { timerId: timer }'
       }
       if (v.theme !== undefined) {
         if (typeof v.theme !== 'object' || v.theme === null || Array.isArray(v.theme)) {

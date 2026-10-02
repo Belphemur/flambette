@@ -1,0 +1,94 @@
+# ADR-0041 · Global multi-timer strip + recipe-detected timer suggestions
+
+**Status:** Accepted
+**Date:** 2026-10-01
+**Supersedes (placement only):** ADR-0038 step-timers-move-under-step-views
+**Extends:** ADR-0020 (per-step timers), ADR-0010 (Meanwhile pairing is one view)
+
+## Context
+
+ADR-0038 moved the ADR-0020 timer controls INTO the step body. The owner
+retested that shape while cooking and reversed it: while juggling an oven,
+a pot of rice and a sauce, the timer controls must be reachable from ANY
+step AND run CONCURRENTLY — a per-step single timer cannot represent
+"oven 25 min + rice 12 min" live at once.
+
+## Decision
+
+1. **Placement: global strip again.** ONE horizontal strip docked in the
+   cooking experience, above the step body / footer nav, visible from every
+   view (the ADR-0020-era placement, restored). It keeps the measured
+   h-11 hit targets. The ADR-0038 per-step `step-timer-row` is removed;
+   ADR-0020's derive-from-`startedAt` countdown model persists untouched.
+
+2. **Multiple concurrent named timers.** `stepTimer` becomes a LIST in the
+   ui store: a timer carries `{ id: number, label: string, remaining:
+   number, running: boolean, startedAt: number | null }` (label free-text,
+   ≤24 chars, e.g. "Oven", "Rice"). Every timer starts independently; the
+   strip renders one chip per timer simultaneously (countdown + label +
+   pause + delete); taps open/continue that timer only. Adding a timer
+   opens the preset ladder (ADR-0020's `TIMER_PRESETS_MIN` 1/3/5/10/15/20/30
+   + custom minutes + first-view-only recipe-total) AND a name field that
+   pre-fills from context (below). Limit 4 concurrent timers (screen
+   space on Pixel 7); adding a 5th asks which to replace.
+
+3. **Recipe-detected suggestion (build-time, per-recipe artifact).** Timer
+   hints are extracted OFFLINE from the raw catalog by a stdlib Python
+   script — the repo's existing generated-data pattern
+   (`scripts/extract_ingredients.py`, `scripts/build_pack_index.py` in
+   AGENTS.md). New `scripts/extract_timer_hints.py` scans each
+   `public/data/recipes/<variantId>.json` step text (incl. measured-amount
+   lines) for an explicit cook duration ("Simmer the rice for 12 minutes",
+   "Bake 20–25 min") and writes the matching sidecar artifact
+   `public/data/recipes/<variantId>.timer.json`:
+   `{ steps: [{ step: number, seconds: number, label?: string,
+   range?: [number, number] }] }` — one file per recipe, sitting NEXT TO
+   the recipe so the UI can `import()` / fetch it ON DEMAND only for the
+   variant being read (no global index load). Ranges record BOTH bounds;
+   the UI suggests the lower bound and says so ("Bake 20 min (of 20–25)";
+   ADR-0022's no-fabrication rule holds: only authored durations are
+   extracted). Absent step has no timer → file is `steps: []` (or omitted
+   entirely). The runtime lib `src/lib/timerSuggest.ts` is a pure lookup
+   over the per-recipe object keyed by current step number. Register the
+   script+artifact convention in the AGENTS.md generated-data table.
+
+4. **Ambiguous anchors do NOT arm silently.** Per the screenshot, the strip
+   sits between the step body (instruction + checklist) and the footer.
+   The add affordance stays explicit (`timer-add`): tapping it opens the
+   panel — **but when the current step has a recipe-detected hint and no
+   timer of the SAME TYPE is yet running for this recipe, the panel opens
+   itself pre-filled with that suggestion instead of the empty add-state**
+   (so "Simmer 15–18 min" arms without a tap). "Same type" is matched on
+   the normalized label (case-insensitive suggestion-label vs chip label:
+   a live "Oven" chip does NOT suppress a "Rice" suggestion, and
+   vice versa — the owner's oven/rice example), so one cook can hold both
+   pre-fills at once; the concurrency cap (§2) still applies on top. An
+   already-running timer of a DIFFERENT type is unaffected (its chip stays;
+   the panel still auto-opens for the new type). Explicit user intent gates
+   every arm/edge-case, no toast-surface countdown (ADR-0020's rule holds):
+   the pre-filled proposal always lands in the confirm shape (name +
+   minutes) on open; `timer-confirm` is disabled at 0 minutes; Escape/
+   `timer-cancel` aborts — nothing auto-arms.
+
+5. **Persistence & reload honesty.** The list is stored under the existing
+   `ui.stepTimers[variantId]` key as `{ [timerId]: StepTimer … }` — the
+   backup registry (ADR-0013) needs NO new slice. On reload, every running
+   timer derives from its `startedAt` (never re-armed; an expired-timer
+   dismissal confirms like the ADR-0020 finish flow).
+
+6. **Leave-with-running-timers confirm** = every RUNNING timer asks before
+   Finish/close (ADR-0020's confirm, generalised to a list).
+
+## Consequences
+
+- Positive: a cook juggling parallel jobs represents them all at once, from
+  any step, with values authored by the recipe itself, not from memory.
+- Neutral: single-timer flows stay one tap (the one chip reads the same).
+- Accepting: the strip needs a scroll/shrink rule at 4 chips (grid shrinks
+  the label of the least-recently-started chip first). Parser drift of the
+  pure lib vs the authored text is tolerated — a missed suggestion NEVER
+  invents a timer; a misparsed one is always user-confirmed before arming.
+- e2e: `step-timer-row` hooks disappear; new hooks per chip
+  (`data-test="timer-chip-*"`); the timed flows keep
+  `step-timer`/`timer-preset-*`/`timer-clear` contracts (`step-timer` is
+  the chip's countdown button; one per chip).

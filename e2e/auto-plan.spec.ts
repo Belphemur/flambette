@@ -19,7 +19,20 @@ import {
  * pin loudly — that is the point.
  */
 
-const PINNED_DEFAULT_IDS = [17452, 6389, 9889, 6167]
+// The generation-0 4-pack after the 2,759-recipe catalog sync (2026-10-02).
+// The 29 new recipes change the eligible-slice rating mean AND enter the
+// candidate pool, so the arithmetic legitimately moves — but only inside the
+// DINNER slice: `ui.autoPlanRuleset` defaults to 'dinner', so that is the
+// eligible set the seed ranks over.
+//
+// The 0f74ee6 re-pin here ([17452, 23775, 19678, 22308]) was captured from
+// `scripts/probe_autoplan_pin.ts` while that probe mirrored the planner with
+// NO ruleset constraint, so it sampled the whole catalog and picked up
+// "Apple Slices with Cinnamon-Honey Peanut Butter" — a snack, in a pack the
+// app can never generate. The probe now applies the dinner default and
+// reports the pack below as HOLDS. A pin is only worth anything if the thing
+// producing it is a faithful mirror; verify with the probe, not by eye.
+const PINNED_DEFAULT_IDS = [17452, 9889, 6389, 6167]
 
 /** Open + generate in the Auto-Plan dialog with the DEFAULT count 4. */
 async function generate(page: Page): Promise<void> {
@@ -334,7 +347,8 @@ test('ruleset select: dessert-only run yields only desserts', async ({ page }) =
 
   await page.getByTestId('auto-plan-button').first().click()
   await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
-  await page.getByTestId('auto-plan-ruleset').selectOption('dessert')
+  await page.getByTestId('auto-plan-ruleset').click()
+  await page.getByTestId('auto-plan-option-dessert').click()
   await page.getByTestId('auto-plan-generate').click()
   await expect(page.getByTestId('auto-plan-confirm')).toBeVisible({ timeout: 15_000 })
   await confirm(page)
@@ -346,6 +360,39 @@ test('ruleset select: dessert-only run yields only desserts', async ({ page }) =
   await expectZeroMealimeRequests(page)
 })
 
+test('the taxonomy dropdown offers Lunch and Snack, and Lunch plans only simple meals', async ({ page }) => {
+  // ADR-0046 §2.2: the dialog's meal-type options come from
+  // mealTypeFilter's exports — the old hard-coded RULESETS list had
+  // drifted and left Lunch (`simple`, the biggest occasion) and Snack
+  // unreachable from Auto-Plan. The label↔ruleset mapping is the thing
+  // that must not silently flip: picking LUNCH must yield ruleset
+  // 'simple' meals, which is what the tail of this test pins.
+  await page.goto('/plan')
+  await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
+
+  await page.getByTestId('auto-plan-button').first().click()
+  await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+  await page.getByTestId('auto-plan-ruleset').click()
+  const menu = page.getByTestId('auto-plan-ruleset-menu')
+  await expect(menu).toBeVisible()
+  // Any + the five offered occasions.
+  await expect(menu.getByRole('option')).toHaveCount(6)
+  await expect(menu.getByRole('option', { name: /^Lunch, \d+ recipes$/ })).toBeVisible()
+  await expect(menu.getByRole('option', { name: /^Snack, \d+ recipes$/ })).toBeVisible()
+
+  await page.getByTestId('auto-plan-option-simple').click()
+  await expect(page.getByTestId('auto-plan-ruleset')).toContainText('Lunch')
+  await page.getByTestId('auto-plan-generate').click()
+  await expect(page.getByTestId('auto-plan-confirm')).toBeVisible({ timeout: 15_000 })
+  await confirm(page)
+
+  const ids = await plannedIds(page)
+  expect(ids.length).toBe(4)
+  const metas = await metaFor(page, ids)
+  for (const m of metas) expect(m.ruleset).toBe('simple')
+  await expectZeroMealimeRequests(page)
+})
+
 test('empty pack (pool exhausted) can never erase or modify the plan', async ({ page }) => {
   await page.goto('/plan')
   await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
@@ -353,8 +400,10 @@ test('empty pack (pool exhausted) can never erase or modify the plan', async ({ 
   // dessert + meat leaves no candidates in the catalog → empty pack.
   await page.getByTestId('auto-plan-button').first().click()
   await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
-  await page.getByTestId('auto-plan-ruleset').selectOption('dessert')
-  await page.getByTestId('auto-plan-category').selectOption('meat')
+  await page.getByTestId('auto-plan-ruleset').click()
+  await page.getByTestId('auto-plan-option-dessert').click()
+  await page.getByTestId('auto-plan-category').click()
+  await page.getByTestId('auto-plan-option-meat').click()
   await page.getByTestId('auto-plan-generate').click()
   await expect(page.getByTestId('auto-plan-preview')).toBeVisible({ timeout: 15_000 })
 
@@ -475,7 +524,8 @@ test('backup export/import round-trips the auto-plan ui slices', async ({ page }
   // Change the persisted settings through the dialog.
   await page.getByTestId('auto-plan-button').first().click()
   await page.getByTestId('auto-plan-mode-replace').click()
-  await page.getByTestId('auto-plan-ruleset').selectOption('breakfast')
+  await page.getByTestId('auto-plan-ruleset').click()
+  await page.getByTestId('auto-plan-option-breakfast').click()
   await page.getByRole('button', { name: 'Close auto-plan' }).click()
   await page.evaluate(() => {
     const pinia = document.querySelector('#app')?.__vue_app__?.config?.globalProperties?.$pinia
@@ -507,11 +557,66 @@ test('backup export/import round-trips the auto-plan ui slices', async ({ page }
   await gotoTab(page, 'Plan')
   await page.getByTestId('auto-plan-button').first().click()
   await expect(page.getByTestId('auto-plan-mode-replace')).toHaveAttribute('aria-checked', 'true')
-  await expect(page.getByTestId('auto-plan-ruleset')).toHaveValue('breakfast')
+  // The dropdown is a button trigger, not a `<select>`: the persisted
+  // ruleset surfaces as the trigger's label (ADR-0046 §2.4).
+  await expect(page.getByTestId('auto-plan-ruleset')).toContainText('Breakfast')
   const gen = await page.evaluate(() => {
     const pinia = document.querySelector('#app')?.__vue_app__?.config?.globalProperties?.$pinia
     return pinia.state.value.ui.autoPlanGeneration
   })
   expect(gen).toBe(42)
+  await expectZeroMealimeRequests(page)
+})
+
+// ---------------------------------------------------------------------------
+// Mobile scroll contract (post-ship, ADR-0046 §4): the sheet sits low in a
+// phone window and its dropdown popups used to run straight past the
+// viewport edge — the owner's screenshot showed the meal-type menu cut at
+// the fold with no way to reach Dinner. The popup now clamps to the space
+// below its trigger and scrolls inside (the Headless UI anchor-padding
+// contract), and the sheet itself scrolls once the preview grid grows.
+// ---------------------------------------------------------------------------
+test('dropdown popups clamp to the window and scroll to reach every option', async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 560 })
+  await page.goto('/plan')
+  await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
+  await page.getByTestId('auto-plan-button').first().click()
+  await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+
+  // Meal type: the popup must not run past the bottom of the window…
+  const mealMenu = page.getByTestId('auto-plan-ruleset-menu')
+  await page.getByTestId('auto-plan-ruleset').click()
+  await expect(mealMenu).toBeVisible()
+  let box = (await mealMenu.boundingBox())!
+  expect(box!.y + box!.height).toBeLessThanOrEqual(560)
+  // …and the clamped popup scrolls: the last option (Dinner) is reachable.
+  await page.getByTestId('auto-plan-option-dinner').scrollIntoViewIfNeeded()
+  await expect(page.getByTestId('auto-plan-option-dinner')).toBeInViewport()
+  await page.keyboard.press('Escape')
+
+  // Protein: same contract from the row below it — even less room there.
+  const proteinMenu = page.getByTestId('auto-plan-category-menu')
+  await page.getByTestId('auto-plan-category').click()
+  await expect(proteinMenu).toBeVisible()
+  box = (await proteinMenu.boundingBox())!
+  expect(box!.y + box!.height).toBeLessThanOrEqual(560)
+  await page.getByTestId('auto-plan-option-vegetarian').scrollIntoViewIfNeeded()
+  await expect(page.getByTestId('auto-plan-option-vegetarian')).toBeInViewport()
+  await expectZeroMealimeRequests(page)
+})
+
+test('the sheet keeps BOTH ends reachable once the preview grid grows', async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 560 })
+  await page.goto('/plan')
+  await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
+  await generate(page)
+  const dialog = page.getByTestId('auto-plan-dialog')
+  // The scrim is `items-end`, so an unclamped panel overflows UPWARD and
+  // clips the header + close button off the top of the window.
+  await expect(dialog.getByRole('button', { name: 'Close auto-plan' })).toBeInViewport()
+  // The preview's confirm row is inside the panel's own scroll.
+  const confirmBtn = page.getByTestId('auto-plan-confirm')
+  await confirmBtn.scrollIntoViewIfNeeded()
+  await expect(confirmBtn).toBeInViewport()
   await expectZeroMealimeRequests(page)
 })

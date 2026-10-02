@@ -43,6 +43,7 @@ describe('settings import (ADR-0013 registry)', () => {
     settingsSlice().write({
       quickFilters: { diets: ['vegan'], protein: 'fish', maxTime: 30, sortBy: 'time', favOnly: true, proOnly: false },
       householdRoom: 'amber-falcon-lantern',
+      // A pre-ADR-0041 record: no label, keyed by step-VIEW index.
       stepTimers: { 42: { 0: { remaining: 120, running: false, startedAt: null } } },
     })
 
@@ -53,6 +54,7 @@ describe('settings import (ADR-0013 registry)', () => {
     expect(ui.quickFilters).toEqual({
       diets: [],
       protein: '',
+      mealType: null,
       maxTime: null,
       sortBy: 'rating',
       favOnly: false,
@@ -114,25 +116,33 @@ describe('settings import (ADR-0013 registry)', () => {
       quickFilters: {
         diets: ['no-pork', 'no-meat'],
         protein: 'meat',
+        mealType: -1,
         maxTime: 45,
         sortBy: 'calories',
         favOnly: false,
         proOnly: true,
       },
       householdRoom: 'amber-falcon-lantern',
-      stepTimers: { 7: { 3: { remaining: 60, running: true, startedAt: 123 } } },
+      stepTimers: { 7: { 3: { id: 3, label: 'Rice', remaining: 60, running: true, startedAt: 123 } } },
     })
     const ui = useUiStore()
     expect(ui.quickFilters).toEqual({
       diets: ['no-pork', 'no-meat'],
       protein: 'meat',
+      mealType: -1,
       maxTime: 45,
       sortBy: 'calories',
       favOnly: false,
       proOnly: true,
     })
     expect(ui.householdRoom).toBe('amber-falcon-lantern')
-    expect(ui.stepTimers[7][3]).toEqual({ remaining: 60, running: true, startedAt: 123 })
+    expect(ui.stepTimers[7][3]).toEqual({
+      id: 3,
+      label: 'Rice',
+      remaining: 60,
+      running: true,
+      startedAt: 123,
+    })
   })
 
   test('a pre-ADR-0027 backup still restores its diet chips', () => {

@@ -703,6 +703,7 @@ describe('room store — quick filters are household state (ADR-0028)', () => {
     expect((seeded.state as { filters?: unknown }).filters).toEqual({
       diets: ui.quickFilters.diets,
       protein: ui.quickFilters.protein,
+      mealType: ui.quickFilters.mealType,
       maxTime: ui.quickFilters.maxTime,
       sortBy: ui.quickFilters.sortBy,
       proOnly: ui.quickFilters.proOnly,

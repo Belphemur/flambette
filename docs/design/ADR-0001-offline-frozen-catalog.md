@@ -14,7 +14,7 @@ visitor's browser.
 
 ## Decision
 
-The full catalog (2,730 recipe variant docs + images) is scraped once
+The full catalog (2,759 recipe variant docs + images) is scraped once
 and committed into the repo (`public/data/`, `public/img/recipes/`).
 The SPA makes **zero runtime requests to any `mealime.com` host**.
 This is enforced in e2e (`blockExternalRequests` +

@@ -24,6 +24,7 @@ describe('normalizeQuickFilters', () => {
     const f: QuickFilters = {
       diets: ['vegan', 'no-pork'],
       protein: 'fish',
+      mealType: -2,
       maxTime: 30,
       sortBy: 'time',
       favOnly: true,
@@ -36,6 +37,29 @@ describe('normalizeQuickFilters', () => {
     expect(
       normalizeQuickFilters({ diets: ['vegan', 'keto', 'vegan', 7, null] })?.diets,
     ).toEqual(['vegan'])
+  })
+
+  test('meal type: an offered id round-trips, anything else means Any (ADR-0043)', () => {
+    // The five occasions the dropdown offers are the only accepted ids.
+    expect(normalizeQuickFilters({ mealType: -2 })?.mealType).toBe(-2)
+    // `cpg` (-6) is COUNTED for partition parity but is not a meal
+    // anyone plans around, so the dropdown never offers it.
+    expect(normalizeQuickFilters({ mealType: -6 })?.mealType).toBeNull()
+    // A stale peer, a truncated payload and a variant id (always positive)
+    // all land on Any rather than on a facet that would blank the grid.
+    expect(normalizeQuickFilters({ mealType: 17 })?.mealType).toBeNull()
+    expect(normalizeQuickFilters({ mealType: 'dinner' })?.mealType).toBeNull()
+    expect(normalizeQuickFilters({})?.mealType).toBeNull()
+  })
+
+  test('a meal type counts as an active filter and as a room-visible change', () => {
+    const base = defaultQuickFilters()
+    expect(hasActiveFilters(base)).toBe(false)
+    const dessert = { ...base, mealType: -2 } as QuickFilters
+    expect(hasActiveFilters(dessert)).toBe(true)
+    expect(sameQuickFilters(base, dessert)).toBe(false)
+    // …and it is household state, so it travels with the rest.
+    expect(toSharedFilters(dessert).mealType).toBe(-2)
   })
 
   test('a partial payload keeps its members and defaults the rest', () => {

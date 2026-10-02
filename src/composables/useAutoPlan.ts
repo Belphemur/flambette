@@ -10,6 +10,12 @@ import { usePlanStore } from '../stores/plan'
 import { useFavouritesStore } from '../stores/favourites'
 import { useRatingStore } from '../stores/rating'
 import { useUiStore } from '../stores/ui'
+// Type-only: the ruleset FILTER is the taxonomy's own ruleset values, so
+// the union is DERIVED from the one source (ADR-0046 §2.3) — a second
+// hand-written copy is exactly what already drifted (Lunch/Snack missing
+// from the Auto-Plan dialog's local list). Erased at runtime, so the
+// store's runtime import edge is not reciprocated.
+import type { OFFERED_MEAL_TYPES } from '../lib/mealTypeFilter'
 
 /**
  * Auto-Plan (ADR-0024): loads the pack index ONCE (memoized promise) and
@@ -56,7 +62,14 @@ export function getPackIndex(): Promise<PackIndex> {
   return indexPromise
 }
 
-export type AutoPlanRulesetFilter = 'dinner' | 'breakfast' | 'dessert' | 'any'
+/** The ruleset values the offered meal occasions select (mealTypeFilter). */
+export type OccasionRuleset = (typeof OFFERED_MEAL_TYPES)[number]['ruleset']
+
+/**
+ * Ruleset constraint for Auto-Plan (ADR-0027, widened by ADR-0046): the
+ * five offered occasions + 'any', which imposes none. Default 'dinner'.
+ */
+export type AutoPlanRulesetFilter = OccasionRuleset | 'any'
 
 export interface AutoPlanOptions {
   count: number

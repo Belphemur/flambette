@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { blockExternalRequests, expectZeroMealimeRequests, waitForCatalog } from './helpers'
 
 /**
@@ -291,6 +291,117 @@ test.describe('the recipe detail', () => {
     const a = (await dialog.getByTestId('detail-actions').boundingBox())!
     const n = (await dialog.getByTestId('nutrition').boundingBox())!
     expect(n.y).toBeGreaterThan(a.y)
+  })
+
+  test('the facts modal shows a derived macro donut and closes on Escape', async ({ page }) => {
+    await blockExternalRequests(page)
+    // A PINNED variant whose published macros account for its energy, so
+    // this case is about the donut rather than about which recipe the
+    // default sort happens to surface. The refusal path is unit-tested
+    // in `src/lib/nutrition.test.ts`.
+    await page.goto('/')
+    await waitForCatalog(page)
+    await page.locator('[data-variant-id="21756"] [data-test="recipe-card-link"]').first().click()
+    const detail = page.getByRole('dialog')
+    await expect(detail.getByTestId('nutrition')).toBeVisible()
+
+    await detail.getByTestId('nutrition-open').click()
+    const modal = page.getByTestId('nutrition-modal')
+    await expect(modal).toBeVisible()
+    await expect(modal).toHaveAttribute('aria-modal', 'true')
+    // Per serving, and the donut is calories-derived (ADR-0004, ADR-0039).
+    await expect(modal).toContainText('per serving')
+    await expect(modal.getByTestId('nutrition-donut-calories')).toHaveText(/^\d+$/)
+
+    // The three legend percentages exist and sum to 100 within rounding.
+    const pcts = await Promise.all(
+      ['fat', 'carbs', 'protein'].map(async (id) => {
+        const text = (await modal.getByTestId(`nutrition-legend-${id}`).textContent())!
+        return Number(text.match(/(\d+)%/)![1])
+      }),
+    )
+    for (const pct of pcts) expect(pct).toBeGreaterThan(0)
+    expect(pcts.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(99)
+    expect(pcts.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(101)
+
+    // The grouped facts are there, sodium included, in the modal now.
+    await expect(modal.getByTestId('nutrition-group-minerals')).toBeVisible()
+    await expect(modal.locator('[data-key="sodium"]')).toBeVisible()
+    // Amino acids stay collapsed until asked for.
+    await expect(modal.locator('[data-key="alanine"]')).toHaveCount(0)
+
+    // Every catalog key carries its PUBLISHED unit: the trace minerals and
+    // vitamins are milligrams/micrograms, never grams (ADR-0039 §2). A
+    // partial unit table printed "1190 g potassium".
+    for (const [key, unit] of [
+      ['potassium', 'mg'],
+      ['calcium', 'mg'],
+      ['vitamin_c', 'mg'],
+      ['selenium', 'µg'],
+      ['vitamin_a', 'µg'],
+    ] as const) {
+      const line = modal.locator(`[data-key="${key}"]`)
+      if ((await line.count()) > 0) await expect(line).toContainText(unit)
+    }
+
+    // The legend dots are PAINTED (a filled background), and so is the
+    // track ring — an unfilled legend beside a borderless track rendered
+    // an invisible chart.
+    const fatDot = modal.locator('[data-test="nutrition-legend-fat"] span').first()
+    await expect
+      .poll(() =>
+        fatDot.evaluate((el) => getComputedStyle(el).backgroundColor),
+      )
+      .not.toBe('rgba(0, 0, 0, 0)')
+    const track = modal.locator('[data-test="nutrition-donut"] svg circle').first()
+    expect(await track.getAttribute('stroke')).toBe('currentColor')
+
+    // Escape closes the MODAL, not the detail behind it.
+    await page.keyboard.press('Escape')
+    await expect(modal).toHaveCount(0)
+    await expect(page.getByTestId('detail-title')).toBeVisible()
+    // …and focus returns to the trigger that opened it, so a keyboard
+    // user does not lose their place.
+    await expect(detail.getByTestId('nutrition-open')).toBeFocused()
+    await expectZeroMealimeRequests(page)
+  })
+
+  test('the facts modal TRAPS focus and puts it back on close', async ({ page }) => {
+    await blockExternalRequests(page)
+    await page.goto('/')
+    await waitForCatalog(page)
+    await page.locator('[data-variant-id="21756"] [data-test="recipe-card-link"]').first().click()
+    const detail = page.getByRole('dialog')
+    await expect(detail.getByTestId('nutrition')).toBeVisible()
+    await detail.getByTestId('nutrition-open').click()
+
+    const modal = page.getByTestId('nutrition-modal')
+    await expect(modal).toBeVisible()
+    // Focus moves into the panel on open.
+    await expect(modal).toBeFocused()
+
+    // Tab (and Shift+Tab) stay INSIDE the dialog: the modal is teleported
+    // to <body>, so without a trap they walk into the still-mounted
+    // recipe detail behind the backdrop.
+    const focusInside = () =>
+      page.evaluate(() => {
+        const panel = document.querySelector('[data-test="nutrition-modal"]')
+        return !!panel && !!document.activeElement && panel.contains(document.activeElement)
+      })
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press('Tab')
+      expect(await focusInside()).toBe(true)
+    }
+    for (let i = 0; i < 4; i++) {
+      await page.keyboard.press('Shift+Tab')
+      expect(await focusInside()).toBe(true)
+    }
+
+    // The close BUTTON is a real close path too, and it restores focus.
+    await modal.getByTestId('nutrition-modal-close').click()
+    await expect(modal).toHaveCount(0)
+    await expect(detail.getByTestId('nutrition-open')).toBeFocused()
+    await expectZeroMealimeRequests(page)
   })
 })
 
@@ -593,6 +704,114 @@ test.describe('touch viewport never gets the hover affordance', () => {
     expect(await firstRowCount(page)).toBe(2)
     const shell = (await page.locator('[data-test="app-shell"]').boundingBox())!
     expect(shell.width).toBeLessThanOrEqual(page.viewportSize()!.width)
+    await expectZeroMealimeRequests(page)
+  })
+})
+test.describe('icon tooltips (pointer)', () => {
+  // Hover the ICON's bounding box: the host span is pointer-transparent
+  // (the card link keeps its click path), so Playwright's actionability
+  // check would reject locator.hover() on it — move the mouse to the
+  // rect's centre directly instead.
+  async function hoverBox(page: Page, locator: Locator) {
+    const box = (await locator.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  }
+
+  test('a bare food-type icon shows its category name on ICON hover, not on card hover', async ({ page, isMobile }) => {
+    // ADR-0044: the bubble is scoped to the ICON by a shared hit-test of
+    // the icon's own rect. Hovering the photo/title/card padding does NOT
+    // open it (the owner's first symptom), and the recipe detail page
+    // gets the same mechanism for free (the owner's second symptom).
+    // Still gated by `@media (hover: hover)` (ADR-0040): the touch
+    // project is provably exempt rather than untested.
+    test.skip(isMobile === true, 'pointer affordance only')
+    await page.setViewportSize(DESKTOP_VIEWPORT)
+    await blockExternalRequests(page)
+    await page.goto('/')
+    await waitForCatalog(page)
+
+    // A card's type icon is the BARE icon that carries the meaning on its
+    // own (the category word is not printed beside it), so it is exactly
+    // what a tooltip is for.
+    const named = page.locator('[data-test="recipe-card"] svg[role="img"]').first()
+    await expect(named).toBeVisible()
+    const name = await named.getAttribute('aria-label')
+    expect(name).toBeTruthy()
+
+    const wrapper = named.locator('xpath=..')
+    const bubble = wrapper.locator('[data-test="icon-tooltip"]')
+    // 1. Hidden at rest — hovering NOTHING yet.
+    await expect(bubble).toBeHidden()
+
+    // 2. Hover the icon's own bounding box: the bubble opens and its text
+    // is the icon's accessible name (the visual dual of it, never a
+    // second thing for AT to read).
+    await hoverBox(page, named)
+    await expect(bubble).toBeVisible()
+    await expect(bubble).toHaveText(name!)
+    await expect(bubble).toHaveAttribute('aria-hidden', 'true')
+
+    // 3. THE REGRESSION (owner report): move the pointer clearly OFF the
+    // icon onto the card's photo — a card hover must NOT open the bubble.
+    const photo = page.locator('[data-test="recipe-card"]').first().locator('img')
+    await hoverBox(page, photo)
+    await expect(bubble).toBeHidden()
+
+    // 4. The KEYBOARD path reaches the same information: the host span is
+    // focusable (the bare icon is inside neither a button nor a link), so
+    // focus it and the bubble opens without a pointer.
+    await page.mouse.move(0, 0)
+    await expect(bubble).toBeHidden()
+    const host = page.locator('[data-test="hue-icon"]').first()
+    await host.focus()
+    await expect(host).toBeFocused()
+    await expect(bubble).toBeVisible()
+    await expect(bubble).toHaveText(name!)
+
+    // 5. The host is pointer-transparent, so a click ON THE ICON still
+    // reaches the card's stretched link and opens the recipe.
+    expect(await host.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none')
+    const box = (await named.boundingBox())!
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+    await expect(page.getByTestId('detail-title')).toBeVisible()
+    await expectZeroMealimeRequests(page)
+  })
+
+  test('the recipe detail header icon has its own tooltip, scoped to the icon', async ({ page, isMobile }) => {
+    // ADR-0044: the recipe page was the surface with NO tooltip at all —
+    // no ancestor carried the old group, so the bubble could never render
+    // there. One mechanism serves both surfaces; this pins the second one.
+    test.skip(isMobile === true, 'pointer affordance only')
+    await page.setViewportSize(DESKTOP_VIEWPORT)
+    await blockExternalRequests(page)
+    await page.goto('/')
+    await waitForCatalog(page)
+
+    // Open the first card — the one the browse case proves carries a
+    // named type icon — and land on its detail page.
+    await page.locator('[data-test="recipe-card-link"]').first().click()
+    await expect(page.getByTestId('detail-title')).toBeVisible()
+
+    // The header's type icon: the first hue-icon under the detail header
+    // that carries a role="img" accessible name.
+    const host = page
+      .locator('header [data-test="hue-icon"]', { has: page.locator('svg[role="img"]') })
+      .first()
+    await expect(host).toBeVisible()
+    const name = await host.locator('svg[role="img"]').getAttribute('aria-label')
+    expect(name).toBeTruthy()
+    const bubble = host.locator('[data-test="icon-tooltip"]')
+    await expect(bubble).toBeHidden()
+
+    // Hovering the icon opens the bubble…
+    await hoverBox(page, host.locator('svg[role="img"]'))
+    await expect(bubble).toBeVisible()
+    await expect(bubble).toHaveText(name!)
+    await expect(bubble).toHaveAttribute('aria-hidden', 'true')
+
+    // …and hovering elsewhere on the page does not.
+    await hoverBox(page, page.getByTestId('detail-title'))
+    await expect(bubble).toBeHidden()
     await expectZeroMealimeRequests(page)
   })
 })

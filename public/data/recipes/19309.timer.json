@@ -1,0 +1,1 @@
+{"steps":[{"step":3,"seconds":900,"label":"Beans"},{"step":6,"seconds":360,"label":"Chicken","range":[360,420]},{"step":9,"seconds":60,"label":"Chicken","range":[60,120]},{"step":11,"seconds":180,"label":"Cream","range":[180,240]}]}

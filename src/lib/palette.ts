@@ -26,10 +26,45 @@
  * structurally impossible.
  */
 
-import { Beef, Droplet, Fish, Flame, Salad, Sprout, type LucideIcon } from 'lucide-vue-next'
+import {
+  Beef,
+  Cookie,
+  Droplet,
+  Fish,
+  Flame,
+  IceCreamCone,
+  Salad,
+  Soup,
+  Sprout,
+  Sunrise,
+  type LucideIcon,
+  UtensilsCrossed,
+} from 'lucide-vue-next'
 
-/** The six roles that own a glyph and a colour: four categorical, two semantic. */
-export type IconRole = 'meat' | 'fish' | 'vegetarian' | 'vegan' | 'energy' | 'sodium'
+/**
+ * The roles that own a glyph and a colour: four categorical for ingredient
+ * TYPE, five for meal OCCASION (ADR-0043), two semantic for NUTRITION.
+ *
+ * The meal-occasion family is deliberately its OWN hue family, not a reuse of
+ * the four ingredient hues: `hue-meat` already means "contains meat" on the
+ * protein chips, so lending it to "Dinner" would make one colour carry two
+ * unrelated meanings on the same screen. Each meal hue was picked to clear
+ * WCAG AA (>=4.5:1) on BOTH surfaces and to stay >= ~20 deltaE from every
+ * protein hue, so a glance never confuses "what kind of food" with "which
+ * meal".
+ */
+export type IconRole =
+  | 'meat'
+  | 'fish'
+  | 'vegetarian'
+  | 'vegan'
+  | 'breakfast'
+  | 'dessert'
+  | 'snack'
+  | 'lunch'
+  | 'dinner'
+  | 'energy'
+  | 'sodium'
 
 /** Ingredient types the catalog actually publishes (`variant_data.category_name`). */
 export type IngredientType = 'meat' | 'fish' | 'vegetarian'
@@ -50,7 +85,18 @@ export interface IconRoleSpec {
   /** Accessible name wherever the icon is the carrier of the meaning. */
   label: string
   /** The Lucide glyph DESIGN.md assigns to this role. */
-  glyph: 'beef' | 'fish' | 'salad' | 'sprout' | 'flame' | 'droplet'
+  glyph:
+    | 'beef'
+    | 'fish'
+    | 'salad'
+    | 'sprout'
+    | 'flame'
+    | 'droplet'
+    | 'sunrise'
+    | 'icecream'
+    | 'cookie'
+    | 'soup'
+    | 'utensils'
 }
 
 /** The whole role contract: role -> glyph + name + colour. Exhaustive by type. */
@@ -103,6 +149,47 @@ export const ICON_ROLES: Record<IconRole, IconRoleSpec> = {
   label: 'Sodium',
   glyph: 'droplet',
   },
+  // ---- meal OCCASION (ADR-0043) — its own hue family, never the four above.
+  breakfast: {
+  kind: 'categorical',
+  token: 'meal-breakfast',
+  darkToken: 'meal-breakfast-soft',
+  className: 'text-meal-breakfast',
+  label: 'Breakfast',
+  glyph: 'sunrise',
+  },
+  dessert: {
+  kind: 'categorical',
+  token: 'meal-dessert',
+  darkToken: 'meal-dessert-soft',
+  className: 'text-meal-dessert',
+  label: 'Dessert',
+  glyph: 'icecream',
+  },
+  snack: {
+  kind: 'categorical',
+  token: 'meal-snack',
+  darkToken: 'meal-snack-soft',
+  className: 'text-meal-snack',
+  label: 'Snack',
+  glyph: 'cookie',
+  },
+  lunch: {
+  kind: 'categorical',
+  token: 'meal-lunch',
+  darkToken: 'meal-lunch-soft',
+  className: 'text-meal-lunch',
+  label: 'Lunch',
+  glyph: 'soup',
+  },
+  dinner: {
+  kind: 'categorical',
+  token: 'meal-dinner',
+  darkToken: 'meal-dinner-soft',
+  className: 'text-meal-dinner',
+  label: 'Dinner',
+  glyph: 'utensils',
+  },
 }
 
 /** The Lucide component for each role's glyph. One map, every call site. */
@@ -113,6 +200,11 @@ export const ROLE_GLYPHS: Record<IconRoleSpec['glyph'], LucideIcon> = {
   sprout: Sprout,
   flame: Flame,
   droplet: Droplet,
+  sunrise: Sunrise,
+  icecream: IceCreamCone,
+  cookie: Cookie,
+  soup: Soup,
+  utensils: UtensilsCrossed,
 }
 
 /** Tailwind text utilities for a role (`text-hue-fish`; dark follows the theme). */
@@ -140,7 +232,28 @@ export function ingredientRole(category: string | null | undefined): IconRole | 
   return null
 }
 
-/** The categorical role for a quick-filter protein value (`''` = any = none). */
+/**
+ * The categorical role for a catalog `ruleset` value — the meal OCCASION
+ * (ADR-0043). Exact match, never a keyword guess, because the catalog
+ * publishes a closed set: breakfast, dessert, snack, simple, dinner, cpg.
+ *
+ * `simple` is MEALIME's internal bucket for quick everyday meals; we surface
+ * it as **Lunch**, which is what a household actually calls it. `cpg` is
+ * Mealime's cost-per-gram product-placement bucket — an advertising tag, not
+ * a meal — so it deliberately gets NO role and NO hue (an unrecognised
+ * ruleset is "no icon", never a fallback colour).
+ */
+export function mealRole(ruleset: string | null | undefined): IconRole | null {
+  if (ruleset === 'breakfast') return 'breakfast'
+  if (ruleset === 'dessert') return 'dessert'
+  if (ruleset === 'snack') return 'snack'
+  if (ruleset === 'simple') return 'lunch'
+  if (ruleset === 'dinner') return 'dinner'
+  return null
+}
+
+/**
+ * The categorical role for a quick-filter protein value (`''` = any = none). */
 export function proteinRole(protein: string): IconRole | null {
   return protein === '' ? null : ingredientRole(protein)
 }

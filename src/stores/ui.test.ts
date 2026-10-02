@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { createPinia, setActivePinia } from 'pinia'
 import { MAX_SERVINGS } from '../lib/servings'
+import { DEFAULT_TIMER_LABEL, MAX_CONCURRENT_TIMERS, MAX_TIMER_LABEL } from '../lib/stepTimer'
 import { useUiStore } from './ui'
 
 /**
@@ -239,5 +240,93 @@ describe('default servings (ADR-0037)', () => {
     // must not silently discard what this device already remembers.
     ui.applySettings({ householdRoom: '' })
     expect(ui.defaultServings).toBe(5)
+  })
+})
+
+/* ---------- Concurrent named timers (ADR-0041) ---------- */
+
+describe('the global timer list (ADR-0041)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  test('two timers run at once and are listed independently', () => {
+    const ui = useUiStore()
+    expect(ui.addTimer(7, 'Oven', 25 * 60)).toBe(1)
+    expect(ui.addTimer(7, 'Rice', 12 * 60)).toBe(2)
+
+    const list = ui.timers(7)
+    expect(list.map((t) => t.label)).toEqual(['Oven', 'Rice'])
+    expect(list.map((t) => t.id)).toEqual([1, 2])
+    expect(ui.timers(99)).toEqual([])
+
+    // Pausing one leaves the other counting: they are independent jobs.
+    ui.pauseTimer(7, 1, 1200)
+    expect(ui.timerById(7, 1)?.running).toBe(false)
+    expect(ui.timerById(7, 1)?.startedAt).toBeNull()
+    expect(ui.timerById(7, 2)?.running).toBe(true)
+  })
+
+  test('a cleared timer leaves the others alone, and the recipe key when the last goes', () => {
+    const ui = useUiStore()
+    ui.addTimer(7, 'Oven', 600)
+    ui.addTimer(7, 'Rice', 600)
+    ui.clearTimer(7, 1)
+    expect(ui.timers(7).map((t) => t.label)).toEqual(['Rice'])
+    ui.clearTimer(7, 2)
+    expect(ui.stepTimers[7]).toBeUndefined()
+  })
+
+  test('a fifth timer is refused and asks for a replacement instead', () => {
+    const ui = useUiStore()
+    for (let i = 0; i < MAX_CONCURRENT_TIMERS; i++) expect(ui.addTimer(7, `T${i}`, 600)).not.toBeNull()
+    expect(ui.isTimerListFull(7)).toBe(true)
+    expect(ui.addTimer(7, 'Too many', 600)).toBeNull()
+    expect(ui.timers(7)).toHaveLength(MAX_CONCURRENT_TIMERS)
+
+    // Replacing is explicit and keeps the slot count.
+    ui.replaceTimer(7, 2, 'Rice', 12 * 60)
+    expect(ui.timers(7)).toHaveLength(MAX_CONCURRENT_TIMERS)
+    expect(ui.timerById(7, 2)?.label).toBe('Rice')
+    expect(ui.timerById(7, 2)?.running).toBe(true)
+  })
+
+  test('labels are normalized and bounded; an empty label reads as the step', () => {
+    const ui = useUiStore()
+    ui.addTimer(7, '  oven   tray ', 600)
+    expect(ui.timerById(7, 1)?.label).toBe('oven tray')
+    ui.renameTimer(7, 1, 'x'.repeat(MAX_TIMER_LABEL + 10))
+    expect(ui.timerById(7, 1)?.label).toHaveLength(MAX_TIMER_LABEL)
+    ui.renameTimer(7, 1, '   ')
+    expect(ui.timerById(7, 1)?.label).toBe(DEFAULT_TIMER_LABEL)
+  })
+
+  test('a pre-ADR-0041 single timer migrates into one named timer (no data dropped)', () => {
+    const ui = useUiStore()
+    ui.applySettings({ stepTimers: { 42: { 0: { remaining: 720, running: true, startedAt: 111 } } } })
+    expect(ui.stepTimers[42][0]).toEqual({
+      id: 0,
+      label: DEFAULT_TIMER_LABEL,
+      remaining: 720,
+      running: true,
+      startedAt: 111,
+    })
+  })
+
+  test('a modern map round-trips labels and ids through the import', () => {
+    const ui = useUiStore()
+    ui.applySettings({
+      stepTimers: { 7: { 3: { id: 3, label: 'Rice', remaining: 60, running: true, startedAt: 123 } } },
+    })
+    expect(ui.stepTimers[7][3]).toEqual({
+      id: 3,
+      label: 'Rice',
+      remaining: 60,
+      running: true,
+      startedAt: 123,
+    })
+    // A junk member is dropped, a good one kept (validation-first import).
+    ui.applySettings({ stepTimers: { 7: { nope: { remaining: 60, running: true, startedAt: 1 } } } })
+    expect(ui.stepTimers[7]).toBeUndefined()
   })
 })

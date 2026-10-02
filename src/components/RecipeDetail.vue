@@ -11,12 +11,14 @@ import { usePlanStore } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
 import { useFavouritesStore } from '../stores/favourites'
 import RatingStars from './RatingStars.vue'
+import NutritionModal from './NutritionModal.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
-import { ICON_ROLES, ingredientRole } from '../lib/palette'
+import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
 import HueIcon from './HueIcon.vue'
 import { onMounted, onUnmounted } from 'vue'
 import {
   ArrowLeft,
+  BookOpen,
   ChefHat,
   ChevronDown,
   Clock,
@@ -37,6 +39,9 @@ const doc = ref<RecipeDoc | null>(null)
 const loading = ref(false)
 const loadError = ref<string | null>(null)
 const ui = useUiStore()
+
+/** The full per-serving facts live in a modal (ADR-0039), not inline. */
+const nutritionOpen = ref(false)
 
 /**
  * Servings shown for THIS recipe: the plan entry's count when the recipe
@@ -88,6 +93,14 @@ const meta = computed<VariantMeta | null>(
 const typeRole = computed(() =>
   ingredientRole(catalog.value?.dataById.get(props.id)?.category_name),
 )
+
+/**
+ * Meal OCCASION (ADR-0043), shown beside the type for the same reason the
+ * tile shows it: "what is it" and "when is it eaten" are two different
+ * questions, so they carry two different hue families. Null rulesets
+ * (today only `cpg`) simply print nothing.
+ */
+const mealTypeRole = computed(() => mealRole(meta.value?.ruleset))
 
 /** Scale factor for ingredients/instructions vs. the recipe's base servings. */
 const factor = computed(() => (doc.value ? servings.value / doc.value.serving_count : 1))
@@ -148,6 +161,11 @@ async function loadDoc() {
   loading.value = true
   loadError.value = null
   doc.value = null
+  // Every load starts with the facts modal CLOSED. `nutritionOpen` used to
+  // survive a recipe-id change, and since the modal is `v-if`-gated on
+  // `doc`, clearing the doc only unmounted it briefly — the new document
+  // remounted it for the next recipe (ADR-0039).
+  nutritionOpen.value = false
   // A PLANNED recipe shows its plan entry (that is what CookingView will
   // cook); an unplanned one starts at the remembered default
   // (ADR-0037). Only the latter was the authored-6 complaint. Re-read per
@@ -179,6 +197,9 @@ function close() {
 }
 
 function onKey(e: KeyboardEvent) {
+  // The facts modal owns Escape while it is open (ADR-0039): this view
+  // must not navigate away underneath it.
+  if (nutritionOpen.value) return
   if (e.key === 'Escape') close()
 }
 onMounted(() => window.addEventListener('keydown', onKey))
@@ -269,6 +290,14 @@ function startCooking() {
   <span v-else class="capitalize">{{
   catalog?.dataById.get(meta.id)?.category_name ?? meta.ruleset
   }}</span>
+  <!-- The occasion wears its OWN hue (ADR-0043): never a protein hue,
+  which means "contains X" two rows down the same screen. -->
+  <HueIcon
+  v-if="mealTypeRole"
+  :role="mealTypeRole"
+  :size="18"
+  :label="ICON_ROLES[mealTypeRole].label"
+  />
   </div>
   <h2 class="text-headline-md sm:text-headline-lg" data-test="detail-title">
   {{ meta.name }}
@@ -411,8 +440,31 @@ function startCooking() {
   }}%</span>
   </div>
   </div>
+  <!-- The 66-row facts block would turn the detail into a wall, so the
+  summary above stays and the rest opens on demand (ADR-0039). The
+  trigger sits INSIDE the section: the section's position contract is
+  unchanged. -->
+  <button
+  v-if="doc"
+  class="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-surface-raised px-4 text-sm font-semibold text-brand-text ring-1 ring-border-strong active:bg-surface-sunken sm:w-auto sm:px-3"
+  aria-label="Full nutrition facts"
+  aria-haspopup="dialog"
+  data-test="nutrition-open"
+  @click="nutritionOpen = true"
+  >
+  <BookOpen :size="16" aria-hidden="true" />Full nutrition facts
+  </button>
   </div>
   </section>
+
+  <Teleport to="body">
+  <NutritionModal
+  v-if="nutritionOpen && doc"
+  :nutrition="doc.nutrition"
+  :calories="meta.calories"
+  @close="nutritionOpen = false"
+  />
+  </Teleport>
 
   <template v-if="loading">
   <div class="mt-6 space-y-3">
