@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Download, Link, Dices, Minus, Plus, Upload, Utensils } from 'lucide-vue-next'
+import { Download, Link, Dices, Minus, Plus, Scale, Upload, Utensils } from 'lucide-vue-next'
 import { applyBackup, backupFileName, buildBackupZip } from '../lib/backup'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { MAX_SERVINGS, MIN_SERVINGS } from '../lib/servings'
+import { UNIT_SYSTEMS, type UnitSystem } from '../lib/units'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
@@ -40,6 +41,23 @@ function bumpDefaultServings(delta: number) {
 
 const canFewerDefault = computed(() => ui.defaultServings > MIN_SERVINGS)
 const canMoreDefault = computed(() => ui.defaultServings < MAX_SERVINGS)
+
+/* ---------- Unit system (ADR-0047) ---------- */
+
+/**
+ * Label for a system: the words a shopper thinks in, not the enum. The
+ * units it actually switches are in the card's note, so the label stays
+ * short and the button never reflows the row.
+ */
+const UNIT_SYSTEM_LABEL: Record<UnitSystem, string> = {
+  metric: 'Metric',
+  imperial: 'Imperial',
+}
+
+/** The one writer — the recipe-detail toggle writes the same store value. */
+function setUnitSystem(system: UnitSystem) {
+  ui.setUnitSystem(system)
+}
 
 /* ---------- Household sync (ADR-0019) ---------- */
 
@@ -212,6 +230,49 @@ function cancelBackupImport(): void {
 <template>
   <section class="space-y-4 pb-4">
   <h2 class="text-lg font-bold tracking-tight">Settings</h2>
+
+  <!-- Unit system (ADR-0047): how quantities, grocery lines and oven
+  temperatures READ on this device. The catalog stays metric; only the
+  display converts, so nothing stored ever changes. -->
+  <div class="space-y-2 rounded-xl bg-surface p-3" data-test="unit-system-card">
+  <span class="text-sm font-bold tracking-tight">Unit system</span>
+  <p class="text-xs">
+  Convert ingredient amounts, grocery lines and oven temperatures on this device. Your recipes, plan and checked items are
+  stored in metric and stay that way.
+  </p>
+  <div
+  class="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-raised px-3 py-2"
+  data-test="unit-system-row"
+  role="group"
+  aria-label="Unit system"
+  >
+  <span class="flex min-w-0 items-center gap-2 text-sm font-medium">
+  <Scale :size="16" aria-hidden="true" class="shrink-0 text-text-muted" />
+  Measure in
+  </span>
+  <div class="flex shrink-0 items-center rounded-lg border">
+  <button
+  v-for="system in UNIT_SYSTEMS"
+  :key="system"
+  class="px-3 py-2 text-sm font-semibold"
+  :class="
+  ui.unitSystem === system
+    ? 'rounded-lg bg-primary-tint text-primary-strong'
+    : 'text-text-muted'
+  "
+  :aria-pressed="ui.unitSystem === system"
+  :aria-label="`${UNIT_SYSTEM_LABEL[system]} units`"
+  :data-test="`unit-system-${system}`"
+  @click="setUnitSystem(system)"
+  >
+  {{ UNIT_SYSTEM_LABEL[system] }}
+  </button>
+  </div>
+  </div>
+  <p class="text-xs text-text-muted" data-test="unit-system-note">
+  {{ ui.unitSystem === 'imperial' ? 'Showing oz, lb, fl oz and °F.' : 'Showing g, kg, ml and °C.' }}
+  </p>
+  </div>
 
   <!-- Default servings (ADR-0037): the remembered starting count. Set it
   once here, or just change servings on any recipe and this follows. -->
