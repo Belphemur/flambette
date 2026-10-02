@@ -249,6 +249,13 @@ bun run test:worker             # DO specs in workerd (vitest-pool-workers)
 bunx wrangler deploy --dry-run  # worker-side gate, run for BOTH configs
 ```
 
+The web worker is assets-only — there is no `/ws` on `flambette.app` — so the
+HOSTED build must bake the relay origin in:
+`VITE_RELAY_WS_URL=wss://ws.flambette.app/ws bun run build && bun run deploy:web`
+(ADR-0038 §5; a build-time value, so it belongs in the deploy command or the
+dashboard's build env, never in the source). A plain `bun run build` keeps the
+same-origin default for dev, e2e, LAN and Docker.
+
 The client reaches the relay on its own origin by default (dev, e2e, LAN
 and Docker all proxy `/ws`); set `VITE_RELAY_WS_URL` at build time to
 point it at a relay living elsewhere — `ws://<host>`/`wss://<host>`,

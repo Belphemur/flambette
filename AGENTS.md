@@ -64,6 +64,13 @@ spoken by a Durable Object instead of a Bun process.
 - Deploys fire from **Workers Builds on tag creation** — the same trigger as
   the GHCR release images. There is NO CI deploy job and NO
   `CLOUDFLARE_API_TOKEN` in the repo; never add one.
+- **The hosted web build MUST set `VITE_RELAY_WS_URL=wss://ws.flambette.app/ws`**
+  (ADR-0038 §5): the web worker is assets-only, so there is no `/ws` on
+  `flambette.app` to dial — without the variable the hosted app would try to
+  open a room against its own origin. The override is a BUILD-TIME value (it is
+  baked into the bundle), so it belongs in the deploy command / the dashboard's
+  build env — never in the source. A plain `bun run build` (self-host, dev, e2e)
+  stays same-origin, which is the default every other surface relies on.
 - **Never hand-write `Env`.** `server/worker-configuration.d.ts` is generated
   (`bun run types:worker`) and committed; regenerate it after touching either
   wrangler config.
