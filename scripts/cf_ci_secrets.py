@@ -28,8 +28,9 @@ required once. The minted token is an ACCOUNT-owned token via
 resources (both zone-scoped resource shapes are rejected with error 1001),
 so the zone groups (Zone Read, Workers Routes Write) attach to the account
 and apply to its zones. Re-running the script ROLLS the CI token (the
-previous same-named token is deleted after the new secret lands); the
-bootstrap file can be deleted after the first run.
+previous same-named token is deleted after the new secret lands) — so the
+bootstrap file must be KEPT: wrangler's OAuth cannot manage tokens, and a
+later rotation without the bootstrap file stops at the capability check.
 
 Usage (from the repo root):
     python3 scripts/cf_ci_secrets.py --dry-run   # auth + plan; mint nothing
@@ -43,6 +44,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import tomllib
 import urllib.error
 import urllib.request
@@ -180,15 +182,33 @@ def _can_manage_tokens(token: str, account: str) -> bool:
         return False
 
 
-def _roll_old(token: str, account: str, new_id: str, token_name: str) -> None:
-    listed = _cf("GET", f"/accounts/{account}/tokens?per_page=50", token)["result"]
-    for t in listed:
-        if t.get("name") == token_name and t.get("id") != new_id and t.get("status") != "deleted":
+def _roll_old(token: str, account: str, new_id: str, token_name: str, started_at: float) -> None:
+    """Delete same-named predecessors — but only ones OLDER than this
+    invocation: a token created after this run started belongs to a CONCURRENT
+    invocation, and deleting it would revoke the credential that run just
+    wrote to the GitHub secret (review #3). The walk paginates every page so a
+    predecessor beyond the first 50 is still found (review #4)."""
+    page = 1
+    while page <= 20:  # safety cap against a misbehaving API
+        listed = _cf("GET", f"/accounts/{account}/tokens?per_page=50&page={page}", token)["result"]
+        if not listed:
+            break
+        for t in listed:
+            if t.get("name") != token_name or t.get("id") == new_id or t.get("status") == "deleted":
+                continue
+            created = t.get("created_on")
+            try:
+                created_ts = datetime.fromisoformat(str(created).replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                created_ts = 0.0
+            if created_ts >= started_at - 60:
+                continue  # young enough to be a concurrent invocation's token — not ours to delete
             try:
                 _cf("DELETE", f"/accounts/{account}/tokens/{t['id']}", token)
                 print(f"  rolled old CI token {t['id']}")
             except CfError as e:
                 print(f"  (could not roll old token {t['id']}: {e})")
+        page += 1
 
 
 def main() -> int:
@@ -200,6 +220,7 @@ def main() -> int:
     ap.add_argument("--repo", help="owner/name for gh (default: the origin remote)")
     ap.add_argument("--token-name", default=TOKEN_NAME)
     args = ap.parse_args()
+    started_at = time.time()
 
     token = _access_token()
     accounts = [(a["id"], a.get("name", "?")) for a in _cf("GET", "/accounts", token)["result"]]
@@ -227,7 +248,8 @@ def main() -> int:
             "  3. Re-run this script: it mints the minimal 'flambette-ci' "
             "account token,\n"
             "     registers the GitHub secrets, rolls the old CI token, and the\n"
-            "     bootstrap file can then be deleted."
+            "     bootstrap file must be KEPT for future rotations (wrangler's\n"
+            "     OAuth cannot manage tokens)."
         )
         return 2
 
@@ -282,15 +304,37 @@ def main() -> int:
         },
     )["result"]
     new_id, value = minted["id"], minted["value"]
+    secrets_set = 0
+    try:
+        # Functional probe with the NEW token before registering the secret —
+        # the scripts list is the exact right `wrangler deploy`/`preview` build on.
+        _cf("GET", f"/accounts/{account}/workers/scripts?per_page=1", value)
 
-    # Functional probe with the NEW token before registering the secret —
-    # the scripts list is the exact right `wrangler deploy`/`preview` build on.
-    _cf("GET", f"/accounts/{account}/workers/scripts?per_page=1", value)
+        repo = args.repo or _repo_from_origin()
+        _gh_secret_set("CLOUDFLARE_API_TOKEN", value, repo)
+        secrets_set += 1
+        _gh_secret_set("CLOUDFLARE_ACCOUNT_ID", account, repo)
+        secrets_set += 1
+    except Exception as e:
+        if secrets_set == 0:
+            # Nothing depends on the minted token yet — revoke it so a failed
+            # setup never leaves an active credential behind (review #2).
+            try:
+                _cf("DELETE", f"/accounts/{account}/tokens/{new_id}", token)
+                print(f"revoked the minted token {new_id} (setup failed before any secret was set)")
+            except CfError as roll_err:
+                print(f"setup FAILED and the minted token {new_id} could NOT be revoked: {roll_err}")
+        else:
+            # At least one secret is already live against this token — revoking
+            # it would break CI. Leave it active; the next successful run rolls it.
+            print(
+                f"setup failed AFTER {secrets_set} secret(s) were set — the minted "
+                f"token {new_id} stays active and is rolled by the next successful run"
+            )
+        print(f"error: {e}", file=sys.stderr)
+        return 2
 
-    repo = args.repo or _repo_from_origin()
-    _gh_secret_set("CLOUDFLARE_API_TOKEN", value, repo)
-    _gh_secret_set("CLOUDFLARE_ACCOUNT_ID", account, repo)
-    _roll_old(token, account, new_id, args.token_name)
+    _roll_old(token, account, new_id, args.token_name, started_at)
 
     print(f"set secrets CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID on {repo}")
     print(f"minted CI token id {new_id} (named '{args.token_name}')")

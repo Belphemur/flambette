@@ -4,6 +4,11 @@ WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY . .
+# The displayed app version is a build-time fact (ADR-0039); the Docker
+# build has no git metadata and no CI env, so the release workflow passes
+# the tag explicitly (see release.yml's build-args).
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
 RUN bun run build
 
 # Serve stage: static nginx with SPA fallback + cache headers

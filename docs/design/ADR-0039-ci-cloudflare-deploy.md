@@ -40,7 +40,11 @@ never a dashboard-generated token pasted into chat.
    with error 1001), so the zone groups attach to the account and apply to
    its zones. Re-running the script ROLLS the CI token (the previous
    same-named token is deleted after the new secret lands), and the
-   bootstrap file can be deleted afterwards.
+   bootstrap file must be KEPT for future rotations — wrangler's OAuth
+   cannot manage tokens, so a later rotation without it stops at the
+   capability check. Rolls are age-guarded (a token created after the run
+   started belongs to a concurrent invocation and is not deleted) and walk
+   every page of the token list.
 2. **Previews (`.github/workflows/preview.yml`, new):** on pull requests and
    pushes to `main`, BOTH workers get a `wrangler preview` deployment
    (`preview --name pr-<PR#>` or `pr-main`; wrangler ≥ 4.136.3 for the

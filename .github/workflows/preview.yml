@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   relay:
-    if: github.event.action != 'closed'
+    if: github.event.action != 'closed' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -68,7 +68,7 @@ jobs:
   # job runs in PARALLEL with the relay job — the relay preview exists before
   # anyone opens the SPA preview URL.
   web:
-    if: github.event.action != 'closed'
+    if: github.event.action != 'closed' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -95,6 +95,9 @@ jobs:
           # Cloudflare's own warning says so — so the SPA cannot point there
           # until the first release.
           VITE_RELAY_WS_URL: wss://pr-${{ github.event.pull_request.number || 'main' }}-flambette-relay-preview-relay-pr-${{ github.event.pull_request.number || 'main' }}.unami.workers.dev/ws
+          # PR events set GITHUB_SHA to the synthetic merge commit — the
+          # header must show the PR's own head sha (review #9).
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
       - name: Preview the web worker
         id: preview-web
@@ -119,7 +122,8 @@ jobs:
   # deleting the preview deletes the namespace with its storage. Preview
   # names are scoped per Worker, so BOTH workers' previews go.
   cleanup:
-    if: github.event.action == 'closed'
+    # Fork PRs get no secrets — there is no preview of theirs to clean up.
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
