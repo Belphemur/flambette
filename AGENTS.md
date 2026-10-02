@@ -45,6 +45,41 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
   ever find yourself editing `server/Dockerfile` to add a filename, that is the
   bug, not the fix.
 
+## Cloudflare (hosted path, ADR-0038)
+
+The same app ships two ways: the Docker compose stack above (self-host) and
+two Cloudflare Workers (hosted). The hosted path is the SAME relay protocol
+spoken by a Durable Object instead of a Bun process.
+
+| | config | worker | domain |
+| --- | --- | --- | --- |
+| web | `wrangler.jsonc` (root) | none — assets-only (`dist/`, SPA fallback) | `flambette.app` |
+| relay | `server/wrangler.jsonc` | `server/worker/index.ts` + `Room` DO | `ws.flambette.app` |
+
+- Commands: `bun run deploy:web`, `bun run deploy:relay`, `bun run dev:relay`
+  (workerd locally, :8787), `bun run test:worker` (vitest-pool-workers),
+  `bun run types:worker` (regenerates `server/worker-configuration.d.ts`),
+  `bun run typecheck:worker`. `bunx wrangler deploy --dry-run` on BOTH configs
+  is the worker-side gate before any push.
+- Deploys fire from **Workers Builds on tag creation** — the same trigger as
+  the GHCR release images. There is NO CI deploy job and NO
+  `CLOUDFLARE_API_TOKEN` in the repo; never add one.
+- **Never hand-write `Env`.** `server/worker-configuration.d.ts` is generated
+  (`bun run types:worker`) and committed; regenerate it after touching either
+  wrangler config.
+- Worker TypeScript lives in `server/worker/`; the shared relay policy
+  constants live in `server/relayPolicy.mjs` and the throttle arithmetic in
+  `server/throttleCore.mjs` (the Bun modules re-export them — the two runtimes
+  cannot share an import graph, and a module-scope `process.env` read throws
+  in workerd).
+- Code canonicalisation is IMPORTED from `src/lib/roomWords.ts` in
+  `server/worker/codes.ts` — the lockstep with the client is structural, not a
+  hand-maintained copy. Nothing else in `server/` imports from `src/` (the Bun
+  relay ships in a container with only `*.mjs`).
+- Rooms persist after the last peer leaves **only on Cloudflare**
+  (ADR-0038 §4): the Durable Object's storage survives until the expiry
+  clocks fire, while the Bun relay still deletes a room nobody is in.
+
 ## Conventions (do not break)
 
 - **Test selectors**: components use `data-test="..."`; Playwright config
