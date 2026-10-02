@@ -17,6 +17,7 @@
  * bun-test, so a bad payload can never leak a raw value into the UI.
  */
 import { DIET_IDS, type DietId } from './dietFilter'
+import { normalizeMealType, type MealTypeId } from './mealTypeFilter'
 
 /** Sort modes offered by the Recipes tab (ADR-0027). */
 export type SortBy = 'rating' | 'latest' | 'popularity' | 'time' | 'calories'
@@ -84,6 +85,12 @@ export interface QuickFilters {
   diets: DietId[]
   /** Single protein category, or '' for any. */
   protein: ProteinFilter
+  /**
+   * Meal occasion (ADR-0043), or null for Any. The buckets are the
+   * CATALOG's own `ruleset` values, so this is an exact facet, not a
+   * heuristic lens like the diets above.
+   */
+  mealType: MealTypeId | null
   /** Max cooking minutes, or null for any. */
   maxTime: number | null
   sortBy: SortBy
@@ -92,7 +99,15 @@ export interface QuickFilters {
 }
 
 export function defaultQuickFilters(): QuickFilters {
-  return { diets: [], protein: '', maxTime: null, sortBy: 'rating', favOnly: false, proOnly: false }
+  return {
+    diets: [],
+    protein: '',
+    mealType: null,
+    maxTime: null,
+    sortBy: 'rating',
+    favOnly: false,
+    proOnly: false,
+  }
 }
 
 /** Human label of a sort mode (falls back to the first option). */
@@ -130,6 +145,10 @@ export function normalizeQuickFilters(value: unknown): QuickFilters | null {
     protein: PROTEIN_VALUES.includes(v.protein as ProteinFilter)
       ? (v.protein as ProteinFilter)
       : base.protein,
+    // Same drop-unknown rule as the diet ids: an id the dropdown does not
+    // offer (or a `cpg` bucket that is counted but never offered) is
+    // refused, so a stale peer can never park the tab on an empty grid.
+    mealType: normalizeMealType(v.mealType),
     // Only the VALUES the control actually offers. A payload carrying
     // `maxTime: -1` would otherwise pass normalization and make the
     // facet reject every recipe, with no select option to reset it.
@@ -145,6 +164,7 @@ export function sameQuickFilters(a: QuickFilters, b: QuickFilters): boolean {
   return (
     a.sortBy === b.sortBy &&
     a.protein === b.protein &&
+    a.mealType === b.mealType &&
     a.maxTime === b.maxTime &&
     a.favOnly === b.favOnly &&
     a.proOnly === b.proOnly &&
@@ -182,6 +202,7 @@ export function hasActiveFilters(f: QuickFilters): boolean {
   return (
     f.diets.length > 0 ||
     f.protein !== '' ||
+    f.mealType !== null ||
     f.maxTime !== null ||
     f.favOnly ||
     f.proOnly

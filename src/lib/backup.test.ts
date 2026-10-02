@@ -54,6 +54,7 @@ describe('settings import (ADR-0013 registry)', () => {
     expect(ui.quickFilters).toEqual({
       diets: [],
       protein: '',
+      mealType: null,
       maxTime: null,
       sortBy: 'rating',
       favOnly: false,
@@ -115,6 +116,7 @@ describe('settings import (ADR-0013 registry)', () => {
       quickFilters: {
         diets: ['no-pork', 'no-meat'],
         protein: 'meat',
+        mealType: -1,
         maxTime: 45,
         sortBy: 'calories',
         favOnly: false,
@@ -127,6 +129,7 @@ describe('settings import (ADR-0013 registry)', () => {
     expect(ui.quickFilters).toEqual({
       diets: ['no-pork', 'no-meat'],
       protein: 'meat',
+      mealType: -1,
       maxTime: 45,
       sortBy: 'calories',
       favOnly: false,

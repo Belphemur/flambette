@@ -1,7 +1,7 @@
 # ADR-0043 — meal-type filter dropdown with icons
 
 * Extends: ADR-0027 (unified quick filters)
-* Status: **Proposed**
+* Status: **Accepted** (as built — see the as-built notes in Consequences)
 * Companions: `scripts/extract_recipe_types.py`, `scripts/test_extract_recipe_types.py`,
   `public/data/recipe_types.json`, `src/lib/mealTypeFilter.ts`, `src/components/RecipesTab.vue`
 
@@ -98,7 +98,31 @@ unlike ADR-0018's diet lens this filter is *exact*, not a suggestion.
   carries `ruleset`, no unmapped value appeared, the buckets partition the
   feasible catalog, Breakfast == 151 (the app's own number), Dinner largest,
   no empty chips, `--check` idempotent.
-- TS test: the `MEAL_TYPE_IDS`/label/icon registry agrees with the JSON.
-- e2e: select Dessert → 91 dessert recipes, all `ruleset === 'dessert'`;
-  Breakfast → 151; counts on the options match the JSON; Desktop Chrome +
-  Pixel 7.
+- TS test: the `MEAL_TYPE_IDS`/label/icon registry agrees with the JSON
+  (`src/lib/mealTypeFilter.test.ts` — partition, the 151/91/2119 counts,
+  negative ids, exactness of the facet) and `quickFilters.test.ts` pins
+  normalization (`-6` and junk both mean Any).
+- e2e: `e2e/meal-type-filter.spec.ts` — the option counts agree with the
+  SERVED catalog (read from `builder_data.json`, never a pinned literal);
+  Dessert narrows to exactly the catalog's dessert count and Breakfast to
+  151; Any restores the whole catalog; the selection persists across a
+  reload and `Clear filters` resets it; the listbox keyboard contract holds
+  and Escape returns focus to the trigger; a diet chip can only narrow
+  further. Desktop Chrome + Pixel 7.
+
+### As-built notes
+1. **The listbox behaviour is shared, not copied.** The sort menu already
+   had ~70 lines of focus bookkeeping (arrows, Home/End, Escape + refocus,
+   Tab, click-away, one document listener per menu). A second popup
+   hand-written the same way is how the two would drift — one with a focus
+   bug, one without a click-away — so it lives once in
+   `src/composables/useListboxMenu.ts`, parameterised by option count and
+   "which option is selected". The sort menu's own contract specs
+   (`quick-filters.spec.ts`, WS1/WS3/WS4) pass unchanged, which is the
+   evidence the extraction changed no behaviour.
+2. **"Any" is option 0 of the listbox**, not a separate control, so the
+   listbox count is `offered buckets + 1` and the initial focus lands on
+   the active row. Clearing a filter is the most common trip here.
+3. **Counts render raw** ("2119", not "2,119"): the Recipes tab already
+   renders `results.length` unformatted, and a second number format in the
+   same paragraph would be the inconsistency.

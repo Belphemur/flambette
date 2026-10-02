@@ -1,7 +1,20 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
-import { ArrowUpDown, Check, Heart, Sparkles, SearchX } from 'lucide-vue-next'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import {
+  ArrowUpDown,
+  Check,
+  Cookie,
+  Gauge,
+  Heart,
+  IceCreamCone,
+  SearchX,
+  Sparkles,
+  Sunrise,
+  Tag,
+  UtensilsCrossed,
+} from 'lucide-vue-next'
 import type { Component } from 'vue'
+import { useListboxMenu } from '../composables/useListboxMenu'
 import { catalog } from '../lib/catalog'
 import {
   DIET_DESCRIPTIONS,
@@ -23,6 +36,12 @@ import {
   type SortBy,
 } from '../lib/quickFilters'
 import { popularityScore } from '../lib/quantity'
+import {
+  OFFERED_MEAL_TYPES,
+  matchesMealType,
+  mealTypeLabel,
+  type MealTypeId,
+} from '../lib/mealTypeFilter'
 import { dietHueClass, dietRole, proteinHueClass, roleGlyph } from '../lib/palette'
 import { searchVariantIds } from '../lib/search'
 import type { VariantMeta } from '../lib/types'
@@ -77,104 +96,70 @@ function setProtein(protein: ProteinFilter) {
 
 /* ---------- Sort menu (compact icon+label affordance, WS1/WS5) ---------- */
 
-const sortOpen = ref(false)
+/**
+ * The popup advertises `role="listbox"` / `role="option"`, so it behaves
+ * like one: arrow keys move the selection focus, Home/End jump, Escape
+ * closes and returns focus to the trigger, and the active option is
+ * focused when the menu opens. The bookkeeping lives in
+ * `useListboxMenu` — the meal-type dropdown (ADR-0043) runs on the SAME
+ * code, so the two popups cannot drift apart.
+ */
+const sortMenu = useListboxMenu(
+  SORT_OPTIONS.length,
+  () => SORT_OPTIONS.findIndex((o) => o.value === filters.value.sortBy),
+)
 
 function setSort(value: SortBy) {
   patchFilters({ sortBy: value })
-  closeSort({ refocus: true })
+  sortMenu.closeMenu({ refocus: true })
+}
+/** The active sort mode's label, shown on the closed button. */
+const sortText = computed(() => sortLabel(filters.value.sortBy))
+
+/* ---------- Meal type (ADR-0043) ---------- */
+
+/**
+ * Occasion dropdown over the catalog's own `ruleset` field. Same listbox
+ * as the sort menu, same keyboard contract, and the SAME "one control in
+ * the 2-column filter grid" placement (WS1) so nothing gets orphaned on
+ * a line of its own on a phone.
+ *
+ * The option LIST is "Any" plus the five offered buckets, and the "+1"
+ * offsets below keep that literal ordering in sync with the DOM order the
+ * template renders (Any first, then `OFFERED_MEAL_TYPES`). A mismatch
+ * here would only misplace the initial focus, so `mealTypeOptions`
+ * derives the count from the same expression the template walks.
+ */
+const mealOptionCount = OFFERED_MEAL_TYPES.length + 1
+
+const mealMenu = useListboxMenu(mealOptionCount, () => {
+  const at = OFFERED_MEAL_TYPES.findIndex((o) => o.id === filters.value.mealType)
+  return at === -1 ? 0 : at + 1
+})
+
+function setMealType(id: MealTypeId | null) {
+  patchFilters({ mealType: id })
+  mealMenu.closeMenu({ refocus: true })
 }
 
 /**
- * Sort menu keyboard support. The popup advertises `role="listbox"` /
- * `role="option"`, so it must behave like one: arrow keys move the
- * selection focus, Home/End jump, Escape closes and returns focus to the
- * trigger, and the active option is focused when the menu opens.
+ * Icon per bucket, resolved from the committed table's lucide name. The
+ * map is a literal record (not a lookup by string) so Tailwind and
+ * vue-tsc see real component references; the registry test in
+ * `mealTypeFilter.test.ts` fails if a bucket ever names an icon this file
+ * does not know.
  */
-const sortTriggerEl = ref<HTMLElement | null>(null)
-const sortOptionEls = ref<HTMLElement[]>([])
-
-/** Index of the option that has DOM focus while the menu is open. */
-const sortFocusIndex = ref(0)
-
-function setSortOptionEl(el: Element | null, index: number) {
-  if (el instanceof HTMLElement) sortOptionEls.value[index] = el
+const MEAL_TYPE_ICONS: Record<MealTypeId, Component> = {
+  [-1]: Sunrise,
+  [-2]: IceCreamCone,
+  [-3]: Cookie,
+  [-4]: Gauge,
+  [-5]: UtensilsCrossed,
+  [-6]: Tag,
 }
 
-function openSort() {
-  sortOpen.value = true
-  sortFocusIndex.value = Math.max(
-  0,
-  SORT_OPTIONS.findIndex((o) => o.value === filters.value.sortBy),
-  )
-  // The listbox exists only after this tick.
-  void nextTick(() => focusSortOption(sortFocusIndex.value))
-}
-
-function closeSort({ refocus = false } = {}) {
-  sortOpen.value = false
-  if (refocus) void nextTick(() => sortTriggerEl.value?.focus())
-}
-
-function focusSortOption(index: number) {
-  const at = (index + SORT_OPTIONS.length) % SORT_OPTIONS.length
-  sortFocusIndex.value = at
-  sortOptionEls.value[at]?.focus()
-}
-
-function onSortMenuKeydown(e: KeyboardEvent) {
-  switch (e.key) {
-  case 'ArrowDown':
-  e.preventDefault()
-  focusSortOption(sortFocusIndex.value + 1)
-  break
-  case 'ArrowUp':
-  e.preventDefault()
-  focusSortOption(sortFocusIndex.value - 1)
-  break
-  case 'Home':
-  e.preventDefault()
-  focusSortOption(0)
-  break
-  case 'End':
-  e.preventDefault()
-  focusSortOption(SORT_OPTIONS.length - 1)
-  break
-  case 'Escape':
-  e.preventDefault()
-  e.stopPropagation()
-  closeSort({ refocus: true })
-  break
-  case 'Tab':
-  // Tabbing out ends the interaction rather than stranding focus.
-  closeSort()
-  break
-  }
-}
-
-/** Click-away closes; the button itself is inside the wrapper. */
-function onDocumentPointerDown(e: PointerEvent) {
-  if (!sortOpen.value) return
-  const target = e.target as Node | null
-  if (target && sortWrapEl.value?.contains(target)) return
-  closeSort()
-}
-
-function onDocumentKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && sortOpen.value) closeSort({ refocus: true })
-}
-
-const sortWrapEl = ref<HTMLElement | null>(null)
-onMounted(() => {
-  document.addEventListener('pointerdown', onDocumentPointerDown)
-  document.addEventListener('keydown', onDocumentKeydown)
-})
-onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', onDocumentPointerDown)
-  document.removeEventListener('keydown', onDocumentKeydown)
-})
-
-/** The active sort mode's label, shown on the closed button. */
-const sortText = computed(() => sortLabel(filters.value.sortBy))
+/** "Any" is not an occasion, so it borrows the neutral Sparkles glyph. */
+const ANY_MEAL_ICON = Sparkles
 
 /* ---------- Icon maps (WS5: one Lucide icon per filter) ---------- */
 
@@ -212,6 +197,9 @@ const results = computed<VariantMeta[]>(() => {
   if (f.proOnly && !meta.is_pro) return false
   if (f.protein !== '' && c.dataById.get(meta.id)?.category_name !== f.protein)
   return false
+  // ADR-0043: an exact compare against the catalog's own `ruleset`, so
+  // unlike the diet lens above this narrows with no guessing at all.
+  if (!matchesMealType(meta.ruleset, f.mealType)) return false
   if (f.maxTime !== null && meta.cooking_minutes > f.maxTime) return false
   if (diets.length > 0) {
   const verdict = index?.verdictById.get(meta.id)
@@ -351,33 +339,33 @@ onUnmounted(() => observer?.disconnect())
 
   <!-- Compact sort affordance: icon + current label, never a wide
   native select with "Sort: …" options. -->
-  <div ref="sortWrapEl" class="relative">
+  <div :ref="sortMenu.wrapEl" class="relative">
   <button
-  ref="sortTriggerEl"
+  :ref="sortMenu.triggerEl"
   class="flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium"
   aria-haspopup="listbox"
-  :aria-expanded="sortOpen"
+  :aria-expanded="sortMenu.open.value"
   aria-label="Sort recipes"
   data-test="sort-button"
-  @click="sortOpen ? closeSort({ refocus: true }) : openSort()"
+  @click="sortMenu.open.value ? sortMenu.closeMenu({ refocus: true }) : sortMenu.openMenu()"
   >
   <ArrowUpDown :size="16" aria-hidden="true" />
   <span class="truncate">{{ sortText }}</span>
   </button>
   <ul
-  v-if="sortOpen"
+  v-if="sortMenu.open.value"
   class="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-xl bg-surface-raised py-1 shadow-lg ring-1"
   role="listbox"
   aria-label="Sort recipes"
   data-test="sort-menu"
-  @keydown="onSortMenuKeydown"
+  @keydown="sortMenu.onMenuKeydown"
   >
   <li v-for="(option, index) in SORT_OPTIONS" :key="option.value" role="none">
   <button
-  :ref="(el) => setSortOptionEl(el as Element | null, index)"
+  :ref="(el) => sortMenu.setOptionEl(el as Element | null, index)"
   class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
   role="option"
-  :tabindex="index === sortFocusIndex ? 0 : -1"
+  :tabindex="index === sortMenu.focusIndex.value ? 0 : -1"
   :aria-selected="filters.sortBy === option.value"
   :aria-label="`Sort by ${option.label}`"
   :data-test="`sort-option-${option.value}`"
@@ -391,6 +379,87 @@ onUnmounted(() => observer?.disconnect())
   />
   <span v-else class="w-4 shrink-0" aria-hidden="true" />
   <span class="truncate">{{ option.label }}</span>
+  </button>
+  </li>
+  </ul>
+  </div>
+  <!-- Meal type (ADR-0043): occasion buckets taken straight from the
+  catalog's own `ruleset` field, so this filter is exact — the counts
+  beside each option are tallied at BUILD time into the committed
+  recipe_types.json, never by a 2,759-recipe scan in the client.
+
+  Icon colour stays neutral: an occasion is not a food, so it has no
+  hue, and the selected row is marked by the brand tint + check exactly
+  like the sort menu (DESIGN.md "Selection and actions"). -->
+  <div :ref="mealMenu.wrapEl" class="relative">
+  <button
+  :ref="mealMenu.triggerEl"
+  class="flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors sm:w-auto"
+  :class="filters.mealType !== null ? 'border-brand-text bg-brand-tint text-brand-text' : ''"
+  aria-haspopup="listbox"
+  :aria-expanded="mealMenu.open.value"
+  aria-label="Meal type"
+  data-test="mealtype-button"
+  @click="mealMenu.open.value ? mealMenu.closeMenu({ refocus: true }) : mealMenu.openMenu()"
+  >
+  <component
+  :is="filters.mealType !== null ? MEAL_TYPE_ICONS[filters.mealType] : ANY_MEAL_ICON"
+  :size="16"
+  aria-hidden="true"
+  />
+  <span class="truncate">{{ mealTypeLabel(filters.mealType) }}</span>
+  </button>
+  <ul
+  v-if="mealMenu.open.value"
+  class="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded-xl bg-surface-raised py-1 shadow-lg ring-1"
+  role="listbox"
+  aria-label="Meal type"
+  data-test="mealtype-menu"
+  @keydown="mealMenu.onMenuKeydown"
+  >
+  <!-- "Any" first: clearing the filter is the most common trip here. -->
+  <li role="none">
+  <button
+  :ref="(el) => mealMenu.setOptionEl(el as Element | null, 0)"
+  class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
+  role="option"
+  :tabindex="mealMenu.focusIndex.value === 0 ? 0 : -1"
+  :aria-selected="filters.mealType === null"
+  aria-label="Any meal type"
+  data-test="mealtype-option-Any"
+  @click="setMealType(null)"
+  >
+  <Check v-if="filters.mealType === null" :size="16" class="shrink-0 text-brand" aria-hidden="true" />
+  <span v-else class="w-4 shrink-0" aria-hidden="true" />
+  <Sparkles :size="16" class="shrink-0" aria-hidden="true" />
+  <span class="truncate">Any</span>
+  </button>
+  </li>
+  <li
+  v-for="(option, index) in OFFERED_MEAL_TYPES"
+  :key="option.id"
+  role="none"
+  >
+  <button
+  :ref="(el) => mealMenu.setOptionEl(el as Element | null, index + 1)"
+  class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
+  role="option"
+  :tabindex="mealMenu.focusIndex.value === index + 1 ? 0 : -1"
+  :aria-selected="filters.mealType === option.id"
+  :aria-label="`${option.label}, ${option.count} recipes`"
+  :data-test="`mealtype-option-${option.label}`"
+  @click="setMealType(option.id)"
+  >
+  <Check
+  v-if="filters.mealType === option.id"
+  :size="16"
+  class="shrink-0 text-brand"
+  aria-hidden="true"
+  />
+  <span v-else class="w-4 shrink-0" aria-hidden="true" />
+  <component :is="MEAL_TYPE_ICONS[option.id]" :size="16" class="shrink-0" aria-hidden="true" />
+  <span class="min-w-0 flex-1 truncate">{{ option.label }}</span>
+  <span class="shrink-0 text-xs tabular-nums text-text-muted">{{ option.count }}</span>
   </button>
   </li>
   </ul>
