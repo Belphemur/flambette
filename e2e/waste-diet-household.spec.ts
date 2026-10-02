@@ -52,7 +52,15 @@ test.describe('diet filter chips', () => {
     await expect(chip).toHaveAttribute('aria-pressed', 'false')
 
     const porkFree = dietIdSet('no-pork')
-    const porkRecipes = 2730 - porkFree.size
+    // Read the catalog size rather than pinning a literal: a catalog sync adds
+    // recipes (2,730 -> 2,759), and a stale constant would rot silently.
+    const total = Number(
+      (await page.evaluate(async () => {
+        const data = await fetch('/data/builder_data.json').then((r) => r.json())
+        return (data.feasible_variants as number[]).length
+      }))
+    )
+    const porkRecipes = total - porkFree.size
     expect(porkRecipes).toBeGreaterThan(0) // the rule has teeth
 
     await chip.click()

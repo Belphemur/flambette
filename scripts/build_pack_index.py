@@ -49,6 +49,8 @@ Stdlib only; idempotent; no network. Re-run with:
 """
 
 import glob
+
+from catalog_paths import recipe_doc_paths
 import gzip
 import json
 import os
@@ -196,12 +198,16 @@ PANTRY_STAPLES = {
 
 
 def main() -> int:
-    recipe_files = sorted(glob.glob(os.path.join("public", "data", "recipes", "*.json")))
-    if len(recipe_files) != 2730:
-        print(f"warning: expected 2,730 recipe docs, found {len(recipe_files)}", file=sys.stderr)
-
+    # Only the catalog docs: this directory ALSO holds ADR-0041's per-recipe
+    # `<id>.timer.json` sidecars, and a bare `*.json` glob silently folds those
+    # into the index (they parse as empty recipes and double the row count).
+    recipe_files = recipe_doc_paths()
     with open(os.path.join("public", "data", "builder_data.json")) as f:
         builder = json.load(f)
+
+    expected = len(builder["feasible_variants"])
+    if len(recipe_files) != expected:
+        print(f"warning: expected {expected} recipe docs, found {len(recipe_files)}", file=sys.stderr)
 
     recipes = {}
     container_line_count = 0

@@ -29,6 +29,18 @@ function resultCount(page: Page) {
   return page.locator('p', { hasText: /\d+ recipes?/ })
 }
 
+/**
+ * How many recipes the catalog holds right now, read from the served
+ * builder_data. A catalog sync legitimately changes this, so specs assert
+ * against the live total instead of a pinned literal.
+ */
+async function catalogSize(page: Page): Promise<number> {
+  return page.evaluate(async () => {
+    const data = await fetch('/data/builder_data.json').then((r) => r.json())
+    return (data.feasible_variants as number[]).length
+  })
+}
+
 async function expectResultCount(page: Page, n: number) {
   await expect(resultCount(page)).toContainText(`${n} recipes`, { timeout: 15_000 })
 }
@@ -86,11 +98,14 @@ test.describe('unified quick filters (WS2)', () => {
   })
 
   test('a protein chip narrows to that category and combines with a diet chip', async ({ page }) => {
+    // The catalog grows (a sync adds recipes), so read the total from the app
+    // rather than pinning a literal that silently rots on the next sync.
+    const total = await catalogSize(page)
     await page.getByTestId('protein-chip-fish').click()
     await expect(page.getByTestId('protein-chip-fish')).toHaveAttribute('aria-pressed', 'true')
     const afterProtein = Number((await resultCount(page).textContent())!.match(/(\d+) recipes?/)![1])
     expect(afterProtein).toBeGreaterThan(0)
-    expect(afterProtein).toBeLessThan(2730)
+    expect(afterProtein).toBeLessThan(total)
 
     // Still an AND with the diet rules.
     await page.getByTestId('diet-chip-vegan').click()

@@ -1,101 +1,104 @@
-# ADR-0043 — recipe-type filter (dish types, with icons in a dropdown)
+# ADR-0043 — meal-type filter dropdown with icons
 
 * Extends: ADR-0027 (unified quick filters)
 * Status: **Proposed**
-* Companions: `src/lib/mealTypeFilter.ts` (new), `src/lib/quickFilters.ts`,
-  `src/components/RecipesTab.vue`, `src/lib/palette.ts` (no hue change)
+* Companions: `scripts/extract_recipe_types.py`, `scripts/test_extract_recipe_types.py`,
+  `public/data/recipe_types.json`, `src/lib/mealTypeFilter.ts`, `src/components/RecipesTab.vue`
 
 ## Context
-The owner asked to "filter by dinner, dessert etc" with nice icons in a
-dropdown. The catalog carries **no meal-occasion field** — this was verified
-three ways (see §5): the baked recipe docs, the raw CDN recipe docs (2 730
-files, identical 13-key shape), and `builder_data.json`. The only tagged
-dimension is `variety_tags`/`variety_tag_ids` (int ids, unnamed) plus
-`category_name` (already the protein chips). The Mealime app's own
-"recipe type" filter (screenshot `Screenshot_20261001-182811..182826.png`)
-lists **dish types** — Soup, Salad, Pasta, Burger, Curry … — which are
-exactly these tag ids. So "dinner/dessert" was the owner's shorthand for the
-dish-type filter; what they asked to see is this tag-derived dropdown with an
-icon per option.
+The owner wants to filter the Recipes tab "by dinner, dessert etc" with nice
+icons in a dropdown.
+
+**The catalog already carries the answer.** `variant_meta[].ruleset` is a
+meal-occasion field with six values — `dinner` (2 119), `simple` (304),
+`breakfast` (151), `dessert` (91), `snack` (89), `cpg` (5). It is the *same*
+field the Mealime app filters on: its "151 breakfast recipes" is exactly this
+count, which is how the taxonomy was identified.
+
+An earlier draft of this ADR claimed the catalog had no occasion field and
+proposed a keyword lens over recipe names. That was wrong: the lens was built,
+counted 104 breakfasts against the app's 151, and discarded once
+`ruleset` was found. The lesson is recorded in §Non-goals.
 
 ## Decision
-Add a single-select **recipe-type** dropdown to the Recipes filter bar
-(placed in the 2-col phone grid, beside cook-time), iconized like the sort
-menu, reading from a frozen tag table in `src/lib/mealTypeFilter.ts`.
+A single **`Meal type`** dropdown in the Recipes filter bar (2-col phone grid,
+ADR-0027 placement) offering the five meal buckets, each with a bundled Lucide
+icon, fed entirely by a **build-time-committed JSON table** — the client does
+no 2 759-recipe scan at runtime (the owner's "no big parsing in the client" rule).
 
-### Tag table `RECIPE_TYPE_TAGS: { id, label, icon, count }` (counts from the
-### catalog; `public/data/recipes/<id>.timer.json` side does not change)
-| id  | label                 | lucide icon   | count |
-|----:|-----------------------|---------------|------:|
-|  2  | Soup                  | Soup          |  201  |
-| 20  | Salad                 | Salad         |  318  |
-|  1  | Pasta & Pizza         | Pizza         |  250  |
-|  4  | Burger & Sandwich     | Hamburger     |  163  |
-| 33  | Pan-Fried & Crispy    | FryingPan     |  162  |
-| 32  | Skillet & Braise      | Skillet       |  152  |
-| 11  | Stir-Fry              | FryingPan     |  85  |
-| 12  | Tacos & Quesadilla     | Taco          |  108  |
-| 27  | Wraps & Fajitas       | Burrito       |  74  |
-| 24  | Baked                 | Oven          |  280  |
-| 25  | Bowls                 | BowlFood      |  127  |
-| 26  | Stuffed               | Croissant     |  53  |
-| 15  | Pork & Lamb Chops     | Beef          |  95  |
-| 14  | Steak & Hearty Salads | Beef          |  110  |
-| 22  | Grilled Protein       | Beef          |  134  |
-|  6  | Curry                 | CookingPot    |   47  |
-| 18  | Fried Rice & Noodles  | RiceBowl      |   49  |
-| 29  | Noodle Squash         | Noodle        |   52  |
-|  8  | Patties & Fritters    | Drumstick     |   45  |
-|  7  | Frittata & Eggs       | EggFry        |   48  |
-| 30  | Wings & Tenders       | Drumstick     |   40  |
+### The buckets (from `ruleset`, one per variant)
+| id  | label     | icon           | `ruleset`  | count |
+|-----|-----------|----------------|------------|-------|
+| -1  | Breakfast | Sunrise        | `breakfast`| 151   |
+| -2  | Dessert   | IceCreamCone   | `dessert`  | 91    |
+| -3  | Snack     | Cookie         | `snack`    | 89    |
+| -4  | Simple    | Gauge          | `simple`   | 304   |
+| -5  | Dinner    | UtensilsCrossed| `dinner`   | 2 119 |
+| -6  | Branded   | Tag            | `cpg`      | 5     |
 
-Counts are derived from the baked `variant_data[].variety_tags` and
-re-derived at build time by `scripts/` parity if exposed (out of scope here
-— the table is static and committed; goldens pin nothing new but a
-`data:verify`-style count check is invited as follow-up).
+- **`cpg` is counted but NOT offered.** It is Mealime's cost-per-gram
+  product-placement bucket (branded OIKOS/PHILADELPHIA recipes), not a meal
+  anyone plans around. It is emitted with `offered: false` so the partition
+  invariant still holds over the whole catalog.
+- Ids are **negative** so an occasion can never collide with a positive
+  catalog variant id.
+- The taxonomy is Mealime's, not ours: `Dinner` legitimately covers lunches
+  too (there is no `lunch` ruleset). "Simple" is Mealime's quick-easy bucket.
 
-### Surface rules (mirrors the sort menu, ADR-0027 §2-col grid)
-- Dropdown trigger: `data-test="mealtype-button"`, `aria-haspopup="listbox"`,
-  `aria-expanded`, `aria-label="Recipe type"`; shows the icon + label of the
-  selected type (or `Any` / Sparkles).
-- Menu: `role="listbox"` of `role="option"` buttons, each `data-test=
-  "mealtype-option-<id>"`, icon + label + count, `aria-selected`.
-- Keyboard: arrow Home/End/Escape/Tab identical to `onSortMenuKeydown`.
-- Icon hue is **neutral** (no food-role colour — these are dish categories,
-  not diets). Selection paints the chip **tint** (brand-tint + brand outline,
-  per DESIGN.md "Selection and actions"), never a fill — so the icon keeps
-  its neutral colour in both states and the pill never resizes.
-- Icons come from `lucide-vue-next` (bundled, ADR-0029); two tags share an
-  icon (Steak/Grilled/Pork all → `Beef`; Skillet & Pan-Fried & Stir-Fry all
-  → `FryingPan`/`Skillet`) — disambiguated by the label, never by colour.
+### Build-time count, static import
+`scripts/extract_recipe_types.py` makes ONE pass over `variant_meta`, tallies
+`ruleset`, and writes `public/data/recipe_types.json`
+(`{byId, order, total, unmatched}`). The client imports that JSON statically
+(Vite inlines it, the `ingredients.json` precedent in
+`ingredientSuggestions.ts`), so the dropdown's counts cost one small module.
 
-### State (one member added to QuickFilters, ADR-0027 §4)
-- New `mealType: number | null` (`null` = Any). Folded into the existing
-  `QuickFilters` object, persisted in the `mealime-planner:v1:ui` slice by
-  the existing store watcher — no new STORE_SLICES entry.
-- `normalizeQuickFilters` validates it: `Number.isInteger(v.mealType)` and
-  `RECIPE_TYPE_TAGS` contains it, else `null` (drops unknown ids, same rule
-  as protein/maxTime).
-- `toSharedFilters`/`mergeSharedFilters` carry it unchanged (household
-  preference).
-- Result pipeline: `facets` gains a clause — `f.mealType !== null &&
-  !(meta.variety_tag_ids ?? []).includes(f.mealType)` → false. Memoized by
-  `mealTypeIndexFor(catalog)` (parallel to `dietIndexFor`), so counts per tag
-  come from the same pass.
+The FACET itself is an **exact string compare** against `meta.ruleset`, which
+is already in the loaded catalog — no fetch, no regex, no memo table, and
+unlike ADR-0018's diet lens this filter is *exact*, not a suggestion.
 
-## Non-goals
-- No meal-occasion filter (dinner/lunch/breakfast) — the data does not
-  distinguish them; the coarse `types` 1-8 on mealime.com overlap heavily
-  and are not in the baked catalog anyway.
-- No tag-name scraping at runtime (offline-first): the table is build-time.
-- No new color tokens (neutral icons only); `palette.ts` untouched.
+### Filtering contract
+- `QuickFilters` (+1 member): `mealType: number | null` (`null` = Any,
+  default). Persisted via the existing store watcher; shared as household
+  state like the rest of `QuickFilters` (ADR-0027 §4).
+- `normalizeQuickFilters` validates: `MEAL_TYPE_IDS.includes(v.mealType)`,
+  else `null` — the same drop-unknown rule as diets.
+- Facet clause in `RecipesTab.results`: `f.mealType === null ? true :
+  MEAL_TYPE_BY_ID.get(f.mealType) === meta.ruleset`. O(1), no allocation.
 
-## Consequences
-- `src/lib/mealTypeFilter.ts`: `RECIPE_TYPE_TAGS`, `MEAL_TYPE_IDS`,
-  `mealTypeLabel(id)`, `mealTypeIcon(id)`, `mealTypeIndexFor(meta)`
-  (memoized id→count), `normalizeMealType` guard — pure, bun-test.
-- `quickFilters.ts`: +1 field + normalize line.
-- `RecipesTab.vue`: add `mealtype-button` + listbox + icon map; wire
-  `patchFilters({ mealType })`; clear-filters resets it; filter-bar grid
-  gains one cell (2-col phone grid absorbs it per ADR-0027).
-- `e2e`: new selectors `mealtype-button`, `mealtype-option-*` asserted.
+### Surface (mirrors the sort-menu listbox, ADR-0027)
+- Trigger `data-test="mealtype-button"`, `aria-haspopup="listbox"`,
+  `aria-expanded`, `aria-label="Meal type"`; shows `icon + label` of the
+  active type, or `Sparkles + Any` when `null`.
+- Menu `data-test="mealtype-menu"`, `role="listbox"`, options
+  `data-test="mealtype-option-{label}"` (Breakfast/Dessert/Snack/Simple/Dinner),
+  each `role="option"` with icon + label + count, `aria-selected`.
+- Keyboard: reuse the sort-menu handlers (Arrow/Home/End/Escape/Tab).
+- Icon colour **neutral** (meal occasions carry no food hue; the selected
+  option/chip uses the brand-tint rule, DESIGN.md "Selection and actions") —
+  icons keep their colour in both states, pills never resize.
+- `clearFilters()` resets `mealType` to `null`.
+
+## Non-goals / hard NOs
+- **No keyword lens over recipe names.** It was tried and discarded: it
+  disagreed with the app (104 vs 151 breakfasts) and would have shipped a
+  guess next to data that was already exact. If a future catalog drops
+  `ruleset`, the goldens fail loudly instead of silently degrading to a guess.
+- No dish-type chips — `variety_tag_ids` already backs the protein chips.
+- No runtime scan of `variant_meta` for counts.
+- No new store slice (no STORE_SLICES entry — a field on QuickFilters).
+- No new colour token (neutral icons only); `palette.ts` untouched.
+- No 6th bottom tab (ADR-0016 e2e-pinned).
+- No runtime fetching of anything (offline-first): the committed JSON plus the
+  `ruleset` already in the loaded catalog are all the filter needs.
+
+## Verification
+- `python3 scripts/extract_recipe_types.py [--check]` — `--check` fails on a
+  stale committed artifact (for CI).
+- `python3 scripts/test_extract_recipe_types.py` — 14 goldens: every variant
+  carries `ruleset`, no unmapped value appeared, the buckets partition the
+  feasible catalog, Breakfast == 151 (the app's own number), Dinner largest,
+  no empty chips, `--check` idempotent.
+- TS test: the `MEAL_TYPE_IDS`/label/icon registry agrees with the JSON.
+- e2e: select Dessert → 91 dessert recipes, all `ruleset === 'dessert'`;
+  Breakfast → 151; counts on the options match the JSON; Desktop Chrome +
+  Pixel 7.

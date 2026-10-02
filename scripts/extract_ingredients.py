@@ -28,6 +28,8 @@ Stdlib only; idempotent; no network. Re-run with:
 
 import collections
 import glob
+
+from catalog_paths import recipe_doc_paths
 import json
 import os
 import re
@@ -253,7 +255,7 @@ def snapshot_section_map() -> dict:
 
 
 def main() -> int:
-    recipe_files = sorted(glob.glob(os.path.join("public", "data", "recipes", "*.json")))
+    recipe_files = recipe_doc_paths()
     if len(recipe_files) != 2730:
         print(f"warning: expected 2,730 recipe docs, found {len(recipe_files)}", file=sys.stderr)
 

@@ -1,6 +1,6 @@
 # AGENTS.md — Guide for AI Agents working on Mealime Planner
 
-Offline-first Vue 3 SPA for the frozen Mealime recipe catalog (2,730 recipes
+Offline-first Vue 3 SPA for the frozen Mealime recipe catalog (2,759 recipes
 + images baked into the repo). **No runtime requests to any `mealime.com`
 host** — this is enforced by e2e (`blockExternalRequests` +
 `expectZeroMealimeRequests`); never add a fetch to external hosts.
@@ -388,6 +388,8 @@ artifact is a broken build).
 | `build_pack_index.py` | `public/data/pack_index.json` | planner ingredient footprint (ADR-0024) |
 | `verify_pack_index_parity.ts` | — | gates the Python builder against the TS it mirrors |
 | `extract_timer_hints.py` | `public/data/recipes/<variantId>.timer.json` | per-recipe timer-hint sidecars for the cooking view's timer suggestions (ADR-0041); goldens: `python3 scripts/test_extract_timer_hints.py` |
+| `extract_recipe_types.py` | `public/data/recipe_types.json` | meal-type (occasion) filter table, counted from `variant_meta[].ruleset` (ADR-0043); `--check` fails on a stale artifact; goldens: `python3 scripts/test_extract_recipe_types.py` |
+| `sync_catalog.py` | the whole catalog | brings the frozen catalog up to date (docs + webp images + builder_data); incremental, keeps what we already have |
 
 ```bash
 bun run data:pack     # rebuild pack_index.json
@@ -395,6 +397,20 @@ bun run data:verify   # assert Python == src/lib/containers.ts + quantity.ts
 python3 scripts/extract_timer_hints.py   # regen per-recipe .timer.json sidecars (idempotent, deletes stale)
 python3 scripts/test_extract_timer_hints.py  # 15 golden extraction cases
 ```
+
+Catalog refresh (ADR-0043): `python3 scripts/sync_catalog.py` is the ONLY way
+the catalog grows. It pulls `get_builder_data` (token read from a FILE —
+`../mealime-media/.mealime_token`, never a command line), fetches each recipe
+doc from `cdn-recipes.mealime.com/<published_recipe_uuid>.json`, archives raw
+truth to `../mealime-media/raw_recipes` + `raw_images`, encodes webp with
+Pillow, and MERGES builder_data (existing entries are kept, so pinned
+ratings/popularity never move silently). Then re-run the four generators above.
+
+**`public/data/recipes/` holds two kinds of JSON** — the catalog docs
+(`<variantId>.json`) AND the ADR-0041 timer sidecars (`<variantId>.timer.json`).
+Any script walking the catalog MUST use `recipe_doc_paths()` from
+`scripts/catalog_paths.py`; a bare `*.json` glob folds the sidecars in and
+silently doubles the pack index.
 
 Timer-hint sidecar rules (ADR-0041): recipes with zero hints omit the file
 entirely (an on-demand fetch 404s and shows no suggestion affordance);
@@ -416,7 +432,7 @@ Parity rules for anything mirroring TS into Python:
   at ~540 KB raw / ~73 KB gzip. Measured: brotli-11 saves a further ~8 KB and
   zstd-19 ~15 KB, but neither justifies changing the nginx image for a file
   this small — stock gzip wins.
-- All 2,730 recipes are authored `serving_count = 6`; index amounts are at
+- All 2,759 recipes are authored `serving_count = 6`; index amounts are at
   the authored servings and scale at read time, never baked.
 
 ## Known pitfalls

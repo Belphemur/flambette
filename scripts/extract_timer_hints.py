@@ -40,6 +40,8 @@ Stdlib only; idempotent; no network. Re-run with:
 """
 
 import glob
+
+from catalog_paths import recipe_doc_paths
 import json
 import os
 import re
@@ -158,7 +160,7 @@ def extract_recipe(doc: dict) -> list[dict]:
 
 
 def main() -> int:
-    recipe_paths = sorted(glob.glob(os.path.join(RECIPES_DIR, "*.json")))
+    recipe_paths = recipe_doc_paths()
     recipe_paths = [p for p in recipe_paths if not p.endswith(".timer.json")]
     written = 0
     total_hints = 0

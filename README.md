@@ -32,7 +32,7 @@ A mobile-first single-page app for browsing a frozen recipe catalog (originally 
 building a meal plan, and generating a grocery list from it.
 
 Fully offline and fully self-contained: the repo ships the complete recipe
-catalog — all 2,730 full recipe documents (`public/data/recipes/`, ~15 MB,
+catalog — all 2,759 full recipe documents (`public/data/recipes/`, ~15 MB,
 one JSON per variant id) plus the catalog snapshot — **and every recipe
 image** (`public/img/recipes/`, one WebP per archived Mealime CDN image).
 The app makes **no external requests at runtime**: recipe details are
@@ -44,7 +44,7 @@ neutral placeholder.
 
 ## Features
 
-- **2,730 recipes, zero internet** — the whole catalog and every photo ship
+- **2,759 recipes, zero internet** — the whole catalog and every photo ship
   in the repo. Browse, search and cook with the network cable unplugged.
 - **Auto-Plan** — a week of meals in one tap. It builds your plan around
   what you're already buying, so two recipes sharing a pack of cheese cost
@@ -247,10 +247,10 @@ with no keepalive and no activity, 12h idle being the backstop);
 ## Data provenance
 
 - `public/data/recipes/{variant_id}.json` — the complete offline catalog:
-  2,730 full recipe documents (ingredients, line items, scaled instructions,
+  2,759 full recipe documents (ingredients, line items, scaled instructions,
   cookware, nutrition), one file per variant id in `feasible_variants`.
 - `public/data/builder_data.json` — a snapshot of Mealime's recipe-builder
-  payload (2,730 feasible recipe variants with metadata, macros, ratings,
+  payload (2,759 feasible recipe variants with metadata, macros, ratings,
   ingredient names and image references).
 - `public/img/recipes/` — the offline image archive: one WebP per distinct
   Mealime CDN image (thumbnails at 400px, presentation images at 800px),
