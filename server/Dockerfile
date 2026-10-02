@@ -17,8 +17,11 @@ WORKDIR /app/server
 # flattening server/ to the image root would point that import at `/src`.
 COPY server/*.ts ./
 COPY server/relay-core/ ./relay-core/
-# The one cross-tree dependency, named on purpose: it lives outside server/,
-# so the globs above cannot cover it.
-COPY src/lib/roomWords.ts /app/src/lib/roomWords.ts
+# The one cross-tree dependency, copied as a DIRECTORY for the same reason
+# the globs exist: naming roomWords.ts alone would make the NEXT file the
+# core imports from src/lib another startup crash-loop (issue #6, one
+# level up). src/lib is 292 KB of flat, import-free source and Bun only
+# transpiles what is actually imported.
+COPY src/lib/ /app/src/lib/
 EXPOSE 8081
 CMD ["bun", "relay.ts"]

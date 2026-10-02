@@ -365,12 +365,29 @@ export function createRoomRegistry({
     return serial
   }
 
+  /**
+   * Arm the wake-up that prunes an ORPHANED floor.
+   *
+   * A floor outlives its room by design, so dropping the room leaves a
+   * record that nothing else will ever look at: with no timer armed, a
+   * relay that keeps serving codes would accumulate one floor entry per
+   * code it has EVER seen (the Bun adapter's `Map`, the DO's
+   * `rev_floor`/`peer_serial` rows). The floor is small, but it is
+   * unbounded, and it is read only if the code comes back — so the only
+   * honest way to reclaim it is to wake up when it reaches its idle TTL.
+   */
+  function armFloorPrune(): void {
+    const entry = store.readFloor()
+    if (entry) arm(entry.at + idleTtlMs)
+  }
+
   function leave(remaining: number): { dropped: boolean } {
     if (remaining > 0) return { dropped: false }
     // Nobody is there, so the room (and its state) goes too. A returning
     // client re-joins — which re-creates it — and re-seeds it. The
     // per-code rev floor survives (review F4).
     store.drop()
+    armFloorPrune()
     return { dropped: true }
   }
 
@@ -386,9 +403,15 @@ export function createRoomRegistry({
     const t = now()
     const row = store.read()
     if (!row) {
-      // The room is already gone; this wake-up only prunes a stale floor.
+      // The room is already gone; this wake-up only prunes a stale floor,
+      // and re-arms itself for as long as the floor is still fresh.
       const entry = store.readFloor()
-      if (entry && t - entry.at > idleTtlMs) store.dropFloor()
+      if (!entry) return null
+      if (t - entry.at > idleTtlMs) {
+        store.dropFloor()
+        return null
+      }
+      arm(entry.at + idleTtlMs)
       return null
     }
     const deadline = Math.min(row.inactivityAt, row.idleAt)
@@ -406,6 +429,9 @@ export function createRoomRegistry({
       console.error(`[relay] expire hook failed for ${code}: ${(err as Error)?.message ?? err}`)
     }
     store.drop()
+    // The room is gone but its floor survives, so the prune wake-up moves
+    // from the room's deadline to the floor's (see `armFloorPrune`).
+    armFloorPrune()
     return reason
   }
 

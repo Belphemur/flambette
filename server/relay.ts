@@ -111,6 +111,12 @@ interface Room {
 const rooms = new Map<string, Room>()
 /** Per-code rev floors. Deliberately separate: they outlive their room. */
 const floors = new Map<string, FloorRecord>()
+/**
+ * Wake-ups for floors whose room is gone. Kept apart from the rooms'
+ * own timers so a room dying cannot cancel its floor's prune — and so
+ * neither timer is cancelled by the other's lifecycle.
+ */
+const floorTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 /** All live sockets (Bun has no iterable `server.clients` — track manually). */
 const sockets = new Set<Socket>()
@@ -137,19 +143,58 @@ function storeFor(code: string): RoomStore {
 }
 
 /**
- * The single timer sink: re-arm the wake-up for the earlier of the room's
- * two deadlines, then let the core decide what a wake-up means. Bun's
- * `setTimeout` is used rather than the Durable Object's alarm only because
- * this adapter never hibernates — a live process always has timers.
+ * The core, wired to this adapter's clock, timer sink and store.
+ *
+ * Built per live room AND per floor prune: the Bun registry is a few
+ * closures over the Maps, so a throwaway one costs nothing and keeps the
+ * prune decision in the core instead of duplicating it here.
+ */
+function registryFor(code: string): RoomRegistry {
+  return createRoomRegistry({
+    code,
+    store: storeFor(code),
+    inactivityTtlMs: INACTIVITY_TTL_MS,
+    idleTtlMs: IDLE_TTL_MS,
+    now: () => Date.now(),
+    arm: (deadline) => armRoom(code, deadline),
+    onExpire: (expired, reason) => notifyExpired(expired, reason),
+  })
+}
+
+/**
+ * The single timer sink: re-arm the wake-up for whichever deadline the
+ * core just decided on, then let the core decide what a wake-up means.
+ * Bun's `setTimeout` is used rather than the Durable Object's alarm only
+ * because this adapter never hibernates — a live process always has
+ * timers.
+ *
+ * A deadline can belong to a room OR to an orphaned floor (the floor
+ * outlives its room, so pruning it needs its own wake-up). They are kept
+ * in separate maps because they have different lifetimes: the room timer
+ * dies with the room, the floor timer outlives it.
  */
 function armRoom(code: string, deadline: number): void {
+  const delay = Math.max(0, deadline - Date.now())
   const room = rooms.get(code)
-  if (!room) return
-  if (room.timer) clearTimeout(room.timer)
-  room.timer = setTimeout(() => {
-    room.timer = undefined
-    room.registry.tick()
-  }, Math.max(0, deadline - Date.now()))
+  if (room) {
+    if (room.timer) clearTimeout(room.timer)
+    room.timer = setTimeout(() => {
+      room.timer = undefined
+      room.registry.tick()
+    }, delay)
+    return
+  }
+  const pending = floorTimers.get(code)
+  if (pending) clearTimeout(pending)
+  floorTimers.set(
+    code,
+    setTimeout(() => {
+      floorTimers.delete(code)
+      // The room is gone; the core prunes the floor if it has aged out and
+      // re-arms the timer if it has not.
+      registryFor(code).tick()
+    }, delay),
+  )
 }
 
 function roomFor(code: string): Room {
@@ -160,15 +205,7 @@ function roomFor(code: string): Room {
     peers: new Set(),
     row: null,
     timer: undefined,
-    registry: createRoomRegistry({
-      code,
-      store: storeFor(code),
-      inactivityTtlMs: INACTIVITY_TTL_MS,
-      idleTtlMs: IDLE_TTL_MS,
-      now: () => Date.now(),
-      arm: (deadline) => armRoom(code, deadline),
-      onExpire: (expired, reason) => notifyExpired(expired, reason),
-    }),
+    registry: registryFor(code),
   }
   rooms.set(code, room)
   return room
@@ -222,6 +259,15 @@ const throttle = makeThrottle({
 
 /** Put a socket into `code`, detaching it from any previous room first. */
 function attach(ws: Socket, code: string): void {
+  // Already in this room: DO NOT detach. `detach` runs `leave`, and a
+  // socket that is the room's only peer would take the room down with it
+  // — a client that re-sends `join` for the room it is already in (a
+  // retry, or the URL intent on a reconnect that raced) would get a
+  // `joined` carrying real state and then find every later push refused
+  // with `bad_state`. The admission verdict was already computed against
+  // the room this socket is still in, so returning early is also the
+  // cheaper answer.
+  if (ws.data.roomCode === code && rooms.get(code)?.peers.has(ws)) return
   detach(ws)
   const room = roomFor(code)
   room.peers.add(ws)

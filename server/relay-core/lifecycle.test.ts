@@ -299,11 +299,21 @@ describe('keepalive', () => {
   test('a household that keeps itself alive for a week is never closed by the idle backstop', () => {
     const h = harness()
     h.registry.admit('join', 0)
-    for (let i = 0; i < 8; i++) {
+    // A WEEK of hourly keepalives, not eight hours: the clock under test
+    // is the 7-day backstop, and a shorter loop would still pass if
+    // `keepalive` stopped refreshing `idleAt` entirely — which is exactly
+    // the review F1 regression this case exists to guard.
+    const hours = IDLE_TTL_MS / HOUR + 8
+    for (let i = 0; i < hours; i++) {
       h.now(HOUR)
-      h.registry.keepalive()
+      expect(h.registry.keepalive()).toEqual({ kind: 'ok' })
+      // A wake-up that fires while the room is still live must decide
+      // "not yet" every single time, for the whole week.
+      expect(h.registry.tick()).toBeNull()
+      expect(h.expired).toEqual([])
     }
-    expect(h.expired).toEqual([])
+    // And the deadline really did move: past the original 7-day mark.
+    expect(h.store.read()!.idleAt).toBeGreaterThan(1_000_000 + IDLE_TTL_MS)
     expect(h.registry.tick()).toBeNull()
   })
 })
@@ -362,6 +372,56 @@ describe('expiry clocks (ADR-0038 widening ADR-0026)', () => {
     expect(h.registry.tick()).toBeNull()
     expect(h.expired).toEqual([])
     expect(h.store.floors.size).toBe(0)
+  })
+
+  test('a FRESH floor with no room keeps a wake-up armed until it ages out', () => {
+    // Nothing reads an orphaned floor until its code comes back, so
+    // without this wake-up a relay accumulates one floor entry per code
+    // it has ever served, forever. The wake-up re-arms while the floor is
+    // fresh and stops dead once the idle TTL has reclaimed it.
+    const h = harness()
+    h.registry.admit('join', 0)
+    h.registry.push(3, { a: 1 }, 'p1')
+    // The real drop path, not a raw `store.drop()`: the adapter never
+    // touches the store directly, and `leave` is what re-aims the
+    // wake-up at the floor it leaves behind.
+    expect(h.registry.leave(0).dropped).toBe(true)
+    const floor = h.store.floors.get('mauve-peacock-candle')!
+    expect(h.armedAt()).toBe(floor.at + IDLE_TTL_MS)
+
+    // A wake-up that fires while the floor is still fresh decides nothing
+    // and re-arms for the same deadline.
+    h.now(HOUR)
+    expect(h.registry.tick()).toBeNull()
+    expect(h.store.floors.size).toBe(1)
+    expect(h.armedAt()).toBe(floor.at + IDLE_TTL_MS)
+
+    // Once the floor has aged out, the wake-up reclaims it and stops.
+    h.now(IDLE_TTL_MS)
+    expect(h.registry.tick()).toBeNull()
+    expect(h.store.floors.size).toBe(0)
+  })
+
+  test('dropping a room arms nothing new when there is no floor to prune', () => {
+    // No floor means nothing to reclaim, and an armed deadline with nothing
+    // behind it would be a timer that fires to no purpose.
+    const h = harness()
+    h.registry.admit('join', 0)
+    const armedWhileLive = h.armedAt()
+    expect(h.store.floors.size).toBe(0)
+    expect(h.registry.leave(0).dropped).toBe(true)
+    expect(h.armedAt()).toBe(armedWhileLive)
+  })
+
+  test('dropping a room re-aims the wake-up at the surviving floor', () => {
+    const h = harness()
+    h.registry.admit('join', 0)
+    h.registry.push(3, { a: 1 }, 'p1')
+    const floor = h.store.floors.get('mauve-peacock-candle')!
+    expect(h.registry.leave(0).dropped).toBe(true)
+    expect(h.store.rooms.size).toBe(0)
+    expect(h.store.floors.size).toBe(1)
+    expect(h.armedAt()).toBe(floor.at + IDLE_TTL_MS)
   })
 
   test('a throwing expire hook cannot keep a room alive', () => {

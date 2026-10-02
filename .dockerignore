@@ -22,3 +22,7 @@ raw_images
 # hand-picked list — issue #6), but never the decision table: those specs depend
 # on bun:test and are dev-only.
 server/relay-core/*.test.ts
+
+# The relay ships src/lib whole (its Dockerfile globs, never a hand-picked
+# list — issue #6), but never its dev-only specs.
+src/lib/*.test.ts

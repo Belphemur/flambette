@@ -84,18 +84,26 @@ mirrored.
    - `server/relay.ts` (Bun, ~120 lines): `Bun.serve`, the WebSocket
      wiring, and mapping core verdicts onto sockets. Bun executes TypeScript
      natively, so the container stays BUILD-LESS — the Dockerfile changes
-     only in the COPY scope: `COPY *.mjs` widens to cover `relay-core/`
-     (still a glob, never an enumerated list — ADR-0025's rule that survived
-     issue #6 stays, and the CI smoke-run stays as the proof the image runs).
+     only in the COPY scope. The image keeps ADR-0025's globs (never an
+     enumerated list — the rule that survived issue #6) and adds exactly
+     two more directory copies:
+
+     | COPY | why |
+     | --- | --- |
+     | `COPY server/*.ts ./` | `relay.mjs` became `relay.ts` |
+     | `COPY server/relay-core/ ./relay-core/` | the core itself |
+     | `COPY src/lib/ /app/src/lib/` | §1's one permitted `src/` import |
+
+     All three are directory globs for the same reason: naming
+     `roomWords.ts` alone would make the NEXT `src/lib` import another
+     startup crash-loop. The CI smoke-run stays as the proof the image runs.
      *Amended after implementation:* the build context moves from `./server`
      to the REPO ROOT (every caller passes `-f server/Dockerfile`, and the
      image keeps the `server/` layout under `/app/server` so the relative
      `../../src/lib/roomWords` import still resolves). Reason: §1's one
      permitted `src/` import is a file OUTSIDE `server/`, so a server-only
      context shipped an image that crash-looped on
-     `Cannot find module '../../src/lib/roomWords'`. The image stays
-     build-less; one cross-tree file is now named in the Dockerfile, which
-     is not the enumerated-sibling-list failure mode issue #6 was about.
+     `Cannot find module '../../src/lib/roomWords'`.
    - `server/worker/` keeps `index.ts` (upgrade/dispatch, hibernation) and
      `room.ts` (the DO shell: SQL persistence, alarms, `env.ROOM`), calling
      the core for every lifecycle decision. Its size drops to roughly the
