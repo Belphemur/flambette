@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, type Component } from 'vue'
+import { computed, nextTick, ref, type Component } from 'vue'
 import { Check, ChevronDown } from 'lucide-vue-next'
 import { useListboxMenu } from '../composables/useListboxMenu'
 import HueIcon from './HueIcon.vue'
@@ -89,6 +89,36 @@ const emit = defineEmits<{ select: [value: string] }>()
 const selected = computed(() => props.options[props.selectedIndex] ?? null)
 
 /**
+ * The popup never runs past the window. The Auto-Plan sheet (ADR-0046)
+ * anchors its rows low on a phone, and the owner's screenshot showed the
+ * meal-type menu cut at the fold — Dinner unreachable, no scrollbar,
+ * nothing to reach it with — while the Protein row below it has only
+ * ~70px of room underneath. This is Headless UI's anchor contract
+ * (tailwindlabs/headlessui #227: max-height + overflow-y on the items;
+ * the `anchor` flip + `--anchor-padding`), measured here because the
+ * popup is inline, not portaled: at open, the space below the trigger
+ * (minus the `mt-1` gap and breathing room) clamps the popup's
+ * `max-height` — and when fewer than ~3 rows fit below but there is more
+ * room ABOVE, the popup flips up (`bottom-full mb-1`) instead. The clamp
+ * is strict, no floor: the popup is always fully on-screen and scrolls
+ * its options, which is the whole point on a phone.
+ */
+const menuMaxH = ref<number | null>(null)
+const menuUp = ref(false)
+function openPopup() {
+  menu.openMenu()
+  void nextTick(() => {
+    const trigger = menu.triggerEl.value
+    if (!trigger) return
+    const rect = trigger.getBoundingClientRect()
+    const below = window.innerHeight - rect.bottom - 8
+    const above = rect.top - 8
+    menuUp.value = below < 132 && above > below
+    menuMaxH.value = Math.round(Math.min(240, menuUp.value ? above : below))
+  })
+}
+
+/**
  * The shared focus bookkeeping (arrows, Home/End, Escape + refocus, Tab,
  * click-away) — consumed, not copied. Options are static per control, so
  * the option count captured at setup is the count for the control's life.
@@ -116,7 +146,7 @@ function choose(option: FilterDropdownOption) {
     :aria-expanded="menu.open.value"
     :aria-label="label"
     :data-test="triggerTest"
-    @click="menu.open.value ? menu.closeMenu({ refocus: true }) : menu.openMenu()"
+    @click="menu.open.value ? menu.closeMenu({ refocus: true }) : openPopup()"
     >
       <slot name="icon" />
       <span class="truncate">{{ selected?.label ?? label }}</span>
@@ -124,8 +154,9 @@ function choose(option: FilterDropdownOption) {
     </button>
     <ul
     v-if="menu.open.value"
-    class="absolute right-0 z-30 mt-1 overflow-hidden rounded-xl bg-surface-raised py-1 shadow-lg ring-1"
-    :class="menuWidth"
+    class="absolute right-0 z-30 overflow-y-auto overflow-x-clip rounded-xl bg-surface-raised py-1 shadow-lg ring-1"
+    :class="[menuWidth, menuUp ? 'bottom-full mb-1' : 'mt-1']"
+    :style="menuMaxH !== null ? { maxHeight: `${menuMaxH}px` } : undefined"
     role="listbox"
     :aria-label="label"
     :data-test="menuTest"

@@ -164,3 +164,40 @@ migration: the value is a string either way.
 - 2026-10-02 — algorithm review closed with zero arithmetic changes; K1–K3
   documented as deliberate so they are not "fixed" into pin-breaking
   "improvements" later.
+- 2026-10-02 — the mobile-scroll contract, post-ship. The owner hit all
+  three cuts on a short window: the dropdown popup ran past the viewport
+  fold with no scrollbar; the cooking screen's Start confirm and Mark as
+  cooked vanished below it; the Auto-Plan sheet's header clipped off the
+  TOP once the preview grew (`items-end` makes an unclamped panel overflow
+  upward, not downward). Decisions:
+  - The popup clamps to the space below its trigger at open time
+    (240px cap, 96px floor) and scrolls its options — Headless UI's
+    `anchor.padding` contract, measured in `FilterDropdown` because the
+    popup is inline, not portaled. ONE component, so all five call sites
+    inherit it.
+  - The cooking step body gets `min-h-0`: the flex minimum-size rule
+    (min-height: auto) otherwise grows the body to its content instead of
+    scrolling it, shoving the pinned strip + footer off-screen. The body
+    is the thing that scrolls; the chrome never moves.
+  - The Auto-Plan panel reuses NutritionModal's sheet pattern verbatim
+    (`max-h-[85vh] overflow-y-auto`). The timer-manage sheet is left
+    alone: its content is bounded (≤4 timers by ADR-0041's concurrent
+    cap), so it cannot overflow.
+  - Verified red-before/green-after with three e2e cases on a 412×560
+    viewport (the owner's report was a ~500px-tall window): recipe 4868
+    (9 detail lines in view 0) drives the cooking case.
+- 2026-10-02 — two refinements while proving the above green, both found
+  by the new e2e:
+  - The 96px floor on the popup clamp was wrong — the Protein row has only
+    ~70px of window under it, so the floor poked the popup back past the
+    fold. Replaced with Headless UI's actual flip behaviour: open downward
+    when ~3 rows fit below, otherwise flip up (`bottom-full mb-1`) and
+    clamp to the space above. Strict clamp, no floor — the popup is always
+    fully on-screen.
+  - The cooking bug was NOT only the missing `min-h-0` (measured: the body
+    did scroll at 48px) — the timer strip's preset `flex-wrap` branch
+    stacked ~380px of preset buttons in its narrow flex-1 column on a
+    412px window, outgrowing the window on its own and shoving the footer
+    off. The presets are now a horizontal scroll row, always — the same
+    pattern the chips row above already used; the wide-screen look is
+    unchanged (a row that fits shows no scrollbar).

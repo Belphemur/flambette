@@ -343,13 +343,6 @@ const suggestionOffered = computed(
 )
 
 /**
- * The presets become a SCROLL row once the row is genuinely crowded — four
- * armed chips, or a long label eating the name field. Below that they wrap
- * as one tidy block, which is what the cook sees on a fresh recipe.
- */
-const presetsScroll = computed(() => timers.value.length >= 4 || nameInput.value.length > 12)
-
-/**
  * Manage sheet (ADR-0042 §5): the armed timers, listed. The chips keep
  * their own inline buttons — this is DISCOVERABILITY (a cook who armed
  * four timers can see the whole set at a glance) and an escape hatch for
@@ -358,10 +351,14 @@ const presetsScroll = computed(() => timers.value.length >= 4 || nameInput.value
 const manageOpen = ref(false)
 
 /**
- * Arm a timer from the ladder or the confirm. Returns false when the
- * concurrent cap is reached and the replace prompt took over instead
- * (ADR-0041 §2). The label is the user's name, else the suggestion's
- * label, else "Step" — the store normalizes the empty case.
+ * The presets are a SCROLL row, always — never a wrapping block. The wrap
+ * branch looked tidy on a wide desktop, but on a phone the row is narrow:
+ * the wrapped presets stacked into a ~380px column (measured on 4868 at
+ * 412px), the strip outgrew the window, and the flex container shoved the
+ * footer — Mark as cooked with it — off the bottom. A scroll row is the
+ * same pattern the chips row above already uses (ADR-0041's shrink rule),
+ * and when the row fits there is no scrollbar: the wide-screen look is
+ * unchanged.
  */
 function arm(seconds: number, replacingId?: number): boolean {
   if (!meta.value) return false
@@ -669,8 +666,14 @@ function onTouchEnd(e: TouchEvent) {
   </header>
 
   <!-- Step body -->
+  <!-- Step body. `min-h-0` is not decoration: without it the flex
+  minimum-size rule (min-height: auto) lets a tall step GROW this body
+  instead of scrolling it, shoving the pinned timer strip and footer off
+  the bottom of a short window (the owner cooked on a ~500px-tall window
+  and the Start confirm + Mark as cooked vanished). The body is the thing
+  that scrolls; the chrome below it never moves. -->
   <div
-  class="flex-1 overflow-y-auto px-4 py-6"
+  class="min-h-0 flex-1 overflow-y-auto px-4 py-6"
   @touchstart.passive="onTouchStart"
   @touchend.passive="onTouchEnd"
   >
@@ -851,9 +854,10 @@ function onTouchEnd(e: TouchEvent) {
   />
   <!-- The one-tap presets, and the explicit confirm every custom
   minute count passes through (ADR-0041 §4). -->
+  <!-- The one-tap presets: always a horizontal scroll row (never a
+  wrapping block — see the arm() comment above). -->
   <div
-  class="flex min-w-0 flex-1 gap-1"
-  :class="presetsScroll ? 'overflow-x-auto' : 'flex-wrap'"
+  class="flex min-w-0 flex-1 gap-1 overflow-x-auto"
   data-test="timer-presets"
   >
   <button

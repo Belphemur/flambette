@@ -312,8 +312,14 @@ function setCategory(value: string) {
   class="fixed inset-0 z-40 flex items-end justify-center bg-surface-dark/50"
   @click.self="closeAutoPlan"
   >
+  <!-- The panel is BOTTOM-anchored (`items-end` on the scrim), so when
+  the preview grid grows past the window the panel overflows UPWARD and
+  the header + close button clip off the TOP. The `max-h-[85vh]
+  overflow-y-auto` pair is NutritionModal's sheet pattern reused: the
+  panel clamps and scrolls its own content, keeping BOTH ends reachable
+  on a short window. -->
   <div
-  class="w-full max-w-app space-y-4 rounded-t-2xl bg-surface-raised p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl"
+  class="max-h-[85vh] w-full max-w-app space-y-4 overflow-y-auto rounded-t-2xl bg-surface-raised p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl"
   role="dialog"
   aria-label="Generate an auto-plan"
   data-test="auto-plan-dialog"

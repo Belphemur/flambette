@@ -531,3 +531,19 @@ test('mark as cooked also asks before discarding a running timer', async ({ page
   await expect(cooking.getByTestId('mark-cooked')).toBeDisabled()
   await expectZeroMealimeRequests(page)
 })
+// ---------------------------------------------------------------------------
+// The pinned surfaces must survive a short window (post-ship, ADR-0046).
+// The owner hit this on a ~500px-tall window: recipe 4868's first view
+// renders 9 ingredient detail lines, and without `min-h-0` on the
+// scrolling body the flex minimum-size rule (min-height: auto) grows the
+// body to its content instead of scrolling it — shoving the timer strip
+// (the Start confirm, the presets) and the footer off the bottom of the
+// window. The body must be the thing that scrolls, never the chrome.
+// ---------------------------------------------------------------------------
+test('pinned timer strip + footer stay on screen on a short viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 560 })
+  const cooking = await startCookingRecipe(page, 4868)
+  await expect(cooking.getByTestId('timer-confirm')).toBeInViewport()
+  await expect(cooking.getByTestId('mark-cooked')).toBeInViewport()
+  await expectZeroMealimeRequests(page)
+})

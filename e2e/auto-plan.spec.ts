@@ -567,3 +567,56 @@ test('backup export/import round-trips the auto-plan ui slices', async ({ page }
   expect(gen).toBe(42)
   await expectZeroMealimeRequests(page)
 })
+
+// ---------------------------------------------------------------------------
+// Mobile scroll contract (post-ship, ADR-0046 §4): the sheet sits low in a
+// phone window and its dropdown popups used to run straight past the
+// viewport edge — the owner's screenshot showed the meal-type menu cut at
+// the fold with no way to reach Dinner. The popup now clamps to the space
+// below its trigger and scrolls inside (the Headless UI anchor-padding
+// contract), and the sheet itself scrolls once the preview grid grows.
+// ---------------------------------------------------------------------------
+test('dropdown popups clamp to the window and scroll to reach every option', async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 560 })
+  await page.goto('/plan')
+  await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
+  await page.getByTestId('auto-plan-button').first().click()
+  await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+
+  // Meal type: the popup must not run past the bottom of the window…
+  const mealMenu = page.getByTestId('auto-plan-ruleset-menu')
+  await page.getByTestId('auto-plan-ruleset').click()
+  await expect(mealMenu).toBeVisible()
+  let box = (await mealMenu.boundingBox())!
+  expect(box!.y + box!.height).toBeLessThanOrEqual(560)
+  // …and the clamped popup scrolls: the last option (Dinner) is reachable.
+  await page.getByTestId('auto-plan-option-dinner').scrollIntoViewIfNeeded()
+  await expect(page.getByTestId('auto-plan-option-dinner')).toBeInViewport()
+  await page.keyboard.press('Escape')
+
+  // Protein: same contract from the row below it — even less room there.
+  const proteinMenu = page.getByTestId('auto-plan-category-menu')
+  await page.getByTestId('auto-plan-category').click()
+  await expect(proteinMenu).toBeVisible()
+  box = (await proteinMenu.boundingBox())!
+  expect(box!.y + box!.height).toBeLessThanOrEqual(560)
+  await page.getByTestId('auto-plan-option-vegetarian').scrollIntoViewIfNeeded()
+  await expect(page.getByTestId('auto-plan-option-vegetarian')).toBeInViewport()
+  await expectZeroMealimeRequests(page)
+})
+
+test('the sheet keeps BOTH ends reachable once the preview grid grows', async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 560 })
+  await page.goto('/plan')
+  await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
+  await generate(page)
+  const dialog = page.getByTestId('auto-plan-dialog')
+  // The scrim is `items-end`, so an unclamped panel overflows UPWARD and
+  // clips the header + close button off the top of the window.
+  await expect(dialog.getByRole('button', { name: 'Close auto-plan' })).toBeInViewport()
+  // The preview's confirm row is inside the panel's own scroll.
+  const confirmBtn = page.getByTestId('auto-plan-confirm')
+  await confirmBtn.scrollIntoViewIfNeeded()
+  await expect(confirmBtn).toBeInViewport()
+  await expectZeroMealimeRequests(page)
+})
