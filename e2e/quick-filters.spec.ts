@@ -196,13 +196,49 @@ test.describe('filter bar layout on a phone (WS1)', () => {
   })
 })
 
+test.describe('cook-time dropdown (ADR-0045)', () => {
+  test('the four buckets render as a listbox and picking one filters the grid', async ({ page }) => {
+    // The native <select> is deleted (its OS-drawn popup matched neither
+    // dropdown); cook time is now the SAME popup shell as sort and meal
+    // type, so it earns the popup coverage the select never needed.
+    const trigger = page.getByTestId('cook-time-filter')
+    await expect(trigger).toContainText('Any cook time')
+
+    await trigger.click()
+    const menu = page.getByTestId('cook-time-menu')
+    await expect(menu).toBeVisible()
+    await expect(menu.getByRole('option')).toHaveCount(4)
+    for (const label of ['Any cook time', '≤ 20 min', '≤ 30 min', '≤ 45 min']) {
+      await expect(menu.getByRole('option', { name: label })).toBeVisible()
+    }
+
+    // Picking a bucket filters the grid: every rendered card is at or
+    // under the cap.
+    await page.getByTestId('cook-time-option-20').click()
+    await expect(trigger).toContainText('≤ 20 min')
+    const times = await page.locator('[data-test="card-time"]').allInnerTexts()
+    expect(times.length).toBeGreaterThan(0)
+    for (const text of times) {
+      expect(parseInt(text, 10)).toBeLessThanOrEqual(20)
+    }
+
+    // Reopening marks the chosen row selected, and "Any" clears it.
+    await trigger.click()
+    await expect(page.getByTestId('cook-time-option-20')).toHaveAttribute('aria-selected', 'true')
+    await page.getByTestId('cook-time-option-any').click()
+    await expect(trigger).toContainText('Any cook time')
+    await expectZeroMealimeRequests(page)
+  })
+})
+
 test.describe('filter sync and join reconciliation (WS3 + WS4)', () => {
   test('the selection persists across a reload', async ({ page }) => {
     await page.getByTestId('protein-chip-vegetarian').click()
     await page.getByTestId('diet-chip-no-pork').click()
     await page.getByTestId('sort-button').click()
     await page.getByTestId('sort-option-calories').click()
-    await page.getByLabel('Filter by max cook time').selectOption('30')
+    await page.getByTestId('cook-time-filter').click()
+    await page.getByTestId('cook-time-option-30').click()
     const before = await quickFilters(page)
 
     await page.reload()
@@ -210,7 +246,7 @@ test.describe('filter sync and join reconciliation (WS3 + WS4)', () => {
     expect(await quickFilters(page)).toEqual(before)
     await expect(page.getByTestId('protein-chip-vegetarian')).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByTestId('diet-chip-no-pork')).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByLabel('Filter by max cook time')).toHaveValue('30')
+    await expect(page.getByTestId('cook-time-filter')).toContainText('≤ 30 min')
     await expectZeroMealimeRequests(page)
   })
 

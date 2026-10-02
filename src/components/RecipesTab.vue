@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { ArrowUpDown, Check, Heart, SearchX, Sparkles } from 'lucide-vue-next'
+import { ArrowUpDown, Clock, Heart, SearchX, Sparkles } from 'lucide-vue-next'
 import type { Component } from 'vue'
-import { useListboxMenu } from '../composables/useListboxMenu'
 import { catalog } from '../lib/catalog'
 import {
   DIET_DESCRIPTIONS,
@@ -16,9 +15,9 @@ import {
 import {
   PROTEIN_OPTIONS,
   SORT_OPTIONS,
+  TIME_OPTIONS,
   defaultQuickFilters,
   hasActiveFilters,
-  sortLabel,
   type ProteinFilter,
   type QuickFilters,
   type SortBy,
@@ -27,7 +26,6 @@ import { popularityScore } from '../lib/quantity'
 import {
   OFFERED_MEAL_TYPES,
   matchesMealType,
-  mealTypeLabel,
   type MealTypeId,
 } from '../lib/mealTypeFilter'
 import {
@@ -43,6 +41,8 @@ import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
 import { useUiStore } from '../stores/ui'
 import RecipeCard from './RecipeCard.vue'
+import FilterDropdown from './FilterDropdown.vue'
+import type { FilterDropdownOption } from './FilterDropdown.vue'
 import HueIcon from './HueIcon.vue'
 
 /** The search box stays device-local: it is a question, not a household
@@ -90,52 +90,76 @@ function setProtein(protein: ProteinFilter) {
   patchFilters({ protein })
 }
 
-/* ---------- Sort menu (compact icon+label affordance, WS1/WS5) ---------- */
+/* ---------- The three dropdowns (ADR-0045: ONE FilterDropdown) ---------- */
 
 /**
- * The popup advertises `role="listbox"` / `role="option"`, so it behaves
- * like one: arrow keys move the selection focus, Home/End jump, Escape
- * closes and returns focus to the trigger, and the active option is
- * focused when the menu opens. The bookkeeping lives in
- * `useListboxMenu` — the meal-type dropdown (ADR-0043) runs on the SAME
- * code, so the two popups cannot drift apart.
+ * Cook time, sort and meal type all render through `FilterDropdown`, so
+ * the trigger classes, the popup shell, the check-or-spacer alignment and
+ * the focus bookkeeping exist ONCE (the native `<select>` is deleted —
+ * its OS-drawn popup was the third visual language). Each control only
+ * supplies data: the option list, the selected index, the `data-test`
+ * contract VERBATIM (ADR-0045 §3) and the leading icon that genuinely
+ * differs.
+ *
+ * `maxTime` keeps its exact `number | null` store type — the dropdown is
+ * presentation only; `normalizeQuickFilters` semantics are untouched.
  */
-const sortMenu = useListboxMenu(
-  SORT_OPTIONS.length,
-  () => SORT_OPTIONS.findIndex((o) => o.value === filters.value.sortBy),
-)
+const cookOptions: FilterDropdownOption[] = TIME_OPTIONS.map((minutes) => ({
+  value: minutes === null ? 'any' : String(minutes),
+  label: minutes === null ? 'Any cook time' : `≤ ${minutes} min`,
+}))
 
-function setSort(value: SortBy) {
-  patchFilters({ sortBy: value })
-  sortMenu.closeMenu({ refocus: true })
+const cookSelectedIndex = computed(() => {
+  const at = cookOptions.findIndex((o) => o.value === String(filters.value.maxTime ?? 'any'))
+  return Math.max(0, at)
+})
+
+function setMaxTime(value: string) {
+  patchFilters({ maxTime: value === 'any' ? null : Number(value) })
 }
-/** The active sort mode's label, shown on the closed button. */
-const sortText = computed(() => sortLabel(filters.value.sortBy))
+
+const sortOptions: FilterDropdownOption[] = SORT_OPTIONS.map((o) => ({
+  value: o.value,
+  label: o.label,
+  ariaLabel: `Sort by ${o.label}`,
+}))
+
+const sortSelectedIndex = computed(() => {
+  const at = SORT_OPTIONS.findIndex((o) => o.value === filters.value.sortBy)
+  return Math.max(0, at)
+})
+
+function setSort(value: string) {
+  patchFilters({ sortBy: value as SortBy })
+}
 
 /* ---------- Meal type (ADR-0043) ---------- */
 
 /**
- * Occasion dropdown over the catalog's own `ruleset` field. Same listbox
- * as the sort menu, same keyboard contract, and the SAME "one control in
- * the 2-column filter grid" placement (WS1) so nothing gets orphaned on
- * a line of its own on a phone.
- *
- * The option LIST is "Any" plus the five offered buckets, and the "+1"
- * offsets below keep that literal ordering in sync with the DOM order the
- * template renders (Any first, then `OFFERED_MEAL_TYPES`). A mismatch
- * here would only misplace the initial focus, so `mealTypeOptions`
- * derives the count from the same expression the template walks.
+ * Occasion dropdown over the catalog's own `ruleset` field, so this
+ * filter is exact — unlike the diet lens above there is no guessing. The
+ * option LIST is "Any" plus the five offered buckets, and the counts
+ * beside each option are tallied at BUILD time into the committed
+ * recipe_types.json, never by a 2,759-recipe scan in the client.
  */
-const mealOptionCount = OFFERED_MEAL_TYPES.length + 1
+const mealOptions: FilterDropdownOption[] = [
+  { value: 'any', label: 'Any', ariaLabel: 'Any meal type', icon: Sparkles },
+  ...OFFERED_MEAL_TYPES.map((option) => ({
+    value: String(option.id),
+    label: option.label,
+    ariaLabel: `${option.label}, ${option.count} recipes`,
+    count: option.count,
+    iconRole: mealRole(option.ruleset),
+  })),
+]
 
-const mealMenu = useListboxMenu(mealOptionCount, () => {
+const mealSelectedIndex = computed(() => {
   const at = OFFERED_MEAL_TYPES.findIndex((o) => o.id === filters.value.mealType)
   return at === -1 ? 0 : at + 1
 })
 
-function setMealType(id: MealTypeId | null) {
-  patchFilters({ mealType: id })
-  mealMenu.closeMenu({ refocus: true })
+function setMealType(value: string) {
+  patchFilters({ mealType: value === 'any' ? null : (Number(value) as MealTypeId) })
 }
 
 /**
@@ -299,18 +323,21 @@ onUnmounted(() => observer?.disconnect())
   class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center"
   data-test="filter-bar"
   >
-  <select
-  :value="filters.maxTime ?? ''"
-  class="h-11 w-full rounded-lg border px-2 text-sm sm:w-auto"
-  aria-label="Filter by max cook time"
-  data-test="cook-time-filter"
-  @change="patchFilters({ maxTime: ($event.target as HTMLSelectElement).value === '' ? null : Number(($event.target as HTMLSelectElement).value) })"
+  <!-- ADR-0045: one FilterDropdown for all three — cook time, sort and
+  meal type finally share one trigger + popup shell, and the native
+  `<select>` (whose OS-drawn popup matched nothing) is deleted. -->
+  <FilterDropdown
+  :options="cookOptions"
+  :selected-index="cookSelectedIndex"
+  label="Filter by max cook time"
+  trigger-test="cook-time-filter"
+  menu-test="cook-time-menu"
+  :option-test="(o) => `cook-time-option-${o.value}`"
+  :active="filters.maxTime !== null"
+  @select="setMaxTime"
   >
-  <option value="">Any cook time</option>
-  <option :value="20">≤ 20 min</option>
-  <option :value="30">≤ 30 min</option>
-  <option :value="45">≤ 45 min</option>
-  </select>
+  <template #icon><Clock :size="16" aria-hidden="true" /></template>
+  </FilterDropdown>
 
   <button
   class="flex h-11 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors"
@@ -342,50 +369,17 @@ onUnmounted(() => observer?.disconnect())
 
   <!-- Compact sort affordance: icon + current label, never a wide
   native select with "Sort: …" options. -->
-  <div :ref="sortMenu.wrapEl" class="relative">
-  <button
-  :ref="sortMenu.triggerEl"
-  class="flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium"
-  aria-haspopup="listbox"
-  :aria-expanded="sortMenu.open.value"
-  aria-label="Sort recipes"
-  data-test="sort-button"
-  @click="sortMenu.open.value ? sortMenu.closeMenu({ refocus: true }) : sortMenu.openMenu()"
+  <FilterDropdown
+  :options="sortOptions"
+  :selected-index="sortSelectedIndex"
+  label="Sort recipes"
+  trigger-test="sort-button"
+  menu-test="sort-menu"
+  :option-test="(o) => `sort-option-${o.value}`"
+  @select="setSort"
   >
-  <ArrowUpDown :size="16" aria-hidden="true" />
-  <span class="truncate">{{ sortText }}</span>
-  </button>
-  <ul
-  v-if="sortMenu.open.value"
-  class="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-xl bg-surface-raised py-1 shadow-lg ring-1"
-  role="listbox"
-  aria-label="Sort recipes"
-  data-test="sort-menu"
-  @keydown="sortMenu.onMenuKeydown"
-  >
-  <li v-for="(option, index) in SORT_OPTIONS" :key="option.value" role="none">
-  <button
-  :ref="(el) => sortMenu.setOptionEl(el as Element | null, index)"
-  class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
-  role="option"
-  :tabindex="index === sortMenu.focusIndex.value ? 0 : -1"
-  :aria-selected="filters.sortBy === option.value"
-  :aria-label="`Sort by ${option.label}`"
-  :data-test="`sort-option-${option.value}`"
-  @click="setSort(option.value)"
-  >
-  <Check
-  v-if="filters.sortBy === option.value"
-  :size="16"
-  class="shrink-0 text-brand"
-  aria-hidden="true"
-  />
-  <span v-else class="w-4 shrink-0" aria-hidden="true" />
-  <span class="truncate">{{ option.label }}</span>
-  </button>
-  </li>
-  </ul>
-  </div>
+  <template #icon><ArrowUpDown :size="16" aria-hidden="true" /></template>
+  </FilterDropdown>
   <!-- Meal type (ADR-0043): occasion buckets taken straight from the
   catalog's own `ruleset` field, so this filter is exact — the counts
   beside each option are tallied at BUILD time into the committed
@@ -394,17 +388,18 @@ onUnmounted(() => observer?.disconnect())
   Icon colour stays neutral: an occasion is not a food, so it has no
   hue, and the selected row is marked by the brand tint + check exactly
   like the sort menu (DESIGN.md "Selection and actions"). -->
-  <div :ref="mealMenu.wrapEl" class="relative">
-  <button
-  :ref="mealMenu.triggerEl"
-  class="flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors sm:w-auto"
-  :class="filters.mealType !== null ? 'border-brand-text bg-brand-tint text-brand-text' : ''"
-  aria-haspopup="listbox"
-  :aria-expanded="mealMenu.open.value"
-  aria-label="Meal type"
-  data-test="mealtype-button"
-  @click="mealMenu.open.value ? mealMenu.closeMenu({ refocus: true }) : mealMenu.openMenu()"
+  <FilterDropdown
+  :options="mealOptions"
+  :selected-index="mealSelectedIndex"
+  label="Meal type"
+  trigger-test="mealtype-button"
+  menu-test="mealtype-menu"
+  :option-test="(o) => `mealtype-option-${o.label}`"
+  menu-width="w-56"
+  :active="filters.mealType !== null"
+  @select="setMealType"
   >
+  <template #icon>
   <component
   :is="ANY_MEAL_ICON"
   v-if="selectedMealRole === null"
@@ -412,63 +407,8 @@ onUnmounted(() => observer?.disconnect())
   aria-hidden="true"
   />
   <HueIcon v-else :role="selectedMealRole" :size="16" />
-  <span class="truncate">{{ mealTypeLabel(filters.mealType) }}</span>
-  </button>
-  <ul
-  v-if="mealMenu.open.value"
-  class="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded-xl bg-surface-raised py-1 shadow-lg ring-1"
-  role="listbox"
-  aria-label="Meal type"
-  data-test="mealtype-menu"
-  @keydown="mealMenu.onMenuKeydown"
-  >
-  <!-- "Any" first: clearing the filter is the most common trip here. -->
-  <li role="none">
-  <button
-  :ref="(el) => mealMenu.setOptionEl(el as Element | null, 0)"
-  class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
-  role="option"
-  :tabindex="mealMenu.focusIndex.value === 0 ? 0 : -1"
-  :aria-selected="filters.mealType === null"
-  aria-label="Any meal type"
-  data-test="mealtype-option-Any"
-  @click="setMealType(null)"
-  >
-  <Check v-if="filters.mealType === null" :size="16" class="shrink-0 text-brand" aria-hidden="true" />
-  <span v-else class="w-4 shrink-0" aria-hidden="true" />
-  <Sparkles :size="16" class="shrink-0" aria-hidden="true" />
-  <span class="truncate">Any</span>
-  </button>
-  </li>
-  <li
-  v-for="(option, index) in OFFERED_MEAL_TYPES"
-  :key="option.id"
-  role="none"
-  >
-  <button
-  :ref="(el) => mealMenu.setOptionEl(el as Element | null, index + 1)"
-  class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
-  role="option"
-  :tabindex="mealMenu.focusIndex.value === index + 1 ? 0 : -1"
-  :aria-selected="filters.mealType === option.id"
-  :aria-label="`${option.label}, ${option.count} recipes`"
-  :data-test="`mealtype-option-${option.label}`"
-  @click="setMealType(option.id)"
-  >
-  <Check
-  v-if="filters.mealType === option.id"
-  :size="16"
-  class="shrink-0 text-brand"
-  aria-hidden="true"
-  />
-  <span v-else class="w-4 shrink-0" aria-hidden="true" />
-  <HueIcon v-if="mealRole(option.ruleset)" :role="mealRole(option.ruleset)!" :size="16" />
-  <span class="min-w-0 flex-1 truncate">{{ option.label }}</span>
-  <span class="shrink-0 text-xs tabular-nums text-text-muted">{{ option.count }}</span>
-  </button>
-  </li>
-  </ul>
-  </div>
+  </template>
+  </FilterDropdown>
   </div>
 
   <!-- WS2: ONE filter surface. The former "All diets" dropdown is gone;
