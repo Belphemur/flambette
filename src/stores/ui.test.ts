@@ -243,6 +243,70 @@ describe('default servings (ADR-0037)', () => {
   })
 })
 
+/* ---------- Display unit system (ADR-0047) ---------- */
+
+describe('unit system (ADR-0047)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  test('a fresh install is metric — the catalog\'s own system, so output is unchanged', () => {
+    expect(useUiStore().unitSystem).toBe('metric')
+  })
+
+  test('an explicit choice is remembered, from either affordance', () => {
+    const ui = useUiStore()
+    ui.setUnitSystem('imperial')
+    expect(ui.unitSystem).toBe('imperial')
+    ui.setUnitSystem('metric')
+    expect(ui.unitSystem).toBe('metric')
+  })
+
+  test('setUnitSystem refuses a value that is not a system', () => {
+    const ui = useUiStore()
+    for (const bad of ['', 'Metric', 'cups', null, undefined, 1, {}]) {
+      ui.setUnitSystem('imperial')
+      ui.setUnitSystem(bad)
+      expect(ui.unitSystem).toBe('imperial')
+    }
+  })
+
+  test('repairUnitSystem replaces a hand-edited value, like repairDefaultServings', () => {
+    // Hydration is a raw `$patch`, so a hand-edited blob lands verbatim. A
+    // value matching no system would silently disable every conversion.
+    for (const bad of ['', 'imperial-ish', 'FA', null, 0, {}]) {
+      const ui = useUiStore()
+      ;(ui as unknown as Record<string, unknown>).unitSystem = bad
+      ui.repairUnitSystem()
+      expect(ui.unitSystem).toBe('metric')
+    }
+  })
+
+  test('repairUnitSystem leaves a good value alone', () => {
+    const ui = useUiStore()
+    ui.setUnitSystem('imperial')
+    ui.repairUnitSystem()
+    expect(ui.unitSystem).toBe('imperial')
+  })
+
+  test('a backup carrying a system applies it; an absent one does not touch it', () => {
+    const ui = useUiStore()
+    ui.applySettings({ unitSystem: 'imperial' })
+    expect(ui.unitSystem).toBe('imperial')
+    // A settings.json written before ADR-0047 has no key: restoring it
+    // must not flip a device that reads imperial back to metric.
+    ui.applySettings({ householdRoom: '' })
+    expect(ui.unitSystem).toBe('imperial')
+  })
+
+  test('applySettings ignores a malformed system rather than disabling the transform', () => {
+    const ui = useUiStore()
+    ui.setUnitSystem('imperial')
+    ui.applySettings({ unitSystem: 'furlongs' })
+    expect(ui.unitSystem).toBe('imperial')
+  })
+})
+
 /* ---------- Concurrent named timers (ADR-0041) ---------- */
 
 describe('the global timer list (ADR-0041)', () => {

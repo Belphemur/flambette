@@ -110,6 +110,35 @@ describe('settings import (ADR-0013 registry)', () => {
     }
   })
 
+  /* ---------- unitSystem (ADR-0047) ---------- */
+
+  test('the unit system round-trips through the settings slice', () => {
+    settingsSlice().write({ unitSystem: 'imperial' })
+    const { unitSystem } = settingsSlice().read() as { unitSystem: string }
+    expect(unitSystem).toBe('imperial')
+    expect(settingsSlice().validate({ unitSystem })).toBeNull()
+
+    settingsSlice().write({ unitSystem: 'metric' })
+    expect(useUiStore().unitSystem).toBe('metric')
+    settingsSlice().write({ unitSystem })
+    expect(useUiStore().unitSystem).toBe('imperial')
+  })
+
+  test('an ABSENT unitSystem validates and is "don\'t touch" on write', () => {
+    // A backup written before ADR-0047 carries no key: restoring it must
+    // not flip a device that reads imperial back to metric.
+    expect(settingsSlice().validate({ shareCookedHistory: true })).toBeNull()
+    settingsSlice().write({ unitSystem: 'imperial' })
+    settingsSlice().write({ householdRoom: '' })
+    expect(useUiStore().unitSystem).toBe('imperial')
+  })
+
+  test('a MALFORMED unitSystem is rejected, not repaired', () => {
+    for (const bad of ['', 'Metric', 'cups', null, 0, {}]) {
+      expect(settingsSlice().validate({ unitSystem: bad })).toContain('unitSystem')
+    }
+  })
+
   test('a modern backup still applies its explicit values', () => {
     settingsSlice().write({
       shareCookedHistory: false,
