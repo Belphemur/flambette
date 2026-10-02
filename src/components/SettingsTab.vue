@@ -4,7 +4,7 @@ import { Download, Link, Dices, Minus, Plus, Scale, Upload, Utensils } from 'luc
 import { applyBackup, backupFileName, buildBackupZip } from '../lib/backup'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { MAX_SERVINGS, MIN_SERVINGS } from '../lib/servings'
-import { UNIT_SYSTEMS, type UnitSystem } from '../lib/units'
+import { UNIT_SYSTEMS, UNIT_SYSTEM_LABEL, type UnitSystem } from '../lib/units'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
@@ -45,15 +45,10 @@ const canMoreDefault = computed(() => ui.defaultServings < MAX_SERVINGS)
 /* ---------- Unit system (ADR-0047) ---------- */
 
 /**
- * Label for a system: the words a shopper thinks in, not the enum. The
- * units it actually switches are in the card's note, so the label stays
- * short and the button never reflows the row.
+ * The labels are the shared `UNIT_SYSTEM_LABEL` registry (the recipe-detail
+ * toggle reads the same map); what each mode actually puts on screen is
+ * spelled out in the card's note below.
  */
-const UNIT_SYSTEM_LABEL: Record<UnitSystem, string> = {
-  dual: 'Dual',
-  metric: 'Metric',
-  imperial: 'Imperial',
-}
 
 /** One line per mode: what the screen will actually read. */
 const UNIT_SYSTEM_NOTE: Record<UnitSystem, string> = {

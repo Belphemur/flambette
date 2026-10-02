@@ -157,9 +157,13 @@ narrower or wider than a first reading of the sections above suggests.
   between systems. Both surfaces write the value through the store's
   validating setter, and a hand-edited blob is repaired in `afterHydrate`.
 - **The recipe-detail toggle is a three-option segmented control** labelled
-  `°C/°F`, `°C / g` and `°F / oz`; the Settings card labels the same values
-  `Dual`, `Metric` and `Imperial` and spells out what each reads as. One
-  store member, one validating setter.
+  `Dual`, `Metric` and `Imperial` — the SAME words as the Settings card,
+  which additionally spells out what each mode reads as. Both surfaces read
+  the one `UNIT_SYSTEM_LABEL` registry in `lib/units`, so the labels cannot
+  drift (an earlier draft labelled the toggle `°C/°F`, `°C / g`, `°F / oz`,
+  which are not three options a reader can choose between — `°C/°F` is what
+  Dual reads, and no mode puts `g` and `°C` in one button). One store
+  member, one validating setter.
 
 ## Consequences
 

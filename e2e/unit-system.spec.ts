@@ -52,6 +52,12 @@ test('DUAL is the default: the authored text, verbatim', async ({ page }) => {
   await expect(sheet(page).getByText('Preheat the oven to 220°C (425°F).')).toBeVisible()
   await expect(sheet(page).getByText('1.02 kg').first()).toBeVisible()
   await expect(page.getByTestId('detail-unit-dual')).toHaveAttribute('aria-pressed', 'true')
+  // The toggle speaks the Settings card's grammar: three SYSTEMS, not three
+  // unit pairs. `°C/°F` used to sit on this button and it is not an option.
+  for (const label of ['Dual', 'Metric', 'Imperial']) {
+    await expect(page.getByTestId('detail-unit-toggle').getByRole('button', { name: `${label} units` })).toBeVisible()
+  }
+  await expect(page.getByTestId('detail-unit-toggle')).not.toContainText('°')
   await expectZeroMealimeRequests(page)
 })
 

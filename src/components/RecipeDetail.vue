@@ -8,6 +8,7 @@ import {
   localizeQuantity,
   localizeSteps,
   UNIT_SYSTEMS,
+  UNIT_SYSTEM_LABEL,
   type UnitSystem,
 } from '../lib/units'
 import { MAX_SERVINGS } from '../lib/servings'
@@ -119,17 +120,10 @@ const factor = computed(() => (doc.value ? servings.value / doc.value.serving_co
  */
 const unitSystem = computed<UnitSystem>(() => ui.unitSystem)
 
-/** Long label for the accessible name; short label for the button face. */
-const UNIT_SYSTEM_LABEL: Record<UnitSystem, string> = {
-  dual: 'Dual',
-  metric: 'Metric',
-  imperial: 'Imperial',
-}
-const UNIT_SYSTEM_SHORT: Record<UnitSystem, string> = {
-  dual: '°C/°F',
-  metric: '°C / g',
-  imperial: '°F / oz',
-}
+/* The three labels come from `UNIT_SYSTEM_LABEL` in lib/units — the same
+ * registry the Settings card reads, so the two surfaces cannot drift apart
+ * again (they briefly did: this toggle once read `°C/°F`, `°C / g`,
+ * `°F / oz`, which are not three options a reader can choose between). */
 
 function setUnitSystem(system: UnitSystem) {
   ui.setUnitSystem(system)
@@ -445,7 +439,7 @@ function startCooking() {
   :data-test="`detail-unit-${system}`"
   @click="setUnitSystem(system)"
   >
-  {{ UNIT_SYSTEM_SHORT[system] }}
+  {{ UNIT_SYSTEM_LABEL[system] }}
   </button>
   </div>
   </div>

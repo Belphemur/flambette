@@ -37,6 +37,19 @@ export type UnitSystem = 'dual' | 'metric' | 'imperial'
 export const UNIT_SYSTEMS: readonly UnitSystem[] = ['dual', 'metric', 'imperial']
 
 /**
+ * The label a shopper thinks in, for BOTH surfaces that offer the setting
+ * (the recipe-detail toggle and the Settings card). The units a system
+ * actually switches live in the Settings card's per-mode note, so the label
+ * stays short and a button never reflows its row. One registry: the two
+ * surfaces are the same setting, so they must be the same words too.
+ */
+export const UNIT_SYSTEM_LABEL: Record<UnitSystem, string> = {
+  dual: 'Dual',
+  metric: 'Metric',
+  imperial: 'Imperial',
+}
+
+/**
  * The default an install that never touches the control runs on: the exact
  * authored catalog text.
  */
