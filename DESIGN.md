@@ -32,6 +32,16 @@ colors:
   hue-vegetarian-soft: "#86EFAC"
   hue-vegan: "#047857"
   hue-vegan-soft: "#6EE7B7"
+  meal-breakfast: "#946200"
+  meal-breakfast-soft: "#FBBF24"
+  meal-dessert: "#A81E6B"
+  meal-dessert-soft: "#F472B6"
+  meal-snack: "#8C5F33"
+  meal-snack-soft: "#EBC49A"
+  meal-lunch: "#3730A3"
+  meal-lunch-soft: "#A5B4FC"
+  meal-dinner: "#571814"
+  meal-dinner-soft: "#FDBCBC"
   nutrition-energy: "#B83A0A"
   nutrition-energy-soft: "#FBBF6E"
   nutrition-sodium: "#4F46E5"
@@ -258,6 +268,46 @@ components:
   icon-hue-vegan-dark:
     backgroundColor: "{colors.surface-dark-raised}"
     textColor: "{colors.hue-vegan-soft}"
+    size: 18px
+  icon-meal-breakfast:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.meal-breakfast}"
+    size: 18px
+  icon-meal-breakfast-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.meal-breakfast-soft}"
+    size: 18px
+  icon-meal-dessert:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.meal-dessert}"
+    size: 18px
+  icon-meal-dessert-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.meal-dessert-soft}"
+    size: 18px
+  icon-meal-snack:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.meal-snack}"
+    size: 18px
+  icon-meal-snack-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.meal-snack-soft}"
+    size: 18px
+  icon-meal-lunch:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.meal-lunch}"
+    size: 18px
+  icon-meal-lunch-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.meal-lunch-soft}"
+    size: 18px
+  icon-meal-dinner:
+    backgroundColor: "{colors.surface-raised}"
+    textColor: "{colors.meal-dinner}"
+    size: 18px
+  icon-meal-dinner-dark:
+    backgroundColor: "{colors.surface-dark-raised}"
+    textColor: "{colors.meal-dinner-soft}"
     size: 18px
   icon-nutrition-energy:
     backgroundColor: "{colors.surface-raised}"

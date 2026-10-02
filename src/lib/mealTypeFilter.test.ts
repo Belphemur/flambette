@@ -55,7 +55,8 @@ describe('the committed meal-type table', () => {
       'Breakfast',
       'Dessert',
       'Snack',
-      'Simple',
+      // The catalog ruleset is `simple`; we surface it as Lunch (ADR-0043).
+      'Lunch',
       'Dinner',
     ])
     expect(OFFERED_MEAL_TYPES.some((o) => o.id === -6)).toBe(false)

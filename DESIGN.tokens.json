@@ -311,6 +311,116 @@
         "hex": "#6ee7b7"
       }
     },
+    "meal-breakfast": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.58,
+          0.384,
+          0
+        ],
+        "hex": "#946200"
+      }
+    },
+    "meal-breakfast-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.984,
+          0.749,
+          0.141
+        ],
+        "hex": "#fbbf24"
+      }
+    },
+    "meal-dessert": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.659,
+          0.118,
+          0.42
+        ],
+        "hex": "#a81e6b"
+      }
+    },
+    "meal-dessert-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.957,
+          0.447,
+          0.714
+        ],
+        "hex": "#f472b6"
+      }
+    },
+    "meal-snack": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.549,
+          0.373,
+          0.2
+        ],
+        "hex": "#8c5f33"
+      }
+    },
+    "meal-snack-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.922,
+          0.769,
+          0.604
+        ],
+        "hex": "#ebc49a"
+      }
+    },
+    "meal-lunch": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.216,
+          0.188,
+          0.639
+        ],
+        "hex": "#3730a3"
+      }
+    },
+    "meal-lunch-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.647,
+          0.706,
+          0.988
+        ],
+        "hex": "#a5b4fc"
+      }
+    },
+    "meal-dinner": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.341,
+          0.094,
+          0.078
+        ],
+        "hex": "#571814"
+      }
+    },
+    "meal-dinner-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.992,
+          0.737,
+          0.737
+        ],
+        "hex": "#fdbcbc"
+      }
+    },
     "nutrition-energy": {
       "$value": {
         "colorSpace": "srgb",

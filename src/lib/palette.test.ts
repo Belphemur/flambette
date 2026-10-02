@@ -57,6 +57,19 @@ const COLOR_TOKENS: Record<string, string> = {
   'hue-vegetarian': '--color-hue-vegetarian',
   'hue-vegetarian-soft': '--color-hue-vegetarian-soft',
   'hue-vegan': '--color-hue-vegan',
+  // Meal OCCASION (ADR-0043) — its own hue family. Deliberately separate from
+  // the four protein hues above: a colour that means "contains meat" must not
+  // also mean "Dinner".
+  'meal-breakfast': '--color-meal-breakfast',
+  'meal-breakfast-soft': '--color-meal-breakfast-soft',
+  'meal-dessert': '--color-meal-dessert',
+  'meal-dessert-soft': '--color-meal-dessert-soft',
+  'meal-snack': '--color-meal-snack',
+  'meal-snack-soft': '--color-meal-snack-soft',
+  'meal-lunch': '--color-meal-lunch',
+  'meal-lunch-soft': '--color-meal-lunch-soft',
+  'meal-dinner': '--color-meal-dinner',
+  'meal-dinner-soft': '--color-meal-dinner-soft',
   'hue-vegan-soft': '--color-hue-vegan-soft',
   'nutrition-energy': '--color-nutrition-energy',
   'nutrition-energy-soft': '--color-nutrition-energy-soft',

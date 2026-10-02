@@ -27,9 +27,9 @@
     },
     "-4": {
       "count": 304,
-      "icon": "Gauge",
+      "icon": "Soup",
       "id": -4,
-      "label": "Simple",
+      "label": "Lunch",
       "offered": true,
       "ruleset": "simple"
     },

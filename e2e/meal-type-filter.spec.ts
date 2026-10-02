@@ -7,7 +7,7 @@ import {
 } from './helpers'
 
 /**
- * The Meal type dropdown (ADR-0043) — Breakfast / Dessert / Snack / Simple
+ * The Meal type dropdown (ADR-0043) — Breakfast / Dessert / Snack / Lunch
  * / Dinner, fed entirely by the catalog's own `ruleset` field.
  *
  * The interesting property here is that this filter is EXACT: it is a
@@ -93,7 +93,7 @@ test('the dropdown offers the five meals with the counts the catalog gives', asy
     ['Breakfast', 'breakfast'],
     ['Dessert', 'dessert'],
     ['Snack', 'snack'],
-    ['Simple', 'simple'],
+    ['Lunch', 'simple'],
     ['Dinner', 'dinner'],
   ] as const) {
     await expect(menu.getByTestId(`mealtype-option-${label}`)).toContainText(
@@ -198,7 +198,7 @@ test('a meal type combines with the other filters by AND, and narrows further', 
   const counts = await rulesetCounts(page)
 
   await openMenu(page)
-  await page.getByTestId('mealtype-option-Simple').click()
+  await page.getByTestId('mealtype-option-Lunch').click()
   await expectResultCount(page, counts.simple)
 
   // A diet chip on top can only ever REMOVE recipes (ADR-0018 diets AND

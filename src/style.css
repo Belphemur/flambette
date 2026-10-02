@@ -93,6 +93,16 @@
   --color-hue-vegetarian-soft: #86efac;
   --color-hue-vegan: #047857;
   --color-hue-vegan-soft: #6ee7b7;
+  --color-meal-breakfast: #946200;
+  --color-meal-breakfast-soft: #fbbf24;
+  --color-meal-dessert: #a81e6b;
+  --color-meal-dessert-soft: #f472b6;
+  --color-meal-snack: #8c5f33;
+  --color-meal-snack-soft: #ebc49a;
+  --color-meal-lunch: #3730a3;
+  --color-meal-lunch-soft: #a5b4fc;
+  --color-meal-dinner: #571814;
+  --color-meal-dinner-soft: #fdbcbc;
   --color-nutrition-energy: #b83a0a;
   --color-nutrition-energy-soft: #fbbf6e;
   --color-nutrition-sodium: #4f46e5;
@@ -175,6 +185,11 @@
   --color-hue-fish: var(--color-hue-fish-soft, #5cc0d8);
   --color-hue-vegetarian: var(--color-hue-vegetarian-soft, #86efac);
   --color-hue-vegan: var(--color-hue-vegan-soft, #6ee7b7);
+  --color-meal-breakfast: var(--color-meal-breakfast-soft, #fbbf24);
+  --color-meal-dessert: var(--color-meal-dessert-soft, #f472b6);
+  --color-meal-snack: var(--color-meal-snack-soft, #ebc49a);
+  --color-meal-lunch: var(--color-meal-lunch-soft, #a5b4fc);
+  --color-meal-dinner: var(--color-meal-dinner-soft, #fdbcbc);
   --color-nutrition-energy: var(--color-nutrition-energy-soft, #fbbf6e);
   --color-nutrition-sodium: var(--color-nutrition-sodium-soft, #a5b4fc);
   --color-nutrition-protein: var(--color-nutrition-protein-soft, #c4a8f5);

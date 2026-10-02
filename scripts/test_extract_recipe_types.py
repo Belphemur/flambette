@@ -33,7 +33,7 @@ def builder():
 
 class Table(unittest.TestCase):
     def test_offers_five_meals_and_keeps_cpg_out_of_the_dropdown(self):
-        self.assertEqual([r[1] for r in mod.TABLE], ["Breakfast", "Dessert", "Snack", "Simple", "Dinner"])
+        self.assertEqual([r[1] for r in mod.TABLE], ["Breakfast", "Dessert", "Snack", "Lunch", "Dinner"])
         self.assertEqual([r[0] for r in mod.TABLE], [-1, -2, -3, -4, -5])
         # cpg is Mealime's product-placement bucket, not a meal.
         self.assertEqual([r[3] for r in mod.NON_OCCASION], ["cpg"])

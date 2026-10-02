@@ -38,7 +38,7 @@ TABLE = [
     (-1, "Breakfast", "Sunrise", "breakfast"),
     (-2, "Dessert", "IceCreamCone", "dessert"),
     (-3, "Snack", "Cookie", "snack"),
-    (-4, "Simple", "Gauge", "simple"),
+    (-4, "Lunch", "Soup", "simple"),
     (-5, "Dinner", "UtensilsCrossed", "dinner"),
 ]
 
