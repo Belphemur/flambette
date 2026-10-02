@@ -220,6 +220,20 @@ export function localizeText(text: string, system: UnitSystem): string {
  * (`1 small bunch`) or a unit that is already imperial-native
  * (cups, tbsp, oz, lb, inch).
  */
+/**
+ * The authored LEADING AMOUNT, matched as a SPAN so it can be preserved
+ * verbatim. `parseQuantity` sums a fraction into a float (`½` → 0.5) and
+ * discards how it was spelled, so re-formatting its `amount` would reflow
+ * an authored `½` into `0.5` and a mixed `1 ½` into `1.5` whenever a
+ * sibling token (a container annotation, say) was the thing that actually
+ * converted. Re-running the parse on the span instead also picks up the
+ * ASCII-fraction form (`3/4 kg`) that `parseQuantity` reads as amount `3`
+ * plus a unit of `/4 kg`.
+ */
+const LEADING_AMOUNT_RE = new RegExp(
+  '^(\\d+\\s*[¼½¾⅓⅔⅛⅜⅝⅞]+|\\d+(?:[.,]\\d+)?(?:\\s*/\\s*\\d+)?|[¼½¾⅓⅔⅛⅜⅝⅞]+)',
+)
+
 export function localizeQuantity(raw: string, system: UnitSystem): string {
   if (system === 'metric') return raw
   const parsed = parseQuantity(raw)
@@ -228,7 +242,12 @@ export function localizeQuantity(raw: string, system: UnitSystem): string {
     // stray temperature still localizes.
     return localizeText(raw, system)
   }
-  let rest = parsed.unit.trim()
+  const trimmed = raw.trim()
+  const span = trimmed.match(LEADING_AMOUNT_RE)
+  const headText = span ? span[0] : formatAmount(parsed.amount)
+  // Re-parse the SPAN so an ASCII fraction scales as the fraction it is.
+  const amount = (span ? parseQuantity(span[0])?.amount : null) ?? parsed.amount
+  let rest = trimmed.slice(headText.length).trim()
   let annotation = ''
   const ann = rest.match(/^(\([^)]*\))\s*/)
   if (ann) {
@@ -238,23 +257,24 @@ export function localizeQuantity(raw: string, system: UnitSystem): string {
     annotation = `(${localizeQuantity(inner, system)})`
     rest = rest.slice(ann[0].length).trim()
   }
-  if (!rest) return formatAmount(parsed.amount)
 
   const tokens = rest.split(/\s+/).filter(Boolean)
   const last = tokens[tokens.length - 1]
   // Only a BARE unit converts. A multi-word phrase is a container noun
   // (`small bunch`, `cm pieces`) or an already-imperial label (`fl oz`);
   // guessing inside it would rewrite prose.
-  const conversion = tokens.length === 1 ? METRIC_TO_IMPERIAL.get(unitKey(last)) : undefined
+  const conversion = rest ? METRIC_TO_IMPERIAL.get(unitKey(last)) : undefined
   if (!conversion) {
-    const head = formatAmount(parsed.amount)
-    return annotation ? `${head} ${annotation} ${rest}` : `${head} ${rest}`
+    const head = annotation ? `${headText} ${annotation}` : headText
+    return rest ? `${head} ${rest}` : head
   }
   const [factor, label] = conversion
-  const converted = parsed.amount * factor
+  const converted = amount * factor
   const head = formatAmount(converted)
   const noun = label === 'inch' ? inchLabel(converted) : label
-  return annotation ? `${head} ${annotation} ${rest}` : `${head} ${noun}`
+  // `rest` IS the bare token that converted, so the rendered noun replaces
+  // it — never both, or an imperial line would read `8 oz lb`.
+  return annotation ? `${head} ${annotation} ${noun}` : `${head} ${noun}`
 }
 
 /**

@@ -145,6 +145,17 @@ describe('quantities (ADR-0047 §1)', () => {
     expect(localizeQuantity('3 (2 ½ cm) pieces', 'imperial')).toBe('3 (1 inch) pieces')
   })
 
+  test('a container head keeps the authored FRACTION, not a flattened decimal', () => {
+    // formatContainerQuantity renders ADR-0017 sums as fractions (`½`,
+    // `1 ½`). `parseQuantity` throws the fraction away (it is summed as a
+    // float), so the head must be sliced back out of the raw string rather
+    // than re-formatted: `0.5 (5 oz) pkg` would misread as a decimal.
+    expect(localizeQuantity('½ (142 g) pkg', 'imperial')).toBe('½ (5 oz) pkg')
+    expect(localizeQuantity('1 ½ (142 g) pkg', 'imperial')).toBe('1 ½ (5 oz) pkg')
+    expect(localizeQuantity('3/4 (142 g) pkg', 'imperial')).toBe('3/4 (5 oz) pkg')
+    expect(localizeQuantity('½ (142 g) small bunch', 'imperial')).toBe('½ (5 oz) small bunch')
+  })
+
   test('imperial-native and count units pass through in BOTH systems', () => {
     for (const q of ['2 cups', '3 tbsp', '6 cloves', '1 small bunch', '1 head', '3 (3 oz) cans']) {
       expect(localizeQuantity(q, 'imperial')).toBe(q)

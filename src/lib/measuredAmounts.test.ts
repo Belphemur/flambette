@@ -153,8 +153,11 @@ describe('measuredChipsForLines', () => {
 
   test('a container chip localizes its ANNOTATION and keeps the count', () => {
     const cheese = doc([item('1 ½ (227 g) block', 'cheddar cheese')])
+    // The head keeps the AUTHORED fraction (`1 ½`), not a flattened `1.5`:
+    // only the annotation converted, so the count it sits next to is
+    // untouched (ADR-0047, "parse what parses, keep the rest verbatim").
     expect(measuredChipsForLines(cheese, ['a slab of cheddar cheese'], 1, 'imperial')).toEqual([
-      { lineIndex: 0, label: 'measured: 1.5 (8 oz) block cheddar cheese' },
+      { lineIndex: 0, label: 'measured: 1 ½ (8 oz) block cheddar cheese' },
     ])
   })
 })
