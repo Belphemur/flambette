@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { blockExternalRequests, expectZeroMealimeRequests, waitForCatalog } from './helpers'
 
 /**
@@ -708,11 +708,22 @@ test.describe('touch viewport never gets the hover affordance', () => {
   })
 })
 test.describe('icon tooltips (pointer)', () => {
-  test('a bare food-type icon shows its category name on hover', async ({ page, isMobile }) => {
-    // ADR-0040: the bubble is a visual DUAL of the icon's accessible
-    // name, revealed on hover/focus and gated by the same
-    // `@media (hover: hover)` rule that scopes the pointer cursor — so
-    // the touch project is provably exempt rather than untested.
+  // Hover the ICON's bounding box: the host span is pointer-transparent
+  // (the card link keeps its click path), so Playwright's actionability
+  // check would reject locator.hover() on it — move the mouse to the
+  // rect's centre directly instead.
+  async function hoverBox(page: Page, locator: Locator) {
+    const box = (await locator.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  }
+
+  test('a bare food-type icon shows its category name on ICON hover, not on card hover', async ({ page, isMobile }) => {
+    // ADR-0044: the bubble is scoped to the ICON by a shared hit-test of
+    // the icon's own rect. Hovering the photo/title/card padding does NOT
+    // open it (the owner's first symptom), and the recipe detail page
+    // gets the same mechanism for free (the owner's second symptom).
+    // Still gated by `@media (hover: hover)` (ADR-0040): the touch
+    // project is provably exempt rather than untested.
     test.skip(isMobile === true, 'pointer affordance only')
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await blockExternalRequests(page)
@@ -729,20 +740,26 @@ test.describe('icon tooltips (pointer)', () => {
 
     const wrapper = named.locator('xpath=..')
     const bubble = wrapper.locator('[data-test="icon-tooltip"]')
+    // 1. Hidden at rest — hovering NOTHING yet.
     await expect(bubble).toBeHidden()
 
-    // Hover is anchored on the CARD (`group/htt`): the tooltip host is
-    // pointer-transparent so the stretched link keeps the click path.
-    await page.locator('[data-test="recipe-card-link"]').first().hover()
+    // 2. Hover the icon's own bounding box: the bubble opens and its text
+    // is the icon's accessible name (the visual dual of it, never a
+    // second thing for AT to read).
+    await hoverBox(page, named)
     await expect(bubble).toBeVisible()
-    // The bubble and the accessible name are the same string.
     await expect(bubble).toHaveText(name!)
-    // It is a decoration, never a second thing for AT to read.
     await expect(bubble).toHaveAttribute('aria-hidden', 'true')
 
-    // The KEYBOARD path reaches the same information: the host span is
+    // 3. THE REGRESSION (owner report): move the pointer clearly OFF the
+    // icon onto the card's photo — a card hover must NOT open the bubble.
+    const photo = page.locator('[data-test="recipe-card"]').first().locator('img')
+    await hoverBox(page, photo)
+    await expect(bubble).toBeHidden()
+
+    // 4. The KEYBOARD path reaches the same information: the host span is
     // focusable (the bare icon is inside neither a button nor a link), so
-    // Tab to it and the bubble opens without a pointer.
+    // focus it and the bubble opens without a pointer.
     await page.mouse.move(0, 0)
     await expect(bubble).toBeHidden()
     const host = page.locator('[data-test="hue-icon"]').first()
@@ -751,12 +768,50 @@ test.describe('icon tooltips (pointer)', () => {
     await expect(bubble).toBeVisible()
     await expect(bubble).toHaveText(name!)
 
-    // The host is pointer-transparent, so a click ON THE ICON still
+    // 5. The host is pointer-transparent, so a click ON THE ICON still
     // reaches the card's stretched link and opens the recipe.
     expect(await host.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none')
     const box = (await named.boundingBox())!
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
     await expect(page.getByTestId('detail-title')).toBeVisible()
+    await expectZeroMealimeRequests(page)
+  })
+
+  test('the recipe detail header icon has its own tooltip, scoped to the icon', async ({ page, isMobile }) => {
+    // ADR-0044: the recipe page was the surface with NO tooltip at all —
+    // no ancestor carried the old group, so the bubble could never render
+    // there. One mechanism serves both surfaces; this pins the second one.
+    test.skip(isMobile === true, 'pointer affordance only')
+    await page.setViewportSize(DESKTOP_VIEWPORT)
+    await blockExternalRequests(page)
+    await page.goto('/')
+    await waitForCatalog(page)
+
+    // Open the first card — the one the browse case proves carries a
+    // named type icon — and land on its detail page.
+    await page.locator('[data-test="recipe-card-link"]').first().click()
+    await expect(page.getByTestId('detail-title')).toBeVisible()
+
+    // The header's type icon: the first hue-icon under the detail header
+    // that carries a role="img" accessible name.
+    const host = page
+      .locator('header [data-test="hue-icon"]', { has: page.locator('svg[role="img"]') })
+      .first()
+    await expect(host).toBeVisible()
+    const name = await host.locator('svg[role="img"]').getAttribute('aria-label')
+    expect(name).toBeTruthy()
+    const bubble = host.locator('[data-test="icon-tooltip"]')
+    await expect(bubble).toBeHidden()
+
+    // Hovering the icon opens the bubble…
+    await hoverBox(page, host.locator('svg[role="img"]'))
+    await expect(bubble).toBeVisible()
+    await expect(bubble).toHaveText(name!)
+    await expect(bubble).toHaveAttribute('aria-hidden', 'true')
+
+    // …and hovering elsewhere on the page does not.
+    await hoverBox(page, page.getByTestId('detail-title'))
+    await expect(bubble).toBeHidden()
     await expectZeroMealimeRequests(page)
   })
 })

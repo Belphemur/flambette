@@ -32,8 +32,11 @@ const isFavourite = computed(() => favourites.isFavourite(props.meta.id))
 </script>
 
 <template>
+  <!-- No `group/htt` here (ADR-0044): the icon tooltip is anchored by a
+  hit-test on the icon's own rect, not by an ancestor group — hovering
+  the card must NOT open it. -->
   <article
-  class="group group/htt relative overflow-hidden rounded-xl bg-surface-raised ring-1 ring-border transition-shadow hover:shadow-md"
+  class="group relative overflow-hidden rounded-xl bg-surface-raised ring-1 ring-border transition-shadow hover:shadow-md"
   data-test="recipe-card"
   :data-variant-id="meta.id"
   >

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { ICON_ROLES, ROLE_GLYPHS, hueClass, type IconRole } from '../lib/palette'
+import { useIconHoverTarget } from '../composables/useIconHoverTarget'
 
 /**
  * The one renderer for a role glyph (ADR-0036 item 5: ONE role-to-glyph
@@ -25,31 +26,33 @@ import { ICON_ROLES, ROLE_GLYPHS, hueClass, type IconRole } from '../lib/palette
  * prints its word beside the glyph, so a bubble there would be noise.
  * Pass `tooltip=""` to opt a labelled icon OUT.
  *
- * The bubble reveals on `group-hover/htt` (which a touch device can
- * never fire), on `group-focus/htt` and on `group-focus-within/htt` —
- * all COMBINED with the `hovercap:` variant, i.e.
- * `@media (hover: hover)` — the same discipline that scopes the pointer
- * cursor. The media gate matters: a tap on a phone FOCUSES the button
- * inside a rating row, so an ungated `group-focus-within` would pop a
- * bubble on the touch device this whole mechanism exists to stay off.
+ * REVEAL (ADR-0044): the host span is `pointer-events-none` — the card's
+ * stretched link keeps its click path under the icon — so the icon can
+ * never match `:hover` and the old ancestor-`group/htt` anchor is GONE
+ * (it opened the bubble for the whole card on the browse tile, and on
+ * the recipe page it had no anchor at all). The pointer reveal is now a
+ * JS hit-test: `useIconHoverTarget` watches the shared `pointermove`
+ * listener and flips `pointerInside` while the pointer is inside THIS
+ * host's rect — hovering the icon, and only the icon, on every surface
+ * that renders it. The keyboard reveal is `@focusin`/`@focusout` on the
+ * focusable host itself (`focusWithin`); both feed one class, and the
+ * whole thing stays inside the `hovercap:` gate — `@media (hover: hover)`
+ * from ADR-0040 — so the touch project can never reveal a bubble by
+ * tapping (a tap FOCUSES the host, and the media gate is what keeps that
+ * silent here).
  *
- * The host span is itself a focus target (`tabindex="0"`) and is
- * `pointer-events-none`. The latter restores the card link's click path
- * (the positioned tooltip host painted above the stretched
- * `after:inset-0` overlay used to swallow clicks on the type icon) while
- * leaving it keyboard focusable. The trade-off is that the pointer over
- * the icon region now hits whatever is under it, so HOVER is anchored on
- * an ancestor `group/htt` (the browse card root carries the same group
- * name) rather than on the host itself — hovering the card is what opens
- * the bubble, which is also the natural gesture for it.
+ * The host is still `tabindex="0"`, `role="img"`/`aria-label` still
+ * carry the meaning for AT, and a click on the icon still reaches the
+ * card's stretched link (the host stays pointer-transparent).
  *
- * It is deliberately NOT `hidden … hovercap:block` (the shape ADR-0040's
- * sketch used): `hovercap:block` compiles to `display:block` INSIDE the
- * media query and nothing else, so on every hover-capable device it
- * overrides `hidden` and the bubble is permanently open. `hidden` +
- * the two reveal variants gives the same "cannot render on touch"
- * guarantee without that failure mode. This component is the ONE
- * tooltip implementation (DRY).
+ * It is deliberately NOT `hidden … hovercap:block` unconditionally (the
+ * shape ADR-0040's sketch used): `hovercap:block` compiles to
+ * `display:block` INSIDE the media query, so on every hover-capable
+ * device it overrides `hidden` and the bubble would be permanently
+ * open. `hidden` + the conditional reveal class gives the same "cannot
+ * render on touch" guarantee without that failure mode. This component
+ * is the ONE tooltip implementation (DRY); `RatingStars`' rating
+ * preview is a DIFFERENT hover surface with its own group (ADR-0044 §3).
  *
  * KNOWN, DELIBERATE: the icon keeps its native `title`, so a
  * hover-capable browser will eventually also show its own OS-level
@@ -68,6 +71,20 @@ const bubble = computed(() => {
   const text = props.tooltip ?? props.label
   return text ?? ''
 })
+
+/**
+ * ADR-0044: subscribe the host to the shared pointer hit-test — but only
+ * when a bubble exists (a labelled icon); an `aria-hidden` glyph beside
+ * real text has nothing to reveal, and must not even register with the
+ * listener. `label`/`tooltip` are static per usage, so the subscription
+ * decided here at setup is the subscription for the element's life.
+ */
+const hostEl = ref<HTMLElement | null>(null)
+const pointerInside = ref(false)
+const focusWithin = ref(false)
+if (bubble.value) {
+  useIconHoverTarget(hostEl, pointerInside)
+}
 </script>
 
 <template>
@@ -75,9 +92,12 @@ const bubble = computed(() => {
   pointer gets (see the header note); `pointer-events-none` so the card's
   stretched link keeps the click path under the icon. -->
   <span
+  ref="hostEl"
   tabindex="0"
   data-test="hue-icon"
-  class="group/htt pointer-events-none relative inline-flex rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+  class="pointer-events-none relative inline-flex rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+  @focusin="focusWithin = true"
+  @focusout="focusWithin = false"
   >
     <component
     :is="ROLE_GLYPHS[ICON_ROLES[props.role].glyph]"
@@ -93,7 +113,8 @@ const bubble = computed(() => {
     role="presentation"
     aria-hidden="true"
     data-test="icon-tooltip"
-    class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-max max-w-40 -translate-x-1/2 rounded-md bg-surface-dark px-2 py-1 text-[11px] leading-snug text-on-brand shadow-lg hovercap:group-hover/htt:block hovercap:group-focus/htt:block hovercap:group-focus-within/htt:block"
+    class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-max max-w-40 -translate-x-1/2 rounded-md bg-surface-dark px-2 py-1 text-[11px] leading-snug text-on-brand shadow-lg"
+    :class="pointerInside || focusWithin ? 'hovercap:block' : ''"
     >
     {{ bubble }}
     </span>
