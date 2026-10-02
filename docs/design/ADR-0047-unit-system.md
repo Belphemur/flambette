@@ -129,10 +129,21 @@ narrower or wider than a first reading of the sections above suggests.
   genuine dual-notation pair in 2,759 recipes is inside that tolerance, and
   a parenthetical genuinely stating a different temperature is converted
   independently rather than dropped.
-- **A temperature RANGE converts BOTH bounds.** The catalog writes its degree
+- **A temperature RANGE converts BOTH bounds — but only when both bounds are
+  PLAUSIBLE temperatures.** The catalog writes its degree
   sign once (`180-200°C`), so the lone-token pass would convert only the
-  upper bound; a range pass runs first. The degree sign is what keeps it
-  safe, so `20-25 minutes` stays prose.
+  upper bound; a range pass runs first. The degree sign alone does NOT keep
+  it safe: prose pairs a lone small number with a real temperature exactly
+  the way a range does (`Cook 2 to 350°F`, `at step 3 - 200°C`) and only the
+  second number carries the sign. The match therefore has to clear a
+  plausibility guard — the low bound is at or above 60 °C / 140 °F (under the
+  lowest authored temperature mention in the frozen corpus, 65 °C / 145 °F)
+  and the bounds ascend, both checked in the SOURCE unit so the answer never
+  depends on the reader's system. A rejected match is returned verbatim, so
+  the lone-token pass then does the honest thing on the one genuine
+  temperature inside it (`Cook 2 to 350°F` → `Cook 2 to 177°C`). Genuine low
+  ends still convert: `65-70°C` → `149-158°F`. A degree-less range
+  (`20-25 minutes`) never reaches the guard at all.
 - **There is deliberately no bare `in` length unit.** The corpus spells
   lengths in full (`inch`/`inches`) — 0 occurrences of `<number> in` across
   2,759 docs — while `<number> in` is ordinary English (`cut 2 in half`), so

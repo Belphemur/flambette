@@ -200,6 +200,28 @@ describe('lengths in prose and annotations (ADR-0047 §4)', () => {
     // A degree-less range is a duration/count, never a temperature.
     expect(localizeText('Bake for 20-25 minutes.', 'imperial')).toBe('Bake for 20-25 minutes.')
   })
+
+  test('a RANGE whose low bound is not a temperature stays PROSE', () => {
+    // Prose pairs a lone small number with a real temperature exactly the way
+    // a range does, and the shared degree sign is on the SECOND number only.
+    // The low bound is a step / a count, so the range must be rejected whole:
+    // only the genuine temperature converts, and the prose `2 to` is intact.
+    expect(localizeText('Cook 2 to 350°F.', 'metric')).toBe('Cook 2 to 177°C.')
+    expect(localizeText('At step 3 - 200°C rest the chicken.', 'imperial')).toBe(
+      'At step 3 - 392°F rest the chicken.',
+    )
+    // Same string, target system already written: nothing to convert.
+    expect(localizeText('Cook 2 to 350°F.', 'imperial')).toBe('Cook 2 to 350°F.')
+    // The floor is a temperature floor, not a digit-count rule: a genuine low
+    // end (65 °C, the slowest setpoint in the catalog) still converts, in
+    // either system.
+    expect(localizeText('Hold at 65-70°C.', 'imperial')).toBe('Hold at 149-158°F.')
+    // Descending bounds are prose order, not a range. Rejecting it is still
+    // right even though the result looks odd: the lone `350°F` is a real
+    // temperature, so the token pass below converts that one and nothing
+    // pretends `375` is part of it.
+    expect(localizeText('Stir 375-350°F at most.', 'metric')).toBe('Stir 375-177°C at most.')
+  })
 })
 
 describe('quantities (ADR-0047 §1)', () => {

@@ -158,9 +158,51 @@ const LENGTH_RE = new RegExp(
  * would otherwise convert only the upper bound and turn `180-200°C` into
  * the wrong `180-392°F`. The degree sign is what makes this safe: `20-25
  * minutes` carries none, so it stays prose.
+ *
+ * The degree sign alone is NOT sufficient, though: prose pairs a lone
+ * small number with a real temperature the same way (`Cook 2 to 350°F`,
+ * `at step 3 - 200°C`), and the low bound of such a match is a step
+ * number, not a temperature. `isPlausibleTempRange` is what tells the two
+ * apart.
  */
 const TEMP_RANGE_RE =
   /(\d+(?:\.\d+)?)([ \t]*(?:-|–|—|to)[ \t]*)(\d+(?:\.\d+)?)[ \t]*°[ \t]*([CF])/g
+
+/**
+ * The floor below which no cooking setpoint in this catalog lives.
+ *
+ * 60 °C is the highest of the two thresholds expressed in Celsius (60 °C
+ * is 140 °F), and it sits UNDER the lowest authored temperature mention in
+ * the frozen corpus — 65 °C / 145 °F, which is a slow-roast / sous-vide
+ * low end. Nothing below that is an oven, a bain-marie or a probe setpoint
+ * here, so a lower bound is prose, not a temperature.
+ *
+ * Stated as a floor on the LOW bound only: the upper bound is unconstrained
+ * (baking goes to 260 °C / 500 °F) because the range reads low→high, so an
+ * ordering check already rejects an upper bound below the floor.
+ */
+const MIN_PLAUSIBLE_RANGE_C = 60
+
+/** The same floor in Fahrenheit (60 °C == 140 °F). */
+const MIN_PLAUSIBLE_RANGE_F = 140
+
+/**
+ * Does `<low><sep><high> °<unit>` actually read as a temperature range?
+ *
+ * Two checks, both in the SOURCE unit so the answer never depends on which
+ * system the reader asked for:
+ * 1. the low bound is at or above the catalog's floor — this is what
+ *    rejects `Cook 2 to 350°F` and `step 3 - 200°C`, whose low bounds are
+ *    an unrelated prose number;
+ * 2. the bounds ascend — a descending pair is prose order, not a range.
+ *
+ * Both bounds are then genuinely temperatures, because the ascending check
+ * puts the high bound at or above the low bound.
+ */
+function isPlausibleTempRange(low: number, high: number, from: 'C' | 'F'): boolean {
+  const floor = from === 'C' ? MIN_PLAUSIBLE_RANGE_C : MIN_PLAUSIBLE_RANGE_F
+  return low >= floor && low < high
+}
 
 /** `inch` / `inches` by magnitude, so a converted length reads naturally. */
 function inchLabel(amount: number): string {
@@ -184,7 +226,10 @@ function convertTemperature(value: number, from: 'C' | 'F', system: UnitSystem):
  * - A parenthetical that states a genuinely DIFFERENT temperature is never
  *   dropped: both notations convert, independently.
  * - A lone temperature converts.
- * - A range whose degree sign is written once converts BOTH bounds.
+ * - A range whose degree sign is written once converts BOTH bounds — but
+ *   only when both bounds are PLAUSIBLE temperatures (see
+ *   `isPlausibleTempRange`); otherwise the match is prose and falls through
+ *   to the lone-token pass, which still converts the real temperature in it.
  */
 function localizeTemperatures(text: string, system: UnitSystem): string {
   const unit = system === 'imperial' ? 'F' : 'C'
@@ -210,20 +255,29 @@ function localizeTemperatures(text: string, system: UnitSystem): string {
   )
   // Ranges next, before the lone-token pass: both bounds share one degree
   // sign, so the token pass would convert only the upper one.
+  //
+  // A REJECTED range is returned verbatim, which is what lets the lone-token
+  // pass do its own (correct) thing on the one genuine temperature in the
+  // match: `Cook 2 to 350°F` keeps its prose `2 to` and converts only
+  // `350°F`.
   const withRanges = withPairs.replace(
     TEMP_RANGE_RE,
     (
-      _match,
+      match,
       lowRaw: string,
       sep: string,
       highRaw: string,
       from: 'C' | 'F',
-    ) =>
-      `${convertTemperature(Number(lowRaw), from, system)}${sep}${convertTemperature(
-        Number(highRaw),
+    ) => {
+      const low = Number(lowRaw)
+      const high = Number(highRaw)
+      if (!isPlausibleTempRange(low, high, from)) return match
+      return `${convertTemperature(low, from, system)}${sep}${convertTemperature(
+        high,
         from,
         system,
-      )}°${unit}`,
+      )}°${unit}`
+    },
   )
   return withRanges.replace(
     TEMP_RE,
