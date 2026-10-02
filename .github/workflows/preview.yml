@@ -48,7 +48,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4.136.3"
+          wranglerVersion: "4.147.0"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           # The GitHub deployment's environment — stable per PR, so the same
           # two deployments get reused on every push instead of multiplying.
@@ -105,7 +105,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4.136.3"
+          wranglerVersion: "4.147.0"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           environment: preview-web-pr-${{ github.event.pull_request.number || 'main' }}
           command: preview --name pr-${{ github.event.pull_request.number || 'main' }}
