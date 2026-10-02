@@ -151,6 +151,25 @@ async function ageRoom(stub: DurableObjectStub, hours: number): Promise<void> {
   })
 }
 
+/**
+ * Await the STORAGE proof that a pushed rev landed in the room's DO. State
+ * pushes have no acknowledgement, and `ageRoom` + the alarm race the async
+ * store: if the store lands after the aging, the store refreshes the room's
+ * timestamps, the alarm sees a fresh room and fires as a no-op — the expiry
+ * frame is then never sent and the waiting spec times out (reproduced ~25%
+ * of suite runs; the flaky CI `worker` job). The SQL row is the wire-less
+ * proof the store ran.
+ */
+async function expectStoredRev(stub: DurableObjectStub, rev: number): Promise<void> {
+  for (;;) {
+    const rows = await runInDurableObject(stub, (_instance, state) =>
+      state.storage.sql.exec('SELECT rev FROM room WHERE id = 1').toArray(),
+    )
+    if (rows.some((row) => (row as { rev?: unknown }).rev === rev)) return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
+
 describe('health', () => {
   it('answers a plain GET with the lifecycle configuration', async () => {
     const response = await SELF.fetch('https://relay.test/')
@@ -395,6 +414,7 @@ describe('liveness and expiry', () => {
     const b = await dial(`/?op=join&room=${room}`)
     await b.expect('joined')
     await a.send({ type: 'state', rev: 9, state: { plan: [] } })
+    await expectStoredRev(roomStub(room), 9)
 
     await ageRoom(roomStub(room), 25)
     await runDurableObjectAlarm(roomStub(room))
@@ -432,6 +452,7 @@ describe('liveness and expiry', () => {
     const a = await dial(`/?op=create&room=${room}`)
     await a.expect('created')
     await a.send({ type: 'state', rev: 9, state: { plan: [] } })
+    await expectStoredRev(roomStub(room), 9)
     await ageRoom(roomStub(room), 25)
     await runDurableObjectAlarm(roomStub(room))
     await a.expect('error')
