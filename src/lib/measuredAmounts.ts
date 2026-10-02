@@ -129,13 +129,13 @@ export function measuredQuantity(item: LineItem, factor: number, base: number): 
  *
  * `system` (ADR-0047) localizes the chip's quantity for DISPLAY only — the
  * quantity itself is derived from `doc.line_items`, which stays canonical
- * metric. Metric keeps the transform the identity.
+ * metric. `dual` (the default) keeps the transform the identity.
  */
 export function measuredChipsForLines(
   doc: RecipeDoc,
   detailLines: readonly string[],
   factor: number,
-  system: UnitSystem = 'metric',
+  system: UnitSystem = 'dual',
 ): MeasuredChip[] {
   const items = doc.line_items ?? []
   if (items.length === 0) return []

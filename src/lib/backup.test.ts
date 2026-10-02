@@ -120,6 +120,8 @@ describe('settings import (ADR-0013 registry)', () => {
 
     settingsSlice().write({ unitSystem: 'metric' })
     expect(useUiStore().unitSystem).toBe('metric')
+    settingsSlice().write({ unitSystem: 'dual' })
+    expect(useUiStore().unitSystem).toBe('dual')
     settingsSlice().write({ unitSystem })
     expect(useUiStore().unitSystem).toBe('imperial')
   })

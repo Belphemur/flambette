@@ -45,14 +45,38 @@ test.beforeEach(async ({ page }) => {
   await waitForCatalog(page)
 })
 
-test('metric is the default: the authored dual notation collapses to °C', async ({ page }) => {
+test('DUAL is the default: the authored text, verbatim', async ({ page }) => {
   await openFixture(page)
-  // The catalog's own `220°C (425°F)` reads as one temperature in metric.
+  // The catalog's own `220°C (425°F)` is what a dual reader gets, byte for
+  // byte — the default must not churn a single pre-existing display pin.
+  await expect(sheet(page).getByText('Preheat the oven to 220°C (425°F).')).toBeVisible()
+  await expect(sheet(page).getByText('1.02 kg').first()).toBeVisible()
+  await expect(page.getByTestId('detail-unit-dual')).toHaveAttribute('aria-pressed', 'true')
+  await expectZeroMealimeRequests(page)
+})
+
+test('METRIC collapses the dual notation to °C and leaves metric amounts alone', async ({ page }) => {
+  await openFixture(page)
+  await page.getByTestId('detail-unit-toggle').getByRole('button', { name: 'Metric units' }).click()
   await expect(sheet(page).getByText('Preheat the oven to 220°C.')).toBeVisible()
   await expect(sheet(page).getByText(/425°F/)).toHaveCount(0)
   // A metric quantity is the IDENTITY — no rounding churn on the sheet.
   await expect(sheet(page).getByText('1.02 kg').first()).toBeVisible()
   await expect(page.getByTestId('detail-unit-metric')).toHaveAttribute('aria-pressed', 'true')
+  await expectZeroMealimeRequests(page)
+})
+
+test('a cup gains its volume in a single-system mode and stays authored in dual', async ({ page }) => {
+  // `cup` is a purchasable VOLUME container: the count never converts, the
+  // mode's volume is annotated next to it (US legal cup = 240 ml exactly).
+  await openFixture(page)
+  await page.getByTestId('detail-unit-toggle').getByRole('button', { name: 'Metric units' }).click()
+  await expect(sheet(page).getByText('1 cup (240 ml)').first()).toBeVisible()
+  await sheet(page).getByRole('button', { name: 'Back' }).click()
+  await openFixture(page)
+  await page.getByTestId('detail-unit-toggle').getByRole('button', { name: 'Dual units' }).click()
+  await expect(sheet(page).getByText('1 cup', { exact: false }).first()).toBeVisible()
+  await expect(sheet(page).getByText('1 cup (240 ml)')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
 

@@ -250,8 +250,8 @@ describe('unit system (ADR-0047)', () => {
     setActivePinia(createPinia())
   })
 
-  test('a fresh install is metric — the catalog\'s own system, so output is unchanged', () => {
-    expect(useUiStore().unitSystem).toBe('metric')
+  test('a fresh install is DUAL — the catalog exactly as authored, so output is unchanged', () => {
+    expect(useUiStore().unitSystem).toBe('dual')
   })
 
   test('an explicit choice is remembered, from either affordance', () => {
@@ -260,6 +260,8 @@ describe('unit system (ADR-0047)', () => {
     expect(ui.unitSystem).toBe('imperial')
     ui.setUnitSystem('metric')
     expect(ui.unitSystem).toBe('metric')
+    ui.setUnitSystem('dual')
+    expect(ui.unitSystem).toBe('dual')
   })
 
   test('setUnitSystem refuses a value that is not a system', () => {
@@ -278,7 +280,7 @@ describe('unit system (ADR-0047)', () => {
       const ui = useUiStore()
       ;(ui as unknown as Record<string, unknown>).unitSystem = bad
       ui.repairUnitSystem()
-      expect(ui.unitSystem).toBe('metric')
+      expect(ui.unitSystem).toBe('dual')
     }
   })
 
@@ -294,7 +296,7 @@ describe('unit system (ADR-0047)', () => {
     ui.applySettings({ unitSystem: 'imperial' })
     expect(ui.unitSystem).toBe('imperial')
     // A settings.json written before ADR-0047 has no key: restoring it
-    // must not flip a device that reads imperial back to metric.
+    // must not flip a device that reads imperial back to the default.
     ui.applySettings({ householdRoom: '' })
     expect(ui.unitSystem).toBe('imperial')
   })

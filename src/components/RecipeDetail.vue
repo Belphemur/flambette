@@ -4,7 +4,12 @@ import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
 import { scaleQuantity } from '../lib/quantity'
-import { localizeQuantity, localizeSteps, type UnitSystem, UNIT_SYSTEMS } from '../lib/units'
+import {
+  localizeQuantity,
+  localizeSteps,
+  UNIT_SYSTEMS,
+  type UnitSystem,
+} from '../lib/units'
 import { MAX_SERVINGS } from '../lib/servings'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
@@ -113,6 +118,18 @@ const factor = computed(() => (doc.value ? servings.value / doc.value.serving_co
  * `localizeSteps` helper, so the two surfaces cannot drift.
  */
 const unitSystem = computed<UnitSystem>(() => ui.unitSystem)
+
+/** Long label for the accessible name; short label for the button face. */
+const UNIT_SYSTEM_LABEL: Record<UnitSystem, string> = {
+  dual: 'Dual',
+  metric: 'Metric',
+  imperial: 'Imperial',
+}
+const UNIT_SYSTEM_SHORT: Record<UnitSystem, string> = {
+  dual: '°C/°F',
+  metric: '°C / g',
+  imperial: '°F / oz',
+}
 
 function setUnitSystem(system: UnitSystem) {
   ui.setUnitSystem(system)
@@ -402,10 +419,10 @@ function startCooking() {
   </button>
   </div>
   </div>
-  <!-- Unit system (ADR-0047): a compact two-option toggle in the ACTIONS
-  panel, so a reader who shops in oz/lb does not have to leave the recipe
-  to fix it. It writes the SAME ui member as the Settings card, so the two
-  surfaces are one setting by construction. -->
+  <!-- Unit system (ADR-0047): a compact three-option segmented control in
+  the ACTIONS panel, so a reader who shops in oz/lb does not have to leave
+  the recipe to fix it. It writes the SAME ui member as the Settings card,
+  so the two surfaces are one setting by construction. -->
   <div
   class="flex items-center justify-between gap-3"
   data-test="detail-unit-toggle"
@@ -424,11 +441,11 @@ function startCooking() {
   : 'text-text-muted'
   "
   :aria-pressed="unitSystem === system"
-  :aria-label="`${system === 'metric' ? 'Metric' : 'Imperial'} units`"
+  :aria-label="`${UNIT_SYSTEM_LABEL[system]} units`"
   :data-test="`detail-unit-${system}`"
   @click="setUnitSystem(system)"
   >
-  {{ system === 'metric' ? '°C / g' : '°F / oz' }}
+  {{ UNIT_SYSTEM_SHORT[system] }}
   </button>
   </div>
   </div>

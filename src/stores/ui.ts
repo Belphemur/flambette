@@ -163,9 +163,10 @@ export const useUiStore = defineStore(
      */
     const defaultServings = ref<number>(FALLBACK_SERVINGS)
     /**
-     * The display unit system (ADR-0047): 'metric' or 'imperial'. Metric is
-     * the default because the catalog IS metric, so the default output is
-     * bit-for-bit today's.
+     * The display unit system (ADR-0047): 'dual', 'metric' or 'imperial'.
+     * `dual` is the default because the catalog text IS today's display, so
+     * the default output is bit-for-bit today's — the TRUE identity, which
+     * is what keeps every pre-existing display pin green.
      *
      * Device-local on purpose, exactly like `defaultServings` above: the
      * PLAN and the grocery `checked` keys are the household's shared truth

@@ -12,33 +12,44 @@
  * Two transforms, deliberately separate:
  *
  * - `localizeQuantity` — a formatted amount + unit (`450 g`, `1.5 (142 g)
- *   pkg`, `½ (142 g) pkg`). Metric is the IDENTITY: the catalog's metric
- *   quantity is today's display, so an install that never touches the
- *   control cannot churn a single existing pin.
+ *   pkg`, `½ (142 g) pkg`). `dual` is the IDENTITY: the catalog text IS
+ *   today's display, so an install that never touches the control cannot
+ *   churn a single existing pin.
  * - `localizeText` — authored PROSE (instruction steps): temperatures and
- *   lengths. Metric is NOT the identity here: the catalog writes dual
- *   notation inconsistently (`220°C (425°F)` AND `450°F (232°C)`), so
- *   neither system reads clean until one of them is dropped.
+ *   lengths. `dual` is the identity here too: the catalog writes dual
+ *   notation inconsistently (`220°C (425°F)` AND `450°F (232°C)`), so a
+ *   reader who wants ONE system asks for it explicitly and a reader who
+ *   wants the catalog as authored gets exactly that.
  *
  * Pure lib: no Vue/Pinia imports, unit-tested like the rest of `src/lib`.
  */
 
 import { formatAmount, parseQuantity } from './quantity'
 
-export type UnitSystem = 'metric' | 'imperial'
+/**
+ * The three settings. `dual` — the catalog exactly as authored — is the
+ * default: it is the TRUE identity, so every display pin that predates this
+ * ADR stays green without touching a single spec.
+ */
+export type UnitSystem = 'dual' | 'metric' | 'imperial'
 
-/** The two accepted systems, in menu order. */
-export const UNIT_SYSTEMS: readonly UnitSystem[] = ['metric', 'imperial']
+/** The three accepted systems, in menu order. */
+export const UNIT_SYSTEMS: readonly UnitSystem[] = ['dual', 'metric', 'imperial']
 
 /**
- * The default an install that never touches the control runs on. Metric is
- * the catalog's own system, so the default is the identity transform.
+ * The default an install that never touches the control runs on: the exact
+ * authored catalog text.
  */
-export const DEFAULT_UNIT_SYSTEM: UnitSystem = 'metric'
+export const DEFAULT_UNIT_SYSTEM: UnitSystem = 'dual'
 
 /** Type guard for backup validation + a hydrated-value repair. */
 export function isUnitSystem(value: unknown): value is UnitSystem {
-  return value === 'metric' || value === 'imperial'
+  return value === 'dual' || value === 'metric' || value === 'imperial'
+}
+
+/** True for the two modes that pick ONE system (everything else is dual). */
+function isSingleSystem(system: UnitSystem): boolean {
+  return system !== 'dual'
 }
 
 /* ---------- Exact-ish conversion factors ---------- */
@@ -79,10 +90,10 @@ const PAIR_TOLERANCE_C = 7
 
 /**
  * Metric unit → imperial factor + label. Only the four units the catalog
- * authors in metric are listed; everything else (cups, tbsp, cloves,
- * bunches, pkg…) is already imperial-native or a count and passes through
- * in BOTH systems (ADR-0047, Alternatives: converting cups would churn
- * every existing pin for no user need).
+ * authors in metric are listed; everything else (tbsp, cloves, bunches,
+ * pkg…) is already imperial-native or a count and passes through. `cup` is
+ * not here either: it is a purchasable VOLUME container, so it keeps its
+ * count and gains a volume ANNOTATION instead (see `cupAnnotation`).
  */
 const METRIC_TO_IMPERIAL: ReadonlyMap<string, readonly [number, string]> = new Map([
   ['kg', [1 / KILOGRAMS_PER_POUND, 'lb']],
@@ -229,35 +240,20 @@ function localizeLengths(text: string, system: UnitSystem): string {
  * sentence. Temperatures first (a dropped parenthetical must not take a
  * length with it), then lengths.
  *
- * Metric is not the identity here — the catalog's dual notation reads
- * badly in BOTH systems, and collapsing it to the target system is the
- * whole point of the setting. Text with no temperature and no length is
- * returned unchanged, so a step that mentions nothing measurable is
+ * `dual` is the IDENTITY — the catalog's own `220°C (425°F)` is exactly
+ * what a dual reader wants, and the default must not churn a single display
+ * pin. `metric` and `imperial` each collapse the pair to the ONE system the
+ * reader asked for. Text with no temperature and no length is returned
+ * unchanged in EVERY mode, so a step that mentions nothing measurable is
  * bit-for-bit the authored string.
  */
 export function localizeText(text: string, system: UnitSystem): string {
-  if (!text) return text
+  if (!text || !isSingleSystem(system)) return text
   return localizeLengths(localizeTemperatures(text, system), system)
 }
 
 /* ---------- Formatted amounts ---------- */
 
-/**
- * Localize a FORMATTED quantity string for display: a line item, a
- * container quantity (`½ (142 g) pkg`, `1 (142 g) pkg`) or a grocery /
- * measured-chip line.
- *
- * Metric is the IDENTITY (ADR-0047 §1: the catalog's metric quantity IS
- * today's display). Imperial converts the leading unit — or, for a
- * container quantity, the ANNOTATION, which is where the catalog hides its
- * unit (`(142 g)` on a `pkg` line, `(2 ½ cm)` on a `pieces` line). The
- * container COUNT is a count of purchased objects and never changes.
- *
- * The string is returned VERBATIM when there is nothing to convert: a
- * free-form custom extra, a count (`6 cloves`), a container phrase
- * (`1 small bunch`) or a unit that is already imperial-native
- * (cups, tbsp, oz, lb, inch).
- */
 /**
  * The authored LEADING AMOUNT, matched as a SPAN so it can be preserved
  * verbatim. `parseQuantity` sums a fraction into a float (`½` → 0.5) and
@@ -272,8 +268,55 @@ const LEADING_AMOUNT_RE = new RegExp(
   '^(\\d+\\s*[¼½¾⅓⅔⅛⅜⅝⅞]+|\\d+(?:[.,]\\d+)?(?:\\s*/\\s*\\d+)?|[¼½¾⅓⅔⅛⅜⅝⅞]+)',
 )
 
+/** US legal cup, millilitres — exact, so metric annotation has no rounding. */
+const MILLILITRES_PER_CUP = 240
+/** US cup, US fluid ounces. */
+const FLUID_OUNCES_PER_CUP = 8
+
+/**
+ * The ANNOTATION a purchasable VOLUME container gains in a single-system
+ * mode, or `undefined` when it needs none.
+ *
+ * This is the SAME annotation grammar the catalog already uses for its own
+ * container weights (`½ (142 g) pkg`), deliberately not a parallel code
+ * path: a `cup` is a purchased object whose volume nobody can see, so a
+ * reader who picked ONE system is shown that system in parentheses next to
+ * it — `1 cup (240 ml)` in metric (US legal cup, exact), `1 cup (8 fl oz)`
+ * in imperial. `dual` passes none: the authored text is `1 cup` and stays
+ * that way.
+ */
+function cupAnnotation(amount: number, system: UnitSystem): string | undefined {
+  if (system === 'metric') return `(${formatAmount(amount * MILLILITRES_PER_CUP)} ml)`
+  if (system === 'imperial') return `(${formatAmount(amount * FLUID_OUNCES_PER_CUP)} fl oz)`
+  return undefined
+}
+
+/** A bare `cup` / `cups` token — the one purchasable volume in the catalog. */
+function isCupToken(rest: string): boolean {
+  return /^cups?$/i.test(rest.trim())
+}
+
+/**
+ * Localize a FORMATTED quantity string for display: a line item, a
+ * container quantity (`½ (142 g) pkg`, `1 (142 g) pkg`) or a grocery /
+ * measured-chip line.
+ *
+ * `dual` is the IDENTITY (ADR-0047 §1: the authored catalog text IS
+ * today's display). `imperial` converts the leading unit — or, for a
+ * container quantity, the ANNOTATION, which is where the catalog hides its
+ * unit (`(142 g)` on a `pkg` line, `(2 ½ cm)` on a `pieces` line).
+ * `metric` is the identity for every value the catalog already authors in
+ * metric, but still annotates a `cup`, because cup is not itself a metric
+ * volume. The container COUNT is a count of purchased objects and never
+ * changes in any mode.
+ *
+ * The string is returned VERBATIM when there is nothing to convert: a
+ * free-form custom extra, a count (`6 cloves`), a container phrase
+ * (`1 small bunch`) or a unit that is already imperial-native
+ * (cups in dual, tbsp, oz, lb, inch).
+ */
 export function localizeQuantity(raw: string, system: UnitSystem): string {
-  if (system === 'metric') return raw
+  if (!isSingleSystem(system)) return raw
   const parsed = parseQuantity(raw)
   if (!parsed) {
     // Free-form text (`a pinch`, `to taste`) — nothing to convert, but a
@@ -298,12 +341,26 @@ export function localizeQuantity(raw: string, system: UnitSystem): string {
 
   const tokens = rest.split(/\s+/).filter(Boolean)
   const last = tokens[tokens.length - 1]
-  // Only a BARE unit converts. A multi-word phrase is a container noun
-  // (`small bunch`, `cm pieces`) or an already-imperial label (`fl oz`);
-  // guessing inside it would rewrite prose.
-  const conversion = rest ? METRIC_TO_IMPERIAL.get(unitKey(last)) : undefined
+  // Only a BARE unit converts, and only in IMPERIAL: in metric the catalog's
+  // own g/kg/ml values are already the target system and are the IDENTITY.
+  // A multi-word phrase is a container noun (`small bunch`, `cm pieces`) or
+  // an already-imperial label (`fl oz`); guessing inside it would rewrite
+  // prose.
+  const conversion =
+    system === 'imperial' && rest && tokens.length === 1 && !isCupToken(rest)
+      ? METRIC_TO_IMPERIAL.get(unitKey(last))
+      : undefined
   if (!conversion) {
     const head = annotation ? `${headText} ${annotation}` : headText
+    // A bare `cup` gains the mode's volume through the SAME annotation
+    // grammar, never a special-cased rewrite of the count. A line that
+    // ALREADY carries an authored annotation has said its volume — adding
+    // a second one would double-annotate it.
+    const cup =
+      !annotation && tokens.length === 1 && isCupToken(rest)
+        ? cupAnnotation(amount, system)
+        : undefined
+    if (cup) return `${head} ${rest} ${cup}`
     return rest ? `${head} ${rest}` : head
   }
   const [factor, label] = conversion
@@ -327,11 +384,11 @@ export const localizeLine = localizeQuantity
  * Localize scaled instruction steps for display. ONE helper, called by
  * both RecipeDetail and CookingView, so the two surfaces cannot drift.
  *
- * Runs in BOTH systems: the catalog's dual notation reads badly in metric
- * too (`220°C (425°F)`), and collapsing it to the target system is the
- * point of the setting. `localizeText` is a no-op on a step that mentions
- * no temperature and no length, so such a step is still bit-for-bit the
- * authored string.
+ * Runs in the two SINGLE-system modes: a reader who asked for one system
+ * gets one system (`220°C (425°F)` → `220°C` metric / `425°F` imperial).
+ * `dual` — the default — returns the authored string untouched. In every
+ * mode `localizeText` is a no-op on a step that mentions no temperature and
+ * no length, so such a step is always bit-for-bit the authored string.
  *
  * Structural on purpose: the caller owns its `ScaledStep` type, and this
  * module stays free of a runtime import of `recipe.ts`.

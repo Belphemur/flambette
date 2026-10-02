@@ -50,8 +50,16 @@ const canMoreDefault = computed(() => ui.defaultServings < MAX_SERVINGS)
  * short and the button never reflows the row.
  */
 const UNIT_SYSTEM_LABEL: Record<UnitSystem, string> = {
+  dual: 'Dual',
   metric: 'Metric',
   imperial: 'Imperial',
+}
+
+/** One line per mode: what the screen will actually read. */
+const UNIT_SYSTEM_NOTE: Record<UnitSystem, string> = {
+  dual: 'Showing the recipe exactly as authored: dual temperatures, cups as written.',
+  metric: 'Showing g, kg, ml and °C; cups gain their volume (1 cup → 1 cup (240 ml)).',
+  imperial: 'Showing oz, lb, fl oz and °F; cups gain their volume (1 cup → 1 cup (8 fl oz)).',
 }
 
 /** The one writer — the recipe-detail toggle writes the same store value. */
@@ -232,8 +240,9 @@ function cancelBackupImport(): void {
   <h2 class="text-lg font-bold tracking-tight">Settings</h2>
 
   <!-- Unit system (ADR-0047): how quantities, grocery lines and oven
-  temperatures READ on this device. The catalog stays metric; only the
-  display converts, so nothing stored ever changes. -->
+  temperatures READ on this device. The catalog stays canonical; only the
+  display converts, so nothing stored ever changes. `dual` — the default —
+  is the catalog exactly as authored. -->
   <div class="space-y-2 rounded-xl bg-surface p-3" data-test="unit-system-card">
   <span class="text-sm font-bold tracking-tight">Unit system</span>
   <p class="text-xs">
@@ -270,7 +279,7 @@ function cancelBackupImport(): void {
   </div>
   </div>
   <p class="text-xs text-text-muted" data-test="unit-system-note">
-  {{ ui.unitSystem === 'imperial' ? 'Showing oz, lb, fl oz and °F.' : 'Showing g, kg, ml and °C.' }}
+  {{ UNIT_SYSTEM_NOTE[ui.unitSystem] }}
   </p>
   </div>
 

@@ -16,24 +16,69 @@ import {
  * (`(142 g)`, `(398 ml)`, `(2 ½ cm)`).
  */
 describe('unit system identity', () => {
-  test('metric is the default and the only two accepted systems are metric/imperial', () => {
-    expect(UNIT_SYSTEMS).toEqual(['metric', 'imperial'])
-    expect(DEFAULT_UNIT_SYSTEM).toBe('metric')
+  test('dual is the default and the three accepted systems are dual/metric/imperial', () => {
+    expect(UNIT_SYSTEMS).toEqual(['dual', 'metric', 'imperial'])
+    expect(DEFAULT_UNIT_SYSTEM).toBe('dual')
   })
 
-  test('isUnitSystem accepts the two systems and refuses everything else', () => {
+  test('isUnitSystem accepts the three systems and refuses everything else', () => {
+    expect(isUnitSystem('dual')).toBe(true)
     expect(isUnitSystem('metric')).toBe(true)
     expect(isUnitSystem('imperial')).toBe(true)
-    for (const bad of ['', 'Metric', 'IMPERIAL', 'cups', null, undefined, 0, 1, {}, []]) {
+    for (const bad of ['', 'Metric', 'IMPERIAL', 'cups', 'metric ', null, undefined, 0, 1, {}, []]) {
       expect(isUnitSystem(bad)).toBe(false)
     }
   })
 
-  test('metric quantities are the IDENTITY — no rounding churn on any authored line', () => {
+  test('DUAL is the IDENTITY everywhere — the catalog, verbatim', () => {
     for (const q of ['450 g', '1.5 kg', '250 ml', '½ (142 g) pkg', '1 (142 g) pkg', '3 (2 ½ cm) pieces', '2 cups', '3 tbsp', '6 cloves', '', 'a pinch']) {
+      expect(localizeQuantity(q, 'dual')).toBe(q)
+      expect(localizeLine(q, 'dual')).toBe(q)
+    }
+    // …including the dual temperature notation a metric/imperial reader
+    // asked to collapse.
+    const step = 'Preheat the oven to 220°C (425°F).'
+    expect(localizeText(step, 'dual')).toBe(step)
+    expect(localizeSteps([{ primary: step, details: [step] }], 'dual')).toEqual([
+      { primary: step, details: [step] },
+    ])
+  })
+
+  test('metric quantities are the IDENTITY — no rounding churn on any authored line', () => {
+    for (const q of ['450 g', '1.5 kg', '250 ml', '½ (142 g) pkg', '1 (142 g) pkg', '3 (2 ½ cm) pieces', '3 tbsp', '6 cloves', '', 'a pinch']) {
       expect(localizeQuantity(q, 'metric')).toBe(q)
       expect(localizeLine(q, 'metric')).toBe(q)
     }
+  })
+})
+
+describe('cups are purchasable VOLUME containers (owner steer, ADR-0047)', () => {
+  test('a bare cup gains the mode volume through the SAME annotation grammar', () => {
+    expect(localizeQuantity('1 cup', 'metric')).toBe('1 cup (240 ml)')
+    expect(localizeQuantity('1 cup', 'imperial')).toBe('1 cup (8 fl oz)')
+    expect(localizeQuantity('2 cups', 'metric')).toBe('2 cups (480 ml)')
+    expect(localizeQuantity('2 cups', 'imperial')).toBe('2 cups (16 fl oz)')
+    // A fractional count keeps its authored head (the count is purchased).
+    expect(localizeQuantity('½ cup', 'metric')).toBe('½ cup (120 ml)')
+  })
+
+  test('dual leaves a cup exactly as authored', () => {
+    expect(localizeQuantity('1 cup', 'dual')).toBe('1 cup')
+    expect(localizeQuantity('2 cups', 'dual')).toBe('2 cups')
+  })
+
+  test('the cup count itself is NEVER converted, in either single system', () => {
+    // 1 cup is 1 CUP in both modes — only its volume is annotated, so a
+    // container count can never drift the way a mass does.
+    expect(localizeQuantity('1 cup', 'metric')).toMatch(/^1 cup \(/)
+    expect(localizeQuantity('1 cup', 'imperial')).toMatch(/^1 cup \(/)
+  })
+
+  test('an authored cup annotation is not double-annotated', () => {
+    expect(localizeQuantity('1 (240 ml) cup', 'metric')).toBe('1 (240 ml) cup')
+    expect(localizeQuantity('1 (8 fl oz) cup', 'imperial')).toBe('1 (8 fl oz) cup')
+    // The authored annotation converts like any other; a second one is not added.
+    expect(localizeQuantity('1 (240 ml) cup', 'imperial')).toBe('1 (8.1 fl oz) cup')
   })
 })
 
@@ -187,7 +232,11 @@ describe('quantities (ADR-0047 §1)', () => {
   })
 
   test('imperial-native and count units pass through in BOTH systems', () => {
-    for (const q of ['2 cups', '3 tbsp', '6 cloves', '1 small bunch', '1 head', '3 (3 oz) cans']) {
+    // `cup` is NOT in this list: a cup is a purchasable volume container and
+    // gains an annotation in the two single-system modes (see the cups block).
+    for (const q of ['3 tbsp', '6 cloves', '1 small bunch', '1 head', '3 (3 oz) cans']) {
+      expect(localizeQuantity(q, 'dual')).toBe(q)
+      expect(localizeQuantity(q, 'metric')).toBe(q)
       expect(localizeQuantity(q, 'imperial')).toBe(q)
     }
   })
