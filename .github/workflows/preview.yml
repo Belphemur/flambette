@@ -50,10 +50,15 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4.147.0"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          # The GitHub deployment's environment — stable per PR, so the same
-          # two deployments get reused on every push instead of multiplying.
-          environment: preview-relay-pr-${{ github.event.pull_request.number || 'main' }}
           command: preview --name pr-${{ github.event.pull_request.number || 'main' }} --config server/wrangler.jsonc
+        # NO `environment` input on purpose: the action feeds it to wrangler's
+        # --env, which renames the preview worker (flambette-preview-...-<env>),
+        # and env-suffixed preview workers do NOT bind the custom-domain
+        # preview routes (verified live: base-name previews get
+        # pr-<N>.{app,relay}.dev.flambette.app active immediately; env-suffixed
+        # ones never do — "none are active"). Without it the preview runs under
+        # the base worker name and the custom-domain URLs work.
+        #
         # `wrangler preview` reads its credential from the ENVIRONMENT, not
         # from the action's apiToken input (verified live on this PR's first
         # run: "In a non-interactive environment, it's necessary to set a
@@ -87,14 +92,12 @@ jobs:
       - name: Build SPA (this PR's relay preview origin)
         run: bun run build
         env:
-          # The relay preview's ACTIVE workers.dev host, per Cloudflare's
-          # preview naming convention (verified live on this PR: the relay
-          # preview answers 200 at this host). The dev-host routes
-          # (pr-<N>.relay.dev.flambette.app) only go live after a production
-          # `wrangler deploy` publishes the custom-domain preview routes —
-          # Cloudflare's own warning says so — so the SPA cannot point there
-          # until the first release.
-          VITE_RELAY_WS_URL: wss://pr-${{ github.event.pull_request.number || 'main' }}-flambette-relay-preview-relay-pr-${{ github.event.pull_request.number || 'main' }}.unami.workers.dev/ws
+          # THIS PR's relay preview on its custom domain — active as soon as
+          # the relay preview exists (verified live: pr-main.relay.dev
+          # .flambette.app answers with the relay's health JSON). The rooms
+          # the preview SPA creates live in that preview's isolated DO
+          # namespace, never in production data.
+          VITE_RELAY_WS_URL: wss://pr-${{ github.event.pull_request.number || 'main' }}.relay.dev.flambette.app/ws
           # PR events set GITHUB_SHA to the synthetic merge commit — the
           # header must show the PR's own head sha (review #9).
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -107,8 +110,11 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4.147.0"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          environment: preview-web-pr-${{ github.event.pull_request.number || 'main' }}
           command: preview --name pr-${{ github.event.pull_request.number || 'main' }}
+        # Same reasoning as the relay job: no `environment` input — an env
+        # suffix renames the preview worker and the custom-domain preview
+        # routes stop binding.
+        #
         # `wrangler preview` reads its credential from the ENVIRONMENT, not
         # from the action's apiToken input (verified live on this PR's first
         # run: "In a non-interactive environment, it's necessary to set a

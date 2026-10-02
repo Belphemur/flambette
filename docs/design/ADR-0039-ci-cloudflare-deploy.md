@@ -66,16 +66,21 @@ never a dashboard-generated token pasted into chat.
    touch the production routes or domains.
 
    The preview SPA talks to ITS OWN preview relay, baked at build time per
-   ADR-0038 §5. The relay origin is the relay preview's workers.dev host,
-   `pr-<N>-flambette-relay-preview-relay-pr-<N>.unami.workers.dev` — per
-   Cloudflare's preview naming convention (`{preview-name}-{config-name}
-   {-env}`; verified live: the relay preview answers 200 at that host) and
-   ACTIVE from the first preview, while the dev-host routes
-   (`pr-<N>.relay.dev.flambette.app`) go live only after a production
-   `wrangler deploy` publishes the custom-domain preview routes (Cloudflare's
-   own warning). Until that first release the workers.dev host is the
-   preview surface; the account's workers.dev subdomain (`unami`) is
-   pinned by the workflow.
+   ADR-0038 §5: `VITE_RELAY_WS_URL=wss://pr-<N>.relay.dev.flambette.app/ws`.
+   The custom-domain preview URLs are the surface on BOTH workers —
+   `pr-<N>.app.dev.flambette.app` for the SPA, `pr-<N>.relay.dev.flambette.app`
+   for the relay (verified live: the relay answers its health JSON, the SPA
+   serves, both 200).
+
+   **The previews must run under the BASE worker name — no `--env` suffix.**
+   The wrangler-action's `environment` input feeds wrangler's `--env`, which
+   renames the preview worker (`flambette-preview-web-<env>`), and
+   env-suffixed preview workers do NOT bind the custom-domain preview routes
+   (verified live: three CI preview runs reported "none are active" for the
+   custom domains while a base-name local preview got them immediately). So
+   the preview jobs pass no `environment` input; the cost is that the two
+   jobs' GitHub deployments share a default environment label instead of
+   named per-PR ones — accepted, the URLs matter more.
 
    `wrangler preview` requires a `previews` block in each config, and
    previews do NOT inherit production settings: the assets worker's block is
@@ -85,14 +90,13 @@ never a dashboard-generated token pasted into chat.
    `env.ROOM` — without it the preview would 1101. The relay's per-preview
    `ROOM` DO namespace keeps preview rooms inside the preview's own storage.
 
-   Two expected wrangler warnings in the preview jobs, both intentional:
-   the `environment` input feeds wrangler's `--env` AND the GitHub
-   deployment environment, and the per-PR env name (`preview-web-pr-<N>`)
-   deliberately has no env section in the config — it exists to derive the
-   preview worker's name (`{config-name}-preview-{env}`) and the stable
-   per-PR GitHub deployments; wrangler proceeds with the top-level config
-   and the missing-environment warning is noise. The same reason explains
-   the custom-domain warning until the first release.
+   The custom-domain preview routes are TOP-LEVEL config
+   (`previews_enabled: true`, `enabled: false`), so they register on the next
+   PRODUCTION deploy of each worker — `v1.2.0` (2026-10-02) was that deploy;
+   since it, every preview URL resolves on the custom domains. A preview
+   created before the routes were registered exposes only its workers.dev
+   URL (the "none are active" warning); deleting and re-running the preview
+   after the deploy attaches the custom-domain URLs.
 
    **Preview rooms are auto-destroyed when the PR is merged or closed:** a
    `cleanup` job (`pull_request: closed`) deletes the preview for BOTH
@@ -102,11 +106,11 @@ never a dashboard-generated token pasted into chat.
    therefore lists explicit types including `closed` (closed is not a
    default type), and the preview jobs skip `closed` events.
 
-   **Bootstrap:** the two preview-only custom domains register on the next
-   PRODUCTION deploy (routes are top-level config) — after this ADR lands,
-   run one `wrangler deploy` of both workers from a clean `main` checkout
-   (or cut the next release) before preview URLs resolve; a preview of a
-   domain that is not yet registered exposes no URL.
+   **Bootstrap (done):** the two preview-only custom domains registered on
+   the `v1.2.0` production deploy of both workers; the wildcard DNS records
+   (`*.app.dev.flambette.app`, `*.relay.dev.flambette.app`, proxied) and the
+   wildcard certificate were provisioned by Cloudflare, covering the
+   three-label preview hostnames.
 3. **Releases (`.github/workflows/release.yml`, updated):** on a `v*` tag the
    existing GHCR docker jobs now run ALONGSIDE `deploy-web` and
    `deploy-relay` (`wrangler deploy` of both workers; the hosted SPA build
