@@ -99,6 +99,19 @@ const roomChip = computed(() => {
 /** The recipe detail view is full-bleed (edge-to-edge hero image). */
 const isRecipe = computed(() => route.name === 'recipe')
 
+/** Clicking the header logo always returns to the recipes list (the
+ * homepage). ADR-0048: app-shell routes share one head, so the recipes
+ * route is the canonical home — never navigate away from it when already
+ * there. */
+function goHome() {
+  if (route.name === 'recipes') {
+    // Same page: scroll to top instead of a no-op navigation.
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
+  } else {
+    void router.push({ name: 'recipes', query: route.query.room ? {} : undefined })
+  }
+}
+
 /** Import a shared plan from `?p=` (replaces the current plan). */
 async function importSharedPlan() {
   const p = route.query.p
@@ -189,10 +202,16 @@ onMounted(async () => {
   class="sticky top-0 z-20 border-b border-border bg-surface-raised"
   >
   <div class="flex items-center justify-between px-4 py-2">
-  <h1 class="flex items-center gap-2 py-1 text-lg font-bold tracking-tight text-brand-text">
-  <img src="/favicon.svg" alt="" width="22" height="22" class="inline" />
+  <button
+  type="button"
+  data-test="home-link"
+  class="flex items-center gap-2 py-1 text-lg font-bold tracking-tight text-brand-text"
+  :aria-label="route.name === 'recipes' ? 'Back to top of recipes' : 'Recipes list'"
+  @click="goHome()"
+  >
+  <img src="/favicon.svg" alt="" width="22" height="22" class="inline" aria-hidden="true" />
   Flambette
-  </h1>
+  </button>
   <div class="flex items-center gap-2">
   <span
   data-test="app-version"

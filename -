@@ -1,0 +1,139 @@
+# Flambette SPA SEO (ADR-0048) — final report
+
+Repo `Belphemur/flambette`, worktree `/home/balor/workspace/mealime-seo-wt`,
+branch `feat/seo-prerender` (rebased onto `origin/main` @ `138c2b9`).
+**The orchestrator (Hermes) merges — nothing was merged, tagged or released.**
+
+## PR
+
+| | |
+| --- | --- |
+| PR | **#42** — `feat(ops)…` no: *feat(seo): Unhead client head + build-time prerendered recipe pages, sitemap & JSON-LD (ADR-0048)* |
+| URL | https://github.com/Belphemur/flambette/pull/42 |
+| State | **OPEN**, `mergeable: MERGEABLE`, `mergeStateStatus: **CLEAN**` |
+| Head SHA | `d46bf63` |
+| Diff vs main | 16 files, +1,767 / −8 (web-only; `server/` untouched) |
+
+## Commits (per task)
+
+| SHA | Task | Content |
+| --- | --- | --- |
+| `2350822` | TASK 1 + 2 | `feat(seo): one SEO head source with Unhead on the client (ADR-0048)` — `src/lib/seo.ts` (+ `siteUrl.ts`), `main.ts` (`createHead()` from `@unhead/vue/client`), `App.vue` default head, `RecipeDetail.vue` reactive recipe head, `images.ts` `BASE_URL` default |
+| `5693f3f` | TASK 3 + 4 | `feat(seo): prerender recipe heads, sitemap and robots at build (ADR-0048)` — `scripts/generate-recipe-seo.ts` (thin main), `src/lib/seoRender.ts` (pure, unit-tested), `package.json` build script |
+| `8adf8a9` | TASK 5 | `test(e2e): pin the client-side SEO head (ADR-0048)` — `e2e/seo-head.spec.ts` |
+| `72a0f8d` | TASK 6 | `docs: ADR-0048 SPA SEO (Unhead client head + build-time prerender)` |
+| `d46bf63` | TASK 7 | `fix(seo): review round` — 5 qodo findings fixed, 1 rebutted, + the duplicate-JSON-LD and Docker fixes |
+
+## Tasks
+
+- **TASK 1 — Unhead wiring.** Done. `createHead()` after pinia/router in `main.ts`; `App.vue` installs `useHead(homeSeoHead())` — the *same* builder the prerenderer writes into `dist/index.html`, so crawler and app cannot disagree. Component-scoped entry removal on unmount is **verified, not assumed**: the e2e navigates to `/plan` and asserts the title returns to `Flambette`, the canonical to `https://flambette.app/`, and that the recipe's `robots` meta and `ld+json` are *gone* (not overridden).
+- **TASK 2 — RecipeDetail `useHead`.** Done. The doc loads async, so `recipeJsonLd`/`recipeSeoHead` take a **nullable** doc: every meta-derived tag (title, description, canonical, OG/Twitter) is present before the fetch resolves, and the JSON-LD upgrades itself on arrival. No "partial builder" was forked — one function, one code path, pinned by `src/lib/seo.test.ts` ("only the two doc-only JSON-LD keys are missing"). The head additionally passes `doc` only when `doc.id === meta.id` (see deviations §1).
+- **TASK 3 — build wiring.** Done. `bun run build` = `vue-tsc -b && vite build && bun run scripts/generate-recipe-seo.ts`. Verified: 2,759 `dist/recipe/<id>/index.html`, `dist/index.html` with the homepage head and exactly one `<title>`, `dist/sitemap.xml` (2,760 `<loc>`), `dist/robots.txt`. Re-running the prerender is **byte-identical** (hashed `dist/recipe/` + the three top-level files across two runs). `nginx.conf` and `wrangler.jsonc` untouched; no e2e asserts sirv's fallback.
+- **TASK 4 — prerenderer unit tests.** Done, relocated (deviation §2): `src/lib/seoRender.test.ts`, 19 tests — base-title replacement (one `<title>`), JSON-LD bytes equal `JSON.stringify(textContent)` and cannot terminate `<script>`, sitemap loc/lastmod format + escaping, robots content, `w3cDate`, noscript escaping, and the `resetPrerenderHead` idempotency contract.
+- **TASK 5 — e2e.** Done. `e2e/seo-head.spec.ts`, 5 tests × 2 projects (Desktop Chrome + Pixel 7). Every expectation is read from `builder_data.json` on disk, never hand-typed. Includes `blockExternalRequests` + `expectZeroMealimeRequests` (this spec touches the catalog).
+- **TASK 6 — ADR-0048.** Done: `docs/design/ADR-0048-spa-prerender-seo.md` (Status/Date/Context/Decision/Consequences/Alternatives, matching the repo's ADR conventions; `references/design-doc-adr.md` does not exist in this repo, so ADR-0047/0043 were used as the template).
+- **TASK 7 — gate + PR + review loop.** Done. See below.
+
+## Gate (final, on `d46bf63`)
+
+| Gate | Result |
+| --- | --- |
+| `bun run build` | **green** — 2,759 pages prerendered, sitemap 2,760 URLs, ~17 MB `dist/recipe/` |
+| `bun run test:unit` | **455 pass / 0 fail** (27 files, 5,023 asserts) |
+| `bun run playwright test` (full, both projects) | **417 passed / 0 failed / 21 skipped** |
+| Docker | image builds and serves: `/` 200, `/recipe/10003/` 200 with the prerendered head, `/recipe/10003` 301 → slash form, `/sitemap.xml` 200, `/robots.txt` 200, exactly one `ld+json` |
+| Sweep | no Mealime token, no PII, no `.pi/`/`.hermes/` paths; no `tsconfig.*.tsbuildinfo` committed; `git add` by explicit path only |
+
+New unit tests: `seo.test.ts` 24 + `seoRender.test.ts` 19 = **43 new** (the other +9 over the pre-ADR-0040 baseline came from `main`'s ADR-0040 relay-core suite, which the branch was rebased onto).
+New e2e: 5 tests × 2 projects = **10 runs** in the 417.
+
+## CI check states (`d46bf63`)
+
+17 passing / 1 skipping / 0 failing — `unit`, `worker`, `web`, `relay`, `docker`,
+`merge-gate`, `e2e (1,4)`, `e2e (2,4)`, `e2e (3,4)`, `e2e (4,4)`, `CodeQL`,
+`Analyze (actions)`, `Analyze (javascript-typescript)`, `Analyze (python)`,
+`Vercel`, `Vercel Preview Comments`, `CodeRabbit`; `cleanup` skipping.
+
+`docker` failed on the first push and is now green — see deviation §5.
+
+## Review loop
+
+- **qodo** — 6 findings, **5 fixed, 1 rebutted**, every thread answered inline with file:line evidence and resolved. **0 open threads.**
+- **CodeRabbit** — answered both `@coderabbitai review` pings; check reports *service-side* `Review skipped: manual review required for this OSS repository` (no findings produced).
+- **Copilot** (`copilot-pull-request-reviewer[bot]`) — requested twice; the API returns an empty `requested_reviewers` and no review appeared. Repo history confirms **only CodeRabbit and qodo have ever reviewed here** (checked on the last three merged PRs), so this is the repo's normal state, not a missed request.
+- **kody** — pinged twice, no response (service-side; matches the pattern seen in earlier campaigns on other repos).
+
+## Proposed AGENTS.md bullet (AGENTS.md is PROTECTED — not edited)
+
+> - **SEO (ADR-0048)**: `src/lib/seo.ts` is the ONLY place a head string is
+>   written — the client (`useHead`) and the build-time prerenderer both
+>   consume it, and `src/lib/seoRender.ts` holds the pure serialization so
+>   both halves are unit-tested (a helper in `scripts/` would sit outside
+>   `bun test src` and outside `vue-tsc`). `bun run build` ends with
+>   `scripts/generate-recipe-seo.ts`, so `dist/` gains
+>   `dist/recipe/<id>/index.html` (head + a plain `<noscript>` block — the app
+>   body is NEVER prerendered, `<div id="app">` stays empty for hydration),
+>   `dist/sitemap.xml` and `dist/robots.txt`; the step is idempotent
+>   (`resetPrerenderHead`) and byte-stable. Canonicals are the TRAILING-SLASH
+>   form `/recipe/<id>/` (what nginx and Cloudflare both serve directly) and
+>   always point at `SITE_URL`, baked for both consumers by the
+>   `__SITE_URL__` define — never hand-write a meta tag. The anti-spam rules
+>   are binding: every string derives from the catalog, JSON-LD omits what the
+>   catalog does not publish (`prepTime`/`cuisine`/`author`/`review`),
+>   `aggregateRating` appears only when `rating > 0 && rating_count > 0`, and
+>   an imageless recipe gets no image tag at all. The JSON-LD script carries a
+>   shared `id="recipe-jsonld"` — without it a hydrating page duplicates it.
+
+Two smaller follow-ups for the same owner edit: the **Commands** block's
+`bun run build` line should note it now includes the prerender step, and the
+Docker section should state that `.dockerignore` may exclude only
+`scripts/*.py` — never a TypeScript build step.
+
+## Deviations from the brief (with rationale)
+
+1. **The canonical gained a trailing slash** (`/recipe/<id>/` instead of the
+   brief's `/recipe/<id>`). Reason: the prerendered page is a directory index,
+   and **both** production surfaces redirect the slash-less form to the slash
+   form (Cloudflare's default `html_handling: auto-trailing-slash`; nginx's
+   `try_files $uri $uri/`, measured as a real 301 on the built image). The
+   published form must be the one served directly, or every canonical and
+   sitemap `<loc>` is a redirect. The app's own router keeps slash-less routes;
+   `nginx.conf`/`wrangler.jsonc` stay untouched, as the brief requires.
+2. **The prerenderer's pure core lives in `src/lib/seoRender.ts`**, not inside
+   `scripts/generate-recipe-seo.ts` (which stays a thin I/O main, exactly as
+   TASK 4 asked). Reason: `bun test src` globs only `src/` and
+   `tsconfig.app.json` type-checks only `src/`, so a helper in `scripts/` would
+   be the one piece of this feature with no test and no type coverage.
+3. **`src/lib/siteUrl.ts` was added.** `DEFAULT_SITE_URL` cannot live in
+   `seo.ts` and be imported by `vite.config.ts`: the config is type-checked by
+   `tsconfig.node.json` (no DOM lib) and `seo.ts` reaches `images.ts`'s
+   `import.meta.env`/DOM types, which fails `vue-tsc -b`.
+4. **An extra e2e test and the `id="recipe-jsonld"` fix were not in the
+   brief.** Found while verifying the production surface: Unhead adopts the
+   static `<meta>`/`<link>` tags of a served prerendered page but an inline
+   script has no identity to dedupe on, so hydration appended a **second
+   identical `Recipe` object**. Both consumers now emit the shared `id`, and a
+   new e2e pins "no second copy of anything" on the trailing-slash URL.
+5. **`.dockerignore` was edited** (outside the brief's file list, but
+   necessary). It excluded `scripts/` wholesale, so `bun run build` failed
+   *inside the image* — `Module not found "scripts/generate-recipe-seo.ts"`
+   after vite had already run. It now excludes only `scripts/*.py`; the
+   TypeScript build step ships. Verified by building and running the image.
+6. **The branch was rebased onto `origin/main`** (`138c2b9`, ADR-0040 relay
+   core, landed after the brief's base `3f82c79`) and force-pushed with
+   `--force-with-lease`, so the PR diff is exactly the 16 files of this work.
+   The gate was re-run in full on the rebased tree (numbers above).
+7. **The stale-doc guard was placed in `loadDoc()` as well as the head.**
+   qodo's finding is real and reaches further than the head: without the
+   guard the *view* also renders an old recipe's steps under the new
+   recipe's heading. Fixing the writer and the consumer is one line each and
+   keeps the invariant true at both ends.
+
+Nothing in the brief's locked design was renegotiated: `src/lib/seo.ts` stayed
+the single source, prerendering stayed head-only (plus a plain `<noscript>`
+block), `SITE_URL` stayed the canonical origin, recipes stayed the only
+indexable surface with the app shell canonicalizing to `/`, the JSON-LD
+omission rules are unchanged, the prerender remains part of every build, and
+no runtime request to any `mealime.com` host was introduced (e2e-enforced).
+
+ALL_MEALIME_SEO_DONE
