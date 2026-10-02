@@ -1,13 +1,14 @@
 # ADR-0040: One TypeScript relay core, two thin adapters (Bun + Durable Object)
 
-**Status:** Proposed (2026-10-02).
+**Status:** Accepted (2026-10-02), implemented in Belphemur/flambette#41.
 **Extends:** ADR-0006 (room sync over a Bun relay), ADR-0025 (Docker
-packaging — the `COPY *.mjs` glob and the CI smoke-run), ADR-0021 (three-word
+packaging — the directory COPY globs and the CI smoke-run), ADR-0021 (three-word
 room codes), ADR-0026 (join-or-create room lifecycle), ADR-0038 (the
 Cloudflare hosted path).
-**Not yet implemented:** no — this ADR and its implementation land in the
-same PR (Belphemur/flambette#41); the amendments above were made while the
-record was still Proposed, before acceptance.
+**Not yet implemented:** no — this ADR and its implementation landed in the
+same PR (Belphemur/flambette#41). Every amendment recorded below was made
+while the record was still Proposed; nothing was rewritten after
+acceptance.
 
 ## Context
 
@@ -136,7 +137,9 @@ mirrored.
 - **The protocol types compile-check every side**, including the SPA's
   import of the error taxonomy.
 - **The Docker image stays glob-copied and smoke-run**; adding a core module
-  still needs no packaging change (ADR-0025's regression guard).
+  still needs no packaging change (ADR-0025's regression guard). The build
+  context is now the repo root, which is the one packaging consequence this
+  ADR accepted as its cost (see §2's amendment).
 - **`bun run test:unit` scope** (currently `bun test src`) widens to include
   `server/relay-core` decision-table tests, so the shared core runs on every
   push independent of the runtime suites.
@@ -154,3 +157,44 @@ mirrored.
 - **Bun workspace package**: cleaner imports, but adds an install step to
   the container and touches the ADR-0025 smoke contract for no behavioural
   gain over a shared directory.
+## As implemented (PR #41)
+
+Deviations from the Decision above, all recorded rather than absorbed:
+
+- **The relay image's build context is the repo root**, and the image keeps
+  the `server/` layout under `/app/server` so `relay-core/codes.ts`'s
+  relative `../../src/lib/roomWords` import still resolves. The image stays
+  BUILD-LESS (§2's core claim survives) and stays glob-copied.
+- **`process.env` reads live in `server/relay.ts`** (§3), and only there.
+- **The DO keeps its room row when the last peer leaves** (ADR-0038 §4),
+  expressed as "the DO adapter never calls `leave`". That is the one
+  behavioural difference between the two adapters, and it is deliberate.
+- **The client's `normalizeRoomCode` replaced the hand-maintained Bun
+  `normalizeCode`.** The client helper is strictly MORE permissive (it also
+  accepts run-together spellings), so the Bun relay now accepts a small
+  superset it used to refuse. A deliberate widening, not a regression.
+- **`peer_serial` is a THIRD table** in the DO, beside `room` and
+  `rev_floor`: SQLite cannot widen an existing table without a migration
+  probe, so the peer serial was added additively and `rev_floor` is
+  untouched.
+- **`AGENTS.md` still names `server/relay.mjs`.** The file is protected from
+  agent edits and is updated separately.
+
+Three real bugs were found by moving the code, and are fixed here rather
+than carried into the new home:
+
+1. A `state` push into a room that no longer existed was COMMITTED and
+   resurrected it. The core refuses `bad_state` when the room is gone.
+2. A peer serial restarted at 1 after a room's deletion, so `state.from`
+   could repeat under one code. The serial now lives in the per-code floor
+   record, which outlives the room.
+3. A socket that re-sent `join` for the room it was already in DELETED that
+   room: `attach` detached the socket first, `detach` ran `leave`, and the
+   socket was often the only peer. The admission verdict was computed first,
+   so the client was told `joined` with real state and then had every push
+   refused. `attach` returns early for a socket already in the target room.
+
+Two leaks were also closed in the move: a dead room's `setTimeout` was left
+armed (keeping the Room object alive for up to 24 h), and an orphaned rev
+floor had no wake-up at all (one entry per code the relay ever served,
+forever). Both now have a prune wake-up of their own.
