@@ -1,0 +1,40 @@
+{
+  // The live-room relay as a Durable Object worker (ADR-0038). One DO class
+  // per room code, so a socket physically cannot belong to two rooms and a
+  // room's state lives in that room's own storage instead of a process map.
+  //
+  // The wire protocol is unchanged from server/relay.mjs — see
+  // docs/design/ADR-0038-cloudflare-deployment.md. `main` is resolved
+  // relative to THIS file, i.e. server/worker/index.ts.
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "flambette-relay",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-10-02",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOM",
+        "class_name": "Room",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["Room"],
+    },
+  ],
+  // Spread the rooms over the fleet instead of pinning them to one colo.
+  "placement": {
+    "mode": "smart",
+  },
+  "observability": {
+    "enabled": true,
+  },
+  "routes": [
+    {
+      "pattern": "ws.flambette.app",
+      "custom_domain": true,
+    },
+  ],
+}
