@@ -12,7 +12,8 @@ host** — this is enforced by e2e (`blockExternalRequests` +
 - vue-router 4: `/`, `/plan`, `/grocery`, `/history`, `/settings`, `/shop`, `/recipe/:id`, `/cooking/:id` — five bottom tabs (Recipes, Plan, Grocery, History, Settings). All five keep visible labels: the fit was measured at Pixel 7 (82px/tab, widest label 49px, no overflow) and is pinned by e2e, so a 6th tab needs a re-measure (ADR-0016).
 - MiniSearch (search), `@vueuse/core` (`useDark`, `useClipboard({ legacy: true })`),
   `lucide-vue-next` (icons, bundled — ADR-0029)
-- WebSocket relay (`server/relay.mjs`, zero-dep Bun-native WebSocket)
+- WebSocket relay (`server/relay.ts` over the shared TS core in
+  `server/relay-core/` — ADR-0040; zero-dep Bun-native WebSocket)
   for live room sync
 - Bun 1.x toolchain (`bun.lock`); docker bases `oven/bun:1-alpine`
   (build) + `nginx:alpine` (serve); **never pin a major** on base
@@ -23,7 +24,7 @@ host** — this is enforced by e2e (`blockExternalRequests` +
 ```bash
 bun install                    # install deps (bun.lock is the lockfile)
 bun run dev                    # dev server (proxies /ws → localhost:8081)
-bun server/relay.mjs           # relay for dev
+bun server/relay.ts             # relay for dev
 bun run build                  # type-check + production build — MUST be green
 bun run test:unit              # bun-test unit specs for src/lib (scoped to src)
 bunx playwright test           # full e2e suite (starts its own relay)
@@ -33,10 +34,16 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
 
 ## Docker packaging (ADR-0025)
 
-- The relay image must stay runnable, not just buildable. `server/Dockerfile`
-  uses `COPY *.mjs ./` — **never enumerate the relay's modules one by one**.
-  A hand-picked `COPY` list meant adding `throttle.mjs` shipped an image that
-  crash-looped on `Cannot find module './throttle.mjs'` (issue #6).
+- The relay image must stay runnable, not just buildable. The build context
+  is the REPO ROOT (ci.yml, release.yml and docker-compose.yml pass
+  `-f server/Dockerfile` from there) because `relay-core/codes.ts` re-exports
+  `src/lib/roomWords.ts` — the one `src/` import ADR-0040 allows. The image
+  keeps the `/app/server` layout and copies by GLOB — `server/*.ts`,
+  `server/relay-core/`, `src/lib/` — **never enumerate the relay's modules
+  one by one**. A hand-picked `COPY` list meant adding `throttle.mjs` shipped
+  an image that crash-looped on `Cannot find module './throttle.mjs'`
+  (issue #6), and naming `roomWords.ts` alone re-created the same failure one
+  level up.
 - CI's `docker` job **smoke-runs** the relay image and requires an HTTP 200
   within 30s (dumping container logs on failure). A green `docker build`
   proves the image assembles, never that the entrypoint starts — do not weaken
@@ -59,11 +66,16 @@ spoken by a Durable Object instead of a Bun process.
 - Commands: `bun run deploy:web`, `bun run deploy:relay`, `bun run dev:relay`
   (workerd locally, :8787), `bun run test:worker` (vitest-pool-workers),
   `bun run types:worker` (regenerates `server/worker-configuration.d.ts`),
-  `bun run typecheck:worker`. `bunx wrangler deploy --dry-run` on BOTH configs
+  `bun run typecheck:worker`, `bun run typecheck:relay` (the Bun adapter).
+  `bunx wrangler deploy --dry-run` on BOTH configs
   is the worker-side gate before any push.
-- Deploys fire from **Workers Builds on tag creation** — the same trigger as
-  the GHCR release images. There is NO CI deploy job and NO
-  `CLOUDFLARE_API_TOKEN` in the repo; never add one.
+- Deploys fire from **GitHub Actions** (ADR-0039): `release.yml` deploys both
+  workers on the `v*` tag (alongside the GHCR images); `preview.yml` previews
+  BOTH workers per PR / main push on preview-only hosts
+  (`pr-<N>.{app,relay}.dev.flambette.app`, auto-destroyed when the PR
+  closes). The `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets are
+  minted and scoped by `scripts/cf_ci_secrets.py` — never hand-paste a
+  token, and never add a second deploy path.
 - **The hosted web build MUST set `VITE_RELAY_WS_URL=wss://ws.flambette.app/ws`**
   (ADR-0038 §5): the web worker is assets-only, so there is no `/ws` on
   `flambette.app` to dial — without the variable the hosted app would try to
@@ -74,15 +86,24 @@ spoken by a Durable Object instead of a Bun process.
 - **Never hand-write `Env`.** `server/worker-configuration.d.ts` is generated
   (`bun run types:worker`) and committed; regenerate it after touching either
   wrangler config.
-- Worker TypeScript lives in `server/worker/`; the shared relay policy
-  constants live in `server/relayPolicy.mjs` and the throttle arithmetic in
-  `server/throttleCore.mjs` (the Bun modules re-export them — the two runtimes
-  cannot share an import graph, and a module-scope `process.env` read throws
-  in workerd).
+- Worker TypeScript lives in `server/worker/`; the WHOLE relay semantics —
+  protocol types, error taxonomy, TTL policy, throttle arithmetic, code
+  canonicalisation — live in the shared TS core `server/relay-core/`
+  (ADR-0040), which BOTH adapters import. The core owns DECISIONS and speaks
+  in intents (`read`/`write`/`drop`/`readFloor`/`writeFloor`/`dropFloor`);
+  it never reads `process.env` or a runtime API — `server/relay.ts` (Bun)
+  implements the intents over Maps, `server/worker/room.ts` (DO) over SQL
+  tables. A semantics change lands in the core ONCE; the adapters differ in
+  the store and nowhere else (the DO keeping its room row after the last
+  peer leaves is the one deliberate behavioural difference, ADR-0038 §4).
 - Code canonicalisation is IMPORTED from `src/lib/roomWords.ts` in
-  `server/worker/codes.ts` — the lockstep with the client is structural, not a
-  hand-maintained copy. Nothing else in `server/` imports from `src/` (the Bun
-  relay ships in a container with only `*.mjs`).
+  `server/relay-core/codes.ts` — the lockstep with the client is structural,
+  not a hand-maintained copy. Nothing else in `server/` imports from `src/`.
+- The decision table (`server/relay-core/lifecycle.test.ts`, run by
+  `bun run test:unit` on every push) pins the lifecycle semantics against a
+  pure in-memory store; the runtime suites (`test:worker`, Playwright
+  room-lifecycle e2e) pin the deployment-specific parts (hibernation, SQL
+  survival, real sockets).
 - Rooms persist after the last peer leaves **only on Cloudflare**
   (ADR-0038 §4): the Durable Object's storage survives until the expiry
   clocks fire, while the Bun relay still deletes a room nobody is in.
@@ -212,9 +233,10 @@ spoken by a Durable Object instead of a Bun process.
   decision lives in `src/lib/relayErrors.ts`, whose third answer
   `'ignore'` means "our frame was refused, the room is fine, do
   nothing". Keepalive is NEVER throttled; only create/join spend the
-  throttle budget. The rules live in `server/roomLifecycle.mjs` (mirrors
-  `throttle.mjs`, unit-tested) — keep the relay's `normalizeCode` in
-  step with the client helper.
+  throttle budget. The rules live in the shared core
+  `server/relay-core/lifecycle.ts` (decision-table tested on every push) —
+  the relay's code canonicalisation is the CLIENT's
+  `normalizeRoomCode`, re-exported, so it cannot drift.
 - **Room codes are three words (ADR-0021)**: the accepted format is the
   UNION — `amber-falcon-lantern` (`WORD_ROOM_CODE_RE`) or a legacy
   `ZZ9ZZZ` (`LEGACY_ROOM_CODE_RE`) — and everything that touches a code
@@ -222,8 +244,9 @@ spoken by a Durable Object instead of a Bun process.
   in, canonical out; a PARTIAL word code is refused, never coerced).
   Codes are rolled CLIENT-side and the relay refuses a taken one with
   `code_taken` (the client re-rolls; collisions are tolerated by
-  design). The relay's `normalizeCode` (in `server/roomLifecycle.mjs`)
-  mirrors the client helper — keep them in step.
+  design). The relay's `normalizeCode` is GONE —
+  `server/relay-core/codes.ts` re-exports the client's `normalizeRoomCode`,
+  so there is one canonicaliser.
 - **Share room = one tap to the clipboard (ADR-0023)**: use
   `useShareRoomLink()` (`src/composables/useShareRoomLink.ts`), never
   `navigator.share` (no Web Share on plain-HTTP LAN) and never a raw
@@ -399,8 +422,10 @@ spoken by a Durable Object instead of a Bun process.
   icon stack, Auto-Plan preview, household favourites + ratings, cooked
   history shared by default, Auto-Plan regenerate seed, cook anytime,
   the DESIGN.md token layer + categorical food hues + wider desktop
-  (ADR-0035, superseded for visual direction), and the kitchen-companion
-  redesign (ADR-0036)). Skim them before
+  (ADR-0035, superseded for visual direction), the kitchen-companion
+  redesign (ADR-0036), the CI Cloudflare deploy + app version in the
+  header (ADR-0039), and the one TypeScript relay core with two thin
+  adapters (ADR-0040)). Skim them before
   proposing changes; new lasting decisions get a new
   `ADR-NNNN-slug.md` (never rewrite an accepted one in place).
 
