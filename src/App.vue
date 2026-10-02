@@ -18,6 +18,7 @@ import { useShareRoomLink } from './composables/useShareRoomLink'
 import { usePlanStore } from './stores/plan'
 import { useRoomStore, type RoomStatus } from './stores/room'
 import { initFavourites } from './stores/favourites'
+import { appVersion } from './lib/appVersion'
 
 const reload = () => location.reload()
 
@@ -178,6 +179,11 @@ onMounted(async () => {
   Flambette
   </h1>
   <div class="flex items-center gap-2">
+  <span
+  data-test="app-version"
+  class="max-w-28 min-w-0 truncate text-xs text-text-muted"
+  :title="`Version ${appVersion}`"
+  >{{ appVersion }}</span>
   <span
   v-if="roomChip"
   class="flex items-center gap-1 rounded-full bg-surface-sunken px-2.5 py-1 text-xs font-medium"

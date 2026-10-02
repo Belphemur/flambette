@@ -5,6 +5,13 @@ on:
     tags:
       - 'v*'
 
+# Releases share ONE group — two tags pushed in quick succession queue
+# instead of racing (ADR-0039). A per-ref group would give each tag its own
+# lane and let an older tag's wrangler deploy finish last.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 permissions:
   contents: read
   packages: write
@@ -38,6 +45,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # The image header shows the release version: the Docker build has
+          # no git metadata (review #7).
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -74,3 +85,53 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # The Cloudflare hosted path (ADR-0038 architecture, ADR-0039 deployment):
+  # the SPA assets worker and the relay DO worker, deployed by the same v*
+  # tag that ships the GHCR images. The secrets are minted and scoped by
+  # scripts/cf_ci_secrets.py — the workflows carry no Cloudflare credential
+  # beyond the minimal API token.
+  deploy-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build SPA (hosted relay origin)
+        run: bun run build
+        env:
+          VITE_RELAY_WS_URL: wss://ws.flambette.app/ws
+
+      - name: Deploy the web worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+
+  deploy-relay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Deploy the relay worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config server/wrangler.jsonc

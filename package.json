@@ -32,6 +32,7 @@
     "@cloudflare/workers-types": "^5.20261002.1",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.4",
     "@vitejs/plugin-vue": "^6.0.9",
     "tailwindcss": "^4.3.3",
     "typescript": "6.0.3",
