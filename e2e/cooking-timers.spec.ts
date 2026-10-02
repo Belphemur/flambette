@@ -18,6 +18,13 @@ import {
  * offered as a suggestion that only ever pre-fills the confirm. The
  * countdown never touches the toast surface.
  *
+ * ADR-0042 reshaped the SURFACE only, to the single row the cook actually
+ * uses: `name · minutes · presets · Start · X` sits above the footer
+ * ALWAYS, with no `timer-add` disclosure and no panel to open. A timer the
+ * recipe timed therefore arrives pre-filled with no tap at all, and
+ * nothing about the §4 per-TYPE gate, the confirm, or the at-cap replace
+ * question changed — only how many taps it takes to get there.
+ *
  * `15682` ("Place eggs … cook for 8 minutes") and `5264` ("Cook until
  * liquid is absorbed, 15-18 minutes") are used for the suggestion cases:
  * the durations are authored in the frozen catalog, so the expectations
@@ -67,49 +74,28 @@ async function secondsAt(cooking: Locator, index = 0): Promise<number> {
 }
 
 /**
- * Open the add panel from the EXPLICIT affordance. Since ADR-0041 §4 the
- * panel can also open itself on a hinted step (which hides the add
- * button), so a helper that wants the plain add shape dismisses an
- * auto-opened proposal first — the tests below then read as "the user
- * asked for it", not "the recipe did".
+ * Arm one preset, one tap. The row is always on screen, so there is no
+ * disclosure to open first (ADR-0042) — and every step WAITS
+ * (auto-retrying `expect`), never `count()`: the strip renders in the same
+ * tick as the cooking dialog, so a `count()` probe can read 0 and click a
+ * preset that is not there yet.
  */
-async function openPanel(cooking: Locator) {
-  if (await cooking.getByTestId('timer-panel').isVisible()) {
-    await cooking.getByTestId('timer-cancel').click()
-    await expect(cooking.getByTestId('timer-panel')).toHaveCount(0)
-  }
-  await expect(cooking.getByTestId('timer-add')).toBeVisible()
-  await cooking.getByTestId('timer-add').click()
-  await expect(cooking.getByTestId('timer-panel')).toBeVisible()
+async function armPreset(cooking: Locator, minutes: number) {
+  const preset = cooking.getByTestId(`timer-preset-${minutes}`)
+  await expect(preset).toBeVisible()
+  await preset.click()
 }
 
 /**
- * Arm one preset, one tap. Every step WAITS (auto-retrying `expect`),
- * never `count()`: the strip renders in the same tick as the cooking
- * dialog, so a `count()` probe can read 0 and click a preset that is not
- * there yet.
+ * Arm a NAMED timer: type the chip's label, then tap a preset. The draft
+ * is cleared on arming, so the next call starts from an empty row — and
+ * at the concurrent cap the add is refused into the "which one?" chips
+ * instead, which is what keeps the loop in the cap test going.
  */
-async function armPreset(cooking: Locator, minutes: number) {
-  await openPanel(cooking)
-  const preset = cooking.getByTestId(`timer-preset-${minutes}`)
-  await expect(preset).toBeVisible()
-  await preset.click()
-  // Arming closes the panel: the next timer starts from the add affordance.
-  await expect(cooking.getByTestId('timer-panel')).toHaveCount(0)
-}
-
-/** Arm a NAMED timer: type the chip's label, then tap a preset. */
 async function armNamed(cooking: Locator, label: string, minutes: number) {
-  await openPanel(cooking)
+  await expect(cooking.getByTestId('timer-name')).toBeVisible()
   await cooking.getByTestId('timer-name').fill(label)
-  const preset = cooking.getByTestId(`timer-preset-${minutes}`)
-  await expect(preset).toBeVisible()
-  await preset.click()
-  // Arming closes the panel — EXCEPT at the concurrent cap, where the add
-  // is refused into the "which one?" prompt and the panel stays put.
-  if (!(await cooking.getByTestId('timer-replace-prompt').isVisible())) {
-    await expect(cooking.getByTestId('timer-panel')).toHaveCount(0)
-  }
+  await armPreset(cooking, minutes)
 }
 
 /** Walk to the view whose first step is number `n` (1-based), either way. */
@@ -132,16 +118,24 @@ async function goToLastStep(cooking: Locator) {
   await expect(cooking.getByText(new RegExp(`Step ${total} \\/ ${total}`))).toBeVisible()
 }
 
-test('the strip offers a timer before any is armed', async ({ page }) => {
+test('the row is always on screen, with no disclosure to open', async ({ page }) => {
   const cooking = await startCooking(page)
 
-  // The strip is always there; before the user asks for a timer it offers
-  // exactly one thing and spreads no presets over the step.
+  // The strip and its add ROW are always there: setting a timer costs no
+  // tap before the presets are reachable (ADR-0042). Before any timer is
+  // armed there is nothing to list, so no manage button either.
   await expect(cooking.getByTestId('timer-strip')).toBeVisible()
+  await expect(cooking.getByTestId('timer-add-row')).toBeVisible()
   await expect(chips(cooking)).toHaveCount(0)
   await expect(countdown(cooking)).toHaveCount(0)
-  await expect(cooking.getByTestId('timer-add')).toBeVisible()
-  await expect(cooking.getByTestId('timer-preset-1')).toHaveCount(0)
+  await expect(cooking.getByTestId('timer-name')).toBeVisible()
+  await expect(cooking.getByTestId('timer-minutes')).toBeVisible()
+  await expect(cooking.getByTestId('timer-preset-1')).toBeVisible()
+  // Start has nothing to arm yet, and the disclosure is GONE.
+  await expect(cooking.getByTestId('timer-confirm')).toBeDisabled()
+  await expect(cooking.getByTestId('timer-add')).toHaveCount(0)
+  await expect(cooking.getByTestId('timer-panel')).toHaveCount(0)
+  await expect(cooking.getByTestId('timer-fab')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
 
@@ -170,7 +164,9 @@ test('a preset arms one chip that runs, stops and deletes', async ({ page }) => 
 
   await cooking.getByTestId('timer-clear').click()
   await expect(chips(cooking)).toHaveCount(0)
-  await expect(cooking.getByTestId('timer-add')).toBeVisible()
+  // Back to a clean row — still open, so the next timer is one tap again.
+  await expect(cooking.getByTestId('timer-name')).toBeVisible()
+  await expect(cooking.getByTestId('timer-fab')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
 
@@ -229,7 +225,8 @@ test('a fifth timer asks which chip to replace, and nothing is dropped silently'
   }
   await expect(chips(cooking)).toHaveCount(4)
 
-  // The fifth is refused into a question instead of a wider strip.
+  // The fifth is refused into a question instead of a wider strip, asked
+  // INLINE as chips in the row (ADR-0042) — no second panel.
   await armNamed(cooking, 'Too many', 5)
   await expect(cooking.getByTestId('timer-replace-prompt')).toBeVisible()
   await expect(chips(cooking)).toHaveCount(4)
@@ -242,23 +239,32 @@ test('a fifth timer asks which chip to replace, and nothing is dropped silently'
   await expectZeroMealimeRequests(page)
 })
 
-test('a duration the recipe writes out is offered, and only through the confirm', async ({ page }) => {
+test('a duration the recipe writes out is disclosed, re-offered, and only the confirm arms it', async ({ page }) => {
   const cooking = await startCookingRecipe(page, 5264)
 
-  await openPanel(cooking)
-  const suggest = cooking.getByTestId('timer-suggest')
-  await expect(suggest).toBeVisible()
-  // Authored as "15-18 minutes" (sidecar from extract_timer_hints.py):
-  // the LOWER bound is suggested, the range is disclosed in the label
-  // ("Step 1" — the sentence itself names no food), never hidden.
-  await expect(suggest).toContainText('Step 1 (of 15–18)')
-  await expect(suggest).toContainText('15 min')
-
-  // Tapping it PRE-FILLS — it never arms anything by itself (ADR-0041 §4).
-  await expect(chips(cooking)).toHaveCount(0)
-  await suggest.click()
+  // The §4 pre-fill lands in the ROW, not in a separate chip: the range
+  // is disclosed in the label ("Step 1" — the sentence itself names no
+  // food) and never hidden. Authored as "15-18 minutes" (sidecar from
+  // extract_timer_hints.py), so the LOWER bound is what is proposed.
   await expect(cooking.getByTestId('timer-name')).toHaveValue('Step 1 (of 15–18)')
   await expect(cooking.getByTestId('timer-minutes')).toHaveValue('15')
+  await expect(cooking.getByTestId('timer-suggest')).toHaveCount(0)
+  await expect(chips(cooking)).toHaveCount(0)
+
+  // X clears the draft only — no timer is touched — and the step's
+  // duration is then OFFERED as a chip, so clearing a field never costs
+  // the cook the recipe's own suggestion.
+  await cooking.getByTestId('timer-cancel').click()
+  await expect(cooking.getByTestId('timer-name')).toHaveValue('')
+  await expect(chips(cooking)).toHaveCount(0)
+  const offer = cooking.getByTestId('timer-suggest')
+  await expect(offer).toBeVisible()
+  await expect(offer).toContainText('Step 1 (of 15–18)')
+  await expect(offer).toContainText('15 min')
+
+  // Tapping it PRE-FILLS — it never arms anything by itself (ADR-0041 §4).
+  await offer.click()
+  await expect(cooking.getByTestId('timer-name')).toHaveValue('Step 1 (of 15–18)')
   await expect(chips(cooking)).toHaveCount(0)
 
   await cooking.getByTestId('timer-confirm').click()
@@ -268,22 +274,23 @@ test('a duration the recipe writes out is offered, and only through the confirm'
   await expectZeroMealimeRequests(page)
 })
 
-test('the panel opens itself, pre-filled, on a step the recipe timed (ADR-0041 §4)', async ({ page }) => {
+test('the row pre-fills itself on a step the recipe timed (ADR-0041 §4)', async ({ page }) => {
   const cooking = await startCookingRecipe(page, 5264)
 
-  // The sidecar resolves AFTER the step renders, and the panel still opens
-  // itself: nothing here waits for a gesture. Step 1 is authored
+  // The sidecar resolves AFTER the step renders, and the row still fills
+  // itself: nothing here waits for a gesture, and with ADR-0042 there is
+  // no "Add timer" tap left to save either. Step 1 is authored
   // "15-18 minutes", so the LOWER bound is proposed and the range is
   // disclosed — the same values `timer-suggest` would have written.
-  await expect(cooking.getByTestId('timer-panel')).toBeVisible()
+  await expect(cooking.getByTestId('timer-add-row')).toBeVisible()
   await expect(cooking.getByTestId('timer-name')).toHaveValue('Step 1 (of 15–18)')
   await expect(cooking.getByTestId('timer-minutes')).toHaveValue('15')
-  // The pre-filled proposal is still a proposal: the add affordance is
-  // hidden only because the panel is already up, and no chip exists yet.
+  // The pre-fill IS the affordance here, so the offer chip adds nothing.
+  await expect(cooking.getByTestId('timer-suggest')).toHaveCount(0)
   await expect(cooking.getByTestId('timer-add')).toHaveCount(0)
   await expect(chips(cooking)).toHaveCount(0)
 
-  // One tap arms — the "Add timer" click the cook never has to make.
+  // One tap arms — the only tap the cook has to make.
   await cooking.getByTestId('timer-confirm').click()
   await expect(chips(cooking)).toHaveCount(1)
   await expect(countdown(cooking)).toContainText('15:00')
@@ -291,48 +298,45 @@ test('the panel opens itself, pre-filled, on a step the recipe timed (ADR-0041 �
   await expectZeroMealimeRequests(page)
 })
 
-test('the auto-open gate is per-TYPE: a live Oven never suppresses a Rice suggestion', async ({ page }) => {
+test('the pre-fill gate is per-TYPE: a live Oven never suppresses a Rice suggestion', async ({ page }) => {
   const cooking = await startCookingRecipe(page, 5264)
 
   // Step 7 is authored with a duration and names the food: "Shrimp
-  // (of 2–3)". The panel offers it without waiting for a gesture.
+  // (of 2–3)". The row fills itself without waiting for a gesture.
   await goToStepView(cooking, 7)
-  await expect(cooking.getByTestId('timer-panel')).toBeVisible()
   await expect(cooking.getByTestId('timer-name')).toHaveValue('Shrimp (of 2–3)')
   await cooking.getByTestId('timer-confirm').click()
   await expect(chips(cooking)).toHaveCount(1)
 
   // Step 11 is hinted too ("Step 11", 1 min) and is a DIFFERENT type from
   // the live Shrimp chip — a cook holding an oven and a pot of rice holds
-  // both. So the panel still opens itself here.
+  // both. So the row still pre-fills itself here.
   await goToStepView(cooking, 11)
-  await expect(cooking.getByTestId('timer-panel')).toBeVisible()
   await expect(cooking.getByTestId('timer-name')).toHaveValue('Step 11 (of 1–2)')
 
   // Walk back to the Shrimp step: its OWN type is already counting down,
-  // so there the panel stays closed and the chip speaks for itself. This
+  // so there the fields stay empty and the chip speaks for itself. This
   // is the per-TYPE gate, not a per-recipe one.
   await goToStepView(cooking, 7)
-  await expect(cooking.getByTestId('timer-panel')).toHaveCount(0)
+  await expect(cooking.getByTestId('timer-name')).toHaveValue('')
   await expect(chips(cooking)).toHaveCount(1)
-  await expect(cooking.getByTestId('timer-add')).toBeVisible()
 
-  // …and the refusal really is about the live timer: opened by hand, the
-  // very same view still offers its suggestion.
-  await cooking.getByTestId('timer-add').click()
+  // …and the refusal really is about the live timer, not about the step
+  // running out of suggestions: the very same view still OFFERS it.
   await expect(cooking.getByTestId('timer-suggest')).toContainText('Shrimp')
   await expectZeroMealimeRequests(page)
 })
 
-test('navigating away from a suggested step closes the panel it opened', async ({ page }) => {
+test('navigating away from a suggested step clears the draft it filled', async ({ page }) => {
   const cooking = await startCookingRecipe(page, 5264)
 
-  await expect(cooking.getByTestId('timer-panel')).toBeVisible()
+  await expect(cooking.getByTestId('timer-name')).toHaveValue('Step 1 (of 15–18)')
   await cooking.getByRole('button', { name: /Next/ }).click()
-  await expect(cooking.getByTestId('timer-panel')).toHaveCount(0)
-  // Step 2 carries no authored duration, so nothing re-opens behind the
+  // Step 2 carries no authored duration, so nothing re-fills behind the
   // cook and no half-filled draft follows them either.
-  await expect(cooking.getByTestId('timer-add')).toBeVisible()
+  await expect(cooking.getByTestId('timer-name')).toHaveValue('')
+  await expect(cooking.getByTestId('timer-minutes')).toHaveValue('')
+  await expect(cooking.getByTestId('timer-suggest')).toHaveCount(0)
   await expect(chips(cooking)).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
@@ -344,10 +348,9 @@ test('a recipe with no timer sidecar offers no suggestion', async ({ page }) => 
   // fact about the catalog, never an error: the suggestion affordance is
   // simply absent.
   const cooking = await startCookingRecipe(page, 10085)
-  await openPanel(cooking)
-  await expect(cooking.getByTestId('timer-panel')).toBeVisible()
+  await expect(cooking.getByTestId('timer-add-row')).toBeVisible()
   await expect(cooking.getByTestId('timer-suggest')).toHaveCount(0)
-  // The ladder still works: a missed suggestion never blocks a timer.
+  // The row still works: a missed suggestion never blocks a timer.
   await expect(cooking.getByTestId('timer-preset-5')).toBeVisible()
   await expectZeroMealimeRequests(page)
 })
@@ -356,7 +359,6 @@ test('the recipe total cooking time is offered once, clearly labelled', async ({
   const cooking = await startCooking(page)
 
   // Labeled as the RECIPE TOTAL, not as this step's time.
-  await openPanel(cooking)
   const suggestion = cooking.getByTestId('timer-preset-recipe')
   await expect(suggestion).toContainText('total')
   const minutes = Number((await suggestion.textContent())!.match(/(\d+)m total/)![1])
@@ -365,11 +367,55 @@ test('the recipe total cooking time is offered once, clearly labelled', async ({
   await expect.poll(() => secondsAt(cooking), { timeout: 15_000 }).toBeGreaterThan(minutes * 60 - 5)
 
   // The suggestion is a first-step affordance only — on the second step
-  // view the ladder has it no more.
+  // view the row has it no more.
   await cooking.getByRole('button', { name: /Next/ }).click()
-  await openPanel(cooking)
   await expect(cooking.getByTestId('timer-preset-5')).toBeVisible()
   await expect(cooking.getByTestId('timer-preset-recipe')).toHaveCount(0)
+  await expectZeroMealimeRequests(page)
+})
+
+test('the manage button lists every armed timer and controls it from one place', async ({ page }) => {
+  const cooking = await startCooking(page)
+
+  await armNamed(cooking, 'Oven', 20)
+  await armNamed(cooking, 'Rice', 5)
+  await expect(cooking.getByTestId('timer-fab')).toBeVisible()
+
+  await cooking.getByTestId('timer-fab').click()
+  const sheet = page.getByTestId('timer-manage-sheet')
+  await expect(sheet).toBeVisible()
+  await expect(sheet).toContainText('Oven')
+  await expect(sheet).toContainText('Rice')
+  await expect(sheet.getByTestId('timer-manage-row')).toHaveCount(2)
+
+  // Pausing from the sheet pauses the CHIP too — one state, two views of
+  // it, never two competing controls.
+  const firstToggle = sheet.locator('[data-test^="timer-manage-toggle-"]').first()
+  await firstToggle.click()
+  await expect(countdown(cooking, 0)).toHaveAttribute('aria-label', /^Start Oven timer, /)
+  await expect(firstToggle).toHaveAttribute('aria-label', /^Start Oven timer, /)
+  // The other timer never stopped.
+  await expect(countdown(cooking, 1)).toHaveAttribute('aria-label', /^Pause Rice timer, /)
+
+  // Escape closes the SHEET and nothing else: the cook session and the
+  // live Rice timer are untouched, so a stray keypress can never throw
+  // away a countdown.
+  await page.keyboard.press('Escape')
+  await expect(sheet).toHaveCount(0)
+  await expect(cooking).toBeVisible()
+  await expect(chips(cooking)).toHaveCount(2)
+
+  // Reopening, clearing from the sheet removes the chip with it.
+  await cooking.getByTestId('timer-fab').click()
+  await expect(sheet).toBeVisible()
+  await sheet.locator('[data-test^="timer-manage-clear-"]').first().click()
+  await expect(chips(cooking)).toHaveCount(1)
+  await expect(sheet.getByTestId('timer-manage-row')).toHaveCount(1)
+
+  // The scrim closes it too, without a gesture on a timer.
+  await page.getByTestId('timer-manage-scrim').click({ position: { x: 8, y: 8 } })
+  await expect(sheet).toHaveCount(0)
+  await expect(chips(cooking)).toHaveCount(1)
   await expectZeroMealimeRequests(page)
 })
 

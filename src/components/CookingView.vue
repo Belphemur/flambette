@@ -8,10 +8,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Ellipsis,
+  List,
   PartyPopper,
   Pause,
   Play,
-  Plus,
   X,
 } from 'lucide-vue-next'
 import { catalog, getRecipe } from '../lib/catalog'
@@ -157,14 +157,6 @@ function close() {
  */
 const measuredOpen = ref(false)
 
-/**
- * Whether the strip's add ladder is revealed. This is the ONLY
- * presentation state the strip adds: the timers themselves live in the ui
- * store keyed by timer id, so rendering them costs no store, lib or backup
- * change.
- */
-const addOpen = ref(false)
-
 const visibleMeasured = computed(() =>
   visibleSteps.value.map((vs) => ({
   partner: vs.partner,
@@ -220,14 +212,18 @@ function isRunning(t: CookTimer): boolean {
 }
 
 /**
- * The add ladder is disclosure state, not timer state. Arriving at a new
- * step closes it and clears the half-typed fields, so an open ladder (or a
- * suggestion belonging to the previous step) never follows the cook.
+ * The draft fields are step-scoped, not timer state (ADR-0042): the add
+ * row is always on screen, so there is no disclosure to close — arriving
+ * at a new step just clears the half-typed fields, and a draft (or a
+ * suggestion) belonging to the previous step never follows the cook.
  * Watching `viewKey` also covers the Meanwhile pair swap, where the leader
  * index changes under the same step.
+ *
+ * Registered BEFORE the §4 watcher below on purpose: the clear runs first,
+ * so a suggestion for the step we just arrived at is pre-filled into the
+ * now-empty fields instead of being refused as "the user is typing".
  */
 watch(viewKey, () => {
-  addOpen.value = false
   pendingArm.value = null
   nameInput.value = ''
   minutesInput.value = ''
@@ -306,35 +302,60 @@ function applySuggestion(s: TimerSuggestion) {
 }
 
 /**
- * ADR-0041 §4 — the panel AUTO-OPENS, pre-filled, when the step view on
- * screen carries an authored duration and nothing of that TYPE is
- * counting down for this recipe yet. The saved tap is "Add timer" (the
- * recipe's own sentence is already in the fields); the CONFIRM is still
- * the user's, so nothing a parser found ever starts counting on its own.
- * The concurrent cap (§2) applies on top — the pre-fill is a proposal
- * either way.
+ * ADR-0041 §4 — the row AUTO-FILLS itself when the step view on screen
+ * carries an authored duration and nothing of that TYPE is counting down
+ * for this recipe yet. ADR-0042 reshapes the SURFACE only: there is no
+ * panel to open any more (the fields and presets are always docked above
+ * the footer), so what §4 does now is write the recipe's own sentence into
+ * them. The CONFIRM is still the user's, so nothing a parser found ever
+ * starts counting on its own. The concurrent cap (§2) applies on top — the
+ * pre-fill is a proposal either way.
  *
  * Declared after `suggestion` on purpose: a watcher reading it above
  * would be a TS2448 "used before declaration" landmine.
  *
- * Three refusals, all of them the user's intent winning:
+ * Two refusals, both of them the user's intent winning:
  *  - a RUNNING timer of the SAME TYPE reads as a chip in the strip, never
- *    as a surprise panel — but a live "Oven" says nothing about a "Rice"
+ *    as a surprise pre-fill — but a live "Oven" says nothing about a "Rice"
  *    suggestion, so the gate is per-TYPE (`sameTimerType`), never
  *    per-recipe;
- *  - an open panel stays open — re-filling a panel the user is reading
- *    mid-edit would move text under their cursor;
  *  - a half-typed draft is never clobbered: a dirty field beats an
  *    auto-fill, which is what makes a LATE sidecar resolve safe.
+ *
+ * A refused suggestion is not lost: `suggestionOffered` keeps it on screen
+ * as a chip the cook can tap — a second pot of rice is a legitimate ask.
  */
 watch(suggestion, (s) => {
   if (!s) return
-  if (addOpen.value) return
   if (timers.value.some((t) => isRunning(t) && sameTimerType(t.label, s.label))) return
   if (nameInput.value.trim() !== '' || minutesInput.value.trim() !== '') return
-  addOpen.value = true
   applySuggestion(s)
 })
+
+/**
+ * Is the step's authored duration still worth OFFERING as a chip? Only
+ * while a field is still empty: once the pre-fill (or the cook's own
+ * typing) has filled them the row already says it, and a second
+ * affordance would just duplicate what is on screen.
+ */
+const suggestionOffered = computed(
+  () => suggestion.value !== null && (nameInput.value.trim() === '' || minutesInput.value.trim() === ''),
+)
+
+/**
+ * The presets become a SCROLL row once the row is genuinely crowded — four
+ * armed chips, or a long label eating the name field. Below that they wrap
+ * as one tidy block, which is what the cook sees on a fresh recipe.
+ */
+const presetsScroll = computed(() => timers.value.length >= 4 || nameInput.value.length > 12)
+
+/**
+ * Manage sheet (ADR-0042 §5): the armed timers, listed. The chips keep
+ * their own inline buttons — this is DISCOVERABILITY (a cook who armed
+ * four timers can see the whole set at a glance) and an escape hatch for
+ * a crowded strip, never a second, competing control surface.
+ */
+const manageOpen = ref(false)
 
 /**
  * Arm a timer from the ladder or the confirm. Returns false when the
@@ -350,11 +371,21 @@ function arm(seconds: number, replacingId?: number): boolean {
     pendingArm.value = { label, seconds }
     return false
   }
-  addOpen.value = false
   pendingArm.value = null
   nameInput.value = ''
   minutesInput.value = ''
   return true
+}
+
+/**
+ * X on the add row: drop the draft and the refused arm, keep every armed
+ * timer running. It is a draft reset, not a disclosure close — there is
+ * nothing to hide, the row IS the surface.
+ */
+function cancelDraft() {
+  pendingArm.value = null
+  nameInput.value = ''
+  minutesInput.value = ''
 }
 
 /** The ladder's one-tap presets: a full timer without the confirm. */
@@ -500,6 +531,15 @@ function onKey(e: KeyboardEvent) {
   e.preventDefault()
   prev()
   } else if (e.key === 'Escape') {
+  // The manage sheet owns Escape while it is open, exactly as the facts
+  // modal does in RecipeDetail (ADR-0039): one Escape closes the NEAREST
+  // thing, and closing the cook session under an open sheet would throw
+  // away a running timer behind a stray keypress.
+  if (manageOpen.value) {
+  e.preventDefault()
+  manageOpen.value = false
+  return
+  }
   e.preventDefault()
   if (confirmTimerBeforeLeaving()) close()
   }
@@ -724,8 +764,10 @@ function onTouchEnd(e: TouchEvent) {
   <div class="mx-auto max-w-reading space-y-2">
   <!-- Armed timers: one chip each, countdowns independent. The row
   scrolls when four chips cannot fit (ADR-0041's shrink rule) rather
-  than truncating a countdown. -->
-  <div v-if="timers.length" class="flex gap-2 overflow-x-auto" data-test="timer-chips">
+  than truncating a countdown. The manage button sits OUTSIDE the
+  scroller so it never scrolls away with the chips. -->
+  <div v-if="timers.length" class="flex items-center gap-2">
+  <div class="flex min-w-0 flex-1 gap-2 overflow-x-auto" data-test="timer-chips">
   <div
   v-for="t in timers"
   :key="t.id"
@@ -764,39 +806,27 @@ function onTouchEnd(e: TouchEvent) {
   </button>
   </div>
   </div>
-
-  <!-- Add affordance: always reachable, so a timer can be armed from
-  ANY step for work that belongs to another one. -->
-  <button
-  v-if="!addOpen"
-  class="flex h-11 items-center gap-1.5 rounded-xl px-2 text-sm font-medium text-text-muted"
-  data-test="timer-add"
-  aria-label="Add a timer"
-  @click="addOpen = true"
-  >
-  <Plus :size="16" aria-hidden="true" />
-  Add timer
-  </button>
-
-  <!-- Ladder: the recipe-detected suggestion first (ADR-0041 §3), then
-  the name and minutes fields, then the one-tap presets. A suggestion
-  only ever PRE-FILLS the fields — arming is the confirm button. -->
-  <div v-if="addOpen" class="space-y-2" data-test="timer-panel">
-  <div v-if="suggestion" class="flex items-center gap-2" data-test="timer-suggest-row">
-  <button
-  class="flex h-11 min-w-0 flex-1 items-center gap-1.5 rounded-xl border border-dashed px-2 text-left text-xs font-medium"
-  data-test="timer-suggest"
-  :aria-label="`Use the ${suggestion.minutes} minute ${suggestion.label} timer this step suggests`"
-  @click="applySuggestion(suggestion)"
-  >
-  <Clock :size="16" aria-hidden="true" class="shrink-0" />
-  <span class="min-w-0 truncate">
-  {{ suggestion.label }} · {{ suggestion.minutes }} min
-  </span>
-  </button>
   </div>
 
-  <div class="flex gap-2">
+  <!-- Manage button (ADR-0042 §5): the ONE affordance the baseline row
+  did not have. The chips stay usable inline; this is how a cook SEES
+  the whole set at a glance once four of them are running. -->
+  <button
+  v-if="timers.length"
+  class="flex size-11 shrink-0 items-center justify-center rounded-full border"
+  data-test="timer-fab"
+  aria-label="Manage timers"
+  @click="manageOpen = true"
+  >
+  <List :size="18" aria-hidden="true" />
+  </button>
+
+  <!-- The add ROW (ADR-0042): name · minutes · presets · Start · X, in
+  one horizontal line, always on screen. There is no disclosure left —
+  a timer can be armed from any step, and one that the recipe itself
+  timed is already PROPOSED in the fields (ADR-0041 §3/§4). Arming is
+  still the user's: nothing here starts counting on its own. -->
+  <div class="flex items-center gap-2" data-test="timer-add-row">
   <label class="sr-only" for="timer-name-input">Timer name</label>
   <input
   id="timer-name-input"
@@ -816,16 +846,20 @@ function onTouchEnd(e: TouchEvent) {
   min="1"
   :max="MAX_TIMER_SECONDS / 60"
   placeholder="Min"
-  class="h-11 w-20 rounded-xl border px-2 text-sm"
+  class="h-11 w-16 shrink-0 rounded-xl border px-2 text-sm"
   data-test="timer-minutes"
   />
-  </div>
-
-  <div class="flex min-w-0 flex-wrap gap-1">
+  <!-- The one-tap presets, and the explicit confirm every custom
+  minute count passes through (ADR-0041 §4). -->
+  <div
+  class="flex min-w-0 flex-1 gap-1"
+  :class="presetsScroll ? 'overflow-x-auto' : 'flex-wrap'"
+  data-test="timer-presets"
+  >
   <button
   v-for="m in TIMER_PRESETS_MIN"
   :key="m"
-  class="h-11 rounded-lg border px-2 text-xs font-medium"
+  class="h-11 shrink-0 rounded-lg border px-2 text-xs font-medium"
   :data-test="`timer-preset-${m}`"
   :aria-label="`Start a ${m} minute timer`"
   @click="armPreset(m)"
@@ -834,7 +868,7 @@ function onTouchEnd(e: TouchEvent) {
   </button>
   <button
   v-if="recipeTotalSuggestion"
-  class="h-11 rounded-lg border border-dashed px-2 text-xs font-medium"
+  class="h-11 shrink-0 rounded-lg border border-dashed px-2 text-xs font-medium"
   data-test="timer-preset-recipe"
   :aria-label="`Start a timer for the recipe total cooking time of ${recipeTotalSuggestion} minutes`"
   @click="armPreset(recipeTotalSuggestion)"
@@ -842,10 +876,9 @@ function onTouchEnd(e: TouchEvent) {
   <Ellipsis :size="14" aria-hidden="true" class="mr-0.5 inline align-[-2px]" />
   {{ recipeTotalSuggestion }}m total
   </button>
-  <!-- Explicit confirm: every value the recipe suggested, and every
-  custom minute count, passes through it (ADR-0041 §4). -->
+  </div>
   <button
-  class="h-11 rounded-lg px-2 text-xs font-semibold text-brand-text"
+  class="h-11 shrink-0 rounded-lg px-2 text-xs font-semibold text-brand-text"
   :class="pendingMinutes > 0 ? '' : 'opacity-50'"
   :disabled="pendingMinutes <= 0"
   data-test="timer-confirm"
@@ -856,17 +889,38 @@ function onTouchEnd(e: TouchEvent) {
   Start
   </button>
   <button
-  class="h-11 rounded-lg border px-2 text-xs font-medium"
+  class="flex size-11 shrink-0 items-center justify-center rounded-lg border"
   data-test="timer-cancel"
-  aria-label="Close the timer panel"
-  @click="addOpen = false"
+  aria-label="Clear the timer fields"
+  @click="cancelDraft"
   >
   <X :size="16" aria-hidden="true" />
   </button>
   </div>
 
-  <!-- At the concurrent cap (ADR-0041 §2): name the chips and let the
-  user give one up. No timer is dropped without an explicit choice. -->
+  <!-- A step's authored duration, OFFERED as a chip (ADR-0042): shown
+  only while a field is still empty — the §4 pre-fill has normally
+  written it into the row already, and a refused one (a timer of the
+  same type is live) is a legitimate second ask. -->
+  <div v-if="suggestionOffered && suggestion" class="flex items-center gap-2" data-test="timer-suggest-row">
+  <button
+  class="flex h-11 min-w-0 flex-1 items-center gap-1.5 rounded-xl border border-dashed px-2 text-left text-xs font-medium"
+  data-test="timer-suggest"
+  :aria-label="`Use the ${suggestion.minutes} minute ${suggestion.label} timer this step suggests`"
+  @click="applySuggestion(suggestion)"
+  >
+  <Clock :size="16" aria-hidden="true" class="shrink-0" />
+  <span class="min-w-0 truncate">
+  {{ suggestion.label }} · {{ suggestion.minutes }} min
+  </span>
+  </button>
+  </div>
+
+  <!-- At the concurrent cap (ADR-0041 §2): the row asks which chip to
+  give up rather than widening the strip. INLINE "Replace N?" chips —
+  no panel, one tap still swaps, and the refused label/seconds are held
+  in `pendingArm` so the replacement arms exactly what was asked for.
+  No timer is ever dropped without an explicit choice. -->
   <div
   v-if="pendingArm"
   class="flex flex-wrap items-center gap-2 rounded-xl border px-2 py-1 text-xs"
@@ -883,11 +937,75 @@ function onTouchEnd(e: TouchEvent) {
   >
   {{ t.label }}
   </button>
+  </div>
+  </div>
+  </div>
 
+  <!-- Manage sheet (ADR-0042 §5): the armed timers listed, each with
+  the same Pause/Restart/Clear verbs its chip carries. Teleported to the
+  body so it is not clipped by the dialog's own overflow; scrim and
+  Escape both close it, and a running timer is never touched by simply
+  opening or dismissing it. -->
+  <Teleport to="body">
+  <div
+  v-if="manageOpen"
+  class="fixed inset-0 z-40 flex items-end justify-center bg-surface-dark/50"
+  data-test="timer-manage-scrim"
+  @click.self="manageOpen = false"
+  >
+  <div
+  class="w-full max-w-app space-y-3 rounded-t-2xl bg-surface-raised p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl"
+  role="dialog"
+  aria-label="Manage timers"
+  data-test="timer-manage-sheet"
+  >
+  <div class="flex items-center justify-between">
+  <h3 class="text-sm font-bold tracking-tight">Timers</h3>
+  <button
+  class="flex size-11 items-center justify-center rounded-full hover:bg-surface-sunken"
+  data-test="timer-manage-close"
+  aria-label="Close the timer list"
+  @click="manageOpen = false"
+  >
+  <X :size="18" aria-hidden="true" />
+  </button>
+  </div>
+  <ul class="space-y-2">
+  <li
+  v-for="t in timers"
+  :key="t.id"
+  class="flex items-center gap-2 rounded-xl border px-2 py-1"
+  data-test="timer-manage-row"
+  >
+  <span class="min-w-0 flex-1 truncate text-sm font-semibold">{{ t.label }}</span>
+  <button
+  class="flex h-11 min-w-20 shrink-0 items-center justify-center gap-1 px-1 font-mono text-base font-semibold tabular-nums"
+  :class="isRunning(t) ? 'text-brand-text' : ''"
+  :data-test="`timer-manage-toggle-${t.id}`"
+  :aria-label="
+  isRunning(t)
+  ? `Pause ${t.label} timer, ${formatCountdown(remainingOf(t))} left`
+  : `Start ${t.label} timer, ${formatCountdown(remainingOf(t))} left`
+  "
+  @click="toggle(t)"
+  >
+  <Pause v-if="isRunning(t)" :size="16" aria-hidden="true" />
+  <Play v-else :size="16" aria-hidden="true" />
+  <span>{{ formatCountdown(remainingOf(t)) }}</span>
+  </button>
+  <button
+  class="flex size-11 shrink-0 items-center justify-center"
+  :data-test="`timer-manage-clear-${t.id}`"
+  :aria-label="`Delete the ${t.label} timer`"
+  @click="clear(t)"
+  >
+  <X :size="16" aria-hidden="true" />
+  </button>
+  </li>
+  </ul>
   </div>
   </div>
-  </div>
-  </div>
+  </Teleport>
 
   <!-- Big navigation buttons -->
   <footer class="border-t px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
