@@ -110,13 +110,33 @@ const TEMP_PAIR_RE = /(\d+(?:\.\d+)?)\s*°\s*([CF])[ \t]*\([ \t]*(\d+(?:\.\d+)?)
 const LENGTH_AMOUNT = String.raw`\d+(?:[.,]\d+)?(?:\s+[¼½¾⅓⅔⅛⅜⅝⅞])?(?:\s*\/\s*\d+)?`
 
 /**
- * A length mention: `5 cm`, `2 ½ cm`, `1 inch`, `6 inches`, `2 in`.
- * `in` is guarded against longer words so "into"/"inch" stay prose.
+ * A length mention: `5 cm`, `2 ½ cm`, `1 inch`, `6 inches`.
+ *
+ * The corpus hyphenates lengths 408 times (`3-inch`, `1 ¼-cm`), so the
+ * separator is a space OR a hyphen.
+ *
+ * There is deliberately NO bare `in` alternative: the catalog writes lengths
+ * in full (`inch`/`inches`) and, more importantly, `<number> in` is ordinary
+ * ENGLISH (`cut 2 in half`, `cook 3 in batches`). A two-letter unit behind a
+ * digit rewrites prose into lengths on every step the app localizes — in
+ * METRIC too, since the pass runs in both systems — so the abbreviation is
+ * not worth the corpus gain. Corpus check over all 2,759 docs: 0 occurrences
+ * of `<number> in`, 0 of `<number>-in`.
  */
 const LENGTH_RE = new RegExp(
-  `(${LENGTH_AMOUNT})[ \\t]*(cm|inch(?:es)?|in)(?![a-z])`,
+  `(${LENGTH_AMOUNT})[ \\t]*(?:-[ \\t]*)?(cm|inch(?:es)?)(?![a-z])`,
   'gi',
 )
+
+/**
+ * A temperature RANGE that writes its degree sign once:
+ * `180-200°C`, `350 to 375°F`. Handled BEFORE the lone-token pass, which
+ * would otherwise convert only the upper bound and turn `180-200°C` into
+ * the wrong `180-392°F`. The degree sign is what makes this safe: `20-25
+ * minutes` carries none, so it stays prose.
+ */
+const TEMP_RANGE_RE =
+  /(\d+(?:\.\d+)?)([ \t]*(?:-|–|—|to)[ \t]*)(\d+(?:\.\d+)?)[ \t]*°[ \t]*([CF])/g
 
 /** `inch` / `inches` by magnitude, so a converted length reads naturally. */
 function inchLabel(amount: number): string {
@@ -140,6 +160,7 @@ function convertTemperature(value: number, from: 'C' | 'F', system: UnitSystem):
  * - A parenthetical that states a genuinely DIFFERENT temperature is never
  *   dropped: both notations convert, independently.
  * - A lone temperature converts.
+ * - A range whose degree sign is written once converts BOTH bounds.
  */
 function localizeTemperatures(text: string, system: UnitSystem): string {
   const unit = system === 'imperial' ? 'F' : 'C'
@@ -163,7 +184,24 @@ function localizeTemperatures(text: string, system: UnitSystem): string {
       return `${av}°${unit} (${bv}°${unit})`
     },
   )
-  return withPairs.replace(
+  // Ranges next, before the lone-token pass: both bounds share one degree
+  // sign, so the token pass would convert only the upper one.
+  const withRanges = withPairs.replace(
+    TEMP_RANGE_RE,
+    (
+      _match,
+      lowRaw: string,
+      sep: string,
+      highRaw: string,
+      from: 'C' | 'F',
+    ) =>
+      `${convertTemperature(Number(lowRaw), from, system)}${sep}${convertTemperature(
+        Number(highRaw),
+        from,
+        system,
+      )}°${unit}`,
+  )
+  return withRanges.replace(
     TEMP_RE,
     (_match, raw: string, from: 'C' | 'F') => `${convertTemperature(Number(raw), from, system)}°${unit}`,
   )

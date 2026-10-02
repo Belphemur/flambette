@@ -125,6 +125,36 @@ describe('lengths in prose and annotations (ADR-0047 §4)', () => {
     const step = 'Cut the carrot into 5 cm pieces.'
     expect(localizeText(step, 'metric')).toBe(step)
   })
+
+  test('a HYPHENATED length converts in both systems (408 corpus occurrences)', () => {
+    expect(localizeText('Cut into 3-inch pieces.', 'metric')).toBe('Cut into 7.6 cm pieces.')
+    expect(localizeText('Slice 1 ¼-cm thick wedges.', 'imperial')).toBe(
+      'Slice 0.5 inch thick wedges.',
+    )
+    // Already imperial: the authored string is the target system, kept verbatim.
+    expect(localizeText('Cut into 3-inch pieces.', 'imperial')).toBe('Cut into 3-inch pieces.')
+  })
+
+  test('`<number> in` is PROSE, never a length — in either system', () => {
+    // The corpus writes lengths in full (`inch`/`inches`); 0 occurrences of
+    // `<number> in` across 2,759 docs, so the abbreviation bought nothing and
+    // cost ordinary English (`cut 2 in half` → `cut 5.1 cm half`).
+    for (const step of ['Cut the chicken in half.', 'Cook the 3 in batches.']) {
+      expect(localizeText(step, 'metric')).toBe(step)
+      expect(localizeText(step, 'imperial')).toBe(step)
+    }
+  })
+
+  test('a temperature RANGE converts both bounds, in either system', () => {
+    expect(localizeText('Bake at 180-200°C until golden.', 'imperial')).toBe(
+      'Bake at 356-392°F until golden.',
+    )
+    expect(localizeText('Roast at 350 to 375°F.', 'metric')).toBe('Roast at 177 to 191°C.')
+    // The source system is already the target: nothing to do.
+    expect(localizeText('Bake at 180-200°C.', 'metric')).toBe('Bake at 180-200°C.')
+    // A degree-less range is a duration/count, never a temperature.
+    expect(localizeText('Bake for 20-25 minutes.', 'imperial')).toBe('Bake for 20-25 minutes.')
+  })
 })
 
 describe('quantities (ADR-0047 §1)', () => {
