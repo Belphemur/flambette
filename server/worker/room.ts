@@ -329,30 +329,19 @@ export class Room extends DurableObject<Env> {
       // a fresh room here too. What survives the deletion is the rev
       // FLOOR, and the `created` reply carries it.
       if (existing && livePeers > 0) return this.#refuse(client, server, RELAY_ERRORS.codeTaken)
-      const floor = this.#floorRev(now)
-      const row = this.#armClocks(
-        {
-          code,
-          rev: floor,
-          state: null,
-          created_at: now,
-          last_activity: now,
-          inactivity_at: now + INACTIVITY_TTL_MS,
-          idle_at: now + IDLE_TTL_MS,
-          serial: 0,
-        },
-        now,
-      )
-      this.#acceptPeer(server, code, row.serial)
-      this.#writeRoom(row)
-      this.#send(server, { type: 'created', code, rev: floor })
-      return new Response(null, { status: 101, webSocket: client })
+      return this.#establish(client, server, code, existing, now)
     }
 
-    // join
-    if (!existing) return this.#refuse(client, server, RELAY_ERRORS.notFound)
-    this.#acceptPeer(server, code, existing.serial)
-    const touched = this.#armClocks(existing, now)
+    // join-or-create (ADR-0026): the first peer to arrive under a code the
+    // relay has never seen ESTABLISHES the room and is answered `created`
+    // — a household member who opens a shared link before its creator, or
+    // who rejoins after an expiry, seeds the room instead of hitting a
+    // dead end. `not_found` is therefore unreachable here: the entry
+    // already refused an unusable code shape before routing.
+    if (!existing) return this.#establish(client, server, code, existing, now)
+    const serial = existing.serial + 1
+    this.#acceptPeer(server, code, serial)
+    const touched = this.#armClocks({ ...existing, serial }, now)
     this.#writeRoom(touched)
     this.#send(server, {
       type: 'joined',
@@ -363,9 +352,52 @@ export class Room extends DurableObject<Env> {
     return new Response(null, { status: 101, webSocket: client })
   }
 
+  /**
+   * Establish a fresh room and answer `created`, carrying the code's rev
+   * FLOOR so a re-created room continues the household's revision history
+   * (review F4). Both `create` into an unoccupied code and `join` onto a
+   * code with no stored room land here — the same event with the same
+   * reply, which is what join-or-create means.
+   */
+  #establish(
+    client: WebSocket,
+    server: WebSocket,
+    code: string,
+    existing: RoomRow | null,
+    now: number,
+  ): Response {
+    const floor = this.#floorRev(now)
+    // The serial advances PAST whatever the previous incarnation of this
+    // code handed out, so peer ids never repeat within a code's history.
+    const serial = (existing?.serial ?? 0) + 1
+    this.#acceptPeer(server, code, serial)
+    this.#writeRoom(
+      this.#armClocks(
+        {
+          code,
+          rev: floor,
+          state: null,
+          created_at: now,
+          last_activity: now,
+          inactivity_at: now + INACTIVITY_TTL_MS,
+          idle_at: now + IDLE_TTL_MS,
+          serial,
+        },
+        now,
+      ),
+    )
+    this.#send(server, { type: 'created', code, rev: floor })
+    return new Response(null, { status: 101, webSocket: client })
+  }
+
   /** Hibernatable accept, tagged with this peer's id. */
-  #acceptPeer(server: WebSocket, code: string, previousSerial: number): void {
-    const id = `p${previousSerial + 1}`
+  /**
+   * Hibernatable accept, tagged with this peer's id. `serial` is the FINAL
+   * serial for this socket — the caller has already advanced past the
+   * previous incarnation's value.
+   */
+  #acceptPeer(server: WebSocket, code: string, serial: number): void {
+    const id = `p${serial}`
     this.ctx.acceptWebSocket(server, [id])
     server.serializeAttachment({ id, code } satisfies PeerAttachment)
   }
@@ -523,9 +555,12 @@ export class Room extends DurableObject<Env> {
       return
     }
 
+    // Which clock fired — the payload mirrors the Bun relay, whose
+    // `room_expired` carries `reason: 'inactive' | 'idle'`.
+    const reason = row.inactivity_at <= row.idle_at ? 'inactive' : 'idle'
     for (const ws of this.ctx.getWebSockets()) {
       try {
-        ws.send(JSON.stringify({ type: 'error', code: RELAY_ERRORS.roomExpired }))
+        ws.send(JSON.stringify({ type: 'error', code: RELAY_ERRORS.roomExpired, reason }))
         ws.close(1000, RELAY_ERRORS.roomExpired)
       } catch {
         // Already gone; the close handler reaped it.

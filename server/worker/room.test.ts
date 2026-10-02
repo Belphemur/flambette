@@ -218,6 +218,20 @@ describe('join-or-create', () => {
     expect(await b.expect('error')).toMatchObject({ type: 'error', code: 'not_found' })
   })
 
+  it('a join onto a code the relay has never seen ESTABLISHES the room (ADR-0026)', async () => {
+    // The first peer under a fresh code seeds it — the household member
+    // who opens a shared link before its creator, or re-joins after an
+    // expiry, must not hit a dead end.
+    const room = nextRoom()
+    const a = await dial(`/?op=join&room=${room}`)
+    expect(await a.expect('created')).toMatchObject({ type: 'created', code: room, rev: 0 })
+    a.send({ type: 'state', rev: 2, state: { plan: [{ id: 3 }] } })
+    const b = await dial(`/?op=join&room=${room}`)
+    expect(await b.expect('joined')).toMatchObject({ rev: 2, state: { plan: [{ id: 3 }] } })
+    a.close()
+    b.close()
+  })
+
   it('mints a legacy code for a create that arrived without one', async () => {
     const a = await dial('/?op=create')
     const created = await a.expect('created')
@@ -239,9 +253,16 @@ describe('state', () => {
     const seen = await b.expect('state')
     expect(seen).toMatchObject({ type: 'state', rev: 5, state: { favorites: ['x'] } })
     expect(typeof seen.from).toBe('string')
-    expect(a.frames.filter((f) => f.type === 'state')).toEqual([])
+    // Peer ids are per-peer, so a third socket's broadcast cannot be
+    // mistaken for this one's.
+    const c = await dial(`/?op=join&room=${room}`)
+    await c.expect('joined')
+    b.frames.length = 0
+    c.send({ type: 'state', rev: 6, state: { plan: [] } })
+    expect(await b.expect('state')).toMatchObject({ rev: 6, from: 'p3' })
     a.close()
     b.close()
+    c.close()
   })
 
   it('answers bad_state when the snapshot is not an object or rev is not finite', async () => {
@@ -279,6 +300,25 @@ describe('state', () => {
       cookedHistory: { 42: {} },
       planIdentity: { id: 'p1' },
     })
+    a.close()
+    b.close()
+    c.close()
+  })
+
+  it('an EXPLICIT empty cookedHistory replaces it wholesale', async () => {
+    // ADR-0032: a sharing sender always sends the key (even empty), so it
+    // can never resurrect rows it itself dropped. Absence is the silent
+    // case; `{}` is a real answer.
+    const room = nextRoom()
+    const a = await dial(`/?op=create&room=${room}`)
+    await a.expect('created')
+    await a.send({ type: 'state', rev: 1, state: { plan: [], cookedHistory: { 42: {} } } })
+    const b = await dial(`/?op=join&room=${room}`)
+    await b.expect('joined')
+    await pushAndWait(b, a, { type: 'state', rev: 2, state: { plan: [], cookedHistory: {} } })
+
+    const c = await dial(`/?op=join&room=${room}`)
+    expect((await c.expect('joined')).state).toEqual({ plan: [], cookedHistory: {} })
     a.close()
     b.close()
     c.close()
@@ -356,8 +396,8 @@ describe('liveness and expiry', () => {
     await ageRoom(roomStub(room), 25)
     await runDurableObjectAlarm(roomStub(room))
 
-    expect(await a.expect('error')).toMatchObject({ code: 'room_expired' })
-    expect(await b.expect('error')).toMatchObject({ code: 'room_expired' })
+    expect(await a.expect('error')).toMatchObject({ code: 'room_expired', reason: 'inactive' })
+    expect(await b.expect('error')).toMatchObject({ code: 'room_expired', reason: 'inactive' })
     expect(await a.closed).toBe(1000)
 
     // The room row is gone; the floor row is not (review F4).
