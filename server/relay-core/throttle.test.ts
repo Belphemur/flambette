@@ -3,7 +3,7 @@ import {
   makeThrottle,
   MemoryAttemptBuckets,
   ATTEMPT_WINDOW_MS,
-} from '../../server/throttle.mjs'
+} from './throttle'
 
 function ws(peerId: number) {
   return { data: { peerId } }

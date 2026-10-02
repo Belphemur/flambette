@@ -1,5 +1,6 @@
 /**
- * `Room` — one Durable Object per room code (ADR-0038).
+ * `Room` — one Durable Object per room code (ADR-0038), on the shared core
+ * (ADR-0040).
  *
  * The Bun relay kept rooms in a Map inside one process. The mapping onto a
  * DO is deliberately one-to-one: the code is the Durable Object's NAME,
@@ -11,52 +12,44 @@
  * - rooms are independent of each other's load — one busy household
  *   cannot stall another's storage operations.
  *
- * Everything the in-memory relay expressed with a Map and a setTimeout
- * becomes a SQL row and an alarm:
+ * WHAT IS STILL HERE is only the half ADR-0040 leaves to the adapter: the
+ * SQL rows, the alarm, and the hibernating WebSocket lifecycle. Every
+ * decision — admission, the rev floor, which snapshot keys are preserved,
+ * which clock fires first, whether a push is even admissible — comes from
+ * `../relay-core`, which is where the Bun adapter gets the same answers.
+ *
+ * What the in-memory relay expressed with a Map and a `setTimeout` becomes
+ * a SQL row and an alarm:
  *
  * - the room row (rev, state JSON, created_at, last_activity, both
  *   deadlines, a peer serial);
- * - the per-code `rev` floor row, which OUTLIVES the room row and is
- *   handed back in `created`/`joined` so a room re-created after an
- *   expiry cannot restart the household's revision history at zero
- *   (review F4);
- * - ONE alarm, armed at the earlier of the two deadlines. workerd gives
- *   a hibernated object no timers at all, so a `setTimeout` here would
- *   simply not fire once the object went idle — an alarm is the only
- *   clock that survives eviction.
+ * - the per-code floor row, which OUTLIVES the room row and is handed back
+ *   in `created`/`joined` so a room re-created after an expiry cannot
+ *   restart the household's revision history at zero (review F4).
+ *
+ * ONE alarm, armed at the earlier of the two deadlines. workerd gives a
+ * hibernated object no timers at all, so a `setTimeout` here would simply
+ * not fire once the object went idle — an alarm is the only clock that
+ * survives eviction.
  *
  * SCOPED DEVIATION (ADR-0038 §4): when the last peer leaves, this relay
  * KEEPS the room row. The Bun relay deletes a room nobody is in; here the
- * state survives until the expiry clocks fire, so a phone that
- * reconnects after a tunnel or a reload gets its plan back instead of
- * re-seeding an empty room.
+ * state survives until the expiry clocks fire, so a phone that reconnects
+ * after a tunnel or a reload gets its plan back instead of re-seeding an
+ * empty room. The deviation is one line — `leave` is simply never called.
  */
 
 import { DurableObject } from 'cloudflare:workers'
-import { IDLE_TTL_MS, INACTIVITY_TTL_MS, PRESERVED_WHEN_ABSENT } from '../relayPolicy.mjs'
-import { normalizeRoomCode, RELAY_ERRORS } from './codes'
-
-/** Columns of the single-room row. `id` is pinned to 1: one room per DO. */
-interface RoomRow {
-  code: string
-  rev: number
-  /** The last shared-state snapshot, JSON-encoded; null until first push. */
-  state: string | null
-  created_at: number
-  last_activity: number
-  /** Absolute deadline of the 24h inactivity clock. */
-  inactivity_at: number
-  /** Absolute deadline of the 7-day idle backstop. */
-  idle_at: number
-  /** Monotonic peer counter, so `state.from` is stable and unique. */
-  serial: number
-}
-
-interface FloorRow {
-  code: string
-  rev: number
-  at: number
-}
+import {
+  createRoomRegistry,
+  type FloorRecord,
+  type RoomRecord,
+  type RoomRegistry,
+  type RoomStore,
+} from '../relay-core/lifecycle'
+import { IDLE_TTL_MS, INACTIVITY_TTL_MS } from '../relay-core/policy'
+import { RELAY_ERRORS, type RelayErrorCode, type RelayMessage } from '../relay-core/protocol'
+import { canonicalizeCode } from '../relay-core/codes'
 
 /** What `deserializeAttachment` carries: this socket's peer identity. */
 interface PeerAttachment {
@@ -81,7 +74,23 @@ CREATE TABLE IF NOT EXISTS rev_floor (
   rev INTEGER NOT NULL,
   at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS peer_serial (
+  code TEXT PRIMARY KEY,
+  serial INTEGER NOT NULL
+);
 `
+
+/**
+ * Why the peer serial lives in its own table rather than as a column on
+ * `rev_floor`. It was added after the first Durable Object deploy, and
+ * SQLite cannot widen an existing table except through `ALTER TABLE` —
+ * which would need a migration probe to stay safe on a database that
+ * already has the column. `CREATE TABLE IF NOT EXISTS` needs no probe and
+ * cannot fail on an existing database, so the migration is purely
+ * additive. A room that predates the table simply has no serial row and
+ * falls back to the room row's own counter, which is exactly the
+ * behaviour of the first deploy.
+ */
 
 const ROOM_ID = 1
 
@@ -105,6 +114,26 @@ export class Room extends DurableObject<Env> {
     return this.ctx.id.name ?? ''
   }
 
+  /**
+   * The shared core, built over this object's SQL store. Recreated per
+   * event rather than cached in a field: the instance is cheap, the core
+   * is a few closures, and a field would have to survive hibernation to
+   * be worth it.
+   */
+  get #room(): RoomRegistry {
+    return createRoomRegistry({
+      code: this.#code,
+      store: this.#store,
+      inactivityTtlMs: INACTIVITY_TTL_MS,
+      idleTtlMs: IDLE_TTL_MS,
+      now: () => Date.now(),
+      arm: (deadline) => this.ctx.storage.setAlarm(deadline),
+      onExpire: (_code, reason) => this.#notifyExpired(reason),
+    })
+  }
+
+  /* ---------------------------------------------------------------- schema */
+
   #ensureSchema(): void {
     if (this.#schemaReady) return
     this.ctx.storage.sql.exec(SCHEMA)
@@ -122,21 +151,12 @@ export class Room extends DurableObject<Env> {
     const present = this.ctx.storage.sql
       .exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'room'")
       .next()
-    if (!present.done) {
-      this.#schemaReady = true
+    // `done` means the probe came back EMPTY, i.e. the table is missing.
+    if (present.done) {
+      this.#ensureSchema()
       return
     }
-    this.#ensureSchema()
-  }
-
-  /** Stored state is our own JSON; a corrupt row must not kill the room. */
-  static #parseState(raw: string | null): Record<string, unknown> | null {
-    if (raw === null) return null
-    try {
-      return JSON.parse(raw) as Record<string, unknown>
-    } catch {
-      return null
-    }
+    this.#schemaReady = true
   }
 
   /**
@@ -152,24 +172,58 @@ export class Room extends DurableObject<Env> {
     return step.done ? undefined : step.value
   }
 
-  // ---------------------------------------------------------------- storage
+  /* ----------------------------------------------------------------- store */
 
-  #readRoom(): RoomRow | null {
+  /** Stored state is our own JSON; a corrupt row must not kill the room. */
+  static #parseState(raw: string | null): Record<string, unknown> | null {
+    if (raw === null) return null
+    try {
+      return JSON.parse(raw) as Record<string, unknown>
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * The core's storage INTENTS over this object's two tables — the whole
+   * "adapter owns state" half of ADR-0040, including the JSON codec the
+   * core knows nothing about.
+   */
+  get #store(): RoomStore {
+    return {
+      read: () => this.#readRoom(),
+      write: (row) => this.#writeRoom(row),
+      drop: () => {
+        this.#ensureTables()
+        this.ctx.storage.sql.exec('DELETE FROM room WHERE id = ?', ROOM_ID)
+      },
+      readFloor: () => this.#readFloor(),
+      writeFloor: (record) => this.#writeFloor(record),
+      dropFloor: () => {
+        this.#ensureTables()
+        this.ctx.storage.sql.exec('DELETE FROM rev_floor WHERE code = ?', this.#code)
+        this.ctx.storage.sql.exec('DELETE FROM peer_serial WHERE code = ?', this.#code)
+      },
+    }
+  }
+
+  #readRoom(): RoomRecord | null {
     const row = this.#one('SELECT * FROM room WHERE id = ?', ROOM_ID)
     if (!row) return null
+    const state = row.state === null || row.state === undefined ? null : String(row.state)
     return {
       code: String(row.code),
       rev: Number(row.rev),
-      state: row.state === null || row.state === undefined ? null : String(row.state),
-      created_at: Number(row.created_at),
-      last_activity: Number(row.last_activity),
-      inactivity_at: Number(row.inactivity_at),
-      idle_at: Number(row.idle_at),
+      state: Room.#parseState(state),
+      createdAt: Number(row.created_at),
+      lastActivityAt: Number(row.last_activity),
+      inactivityAt: Number(row.inactivity_at),
+      idleAt: Number(row.idle_at),
       serial: Number(row.serial),
     }
   }
 
-  #writeRoom(row: RoomRow): void {
+  #writeRoom(row: RoomRecord): void {
     this.#ensureTables()
     this.ctx.storage.sql.exec(
       `INSERT OR REPLACE INTO room
@@ -178,86 +232,50 @@ export class Room extends DurableObject<Env> {
       ROOM_ID,
       row.code,
       row.rev,
-      row.state,
-      row.created_at,
-      row.last_activity,
-      row.inactivity_at,
-      row.idle_at,
+      row.state === null ? null : JSON.stringify(row.state),
+      row.createdAt,
+      row.lastActivityAt,
+      row.inactivityAt,
+      row.idleAt,
       row.serial,
     )
   }
 
-  #readFloor(): FloorRow | null {
+  #readFloor(): FloorRecord | null {
     const row = this.#one('SELECT * FROM rev_floor WHERE code = ?', this.#code)
-    return row ? { code: String(row.code), rev: Number(row.rev), at: Number(row.at) } : null
+    if (!row) return null
+    return {
+      code: String(row.code),
+      rev: Number(row.rev),
+      at: Number(row.at),
+      serial: this.#readSerial(),
+    }
   }
 
-  #writeFloor(rev: number, at: number): void {
+  #writeFloor(record: FloorRecord): void {
     this.#ensureTables()
     this.ctx.storage.sql.exec(
       'INSERT OR REPLACE INTO rev_floor (code, rev, at) VALUES (?, ?, ?)',
-      this.#code,
-      rev,
-      at,
+      record.code,
+      record.rev,
+      record.at,
+    )
+    this.ctx.storage.sql.exec(
+      'INSERT OR REPLACE INTO peer_serial (code, serial) VALUES (?, ?)',
+      record.code,
+      record.serial,
     )
   }
 
-  #dropFloor(): void {
-    this.#ensureTables()
-    this.ctx.storage.sql.exec('DELETE FROM rev_floor WHERE code = ?', this.#code)
+  /** The peer serial, or 0 for a room created before the table existed. */
+  #readSerial(): number {
+    const row = this.#one('SELECT serial FROM peer_serial WHERE code = ?', this.#code)
+    return row ? Number(row.serial) : 0
   }
 
-  // ------------------------------------------------------------------ clocks
+  /* ---------------------------------------------------------------- sockets */
 
-  /**
-   * The canonical `rev` this code has reached (0 when unknown, or older
-   * than the idle TTL — the entry is pruned on the way through, which is
-   * what keeps the floor table bounded without an alarm of its own).
-   */
-  #floorRev(now: number): number {
-    const entry = this.#readFloor()
-    if (!entry) return 0
-    if (now - entry.at > IDLE_TTL_MS) {
-      this.#dropFloor()
-      return 0
-    }
-    return entry.rev
-  }
-
-  /**
-   * Record a rev, moving the floor forward when it is higher and
-   * refreshing the floor's own age either way, so a busy household never
-   * has its floor pruned underneath it.
-   */
-  #noteFloor(rev: number, now: number): void {
-    const entry = this.#readFloor()
-    if (!entry || rev > entry.rev || now - entry.at > IDLE_TTL_MS) {
-      this.#writeFloor(rev, now)
-      return
-    }
-    this.#writeFloor(entry.rev, now)
-  }
-
-  /**
-   * Restart BOTH expiry clocks. Every liveness signal funnels through
-   * here — create, join, state AND keepalive (review F1) — because a
-   * connected peer that keepalives is by definition not an idle room.
-   * The two deadlines are then one alarm at the earlier of them.
-   */
-  #armClocks(row: RoomRow, now: number): RoomRow {
-    const next: RoomRow = {
-      ...row,
-      last_activity: now,
-      inactivity_at: now + INACTIVITY_TTL_MS,
-      idle_at: now + IDLE_TTL_MS,
-    }
-    this.ctx.storage.setAlarm(Math.min(next.inactivity_at, next.idle_at))
-    return next
-  }
-
-  // ------------------------------------------------------------------ sockets
-
-  #send(ws: WebSocket, payload: unknown): void {
+  #send(ws: WebSocket, payload: RelayMessage): void {
     try {
       ws.send(JSON.stringify(payload))
     } catch {
@@ -266,7 +284,7 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  #fail(ws: WebSocket, code: string): void {
+  #fail(ws: WebSocket, code: RelayErrorCode): void {
     this.#send(ws, { type: 'error', code })
   }
 
@@ -276,7 +294,7 @@ export class Room extends DurableObject<Env> {
    * driven by relay messages, so an HTTP 4xx here would surface as a bare
    * "connection failed" instead of "that code is taken".
    */
-  #refuse(client: WebSocket, server: WebSocket, code: string): Response {
+  #refuse(client: WebSocket, server: WebSocket, code: RelayErrorCode): Response {
     // `accept()` (not `ctx.acceptWebSocket`) is deliberate: a refused
     // socket is never hibernated, so it cannot linger in this room's
     // peer set and cannot be revived by a later message. The client end
@@ -293,15 +311,35 @@ export class Room extends DurableObject<Env> {
     return new Response(null, { status: 101, webSocket: client })
   }
 
-  /** Broadcast to every socket in this room EXCEPT the sender. */
-  #fanOut(sender: WebSocket | null, payload: unknown): void {
-    for (const peer of this.ctx.getWebSockets()) {
-      if (peer === sender) continue
-      this.#send(peer, payload)
+  /**
+   * Hibernatable accept, tagged with this peer's id. The serial comes
+   * from the core, which keeps it monotone across a re-creation of this
+   * code, so an id is never handed out twice within a code's history.
+   */
+  #acceptPeer(server: WebSocket, code: string): string {
+    const id = `p${this.#room.nextSerial()}`
+    this.ctx.acceptWebSocket(server, [id])
+    server.serializeAttachment({ id, code } satisfies PeerAttachment)
+    return id
+  }
+
+  /**
+   * Tell every peer the room is gone, BEFORE the core drops the row. The
+   * client treats `room_expired` as TERMINAL — a re-join would
+   * join-or-create an empty room and read as silent household data loss.
+   */
+  #notifyExpired(reason: 'inactive' | 'idle'): void {
+    for (const ws of this.ctx.getWebSockets()) {
+      try {
+        ws.send(JSON.stringify({ type: 'error', code: RELAY_ERRORS.roomExpired, reason }))
+        ws.close(1000, RELAY_ERRORS.roomExpired)
+      } catch {
+        // Already gone; the close handler reaped it.
+      }
     }
   }
 
-  // ------------------------------------------------------------------- fetch
+  /* ------------------------------------------------------------------ fetch */
 
   /**
    * Entry point for an upgrade the worker entry has already validated,
@@ -313,100 +351,32 @@ export class Room extends DurableObject<Env> {
     const mode = url.searchParams.get('mode') === 'create' ? 'create' : 'join'
     // The entry routed by name, so the code in the URL is already
     // canonical; re-deriving it keeps the row self-describing.
-    const code = normalizeRoomCode(url.searchParams.get('room') ?? '') || this.#code
-    const now = Date.now()
+    const code = canonicalizeCode(url.searchParams.get('room')) || this.#code
 
     const pair = new WebSocketPair()
     const client = pair[0]
     const server = pair[1]
 
-    const existing = this.#readRoom()
-    const livePeers = this.ctx.getWebSockets().length
+    const verdict = this.#room.admit(mode, this.ctx.getWebSockets().length)
+    if (verdict.kind === 'refuse') return this.#refuse(client, server, verdict.error)
 
-    if (mode === 'create') {
-      // A stored room that nobody is in is, logically, gone — the Bun
-      // relay deletes it on last leave (ADR-0026), so a `create` lands on
-      // a fresh room here too. What survives the deletion is the rev
-      // FLOOR, and the `created` reply carries it.
-      if (existing && livePeers > 0) return this.#refuse(client, server, RELAY_ERRORS.codeTaken)
-      return this.#establish(client, server, code, existing, now)
+    this.#acceptPeer(server, code)
+    if (verdict.kind === 'establish') {
+      // `created` carries the code's rev FLOOR, never the room's current
+      // rev: the client seeds above it, so a re-created room cannot pass a
+      // stale snapshot off as newer (review F4).
+      this.#send(server, { type: 'created', code: verdict.code, rev: verdict.rev })
+    } else {
+      this.#send(server, { type: 'joined', code: verdict.code, rev: verdict.rev, state: verdict.state })
     }
-
-    // join-or-create (ADR-0026): the first peer to arrive under a code the
-    // relay has never seen ESTABLISHES the room and is answered `created`
-    // — a household member who opens a shared link before its creator, or
-    // who rejoins after an expiry, seeds the room instead of hitting a
-    // dead end. `not_found` is therefore unreachable here: the entry
-    // already refused an unusable code shape before routing.
-    if (!existing) return this.#establish(client, server, code, existing, now)
-    const serial = existing.serial + 1
-    this.#acceptPeer(server, code, serial)
-    const touched = this.#armClocks({ ...existing, serial }, now)
-    this.#writeRoom(touched)
-    this.#send(server, {
-      type: 'joined',
-      code,
-      rev: touched.rev,
-      state: Room.#parseState(touched.state),
-    })
     return new Response(null, { status: 101, webSocket: client })
   }
 
-  /**
-   * Establish a fresh room and answer `created`, carrying the code's rev
-   * FLOOR so a re-created room continues the household's revision history
-   * (review F4). Both `create` into an unoccupied code and `join` onto a
-   * code with no stored room land here — the same event with the same
-   * reply, which is what join-or-create means.
-   */
-  #establish(
-    client: WebSocket,
-    server: WebSocket,
-    code: string,
-    existing: RoomRow | null,
-    now: number,
-  ): Response {
-    const floor = this.#floorRev(now)
-    // The serial advances PAST whatever the previous incarnation of this
-    // code handed out, so peer ids never repeat within a code's history.
-    const serial = (existing?.serial ?? 0) + 1
-    this.#acceptPeer(server, code, serial)
-    this.#writeRoom(
-      this.#armClocks(
-        {
-          code,
-          rev: floor,
-          state: null,
-          created_at: now,
-          last_activity: now,
-          inactivity_at: now + INACTIVITY_TTL_MS,
-          idle_at: now + IDLE_TTL_MS,
-          serial,
-        },
-        now,
-      ),
-    )
-    this.#send(server, { type: 'created', code, rev: floor })
-    return new Response(null, { status: 101, webSocket: client })
-  }
-
-  /** Hibernatable accept, tagged with this peer's id. */
-  /**
-   * Hibernatable accept, tagged with this peer's id. `serial` is the FINAL
-   * serial for this socket — the caller has already advanced past the
-   * previous incarnation's value.
-   */
-  #acceptPeer(server: WebSocket, code: string, serial: number): void {
-    const id = `p${serial}`
-    this.ctx.acceptWebSocket(server, [id])
-    server.serializeAttachment({ id, code } satisfies PeerAttachment)
-  }
-
-  // ------------------------------------------------------------------ message
+  /* --------------------------------------------------------------- message */
 
   /**
    * A message off a hibernating socket. Woken objects never pass through
-   * `fetch`, so this is where the room rules live.
+   * `fetch`, so this is where the room rules are applied — by the core.
    */
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
     this.#ensureTables()
@@ -428,38 +398,34 @@ export class Room extends DurableObject<Env> {
     switch (msg.type) {
       case 'keepalive': {
         // Never throttled: it carries no guessable input and must not be
-        // able to burn a create/join budget. It DOES refresh both clocks
-        // (review F1).
-        if (!member || !this.#readRoom()) {
+        // able to burn a create/join budget. The core refreshes BOTH
+        // clocks, so a 7-day-connected household is never closed by the
+        // idle backstop (review F1).
+        if (!member || this.#room.keepalive().kind !== 'ok') {
           this.#fail(ws, RELAY_ERRORS.notInRoom)
           return
         }
-        this.#writeRoom(this.#armClocks(this.#readRoom()!, Date.now()))
         this.#send(ws, { type: 'keepalive_ack' })
         return
       }
 
       case 'state': {
-        const rev = msg.rev
         // Review F2: MEMBERSHIP, not just the code. A socket that was
         // refused (code_taken / not_found) must not write into the room
         // it was aiming at. The Bun relay answers a non-member's state
         // with bad_state (the membership check is folded into the same
         // guard), so the two relays speak the same reply here.
-        if (
-          !member ||
-          !this.#readRoom() ||
-          typeof rev !== 'number' ||
-          !Number.isFinite(rev) ||
-          typeof msg.state !== 'object' ||
-          msg.state === null
-        ) {
-          this.#fail(ws, RELAY_ERRORS.badState)
+        const verdict = member
+          ? this.#room.push(msg.rev, msg.state, attachment!.id)
+          : { ok: false as const, error: RELAY_ERRORS.badState as RelayErrorCode }
+        if (!verdict.ok) {
+          this.#fail(ws, verdict.error)
           return
         }
-        this.#commitState(rev, msg.state as Record<string, unknown>)
-        this.#writeRoom(this.#armClocks(this.#readRoom()!, Date.now()))
-        this.#fanOut(ws, { type: 'state', rev, state: msg.state, from: attachment!.id })
+        for (const peer of this.ctx.getWebSockets()) {
+          if (peer === ws) continue
+          this.#send(peer, verdict.fanOut)
+        }
         return
       }
 
@@ -477,22 +443,17 @@ export class Room extends DurableObject<Env> {
         // room (an old client that only knows how to say so), and refused
         // otherwise: a socket cannot move rooms, and a different code
         // would need a different Durable Object entirely.
-        const asked = normalizeRoomCode(typeof msg.code === 'string' ? msg.code : '')
-        if (!member || !asked || asked !== this.#code || !this.#readRoom()) {
+        const asked = canonicalizeCode(msg.code)
+        const row = member && asked === this.#code ? this.#readRoom() : null
+        if (!row) {
           this.#fail(ws, RELAY_ERRORS.unknownType)
           return
         }
-        const row = this.#readRoom()!
         this.#send(
           ws,
           msg.type === 'create'
-            ? { type: 'created', code: this.#code, rev: this.#floorRev(Date.now()) }
-            : {
-                type: 'joined',
-                code: this.#code,
-                rev: row.rev,
-                state: Room.#parseState(row.state),
-              },
+            ? { type: 'created', code: this.#code, rev: this.#room.floor() }
+            : { type: 'joined', code: this.#code, rev: row.rev, state: row.state },
         )
         return
       }
@@ -502,86 +463,27 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  /**
-   * Store a snapshot and move the floor. `cookedHistory` and
-   * `planIdentity` are PRESERVED when the inbound snapshot omits them
-   * (ADR-0032 / ADR-0034): an opted-out sender is silent about history,
-   * never a wipe, and an explicit `planIdentity: null` really does mean
-   * "no current plan", so only an ABSENT key carries the stored value
-   * forward. This store is what a later joiner adopts, which is exactly
-   * why a wholesale replace would be destructive.
-   */
-  #commitState(rev: number, state: Record<string, unknown>): void {
-    const now = Date.now()
-    const row = this.#readRoom()
-    const previous = Room.#parseState(row?.state ?? null)
-    let next = state
-    for (const key of PRESERVED_WHEN_ABSENT) {
-      if (state[key] === undefined && previous?.[key] !== undefined) {
-        if (next === state) next = { ...state }
-        next[key] = previous[key]
-      }
-    }
-    if (row) {
-      this.#writeRoom({ ...row, rev, state: JSON.stringify(next) })
-    }
-    this.#noteFloor(rev, now)
-  }
-
-  // ------------------------------------------------------------------- alarms
+  /* ----------------------------------------------------------------- alarms */
 
   /**
-   * Expiry. One alarm, armed at the earlier deadline: whichever clock
-   * fired first closes the room, tells every peer `room_expired` (the
-   * client treats that as TERMINAL — a re-join would join-or-create an
-   * empty room and read as silent household data loss) and deletes the
-   * room row. The floor row deliberately stays, so the household's
-   * revision history outlives the room until the idle TTL prunes it.
+   * Expiry. The core reads the row, decides which of the two clocks fired
+   * (and re-arms the alarm when a keepalive moved the deadline), notifies
+   * the peers through `onExpire` and drops the row. The floor row
+   * deliberately stays, so the household's revision history outlives the
+   * room until the idle TTL prunes it.
    */
   async alarm(): Promise<void> {
     this.#ensureTables()
-    const now = Date.now()
-    const row = this.#readRoom()
-
-    if (!row) {
-      this.#pruneFloor(now)
-      return
-    }
-
-    const deadline = Math.min(row.inactivity_at, row.idle_at)
-    if (now < deadline) {
-      // Touched (a keepalive re-armed it) since the alarm was set.
-      this.ctx.storage.setAlarm(deadline)
-      return
-    }
-
-    // Which clock fired — the payload mirrors the Bun relay, whose
-    // `room_expired` carries `reason: 'inactive' | 'idle'`.
-    const reason = row.inactivity_at <= row.idle_at ? 'inactive' : 'idle'
-    for (const ws of this.ctx.getWebSockets()) {
-      try {
-        ws.send(JSON.stringify({ type: 'error', code: RELAY_ERRORS.roomExpired, reason }))
-        ws.close(1000, RELAY_ERRORS.roomExpired)
-      } catch {
-        // Already gone; the close handler reaped it.
-      }
-    }
-    this.ctx.storage.sql.exec('DELETE FROM room WHERE id = ?', ROOM_ID)
-    this.#pruneFloor(now)
+    this.#room.tick()
   }
 
-  /** The floor outlives the room; it dies with the idle TTL. */
-  #pruneFloor(now: number): void {
-    const entry = this.#readFloor()
-    if (entry && now - entry.at > IDLE_TTL_MS) this.#dropFloor()
-  }
-
-  // -------------------------------------------------------------------- close
+  /* ------------------------------------------------------------------ close */
 
   /**
    * A peer left. Deliberately a no-op beyond what the runtime already
    * did: ADR-0038 §4 keeps the room row until the clocks fire, so a
-   * phone that reloads mid-cook comes back to its plan. The only thing
+   * phone that reloads mid-cook comes back to its plan — which is also
+   * why `leave` is never called on the core from here. The only thing
    * left to do is make sure the room is not holding an alarm for a room
    * that is still alive — which it legitimately is.
    */

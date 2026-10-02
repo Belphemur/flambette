@@ -24,7 +24,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 
 const INACTIVITY_TTL_MS = 1_500
 const KEEPALIVE_EVERY_MS = 300
-/** Mirrors the relay's default idle backstop (server/relayPolicy.mjs: 7 days). */
+/** Mirrors the relay's default idle backstop (server/relay-core/policy.ts: 7 days). */
 const IDLE_TTL_DEFAULT_MS = 7 * 24 * 60 * 60 * 1000
 
 /** Child relays this worker started, killed in afterAll. */
@@ -66,7 +66,7 @@ async function startRelay(slot: number, env: Record<string, string>): Promise<st
       }
       continue // occupied by a DIFFERENT configuration — take the next port
     }
-    const child = spawn('bun', ['server/relay.mjs'], {
+    const child = spawn('bun', ['server/relay.ts'], {
       env: { ...process.env, PORT: String(port), ...env },
       stdio: 'ignore',
     })

@@ -11,13 +11,15 @@ import { describe, expect, it } from 'vitest'
  * Room lifecycle (ADR-0026, as deployed per ADR-0038) at the WIRE level,
  * against the real Room Durable Object in workerd.
  *
- * These are the scenarios from src/lib/roomLifecycle.test.ts ported onto
- * the deployment that ships: every case below goes through the worker
- * entry's upgrade path — intent in the URL, `idFromName` routing — and
- * speaks the same JSON the client does. The unit specs stay authoritative
- * for the clock arithmetic (they can pin time); these pin the parts a
- * fake clock cannot see: hibernation, the alarm and the SQL storage that
- * must survive it.
+ * These are the room scenarios exercised at the WIRE level against the
+ * real Room Durable Object in workerd. The authoritative rules live in
+ * ../relay-core/lifecycle.test.ts, which pins every one of them against the
+ * shared core (ADR-0040); what only this file can see is the deployment
+ * around it — hibernation, SELF.fetch routing, and storage surviving
+ * eviction. Every case below goes through the worker entry's upgrade path
+ * (intent in the URL, `idFromName` routing) and speaks the same JSON the
+ * client does.
+ *
  *
  * Every test dials its OWN room code: the pool rolls each test's storage
  * back, but the object instances and their sockets are shared inside one

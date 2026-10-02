@@ -23,9 +23,13 @@
     "forceConsistentCasingInFileNames": true
   },
   "include": [
+    "relay-core/**/*.ts",
     "worker/**/*.ts",
     "worker-configuration.d.ts",
-    "*.mjs",
     "../src/lib/roomWords.ts"
-  ]
+  ],
+  // The shared core's specs run under `bun test`, not workerd, and import
+  // `bun:test`; they are type-checked by server/tsconfig.relay.json's
+  // sibling (bun) project and by the runner that actually executes them.
+  "exclude": ["**/*.test.ts"]
 }

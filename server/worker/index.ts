@@ -25,15 +25,11 @@
  * "connection failed" instead of "not a room code" or "slow down".
  */
 
-import { mintLegacyCode, normalizeRoomCode } from './codes'
+import { mintLegacyCode, canonicalizeCode } from '../relay-core/codes'
+import { RELAY_ERRORS } from '../relay-core/protocol'
 import { Room } from './room'
-import { makeThrottle } from '../throttleCore.mjs'
-import {
-  DEFAULT_ATTEMPT_LIMIT,
-  IDLE_TTL_MS,
-  INACTIVITY_TTL_MS,
-  RELAY_SERVICE,
-} from '../relayPolicy.mjs'
+import { makeThrottle } from '../relay-core/throttle'
+import { DEFAULT_ATTEMPT_LIMIT, IDLE_TTL_MS, INACTIVITY_TTL_MS, RELAY_SERVICE } from '../relay-core/policy'
 
 export { Room }
 
@@ -67,7 +63,7 @@ let currentAddress: string = 'unknown'
  *
  * Deliberately lazy: the limit comes from the RELAY_ATTEMPT_LIMIT var, and
  * a module-scope constant cannot see a binding. This is the same knob the
- * Bun relay reads from process.env (server/throttle.mjs) — the e2e suite
+ * Bun relay reads from `process.env` (server/relay.ts) — the e2e suite
  * raises it for a shared CI IP, and the DO specs pin the boundary at their
  * own value.
  */
@@ -130,7 +126,7 @@ export default {
     // ADR-0026's join-or-create is the default intent: a bare `?room=X`
     // is a join, and only an explicit `op=create` claims the code.
     const op = url.searchParams.get('op') === 'create' ? 'create' : 'join'
-    let code = normalizeRoomCode(rawCode)
+    let code = canonicalizeCode(rawCode)
 
     if (op === 'create' && !code) {
       // A create that arrived without a code (the hand-typed / link-less
@@ -138,7 +134,7 @@ export default {
       // A collision surfaces as `code_taken` and the client re-rolls.
       code = mintLegacyCode()
     }
-    if (!code) return refuseWith('not_found')
+    if (!code) return refuseWith(RELAY_ERRORS.notFound)
 
     // One attempt against BOTH the per-socket and per-IP budgets. The
     // socket bucket is a per-attempt no-op (each upgrade is a fresh id);
@@ -147,7 +143,7 @@ export default {
     // each time.
     currentAddress = clientAddress(request)
     if (!getThrottle(env).allow({ data: { peerId: crypto.randomUUID() } })) {
-      return refuseWith('rate_limited')
+      return refuseWith(RELAY_ERRORS.rateLimited)
     }
 
     // Route by name: the code IS the Durable Object's name, so two

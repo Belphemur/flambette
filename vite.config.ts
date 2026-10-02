@@ -4,7 +4,7 @@ import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import { buildAppVersion } from './src/lib/appVersion'
 
-// The live-room relay runs as a separate process (server/relay.mjs, :8081 in
+// The live-room relay runs as a separate process (server/relay.ts, :8081 in
 // dev/e2e, the `relay` service behind nginx in production). Both the dev
 // server and `vite preview` (used by the e2e suite) proxy /ws to it so the
 // browser only ever talks to the web origin.

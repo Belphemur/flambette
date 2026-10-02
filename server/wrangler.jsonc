@@ -3,7 +3,7 @@
   // per room code, so a socket physically cannot belong to two rooms and a
   // room's state lives in that room's own storage instead of a process map.
   //
-  // The wire protocol is unchanged from server/relay.mjs — see
+  // The wire protocol is unchanged from server/relay.ts — see
   // docs/design/ADR-0038-cloudflare-deployment.md. `main` is resolved
   // relative to THIS file, i.e. server/worker/index.ts.
   "$schema": "../node_modules/wrangler/config-schema.json",

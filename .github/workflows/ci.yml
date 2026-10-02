@@ -159,8 +159,10 @@ jobs:
 
       # A successful build proves nothing about startup: the relay image once
       # shipped without ./throttle.mjs, so it crash-looped on `bun relay.mjs`
-      # while `docker build` stayed green (issue #6). Run it and require a real
-      # HTTP 200 off the health endpoint before the image is considered good.
+      # while `docker build` stayed green (issue #6). It now also has to
+      # carry server/relay-core/, which the Dockerfile copies by glob. Run it
+      # and require a real HTTP 200 off the health endpoint before the image
+      # is considered good.
       - name: Smoke-run relay image
         run: |
           docker run -d --name relay-smoke -p 18081:8081 flambette-relay:ci

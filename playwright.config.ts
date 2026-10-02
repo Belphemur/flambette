@@ -41,7 +41,7 @@ export default defineConfig({
       // the 30/min default starves the suite (32 failures on main, v0.12.0
       // CI). Tests are not the threat model: lift the cap for the spawned
       // instance only (prod default 30 stands).
-      command: 'RELAY_ATTEMPT_LIMIT=100000 bun server/relay.mjs',
+      command: 'RELAY_ATTEMPT_LIMIT=100000 bun server/relay.ts',
       url: 'http://localhost:8081',
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
