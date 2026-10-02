@@ -321,15 +321,18 @@ def main() -> int:
             # setup never leaves an active credential behind (review #2).
             try:
                 _cf("DELETE", f"/accounts/{account}/tokens/{new_id}", token)
-                print(f"revoked the minted token {new_id} (setup failed before any secret was set)")
+                print("revoked the freshly minted token (setup failed before any secret was set)")
             except CfError as roll_err:
-                print(f"setup FAILED and the minted token {new_id} could NOT be revoked: {roll_err}")
+                print(
+                    f"setup FAILED and the freshly minted token could NOT be revoked: {roll_err} — "
+                    f"find the token named '{args.token_name}' in the dashboard and delete it"
+                )
         else:
             # At least one secret is already live against this token — revoking
             # it would break CI. Leave it active; the next successful run rolls it.
             print(
-                f"setup failed AFTER {secrets_set} secret(s) were set — the minted "
-                f"token {new_id} stays active and is rolled by the next successful run"
+                f"setup failed AFTER {secrets_set} secret(s) were set — the freshly "
+                f"minted token stays active and is rolled by the next successful run"
             )
         print(f"error: {e}", file=sys.stderr)
         return 2
@@ -337,7 +340,7 @@ def main() -> int:
     _roll_old(token, account, new_id, args.token_name, started_at)
 
     print(f"set secrets CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID on {repo}")
-    print(f"minted CI token id {new_id} (named '{args.token_name}')")
+    print(f"minted the CI token named '{args.token_name}' — its id is visible in the dashboard")
     return 0
 
 
