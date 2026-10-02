@@ -35,12 +35,13 @@
  */
 
 import { randomInt } from 'node:crypto'
-
-/** Rooms close after 1h with no keepalive and no state activity (ADR-0026). */
-export const INACTIVITY_TTL_MS = Number(process.env.RELAY_INACTIVITY_TTL_MS ?? 60 * 60 * 1000)
-
-/** Backstop TTL for a room whose peers vanished without `leave`. */
-export const IDLE_TTL_MS = Number(process.env.RELAY_IDLE_TTL_MS ?? 12 * 60 * 60 * 1000)
+import {
+  CODE_ALPHABET,
+  CODE_LENGTH,
+  IDLE_TTL_MS as POLICY_IDLE_TTL_MS,
+  INACTIVITY_TTL_MS as POLICY_INACTIVITY_TTL_MS,
+  WORD_CODE_RE,
+} from './relayPolicy.mjs'
 
 /**
  * Room codes have two accepted shapes (ADR-0021):
@@ -49,10 +50,19 @@ export const IDLE_TTL_MS = Number(process.env.RELAY_IDLE_TTL_MS ?? 12 * 60 * 60 
  * - the legacy one: 4-12 chars compacted and upper-cased, minted by the
  *   relay from a Crockford base32 alphabet with all vowels removed so
  *   codes never spell words.
+ *
+ * The alphabet, the length and the word shape are declared once in
+ * ./relayPolicy.mjs so the Bun relay and the Cloudflare Durable Object
+ * relay cannot drift on them; re-exported here because this module is
+ * the Bun-side home of the code rules.
  */
-export const CODE_ALPHABET = '0123456789BCDFGHJKLMNPQRSTVWXZ'
-export const CODE_LENGTH = 6
-export const WORD_CODE_RE = /^[a-z]{3,10}-[a-z]{3,10}-[a-z]{3,10}$/
+export { CODE_ALPHABET, CODE_LENGTH, WORD_CODE_RE }
+
+/** Rooms close after 1h with no keepalive and no state activity (ADR-0026). */
+export const INACTIVITY_TTL_MS = Number(process.env.RELAY_INACTIVITY_TTL_MS ?? POLICY_INACTIVITY_TTL_MS)
+
+/** Backstop TTL for a room whose peers vanished without `leave`. */
+export const IDLE_TTL_MS = Number(process.env.RELAY_IDLE_TTL_MS ?? POLICY_IDLE_TTL_MS)
 
 /**
  * Canonicalize any accepted code so `join` finds the room whichever
