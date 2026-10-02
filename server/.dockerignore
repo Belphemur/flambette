@@ -1,5 +1,0 @@
-# The relay image must stay runnable, so it ships the WHOLE runtime surface
-# (Dockerfile globs, never a hand-picked list — issue #6). The one thing it
-# does not need is the decision table, which is a dev-only dependency on
-# bun:test and would otherwise ship into the published image.
-relay-core/*.test.ts

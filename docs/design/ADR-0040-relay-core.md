@@ -5,8 +5,9 @@
 packaging — the `COPY *.mjs` glob and the CI smoke-run), ADR-0021 (three-word
 room codes), ADR-0026 (join-or-create room lifecycle), ADR-0038 (the
 Cloudflare hosted path).
-**Not yet implemented:** this ADR is the design for the convergence; code
-follows in a later PR once accepted.
+**Not yet implemented:** no — this ADR and its implementation land in the
+same PR (Belphemur/flambette#41); the amendments above were made while the
+record was still Proposed, before acceptance.
 
 ## Context
 
@@ -86,6 +87,15 @@ mirrored.
      only in the COPY scope: `COPY *.mjs` widens to cover `relay-core/`
      (still a glob, never an enumerated list — ADR-0025's rule that survived
      issue #6 stays, and the CI smoke-run stays as the proof the image runs).
+     *Amended after implementation:* the build context moves from `./server`
+     to the REPO ROOT (every caller passes `-f server/Dockerfile`, and the
+     image keeps the `server/` layout under `/app/server` so the relative
+     `../../src/lib/roomWords` import still resolves). Reason: §1's one
+     permitted `src/` import is a file OUTSIDE `server/`, so a server-only
+     context shipped an image that crash-looped on
+     `Cannot find module '../../src/lib/roomWords'`. The image stays
+     build-less; one cross-tree file is now named in the Dockerfile, which
+     is not the enumerated-sibling-list failure mode issue #6 was about.
    - `server/worker/` keeps `index.ts` (upgrade/dispatch, hibernation) and
      `room.ts` (the DO shell: SQL persistence, alarms, `env.ROOM`), calling
      the core for every lifecycle decision. Its size drops to roughly the

@@ -25,7 +25,11 @@ services:
 
   relay:
     image: ghcr.io/belphemur/flambette-relay:latest
-    # build: ./server
+    # Build from the REPO ROOT, not ./server: the relay core re-exports the
+    # canonical room-code helper from src/lib/roomWords.ts (ADR-0040).
+    # build:
+    #   context: .
+    #   dockerfile: server/Dockerfile
     # Rooms are held in memory only: restarting the relay drops live rooms,
     # while each browser's plan and checklist survive untouched in
     # localStorage.

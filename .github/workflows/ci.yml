@@ -155,14 +155,17 @@ jobs:
         run: docker build .
 
       - name: Build relay Docker image
-        run: docker build -t flambette-relay:ci ./server
+        # Context is the repo root, not ./server: relay-core/codes.ts re-exports
+        # src/lib/roomWords.ts (ADR-0040 allows exactly one src/ import), so a
+        # server-only context ships an image that crash-loops on startup.
+        run: docker build -f server/Dockerfile -t flambette-relay:ci .
 
       # A successful build proves nothing about startup: the relay image once
-      # shipped without ./throttle.mjs, so it crash-looped on `bun relay.mjs`
+      # shipped without ./throttle.mjs, so it crash-looped on `bun relay.ts`
       # while `docker build` stayed green (issue #6). It now also has to
-      # carry server/relay-core/, which the Dockerfile copies by glob. Run it
-      # and require a real HTTP 200 off the health endpoint before the image
-      # is considered good.
+      # carry server/relay-core/ and src/lib/roomWords.ts, which the Dockerfile
+      # copies. Run it and require a real HTTP 200 off the health endpoint
+      # before the image is considered good.
       - name: Smoke-run relay image
         run: |
           docker run -d --name relay-smoke -p 18081:8081 flambette-relay:ci
