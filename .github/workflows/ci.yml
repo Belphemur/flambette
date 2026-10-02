@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# One push to a ref supersedes the previous run for that same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Sharded e2e: one chromium project per shard, run in a matrix so the
   # whole suite parallelizes across runners and each job fails with its

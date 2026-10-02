@@ -493,5 +493,10 @@ Parity rules for anything mirroring TS into Python:
 ## Release
 
 - `git tag v<semver>` + push tag → release workflow publishes
-  `ghcr.io/belphemur/flambette` AND `...-relay` (tags `X.Y.Z`,
-  `X.Y`, `latest` — the workflow strips the `v` prefix).
+  `ghcr.io/belphemur/flambette` AND `...-relay` (tags `X.Y.Z`, `X.Y`,
+  `latest` — the workflow strips the `v` prefix) and deploys the Cloudflare
+  hosted path (ADR-0039: `deploy-web` + `deploy-relay` via
+  `cloudflare/wrangler-action`; previews of both workers run per PR / main
+  from `preview.yml`). The `CLOUDFLARE_API_TOKEN` /
+  `CLOUDFLARE_ACCOUNT_ID` secrets are minted and scoped by
+  `scripts/cf_ci_secrets.py` — never hand-paste a token.
