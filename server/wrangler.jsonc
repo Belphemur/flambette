@@ -74,4 +74,8 @@
       ],
     },
   },
+  // Same as the web worker: without this, a preview deploys with no active
+  // URL. Previews live on <preview-name>-flambette-relay.<subdomain>
+  // .workers.dev — never on a production hostname.
+  "preview_urls": true,
 }

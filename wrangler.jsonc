@@ -32,4 +32,10 @@
   // worker needs nothing preview-specific — assets, compatibility settings,
   // migrations and placement stay at the top level.
   "previews": {},
+  // Expose each preview on <preview-name>-<worker>.workers.dev — without
+  // this a preview deploys with NO active URL (verified live: the GitHub
+  // deployment for PR #37 said so). The workers.dev route is the SAFE
+  // preview surface; a custom-domain preview would sit on a production
+  // hostname.
+  "preview_urls": true,
 }
