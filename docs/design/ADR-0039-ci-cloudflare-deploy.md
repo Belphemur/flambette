@@ -50,6 +50,24 @@ never a dashboard-generated token pasted into chat.
    touch the production routes or domains; a preview SPA talks to the
    PRODUCTION relay (`VITE_RELAY_WS_URL=wss://ws.flambette.app/ws`), because
    a preview origin has no relay behind its own `/ws`.
+
+   `wrangler preview` requires a `previews` block in each config, and
+   previews do NOT inherit production settings: the assets worker's block is
+   empty (`previews: {}` — assets, compatibility settings, migrations and
+   placement stay top-level); the relay's restates its vars and placement
+   and declares the `ROOM` Durable Object binding, because the worker reads
+   `env.ROOM` — without it the preview would 1101. The payoff is ISOLATION:
+   each preview automatically gets its own Durable Object namespace and
+   storage (the class is same-Worker, no `script_name`), so preview rooms
+   can never read or overwrite production rooms.
+
+   **Preview rooms are auto-destroyed when the PR is merged or closed:** a
+   `cleanup` job (`pull_request: closed`) deletes the preview for BOTH
+   workers (`wrangler preview delete --name pr-<N> --skip-confirmation` —
+   preview names are scoped per Worker), and deleting the preview deletes
+   its DO namespace with the rooms' storage. The `pull_request` trigger
+   therefore lists explicit types including `closed` (closed is not a
+   default type), and the preview jobs skip `closed` events.
 3. **Releases (`.github/workflows/release.yml`, updated):** on a `v*` tag the
    existing GHCR docker jobs now run ALONGSIDE `deploy-web` and
    `deploy-relay` (`wrangler deploy` of both workers; the hosted SPA build

@@ -52,4 +52,26 @@
       "custom_domain": true,
     },
   ],
+  // Previews (ADR-0039) do NOT inherit production settings — this block is
+  // what a `wrangler preview` deployment gets. Restate vars + placement with
+  // preview-safe values, and declare the DO binding: each preview
+  // automatically gets its OWN Durable Object namespace and storage (the
+  // class is same-Worker, no script_name), so preview rooms can never touch
+  // production rooms, and deleting the preview deletes its rooms' state.
+  "previews": {
+    "vars": {
+      "RELAY_ATTEMPT_LIMIT": "30",
+    },
+    "placement": {
+      "mode": "smart",
+    },
+    "durable_objects": {
+      "bindings": [
+        {
+          "name": "ROOM",
+          "class_name": "Room",
+        },
+      ],
+    },
+  },
 }

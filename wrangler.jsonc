@@ -28,4 +28,8 @@
       "custom_domain": true,
     },
   ],
+  // `wrangler preview` (ADR-0039) requires the block to exist; the web
+  // worker needs nothing preview-specific — assets, compatibility settings,
+  // migrations and placement stay at the top level.
+  "previews": {},
 }
