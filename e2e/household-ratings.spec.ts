@@ -18,7 +18,12 @@ import {
  * the new weights are a no-op without household preference.
  */
 
-const PINNED_DEFAULT_IDS = [17452, 6389, 9889, 6167]
+// Same contract as e2e/auto-plan.spec.ts, same value: the generation-0
+// DINNER pack after the 2,759-recipe sync. Only the ORDER within the pack
+// moved (the 9889/6389 pair swapped), which is the seed ranking re-sorting
+// inside the eligible slice — not a different pack. See
+// `bun run scripts/probe_autoplan_pin.ts`.
+const PINNED_DEFAULT_IDS = [17452, 9889, 6389, 6167]
 
 type RatingRecord = { rating: number; count: number; updatedAt: number }
 

@@ -12,7 +12,14 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { buildAutoPlan } from '../src/lib/packPlanner'
 
-const PINNED = [17452, 6389, 9889, 6167]
+const PINNED = [17452, 9889, 6389, 6167]
+
+/** Must match the `autoPlanRuleset` default in src/stores/ui.ts: the
+ *  default pack is a DINNER pack, and a probe that mirrors the call
+ *  without that constraint is not a mirror. It used to be, which is how
+ *  the 0f74ee6 re-pin captured a set containing an "Apple Slices" snack
+ *  and then reported a healthy pin broken. */
+const DEFAULT_RULESET = 'dinner'
 
 const index = JSON.parse(
   readFileSync(resolve(process.cwd(), 'public/data/pack_index.json'), 'utf8')
@@ -28,7 +35,9 @@ const metaById = new Map<number, any>(builder.variant_meta.map((m: any) => [m.id
 // the ELIGIBLE-slice mean with the variant's own rating_count as the weight.
 const RATING_PRIOR_WEIGHT = 10
 
-const eligible = builder.feasible_variants.slice()
+const eligible = builder.feasible_variants.filter(
+  (v: number) => metaById.get(v)?.ruleset === DEFAULT_RULESET,
+)
 const mean =
   eligible.reduce((a: number, v: number) => a + (metaById.get(v)?.rating ?? 0), 0) /
   Math.max(1, eligible.length)

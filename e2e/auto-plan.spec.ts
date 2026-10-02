@@ -19,11 +19,20 @@ import {
  * pin loudly — that is the point.
  */
 
-// Re-pinned after the 2,759-recipe catalog sync (2026-10-02): the 29 new
-// recipes change the eligible-slice rating mean AND enter the candidate pool,
-// so the arithmetic legitimately moves. Verified with
-// `bun run scripts/probe_autoplan_pin.ts`, which mirrors runAutoPlan.
-const PINNED_DEFAULT_IDS = [17452, 23775, 19678, 22308]
+// The generation-0 4-pack after the 2,759-recipe catalog sync (2026-10-02).
+// The 29 new recipes change the eligible-slice rating mean AND enter the
+// candidate pool, so the arithmetic legitimately moves — but only inside the
+// DINNER slice: `ui.autoPlanRuleset` defaults to 'dinner', so that is the
+// eligible set the seed ranks over.
+//
+// The 0f74ee6 re-pin here ([17452, 23775, 19678, 22308]) was captured from
+// `scripts/probe_autoplan_pin.ts` while that probe mirrored the planner with
+// NO ruleset constraint, so it sampled the whole catalog and picked up
+// "Apple Slices with Cinnamon-Honey Peanut Butter" — a snack, in a pack the
+// app can never generate. The probe now applies the dinner default and
+// reports the pack below as HOLDS. A pin is only worth anything if the thing
+// producing it is a faithful mirror; verify with the probe, not by eye.
+const PINNED_DEFAULT_IDS = [17452, 9889, 6389, 6167]
 
 /** Open + generate in the Auto-Plan dialog with the DEFAULT count 4. */
 async function generate(page: Page): Promise<void> {
