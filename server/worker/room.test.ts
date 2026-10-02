@@ -39,9 +39,12 @@ class Peer {
     })
     ws.addEventListener('message', (e) => {
       const frame = JSON.parse(e.data as string)
-      this.frames.push(frame)
+      // Exactly-once delivery: a frame that satisfies a pending waiter is
+      // handed to it and NOT buffered, or a later next() would hand the
+      // same frame to the next assertion and let it pass on a stale ack.
       const waiter = this.#waiters.shift()
       if (waiter) waiter(frame)
+      else this.frames.push(frame)
     })
   }
 

@@ -153,9 +153,15 @@ to publish on **tag creation**, in step with the Docker release flow:
 
 - Application `flambette`: repo root, build `bun install --frozen-lockfile &&
   bun run build`, deploy `wrangler deploy` (root `wrangler.jsonc`).
-- Application `flambette-relay`: root directory `server/`, deploy
-  `wrangler deploy` (`server/wrangler.jsonc`); the worker needs no build step
-  (wrangler bundles TS itself).
+- Application `flambette-relay`: **repo root too** — `server/` has no
+  lockfile of its own and the worker imports `src/lib/roomWords.ts` from
+  outside it, so a `server/` root cannot build. Install and deploy from the
+  repository root: `bun install --frozen-lockfile`, then
+  `bun run deploy:relay` (which passes `server/wrangler.jsonc` explicitly).
+  The worker needs no build step (wrangler bundles TS itself), and the hosted
+  web build sets `VITE_RELAY_WS_URL=wss://ws.flambette.app/ws` — a build-time
+  value baked into the bundle, so it belongs in the web application's build
+  command / build env (§5), never in the source.
 - Pushes to non-production branches get preview versions with preview URLs
   automatically; **production deploys fire on tag creation** (`v<semver>`),
   configured in the Workers Builds settings for each application — the same
