@@ -42,6 +42,15 @@ mirrored.
 
 ## Decision
 
+0. **The persistence boundary, stated once and sharp:** the core owns
+   DECISIONS (when a room expires, what a join adopts, how the rev floor
+   moves), and the adapters own STATE (where bytes live). The core therefore
+   speaks in intents — `touchRoom`, `storeRev`, `readFloor`, `expire` — and
+   never reads or writes a Map, a table, or storage directly; each adapter
+   implements those intents over its own store (the Bun registry's
+   in-process Maps, the DO's SQL + alarms). This is what keeps the
+   decision-table test able to run against a pure in-memory store while
+   workerd proves the SQL side.
 1. **One runtime-neutral TypeScript core: `server/relay-core/`.** A plain
    directory, not a workspace package — two consumers do not justify a
    workspace ceremony, and a package would add an install step to the relay
