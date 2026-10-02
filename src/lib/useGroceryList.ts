@@ -1,6 +1,11 @@
 import { computed, ref, watch } from 'vue'
 import { catalog, getRecipe } from './catalog'
-import { aggregateGroceries, nameKey, type GroceryItem } from './grocery'
+import {
+  aggregateGroceries,
+  nameKey,
+  type GroceryItemView,
+} from './grocery'
+import { localizeQuantity } from './units'
 import { STORE_SECTIONS } from './sections'
 import type { RecipeDoc, VariantMeta } from './types'
 import {
@@ -9,6 +14,7 @@ import {
 } from '../composables/useConfirm'
 import { usePlanStore } from '../stores/plan'
 import { useGroceryStore } from '../stores/grocery'
+import { useUiStore } from '../stores/ui'
 
 /**
  * Shared grocery-list engine for the Grocery tab and Shopping mode:
@@ -18,6 +24,7 @@ import { useGroceryStore } from '../stores/grocery'
 export function useGroceryList() {
   const plan = usePlanStore()
   const checked = useGroceryStore()
+  const ui = useUiStore()
 
   const docs = ref(new Map<number, RecipeDoc>())
   const loading = ref(false)
@@ -53,11 +60,31 @@ export function useGroceryList() {
     return plan.plan.find((e) => e.variantId === variantId)?.servings ?? 1
   }
 
-  const items = computed<GroceryItem[]>(() =>
-    aggregateInputs.value.length === plannedMetas.value.length && plannedMetas.value.length > 0
-      ? aggregateGroceries(aggregateInputs.value)
-      : [],
-  )
+  /**
+   * The aggregated list, PLUS one localized rendering per line (ADR-0047).
+   *
+   * `display` stays canonical and remains the `checked`-map key basis, so
+   * flipping the unit system re-renders the text and changes NO key — a
+   * hand-checked item can never uncheck itself, and two household members
+   * on different systems keep the same list. Both consumers (Grocery tab
+   * and Shop view) read the same `text` from this one pass.
+   */
+  const items = computed<GroceryItemView[]>(() => {
+    if (
+      aggregateInputs.value.length !== plannedMetas.value.length ||
+      plannedMetas.value.length === 0
+    ) {
+      return []
+    }
+    const system = ui.unitSystem
+    return aggregateGroceries(aggregateInputs.value).map((item) => ({
+      ...item,
+      lines: item.lines.map((line) => ({
+        ...line,
+        text: localizeQuantity(line.display, system),
+      })),
+    }))
+  })
 
   const totalCount = computed(
     () =>
@@ -71,7 +98,7 @@ export function useGroceryList() {
 
   /** Sections with items, in canonical order. */
   const sections = computed(() => {
-    const bySection = new Map<string, GroceryItem[]>()
+    const bySection = new Map<string, GroceryItemView[]>()
     for (const item of items.value) {
       const list = bySection.get(item.section) ?? []
       list.push(item)

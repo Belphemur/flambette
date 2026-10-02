@@ -261,10 +261,10 @@ function exitShopping() {
   </span>
   <span class="min-w-0 flex-1 truncate">
   <span
-  v-if="entry.line.display"
+  v-if="entry.line.text"
   class="mr-2 font-semibold text-brand-text"
   :class="checked.map[entry.line.key] ? 'text-text-muted' : ''"
-  >{{ entry.line.display }}</span>
+  >{{ entry.line.text }}</span>
   <span :class="checked.map[entry.line.key] ? 'text-text-muted line-through' : ''">{{
   entry.item.name
   }}</span>

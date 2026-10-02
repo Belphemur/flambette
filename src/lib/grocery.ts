@@ -12,8 +12,29 @@ import type { RecipeDoc } from './types'
 export interface GroceryLine {
   /** Stable key for the checkbox state: `<normalized name>||<display>` */
   key: string
-  /** Formatted amount + unit, or the verbatim unparseable quantity. */
+  /**
+   * Formatted amount + unit, or the verbatim unparseable quantity.
+   *
+   * CANONICAL: this is the key basis and stays metric forever (ADR-0047).
+   * Never localize it — the localized rendering is `text` on
+   * `GroceryLineView`, so flipping the unit system cannot orphan a checked
+   * item.
+   */
   display: string
+}
+
+/**
+ * A line plus its display text for THIS device's unit system (ADR-0047).
+ * Two fields on purpose: `display` is the identity and the key basis,
+ * `text` is what the screen shows.
+ */
+export interface GroceryLineView extends GroceryLine {
+  /** `display` converted for display; identical to `display` in metric. */
+  text: string
+}
+
+export interface GroceryItemView extends Omit<GroceryItem, 'lines'> {
+  lines: GroceryLineView[]
 }
 
 export interface GroceryItem {

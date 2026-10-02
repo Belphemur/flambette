@@ -292,10 +292,10 @@ function customCategory(item: string): string | undefined {
   :class="checked.map[line.key] ? 'text-text-muted line-through' : ''"
   >
   <span
-  v-if="line.display"
+  v-if="line.text"
   class="mr-1.5 font-medium text-brand-text"
   :class="checked.map[line.key] ? 'text-text-muted line-through' : ''"
-  >{{ line.display }}</span>
+  >{{ line.text }}</span>
   <span :class="checked.map[line.key] ? 'text-text-muted line-through' : ''">{{ item.name }}</span>
   </span>
   <!-- Provenance pill: a shrink-0 flex sibling OUTSIDE the
