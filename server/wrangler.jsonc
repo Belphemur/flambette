@@ -51,6 +51,17 @@
       "pattern": "ws.flambette.app",
       "custom_domain": true,
     },
+    // Preview-only surface (ADR-0039): relay previews live at
+    // <preview-name>.relay.dev.flambette.app, in the preview's own Durable
+    // Object namespace. Production is DISABLED on this host (enabled: false)
+    // — a preview can never serve a production hostname. The route config
+    // registers on the next production deploy.
+    {
+      "pattern": "relay.dev.flambette.app",
+      "custom_domain": true,
+      "previews_enabled": true,
+      "enabled": false,
+    },
   ],
   // Previews (ADR-0039) do NOT inherit production settings — this block is
   // what a `wrangler preview` deployment gets. Restate vars + placement with

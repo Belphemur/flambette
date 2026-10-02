@@ -44,22 +44,35 @@ never a dashboard-generated token pasted into chat.
 2. **Previews (`.github/workflows/preview.yml`, new):** on pull requests and
    pushes to `main`, BOTH workers get a `wrangler preview` deployment
    (`preview --name pr-<PR#>` or `pr-main`; wrangler ≥ 4.136.3 for the
-   stable preview URLs). With `gitHubToken` + `deployments: write`, the
-   preview URLs surface as GitHub deployments on the PR. Concurrency:
+   stable preview URLs), and the two jobs run in PARALLEL — the URLs are
+   deterministic, so no job depends on another.
+
+   Preview URLs live on PREVIEW-ONLY hosts under `dev.flambette.app`:
+   `<preview-name>.app.dev.flambette.app` for the SPA and
+   `<preview-name>.relay.dev.flambette.app` for the relay — routes with
+   `custom_domain: true`, `previews_enabled: true` and `enabled: false`, so
+   production is DISABLED on those hosts and a preview can never serve a
+   production hostname; Cloudflare auto-provisions the wildcard DNS record
+   and certificate for each. `preview_urls: true` additionally exposes each
+   preview on workers.dev. With `gitHubToken` + `deployments: write`, the
+   preview URLs surface as GitHub deployments whose `environment` is stable
+   per PR (`preview-web-pr-<N>` / `preview-relay-pr-<N>`) — the SAME two
+   deployments are reused on every push instead of multiplying. Concurrency:
    `preview-<PR# or ref>`, cancel-in-progress. Preview deployments never
-   touch the production routes or domains; a preview SPA talks to the
-   PRODUCTION relay (`VITE_RELAY_WS_URL=wss://ws.flambette.app/ws`), because
-   a preview origin has no relay behind its own `/ws`.
+   touch the production routes or domains.
+
+   The preview SPA talks to ITS OWN preview relay
+   (`VITE_RELAY_WS_URL=wss://pr-<N>.relay.dev.flambette.app/ws`, baked at
+   build time per ADR-0038 §5), so preview rooms live entirely inside the
+   preview's isolated Durable Object namespace — a preview household plays
+   in its own sandbox, never in production data.
 
    `wrangler preview` requires a `previews` block in each config, and
    previews do NOT inherit production settings: the assets worker's block is
    empty (`previews: {}` — assets, compatibility settings, migrations and
    placement stay top-level); the relay's restates its vars and placement
    and declares the `ROOM` Durable Object binding, because the worker reads
-   `env.ROOM` — without it the preview would 1101. The payoff is ISOLATION:
-   each preview automatically gets its own Durable Object namespace and
-   storage (the class is same-Worker, no `script_name`), so preview rooms
-   can never read or overwrite production rooms.
+   `env.ROOM` — without it the preview would 1101.
 
    **Preview rooms are auto-destroyed when the PR is merged or closed:** a
    `cleanup` job (`pull_request: closed`) deletes the preview for BOTH
@@ -68,6 +81,12 @@ never a dashboard-generated token pasted into chat.
    its DO namespace with the rooms' storage. The `pull_request` trigger
    therefore lists explicit types including `closed` (closed is not a
    default type), and the preview jobs skip `closed` events.
+
+   **Bootstrap:** the two preview-only custom domains register on the next
+   PRODUCTION deploy (routes are top-level config) — after this ADR lands,
+   run one `wrangler deploy` of both workers from a clean `main` checkout
+   (or cut the next release) before preview URLs resolve; a preview of a
+   domain that is not yet registered exposes no URL.
 3. **Releases (`.github/workflows/release.yml`, updated):** on a `v*` tag the
    existing GHCR docker jobs now run ALONGSIDE `deploy-web` and
    `deploy-relay` (`wrangler deploy` of both workers; the hosted SPA build

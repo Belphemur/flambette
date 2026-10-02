@@ -1,10 +1,15 @@
 name: Preview
 
 # Preview deployments of BOTH workers (ADR-0039): a `wrangler preview` of the
-# SPA and the relay per PR / per main push, each surfaced as a GitHub
-# deployment (that is what `deployments: write` + `gitHubToken` buy). Preview
-# URLs are stable per name and never touch the production routes or domains —
-# production deploys happen only in release.yml, on a `v*` tag.
+# relay and the SPA per PR / per main push. Previews live on preview-only
+# hosts under dev.flambette.app — never on a production hostname — and the
+# preview SPA talks to ITS OWN preview relay, whose rooms live in the
+# preview's isolated Durable Object namespace. The URLs are DETERMINISTIC
+# (pr-<N>.relay.dev.flambette.app), so the two jobs run in parallel with no
+# ordering dependency. Each job surfaces as its own GitHub deployment whose
+# environment is stable per PR (`preview-web-pr-<N>` / `preview-relay-pr-<N>`
+# — reused on every push instead of a fresh deployment each time). Production
+# deploys happen only in release.yml, on a `v*` tag.
 
 on:
   pull_request:
@@ -20,80 +25,10 @@ permissions:
 
 concurrency:
   group: preview-${{ github.event.pull_request.number || github.ref }}
+  # A close (cleanup) supersedes an in-flight preview push for the same PR.
   cancel-in-progress: true
 
 jobs:
-  web:
-    if: github.event.action != 'closed'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        # The app version is baked from git facts (vite.config.ts) — tags
-        # included, or the header would fall back to dev-<sha>.
-        with:
-          fetch-depth: 0
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      # A preview SPA has no relay behind its own origin (preview deployments
-      # never change routes), so it talks to the PRODUCTION relay — the same
-      # hosted origin a released SPA uses (ADR-0038 §5).
-      - name: Build SPA (hosted relay origin)
-        run: bun run build
-        env:
-          VITE_RELAY_WS_URL: wss://ws.flambette.app/ws
-
-      - name: Preview the web worker
-        id: preview-web
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4.136.3"
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          command: preview --name pr-${{ github.event.pull_request.number || 'main' }}
-        # `wrangler preview` reads its credential from the ENVIRONMENT, not
-        # from the action's apiToken input (verified live on this PR's first
-        # run: "In a non-interactive environment, it's necessary to set a
-        # CLOUDFLARE_API_TOKEN environment variable").
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-  # Preview rooms are auto-destroyed when the PR is merged or closed: each
-  # preview's rooms live in that preview's OWN Durable Object namespace, and
-  # deleting the preview deletes the namespace with its storage. Preview
-  # names are scoped per Worker, so BOTH workers' previews go.
-  cleanup:
-    if: github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: preview-cleanup-${{ github.event.pull_request.number }}
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Delete the web preview
-        run: bunx wrangler@4.136.3 preview delete --name "pr-${{ github.event.pull_request.number }}" --skip-confirmation
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Delete the relay preview
-        run: bunx wrangler@4.136.3 preview delete --name "pr-${{ github.event.pull_request.number }}" --skip-confirmation --config server/wrangler.jsonc
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
   relay:
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
@@ -115,9 +50,85 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4.136.3"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          # The GitHub deployment's environment — stable per PR, so the same
+          # two deployments get reused on every push instead of multiplying.
+          environment: preview-relay-pr-${{ github.event.pull_request.number || 'main' }}
           command: preview --name pr-${{ github.event.pull_request.number || 'main' }} --config server/wrangler.jsonc
-        # Same as the web job: the preview command reads CLOUDFLARE_API_TOKEN
-        # from the environment.
+        # `wrangler preview` reads its credential from the ENVIRONMENT, not
+        # from the action's apiToken input (verified live on this PR's first
+        # run: "In a non-interactive environment, it's necessary to set a
+        # CLOUDFLARE_API_TOKEN environment variable").
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  # The SPA preview points at THIS PR's relay preview
+  # (pr-<N>.relay.dev.flambette.app), so preview rooms live entirely inside
+  # the preview's isolated DO namespace. The URL is deterministic, so this
+  # job runs in PARALLEL with the relay job — the relay preview exists before
+  # anyone opens the SPA preview URL.
+  web:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        # The app version is baked from git facts (vite.config.ts) — tags
+        # included, or the header would fall back to dev-<sha>.
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build SPA (this PR's relay preview origin)
+        run: bun run build
+        env:
+          VITE_RELAY_WS_URL: wss://pr-${{ github.event.pull_request.number || 'main' }}.relay.dev.flambette.app/ws
+
+      - name: Preview the web worker
+        id: preview-web
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4.136.3"
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          environment: preview-web-pr-${{ github.event.pull_request.number || 'main' }}
+          command: preview --name pr-${{ github.event.pull_request.number || 'main' }}
+        # `wrangler preview` reads its credential from the ENVIRONMENT, not
+        # from the action's apiToken input (verified live on this PR's first
+        # run: "In a non-interactive environment, it's necessary to set a
+        # CLOUDFLARE_API_TOKEN environment variable").
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  # Preview rooms are auto-destroyed when the PR is merged or closed: each
+  # preview's rooms live in that preview's OWN Durable Object namespace, and
+  # deleting the preview deletes the namespace with its storage. Preview
+  # names are scoped per Worker, so BOTH workers' previews go.
+  cleanup:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Delete the web preview
+        run: bunx wrangler@4.136.3 preview delete --name "pr-${{ github.event.pull_request.number }}" --skip-confirmation
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Delete the relay preview
+        run: bunx wrangler@4.136.3 preview delete --name "pr-${{ github.event.pull_request.number }}" --skip-confirmation --config server/wrangler.jsonc
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
