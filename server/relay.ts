@@ -241,7 +241,15 @@ function detach(ws: Socket): void {
   ws.data.roomCode = undefined
   if (!room) return
   room.peers.delete(ws)
-  room.registry.leave(room.peers.size)
+  if (room.registry.leave(room.peers.size).dropped && room.timer) {
+    // The room is gone, so its wake-up has nothing left to decide — clear
+    // it. An armed 24h timer would keep the Room object (and its peer set)
+    // alive long after the last peer left, for every code the relay ever
+    // served; `roomLifecycle.mjs`'s dropRoom cleared both timers for the
+    // same reason.
+    clearTimeout(room.timer)
+    room.timer = undefined
+  }
 }
 
 /* ---------------------------------------------------------------- admission */
