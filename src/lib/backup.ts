@@ -20,6 +20,7 @@ import { DIET_IDS, type DietId } from './dietFilter'
 import { normalizeQuickFilters, type QuickFilters } from './quickFilters'
 import { isServings, FALLBACK_SERVINGS, MAX_SERVINGS, MIN_SERVINGS } from './servings'
 import { isStepTimer } from './stepTimer'
+import { isUnitSystem, UNIT_SYSTEMS } from './units'
 import { zipStore, unzipStore, type ZipEntry } from './zip'
 
 /** Backup schema version. Bump + add a migration when the shape evolves. */
@@ -258,7 +259,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
      importing an old backup is not re-flipped on the next launch). */
   {
     file: 'settings.json',
-    label: 'settings (cooked-history room sharing + quick filters + household room + step timers + theme + default servings)',
+    label: 'settings (cooked-history room sharing + quick filters + household room + step timers + theme + default servings + unit system)',
     persistKeys: ['mealime-planner:v1:ui'],
     read: () => {
       const ui = useUiStore()
@@ -276,6 +277,10 @@ export const STORE_SLICES: SliceDef<any>[] = [
         // restored device starts recipes at the household's usual count
         // instead of the authored 6.
         defaultServings: ui.defaultServings,
+        // ADR-0047: the device's display unit system travels with a backup
+        // like every other ui preference (the registry rule), so a restored
+        // device keeps reading recipes in the system it read them in.
+        unitSystem: ui.unitSystem,
       }
     },
     validate(value) {
@@ -346,6 +351,13 @@ export const STORE_SLICES: SliceDef<any>[] = [
       if (v.defaultServings !== undefined && !isServings(v.defaultServings)) {
         return `settings.json defaultServings must be an integer between ${MIN_SERVINGS} and ${MAX_SERVINGS}`
       }
+      // ADR-0047: absent is a valid "don't touch" (a pre-ADR-0047 backup);
+      // present must be one of the two systems, because import is
+      // validation-first and a malformed value would disable the display
+      // transform on every surface.
+      if (v.unitSystem !== undefined && !isUnitSystem(v.unitSystem)) {
+        return `settings.json unitSystem must be one of ${UNIT_SYSTEMS.join('/')}`
+      }
       return null
     },
     write(value) {
@@ -360,6 +372,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
         autoPlanMode?: unknown
         autoPlanGeneration?: unknown
         defaultServings?: unknown
+        unitSystem?: unknown
       }
       useUiStore().applySettings({
         shareCookedHistory: v.shareCookedHistory,
@@ -377,6 +390,11 @@ export const STORE_SLICES: SliceDef<any>[] = [
         // Same rule: a pre-ADR-0037 backup restores the authored 6 rather
         // than leaving the device's own default in place.
         defaultServings: v.defaultServings ?? FALLBACK_SERVINGS,
+        // ADR-0047: deliberately NOT defaulted. The system is a reading
+        // preference, and a backup that predates it says nothing about the
+        // device's — "absent = don't touch" keeps a restore from silently
+        // flipping a metric device to imperial (or the reverse).
+        unitSystem: v.unitSystem,
       })
       if (v.theme) writeTheme(v.theme.theme ?? '')
     },

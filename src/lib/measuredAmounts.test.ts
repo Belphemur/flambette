@@ -131,4 +131,33 @@ describe('measuredChipsForLines', () => {
     expect(measuredChipsForLines(doc([]), ['a potato'], 1)).toEqual([])
     expect(measuredChipsForLines(d, ['a potato'], 1)).toEqual([])
   })
+
+  /* ---------- ADR-0047: the chip localizes, the doc does not ---------- */
+
+  test('imperial localizes the chip quantity; metric leaves it canonical', () => {
+    // 710 ml → 24.0 fl oz, a bare unit (no container annotation).
+    expect(measuredChipsForLines(d, ['a splash of milk'], 1, 'imperial')).toEqual([
+      { lineIndex: 0, label: 'measured: 24 fl oz milk' },
+    ])
+    // The default argument is metric = today's text, unchanged.
+    expect(measuredChipsForLines(d, ['a splash of milk'], 1)).toEqual([
+      { lineIndex: 0, label: 'measured: 710 ml milk' },
+    ])
+  })
+
+  test('a count chip (lemons) is untouched by the unit system', () => {
+    expect(measuredChipsForLines(d, ['juice of ¾ lemon'], 1, 'imperial')).toEqual([
+      { lineIndex: 0, label: 'measured: 3 lemons' },
+    ])
+  })
+
+  test('a container chip localizes its ANNOTATION and keeps the count', () => {
+    const cheese = doc([item('1 ½ (227 g) block', 'cheddar cheese')])
+    // The head keeps the AUTHORED fraction (`1 ½`), not a flattened `1.5`:
+    // only the annotation converted, so the count it sits next to is
+    // untouched (ADR-0047, "parse what parses, keep the rest verbatim").
+    expect(measuredChipsForLines(cheese, ['a slab of cheddar cheese'], 1, 'imperial')).toEqual([
+      { lineIndex: 0, label: 'measured: 1 ½ (8 oz) block cheddar cheese' },
+    ])
+  })
 })

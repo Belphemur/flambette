@@ -9,6 +9,7 @@ import {
   type QuickFilters,
 } from '../lib/quickFilters'
 import { isRoomCode, normalizeRoomCode } from '../lib/roomWords'
+import { DEFAULT_UNIT_SYSTEM, isUnitSystem, type UnitSystem } from '../lib/units'
 import { clampServings, FALLBACK_SERVINGS, isServings, MIN_SERVINGS } from '../lib/servings'
 import {
   MAX_CONCURRENT_TIMERS,
@@ -161,6 +162,20 @@ export const useUiStore = defineStore(
      * touches the control behaves exactly as before.
      */
     const defaultServings = ref<number>(FALLBACK_SERVINGS)
+    /**
+     * The display unit system (ADR-0047): 'dual', 'metric' or 'imperial'.
+     * `dual` is the default because the catalog text IS today's display, so
+     * the default output is bit-for-bit today's — the TRUE identity, which
+     * is what keeps every pre-existing display pin green.
+     *
+     * Device-local on purpose, exactly like `defaultServings` above: the
+     * PLAN and the grocery `checked` keys are the household's shared truth
+     * and are unit-independent (ADR-0047 §2), while the system is one
+     * person's reading preference. Two phones in one household can display
+     * the same shared plan in their own units without a single key
+     * changing. Not part of the room payload.
+     */
+    const unitSystem = ref<UnitSystem>(DEFAULT_UNIT_SYSTEM)
     /** Persistent household room code the app auto-joins on start (ADR-0019). */
     const householdRoom = ref('')
     /**
@@ -294,6 +309,7 @@ export const useUiStore = defineStore(
       autoPlanMode?: unknown
       autoPlanGeneration?: unknown
       defaultServings?: unknown
+      unitSystem?: unknown
     }): void {
       if (typeof prefs.shareCookedHistory === 'boolean') {
         shareCookedHistory.value = prefs.shareCookedHistory
@@ -336,6 +352,12 @@ export const useUiStore = defineStore(
       if (prefs.defaultServings !== undefined) {
         setDefaultServings(prefs.defaultServings as number)
       }
+      // ADR-0047: an ABSENT key is "don't touch" (a pre-ADR backup keeps
+      // the device's own system), and a present one must be a real system
+      // — the slice validator rejects a malformed value before it gets
+      // here, so an unknown string simply leaves the current value in
+      // place rather than disabling the display transform entirely.
+      if (isUnitSystem(prefs.unitSystem)) unitSystem.value = prefs.unitSystem
     }
 
     /**
@@ -425,6 +447,19 @@ export const useUiStore = defineStore(
     }
 
     /**
+     * Repair a hydrated `unitSystem` (ADR-0047), mirroring
+     * `repairDefaultServings`: hydration is a raw `$patch` of whatever
+     * localStorage held, so a hand-edited or truncated value lands
+     * verbatim. A value that is neither system would silently disable
+     * every display conversion (the components compare against a system
+     * that no branch matches), so it is replaced by the default.
+     */
+    function repairUnitSystem(): void {
+      if (isUnitSystem(unitSystem.value)) return
+      unitSystem.value = DEFAULT_UNIT_SYSTEM
+    }
+
+    /**
      * Keep only well-formed timers out of an imported/loaded map
      * (validation-first import: unknown shapes are dropped, not trusted).
      *
@@ -489,6 +524,18 @@ export const useUiStore = defineStore(
       defaultServings.value = clampServings(value)
     }
 
+    /**
+     * Choose the display unit system (ADR-0047). The ONLY writer, from both
+     * affordances (Settings card + the recipe-detail toggle), so the two
+     * surfaces are one setting by construction. The write is validated,
+     * not trusted: a non-system value (a stale control, a test poking the
+     * ref) is refused rather than stored.
+     */
+    function setUnitSystem(system: unknown): void {
+      if (!isUnitSystem(system)) return
+      unitSystem.value = system
+    }
+
     /** End the current toast (if any) and fire its onDismiss exactly once. */
     function endToast() {
       if (toastTimer) {
@@ -526,6 +573,8 @@ export const useUiStore = defineStore(
       autoPlanMode,
       autoPlanGeneration,
       defaultServings,
+      unitSystem,
+      setUnitSystem,
       nextAutoPlanGeneration,
       advanceAutoPlanGeneration,
       setCookingStep,
@@ -544,6 +593,7 @@ export const useUiStore = defineStore(
       adoptHistoryShareDefault,
       setDefaultServings,
       repairDefaultServings,
+      repairUnitSystem,
       setHouseholdRoom,
       showToast,
       dismissToast,
@@ -574,6 +624,9 @@ export const useUiStore = defineStore(
         // The remembered default serving size (ADR-0037): a device-local
         // preference, restored on the next launch.
         'defaultServings',
+        // The display unit system (ADR-0047): device-local, like the
+        // default servings — the shared plan is unit-independent.
+        'unitSystem',
       ],
       // Hydration has already run when this fires, so a v0.12 blob (which
       // has no `quickFilters` and therefore patched nothing) can still be
@@ -584,10 +637,12 @@ export const useUiStore = defineStore(
           migrateLegacyFilters: () => void
           adoptHistoryShareDefault: () => void
           repairDefaultServings: () => void
+          repairUnitSystem: () => void
         }
         store.migrateLegacyFilters()
         store.adoptHistoryShareDefault()
         store.repairDefaultServings()
+        store.repairUnitSystem()
       },
     },
   },
