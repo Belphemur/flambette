@@ -21,8 +21,10 @@ import RatingStars from './RatingStars.vue'
 import NutritionModal from './NutritionModal.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
+import { recipeSeoHead } from '../lib/seo'
 import HueIcon from './HueIcon.vue'
 import { onMounted, onUnmounted } from 'vue'
+import { useHead } from '@unhead/vue'
 import {
   ArrowLeft,
   BookOpen,
@@ -95,6 +97,20 @@ const canMoreServings = computed(() => servings.value < MAX_SERVINGS)
 const meta = computed<VariantMeta | null>(
   () => catalog.value?.byId.get(props.id) ?? null,
 )
+
+/**
+ * This recipe's SEO head (ADR-0048) — the SAME payload the build-time
+ * prerenderer baked into `dist/recipe/<id>/index.html`, so a crawler and
+ * this browser describe the page identically.
+ *
+ * It is `computed` on purpose: navigating between two recipes (or a
+ * `?p=` link) re-derives the head from the new `meta` alone, never
+ * carrying the previous recipe's title or JSON-LD. While the async doc
+ * fetch is in flight the payload degrades to the meta-derived fields and
+ * upgrades itself the moment `doc` lands — see `recipeSeoHead(doc | null)`.
+ * An unknown id renders NO head at all: there is nothing truthful to say.
+ */
+useHead(computed(() => (meta.value ? recipeSeoHead(doc.value, meta.value) : null)))
 
 /** Categorical ingredient-TYPE hue beside the category name (ADR-0035). */
 const typeRole = computed(() =>
