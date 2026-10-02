@@ -20,6 +20,7 @@ import { containerContribution, formatContainerQuantity, parseContainerQuantity 
 import { nameKey } from './grocery'
 import { formatAmount, parseQuantity } from './quantity'
 import { isSeasoning, scaleQuantity } from './recipe'
+import { localizeQuantity, type UnitSystem } from './units'
 import type { LineItem, RecipeDoc } from './types'
 
 export interface MeasuredChip {
@@ -125,11 +126,16 @@ export function measuredQuantity(item: LineItem, factor: number, base: number): 
  * Chips for one step view: every imprecise detail line that names an
  * ingredient with a measured line item. Detail lines keep their order,
  * and a line naming TWO imprecise ingredients yields two chips.
+ *
+ * `system` (ADR-0047) localizes the chip's quantity for DISPLAY only — the
+ * quantity itself is derived from `doc.line_items`, which stays canonical
+ * metric. Metric keeps the transform the identity.
  */
 export function measuredChipsForLines(
   doc: RecipeDoc,
   detailLines: readonly string[],
   factor: number,
+  system: UnitSystem = 'metric',
 ): MeasuredChip[] {
   const items = doc.line_items ?? []
   if (items.length === 0) return []
@@ -142,7 +148,7 @@ export function measuredChipsForLines(
       if (!quantity) continue
       chips.push({
         lineIndex,
-        label: `measured: ${quantity} ${item.ingredient_name.trim()}`,
+        label: `measured: ${localizeQuantity(quantity, system)} ${item.ingredient_name.trim()}`,
       })
     }
   })

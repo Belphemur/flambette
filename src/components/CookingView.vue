@@ -17,6 +17,7 @@ import {
 import { catalog, getRecipe } from '../lib/catalog'
 import { measuredChipsForLines, type MeasuredChip } from '../lib/measuredAmounts'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
+import { localizeSteps } from '../lib/units'
 import {
   MAX_TIMER_SECONDS,
   MAX_TIMER_LABEL,
@@ -76,7 +77,16 @@ const servings = computed(() => {
 })
 
 const factor = computed(() => (doc.value ? servings.value / doc.value.serving_count : 1))
-const steps = computed<ScaledStep[]>(() => (doc.value ? scaleSteps(doc.value, factor.value) : []))
+/**
+ * Steps for display: scaled, then localized for the device's unit system
+ * (ADR-0047). The SAME `localizeSteps` helper the recipe sheet uses, so a
+ * step cannot read `220°C` in the sheet and `425°F` in the cook. The
+ * session's servings stay frozen; only the display transform follows the
+ * setting.
+ */
+const steps = computed<ScaledStep[]>(() =>
+  doc.value ? localizeSteps(scaleSteps(doc.value, factor.value), ui.unitSystem) : [],
+)
 
 /* ---------- Step views: single steps + "Meanwhile" pairs (ADR-0010) ----------
  *
@@ -160,7 +170,9 @@ const measuredOpen = ref(false)
 const visibleMeasured = computed(() =>
   visibleSteps.value.map((vs) => ({
   partner: vs.partner,
-  chips: doc.value ? measuredChipsForLines(doc.value, vs.step.details, factor.value) : [],
+  chips: doc.value
+    ? measuredChipsForLines(doc.value, vs.step.details, factor.value, ui.unitSystem)
+    : [],
   })),
 )
 

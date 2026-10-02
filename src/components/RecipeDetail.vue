@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
 import { scaleQuantity } from '../lib/quantity'
+import { localizeQuantity, localizeSteps, type UnitSystem, UNIT_SYSTEMS } from '../lib/units'
 import { MAX_SERVINGS } from '../lib/servings'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
@@ -105,16 +106,30 @@ const mealTypeRole = computed(() => mealRole(meta.value?.ruleset))
 /** Scale factor for ingredients/instructions vs. the recipe's base servings. */
 const factor = computed(() => (doc.value ? servings.value / doc.value.serving_count : 1))
 
+/**
+ * Display unit system (ADR-0047). Device-local, and applied HERE — at the
+ * render edge — so the doc, the plan and every persisted number stay
+ * canonical metric. Both this sheet and the cooking view run the same
+ * `localizeSteps` helper, so the two surfaces cannot drift.
+ */
+const unitSystem = computed<UnitSystem>(() => ui.unitSystem)
+
+function setUnitSystem(system: UnitSystem) {
+  ui.setUnitSystem(system)
+}
+
 const scaledIngredients = computed(() => {
   if (!doc.value) return []
   return doc.value.line_items.map((item) => ({
   ...item,
-  quantity: scaleQuantity(item.quantity, factor.value),
+  // Scale first, then convert: the authored quantity is metric, so this is
+  // the only place the number in front of the user ever changes system.
+  quantity: localizeQuantity(scaleQuantity(item.quantity, factor.value), unitSystem.value),
   }))
 })
 
 const scaledSteps = computed<ScaledStep[]>(() =>
-  doc.value ? scaleSteps(doc.value, factor.value) : [],
+  doc.value ? localizeSteps(scaleSteps(doc.value, factor.value), unitSystem.value) : [],
 )
 
 const macroBars = computed(() => {
@@ -384,6 +399,36 @@ function startCooking() {
   @click="setServings(servings + 1)"
   >
   <Plus :size="18" aria-hidden="true" />
+  </button>
+  </div>
+  </div>
+  <!-- Unit system (ADR-0047): a compact two-option toggle in the ACTIONS
+  panel, so a reader who shops in oz/lb does not have to leave the recipe
+  to fix it. It writes the SAME ui member as the Settings card, so the two
+  surfaces are one setting by construction. -->
+  <div
+  class="flex items-center justify-between gap-3"
+  data-test="detail-unit-toggle"
+  role="group"
+  aria-label="Unit system"
+  >
+  <span class="text-sm font-medium">Units</span>
+  <div class="flex shrink-0 items-center rounded-lg ring-1 ring-border-strong">
+  <button
+  v-for="system in UNIT_SYSTEMS"
+  :key="system"
+  class="px-3 py-2 text-xs font-semibold capitalize"
+  :class="
+  unitSystem === system
+  ? 'rounded-lg bg-primary-tint text-primary-strong'
+  : 'text-text-muted'
+  "
+  :aria-pressed="unitSystem === system"
+  :aria-label="`${system === 'metric' ? 'Metric' : 'Imperial'} units`"
+  :data-test="`detail-unit-${system}`"
+  @click="setUnitSystem(system)"
+  >
+  {{ system === 'metric' ? '°C / g' : '°F / oz' }}
   </button>
   </div>
   </div>
