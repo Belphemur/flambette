@@ -205,9 +205,9 @@ def _roll_old(token: str, account: str, new_id: str, token_name: str, started_at
                 continue  # young enough to be a concurrent invocation's token — not ours to delete
             try:
                 _cf("DELETE", f"/accounts/{account}/tokens/{t['id']}", token)
-                print(f"  rolled old CI token {t['id']}")
-            except CfError as e:
-                print(f"  (could not roll old token {t['id']}: {e})")
+                print("  rolled an old CI token")
+            except CfError:
+                print("  (could not roll an old CI token — the token stays active until the next successful run)")
         page += 1
 
 
