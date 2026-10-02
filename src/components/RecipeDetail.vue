@@ -21,8 +21,10 @@ import RatingStars from './RatingStars.vue'
 import NutritionModal from './NutritionModal.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
+import { recipeSeoHead } from '../lib/seo'
 import HueIcon from './HueIcon.vue'
 import { onMounted, onUnmounted } from 'vue'
+import { useHead } from '@unhead/vue'
 import {
   ArrowLeft,
   BookOpen,
@@ -94,6 +96,29 @@ const canMoreServings = computed(() => servings.value < MAX_SERVINGS)
 
 const meta = computed<VariantMeta | null>(
   () => catalog.value?.byId.get(props.id) ?? null,
+)
+
+/**
+ * This recipe's SEO head (ADR-0048) — the SAME payload the build-time
+ * prerenderer baked into `dist/recipe/<id>/index.html`, so a crawler and
+ * this browser describe the page identically.
+ *
+ * It is `computed` on purpose: navigating between two recipes (or a
+ * `?p=` link) re-derives the head from the new `meta` alone, never
+ * carrying the previous recipe's title or JSON-LD. While the async doc
+ * fetch is in flight the payload degrades to the meta-derived fields and
+ * upgrades itself the moment `doc` lands — see `recipeSeoHead(doc | null)`.
+ * An unknown id renders NO head at all: there is nothing truthful to say.
+ */
+useHead(
+  computed(() => {
+    const m = meta.value
+    if (!m) return null
+    // Only the CURRENT recipe's doc may enter the head: the id check makes
+    // the invariant local, so a late fetch resolving after a route change
+    // can never pair this recipe's name/URL with another one's ingredients.
+    return recipeSeoHead(doc.value?.id === m.id ? doc.value : null, m)
+  }),
 )
 
 /** Categorical ingredient-TYPE hue beside the category name (ADR-0035). */
@@ -200,11 +225,20 @@ async function loadDoc() {
   const entry = plan.plan.find((e) => e.variantId === m.id)
   servings.value = entry?.servings ?? ui.defaultServings
   try {
-  doc.value = await getRecipe(m)
+    const loaded = await getRecipe(m)
+    // Race guard: navigating to another recipe while this fetch is in
+    // flight must not let the STALE document land — it would pair the new
+    // recipe's name with the old one's ingredients and instructions, in the
+    // view AND in the SEO head (ADR-0048). The newer loadDoc already cleared
+    // `doc`, so dropping this result simply leaves the newer one in charge.
+    if (meta.value?.id === m.id) doc.value = loaded
   } catch (e) {
-  loadError.value = e instanceof Error ? e.message : String(e)
+    // Same guard for the error: a failure belonging to a recipe we have
+    // already left must not raise an error banner over the new one.
+    if (meta.value?.id !== m.id) return
+    loadError.value = e instanceof Error ? e.message : String(e)
   } finally {
-  loading.value = false
+    if (meta.value?.id === m.id) loading.value = false
   }
 }
 

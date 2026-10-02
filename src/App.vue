@@ -19,6 +19,21 @@ import { usePlanStore } from './stores/plan'
 import { useRoomStore, type RoomStatus } from './stores/room'
 import { initFavourites } from './stores/favourites'
 import { appVersion } from './lib/appVersion'
+import { homeSeoHead } from './lib/seo'
+import { useHead } from '@unhead/vue'
+
+/**
+ * The app-level DEFAULT head (ADR-0048). Every app-shell route is served
+ * the same SPA fallback HTML, so it all shares this one head — canonical
+ * to the homepage, which is the duplicate-content defence for /plan,
+ * /grocery, /settings … Route components layer their own scoped entries
+ * over it; Unhead drops those on unmount and this default resurfaces.
+ *
+ * The strings come from `homeSeoHead()` — the SAME builder the
+ * prerenderer writes into `dist/index.html`, so a crawler and the
+ * hydrating app cannot disagree.
+ */
+useHead(homeSeoHead())
 
 const reload = () => location.reload()
 

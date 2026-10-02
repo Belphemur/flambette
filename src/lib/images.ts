@@ -24,7 +24,10 @@ export function localImageUrl(remoteUrl: string | null | undefined): string | nu
   if (!basename) return null
   const dot = basename.lastIndexOf('.')
   const stem = dot > 0 ? basename.slice(0, dot) : basename
-  return `${import.meta.env.BASE_URL}img/recipes/${stem}.webp`
+  // `?? '/'`: the build-time SEO prerenderer imports this module under bun
+  // (no Vite), where BASE_URL is undefined — Vite itself always defines it.
+  const base = import.meta.env.BASE_URL ?? '/'
+  return `${base}img/recipes/${stem}.webp`
 }
 
 /** Like {@link localImageUrl} but falls back to a neutral placeholder. */
