@@ -129,6 +129,15 @@ cannot leave a stale page behind.
 - **Instructions are `HowToStep`s of `primary_message` only** — the
   secondary breakdown lines are ingredient amounts, not prose steps.
 
+Both consumers give the JSON-LD script the same `id` (`recipe-jsonld`).
+Unhead adopts the static `<meta>`/`<link>` tags it finds in a served
+prerendered page (they dedupe by `name`/`property` and `rel: canonical`),
+but an inline script has no such identity — without a shared `id` the
+hydrating app appends its own copy and the page carries two identical
+`Recipe` objects, which a rich-result validator reads as a duplicate. The
+e2e suite pins the single copy on the trailing-slash URL, i.e. the page
+both production surfaces actually serve.
+
 ### 6. Canonicals and the indexable surface
 
 Only `/recipe/:id` pages are the recipe surface, and their canonical is the
@@ -140,26 +149,62 @@ that `/plan` served this same document is a duplicate of it. `robots.txt`
 allows everything except `/cooking/` (a fullscreen session view) and points
 at the sitemap.
 
-Canonicals always point at `SITE_URL` (`https://flambette.app`, overridable
-at build time via the `SITE_URL` env var). A self-hosted instance
-canonicalizing to the official site is deliberate: a private install must not
-compete with the hosted one in search.
+Canonicals always point at `SITE_URL`, overridable at build time via the
+`SITE_URL` env var. A self-hosted instance canonicalizing to the official
+site is deliberate: a private install must not compete with the hosted one
+in search. The override reaches BOTH consumers from one variable:
+`vite.config.ts` bakes it as the `__SITE_URL__` define (the same
+`typeof`-guarded pattern as `__APP_VERSION__`) and the prerenderer reads the
+env var directly — otherwise a build with an override would prerender one
+origin and hydrate into another, which is the exact disagreement this ADR
+exists to prevent. `DEFAULT_SITE_URL` lives in its own dependency-free
+module (`src/lib/siteUrl.ts`) because both the app's and the Node config's
+type-check projects read it, and importing the DOM-touching `seo.ts` into
+`vite.config.ts` would break `vue-tsc -b`.
+
+**The canonical recipe URL carries a trailing slash**
+(`/recipe/<id>/`), because the prerendered page is a directory index and
+Cloudflare static assets default to `html_handling: "auto-trailing-slash"`:
+publishing the slash-less form would 308-redirect every one of the 2,759
+canonicals and sitemap `<loc>`s on the hosted site. The slash form is
+served directly by nginx (`try_files $uri $uri/`), by Cloudflare and by
+`vite preview` alike. The app's own router keeps its slash-less routes — a
+canonical is a crawler-facing statement, not a UI route.
 
 ### 7. The serving matrix
 
 `dist/recipe/<id>/index.html` is only useful if `/recipe/<id>` reaches it:
 
-| Surface | `/recipe/<id>` | Why |
+| Surface | `/recipe/<id>/` | Why |
 | --- | --- | --- |
 | nginx (Docker, self-host) | prerendered file | `try_files $uri $uri/ /index.html` + `index index.html`: the directory resolves to its index before the fallback |
-| Cloudflare static assets (hosted) | prerendered file | an existing directory index is an existing asset; `not_found_handling: "single-page-application"` only fires for paths that do NOT resolve |
+| Cloudflare static assets (hosted) | prerendered file | the slash form is the asset; `not_found_handling: "single-page-application"` only fires for paths that do NOT resolve |
 | `vite preview` (e2e only) | SPA shell at `/recipe/<id>`, prerendered file at `/recipe/<id>/` | sirv's single-file mode does not resolve a directory index |
 
+Measured against the built Docker image (`nginx.conf` untouched): `/` and
+`/recipe/<id>/` return 200 with the prerendered head, `/sitemap.xml` and
+`/robots.txt` 200, and `/recipe/<id>` is a **301** to the slash form —
+nginx's `try_files $uri $uri/` redirecting to the directory. Publishing the
+slash form as the canonical is therefore the form every production surface
+serves directly, with no redirect hop in front of it.
+| Vercel (superseded preview host, ADR-0027) | prerendered file | Vercel applies `rewrites` only when no static file matches; the preview is also behind deployment-protection SSO, so no unauthenticated crawler can read it regardless |
+
 Nothing about this matrix is asserted in e2e: `vite preview`'s fallback is a
-dev-server detail, and both production surfaces are configured by files this
-ADR deliberately does not touch (`nginx.conf`, `wrangler.jsonc`). The e2e
-suite therefore proves the app still works when served the shell — which is
-the fallback that must keep working anyway.
+dev-server detail, and every production surface is configured by files this
+ADR deliberately does not touch (`nginx.conf`, `wrangler.jsonc`,
+`vercel.json`). The e2e suite therefore proves the app still works when
+served the shell — which is the fallback that must keep working anyway.
+
+### 8. One async fetch, one recipe
+
+A recipe doc is fetched asynchronously, and `loadDoc()` can be in flight
+for recipe A when the route changes to recipe B. Without a guard the stale
+document lands in `doc` and the head pairs B's name and URL with A's
+ingredients and instructions — a JSON-LD object describing a recipe that
+does not exist. `loadDoc()` therefore drops any result whose id is no
+longer current, and the head independently passes `doc` only when
+`doc.id === meta.id`, so the invariant holds at the point of use as well as
+at the point of write.
 
 ## Consequences
 

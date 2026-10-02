@@ -122,7 +122,11 @@ describe('renderHeadBlock / injectHead', () => {
 
   test('carries exactly one ld+json script, parsed back to recipeJsonLd', () => {
     const html = injectHead(BASE_HTML, renderHeadBlock(recipeSeoHead(DOC, META)))
-    const bodies = [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)]
+    // The `id` is part of the contract: it is what lets the hydrating app's
+    // Unhead ADOPT this script instead of appending a second ld+json.
+    const bodies = [
+      ...html.matchAll(/<script id="recipe-jsonld" type="application\/ld\+json">(.*?)<\/script>/g),
+    ]
     expect(bodies).toHaveLength(1)
     expect(JSON.parse(bodies[0][1])).toEqual(
       JSON.parse(JSON.stringify(recipeJsonLd(DOC, META))),
@@ -167,7 +171,7 @@ describe('renderHeadBlock / injectHead', () => {
     )
     expect(recipe.match(/do not edit/g)).toHaveLength(1)
     expect(recipe.match(/<link rel="canonical"/g)).toHaveLength(1)
-    expect(recipe).toContain(`${SITE_URL}/recipe/10003`)
+    expect(recipe).toContain(`${SITE_URL}/recipe/10003/`)
   })
 })
 
@@ -180,7 +184,7 @@ describe('renderNoscript', () => {
     expect(html).toContain(`<h1>${META.name}</h1>`)
     expect(html).toContain('<li>1 head butter lettuce</li>')
     expect(html).toContain('<li>Wash the produce.</li>')
-    expect(html).toContain(`href="${SITE_URL}/recipe/10003"`)
+    expect(html).toContain(`href="${SITE_URL}/recipe/10003/"`)
     expect(html.startsWith('<noscript>')).toBe(true)
     expect(html.trimEnd().endsWith('</noscript>')).toBe(true)
   })

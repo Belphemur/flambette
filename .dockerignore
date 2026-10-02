@@ -13,7 +13,11 @@ Dockerfile
 # Repo/tooling content that must never reach the build context or image
 docs
 e2e
-scripts
+# Only the Python data generators are dead weight in the image. The TypeScript
+# build steps must NOT be excluded: `bun run build` ends with
+# scripts/generate-recipe-seo.ts (ADR-0048), so dropping scripts/ makes the
+# Docker build fail with "Module not found" AFTER vite has already run.
+scripts/*.py
 test-results
 playwright-report
 raw_recipes

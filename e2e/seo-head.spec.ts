@@ -77,7 +77,7 @@ test('a recipe page describes itself with the catalog name and facts', async ({ 
   await expect(page.locator('link[rel="canonical"]')).toHaveCount(1)
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     'href',
-    `${SITE_URL}/recipe/${VARIANT_ID}`,
+    `${SITE_URL}/recipe/${VARIANT_ID}/`,
   )
   expect(await metaContent(page, 'meta[name="robots"]')).toBe('index, follow')
 })
@@ -90,7 +90,7 @@ test('exactly one schema.org Recipe object, carrying the catalog truth', async (
   const ld = nodes[0]
   expect(ld['@type']).toBe('Recipe')
   expect(ld.name).toBe(META.name)
-  expect(ld.url).toBe(`${SITE_URL}/recipe/${VARIANT_ID}`)
+  expect(ld.url).toBe(`${SITE_URL}/recipe/${VARIANT_ID}/`)
   expect(ld['@id']).toBe(ld.url)
   // Ingredients and steps are real arrays from the doc, never placeholders.
   expect(Array.isArray(ld.recipeIngredient)).toBe(true)
@@ -127,11 +127,35 @@ test('a second recipe page carries its own head, never the previous one', async 
   await page.goto(`/recipe/${OTHER_ID}`)
   await expect
     .poll(async () => (await ldJson(page))[0]?.url, { timeout: 15_000 })
-    .toBe(`${SITE_URL}/recipe/${OTHER_ID}`)
+    .toBe(`${SITE_URL}/recipe/${OTHER_ID}/`)
 
   expect((await ldJson(page))[0].name).not.toBe(firstLd.name)
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     'href',
-    `${SITE_URL}/recipe/${OTHER_ID}`,
+    `${SITE_URL}/recipe/${OTHER_ID}/`,
   )
+})
+
+test('hydrating the PRERENDERED page adds no second copy of anything', async ({ page }) => {
+  // The trailing-slash URL is the form both production surfaces serve from
+  // `dist/recipe/<id>/index.html`, so this is the page a crawler lands on
+  // and then a browser hydrates. Unhead adopts the static meta/link tags but
+  // an inline JSON-LD script has no identity to dedupe on unless both
+  // consumers give it one (`id: recipe-jsonld`) — without it the page ends
+  // up with TWO identical Recipe objects, which a rich-result validator
+  // reads as a duplicate.
+  await page.goto(`/recipe/${VARIANT_ID}/`)
+  await expect(page.getByRole('heading', { name: META.name })).toBeVisible({ timeout: 15_000 })
+  await expect
+    .poll(async () => (await ldJson(page))[0]?.recipeIngredient !== undefined, { timeout: 15_000 })
+    .toBe(true)
+
+  expect(await ldJson(page)).toHaveLength(1)
+  await expect(page.locator('meta[name="description"]')).toHaveCount(1)
+  await expect(page.locator('link[rel="canonical"]')).toHaveCount(1)
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+    'href',
+    `${SITE_URL}/recipe/${VARIANT_ID}/`,
+  )
+  await expect(page).toHaveTitle(META.name)
 })

@@ -35,9 +35,24 @@
 
 import type { RecipeDoc, VariantMeta } from './types'
 import { localImageUrl } from './images'
+import { DEFAULT_SITE_URL } from './siteUrl'
 
-/** The canonical production origin (ADR-0038 hosted path). Build-time only. */
-export const SITE_URL = 'https://flambette.app'
+export { DEFAULT_SITE_URL }
+
+/** The canonical production origin (ADR-0038 hosted path).
+ *
+ *  `vite.config.ts` bakes the build's `SITE_URL` env var (if any) as the
+ *  `__SITE_URL__` define, using the same pattern as `appVersion` — so a
+ *  build that points its canonicals somewhere else ALSO points the running
+ *  app's head there. Without this the prerenderer and the hydrating client
+ *  would disagree about the origin, which is the one thing the two
+ *  consumers must never do. The prerenderer passes its own (identical)
+ *  value explicitly; this constant is the fallback for dev, tests and
+ *  tools, which never run the define. */
+declare const __SITE_URL__: string
+
+export const SITE_URL: string =
+  typeof __SITE_URL__ === 'undefined' ? DEFAULT_SITE_URL : __SITE_URL__
 
 /** Meal-occasion label per catalog `ruleset`, matching ADR-0043's table. */
 const OCCASION_LABEL: Record<string, string> = {
@@ -75,9 +90,20 @@ export const HOME_DESCRIPTION =
   'Flambette — the frozen Mealime recipe catalog: browse 2,700+ quick recipes, ' +
   'plan your week and cook with step-by-step timers.'
 
-/** Absolute URL for a recipe route, for canonical / OG / JSON-LD `@id`. */
+/**
+ * Absolute URL for a recipe route, for canonical / OG / JSON-LD `@id`.
+ *
+ * The form carries a TRAILING SLASH, and it is deliberate: the prerendered
+ * page is a directory index (`dist/recipe/<id>/index.html`), and Cloudflare
+ * static assets default to `html_handling: "auto-trailing-slash"` — with the
+ * slash-less form the hosted site would 308-redirect every one of the 2,759
+ * canonicals to its slash form. Publishing the form each surface serves
+ * directly means no redirect on nginx (`try_files $uri $uri/`), none on
+ * Cloudflare, and none in `vite preview`. The app's own router links stay
+ * slash-less; a canonical is a crawler-facing statement, not a UI route.
+ */
 export function recipeUrl(variantId: number, siteUrl: string = SITE_URL): string {
-  return `${siteUrl}/recipe/${variantId}`
+  return `${siteUrl}/recipe/${variantId}/`
 }
 
 /**
@@ -179,7 +205,8 @@ export function recipeJsonLd(
   }
 
   // Per-serving nutrition facts — the SAME numbers the app displays
-  // (meta.calories / sodium_mg are already per-serving, ADR-0002/0003).
+  // (`meta.calories` / `sodium_mg` are already per-serving, ADR-0002;
+  // never scale them here, only totals scale anywhere).
   const nutrition: Record<string, unknown> = { '@type': 'NutritionInformation' }
   if (meta.calories > 0) nutrition.calories = `${kcal} kcal`
   if (meta.sodium_mg > 0) nutrition.sodiumContent = `${sodium} mg`
@@ -237,8 +264,17 @@ export type SeoLinkTag = {
  * `innerHTML`), so we hand over the OBJECT and both consumers — the
  * client's `useHead` and the prerenderer's `JSON.stringify` — emit the
  * identical payload.
+ *
+ * `id` is load-bearing on a PRERENDERED page. Unhead adopts the static
+ * `<meta>`/`<link>` tags it finds in the served HTML (keyed by
+ * `name`/`property` and by `rel: canonical`), but an inline script has no
+ * such identity — without an `id` the hydrating app appends its own copy
+ * and the page ends up with two `ld+json` blocks. A shared `id` gives
+ * both consumers the same dedupe identity, so the prerendered script is
+ * adopted instead of doubled.
  */
 export type SeoJsonLdScript = {
+  id: 'recipe-jsonld'
   type: 'application/ld+json'
   textContent: Record<string, unknown>
 }
@@ -275,9 +311,11 @@ export function recipeSeoHead(
     title,
     meta: [
       { name: 'description', content: description },
-      // Recipe pages are the ONLY indexable surface (ADR-0048): App.vue's
-      // default head marks the app-shell routes noindex, and this line
-      // flips the verdict back for the recipe itself.
+      // The recipe page DECLARES ITSELF INDEXABLE. The app-shell head
+      // (homeSeoHead) carries no robots directive at all — the homepage is
+      // a legitimate search result and the app-shell routes dedupe by their
+      // canonical, not by being blocked — so this tag is an explicit
+      // statement, not a verdict being flipped back.
       { name: 'robots', content: 'index, follow' },
       { property: 'og:type', content: 'article' },
       { property: 'og:title', content: title },
@@ -296,6 +334,7 @@ export function recipeSeoHead(
     link: [{ rel: 'canonical', href: url }],
     script: [
       {
+        id: 'recipe-jsonld',
         type: 'application/ld+json',
         textContent: recipeJsonLd(doc, meta, siteUrl),
       },

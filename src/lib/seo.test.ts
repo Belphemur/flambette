@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  DEFAULT_SITE_URL,
   HOME_DESCRIPTION,
   HOME_TITLE,
   SITE_URL,
@@ -83,9 +84,17 @@ describe('isoDuration', () => {
 /* ---------- urls + images ---------- */
 
 describe('recipeUrl / recipeImages', () => {
-  test('canonical url is /recipe/<id> on the site origin', () => {
-    expect(recipeUrl(10003)).toBe(`${SITE_URL}/recipe/10003`)
-    expect(recipeUrl(42, 'http://localhost:8097')).toBe('http://localhost:8097/recipe/42')
+  test('canonical url is the TRAILING-SLASH form of /recipe/<id>', () => {
+    // The trailing slash is load-bearing: the prerendered page is a
+    // directory index and Cloudflare's default auto-trailing-slash would
+    // 308 the slash-less form (see recipeUrl's comment).
+    expect(recipeUrl(10003)).toBe(`${SITE_URL}/recipe/10003/`)
+    expect(recipeUrl(42, 'http://localhost:8097')).toBe('http://localhost:8097/recipe/42/')
+  })
+
+  test('the hosted default origin is the one both consumers read', () => {
+    expect(DEFAULT_SITE_URL).toBe('https://flambette.app')
+    expect(SITE_URL).toBe(DEFAULT_SITE_URL)
   })
 
   test('images map to the LOCAL webp assets, absolute — never the CDN URL', () => {
@@ -132,7 +141,7 @@ describe('recipeJsonLd', () => {
   test('is a schema.org Recipe anchored on the canonical url', () => {
     expect(ld['@context']).toBe('https://schema.org')
     expect(ld['@type']).toBe('Recipe')
-    expect(ld['@id']).toBe(`${SITE_URL}/recipe/10003`)
+    expect(ld['@id']).toBe(`${SITE_URL}/recipe/10003/`)
     expect(ld['url']).toBe(ld['@id'])
   })
 
@@ -187,9 +196,9 @@ describe('recipeSeoHead with no doc yet', () => {
     expect(head.meta.find((m) => m.name === 'description')?.content).toBe(
       recipeDescription(META),
     )
-    expect(head.link).toEqual([{ rel: 'canonical', href: `${SITE_URL}/recipe/10003` }])
+    expect(head.link).toEqual([{ rel: 'canonical', href: `${SITE_URL}/recipe/10003/` }])
     expect(head.meta.find((m) => m.property === 'og:url')?.content).toBe(
-      `${SITE_URL}/recipe/10003`,
+      `${SITE_URL}/recipe/10003/`,
     )
   })
 
@@ -243,7 +252,7 @@ describe('recipeSeoHead', () => {
   })
 
   test('canonical link points at the recipe route', () => {
-    expect(head.link).toEqual([{ rel: 'canonical', href: `${SITE_URL}/recipe/10003` }])
+    expect(head.link).toEqual([{ rel: 'canonical', href: `${SITE_URL}/recipe/10003/` }])
   })
 
   test('one JSON-LD script matching recipeJsonLd', () => {

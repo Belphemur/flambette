@@ -3,6 +3,9 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import { buildAppVersion } from './src/lib/appVersion'
+// The dependency-free module, not ./src/lib/seo: seo.ts reaches the DOM
+// types (images.ts) and importing it here would break vue-tsc -b.
+import { DEFAULT_SITE_URL } from './src/lib/siteUrl'
 
 // The live-room relay runs as a separate process (server/relay.ts, :8081 in
 // dev/e2e, the `relay` service behind nginx in production). Both the dev
@@ -58,6 +61,13 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(
       buildAppVersion({ tag, branch, sha, isRelease: isTagRelease }),
+    ),
+    // The canonical origin for SEO payloads (ADR-0048). A self-hosted build
+    // can point every canonical, OG url and JSON-LD @id at its own origin
+    // with SITE_URL=…; the prerenderer reads the SAME env var, so the
+    // static HTML and the hydrating app can never disagree about it.
+    __SITE_URL__: JSON.stringify(
+      (process.env.SITE_URL || DEFAULT_SITE_URL).replace(/\/+$/, ''),
     ),
   },
 })

@@ -78,7 +78,12 @@ export function renderHeadBlock(head: SeoHeadInput): string {
     `<title>${xmlEscape(head.title)}</title>`,
     ...head.meta.map(metaTag),
     ...head.link.map(linkTag),
-    ...head.script.map((s) => `<script type="${s.type}">${jsonLdText(s.textContent)}</script>`),
+    ...head.script.map(
+      // The `id` is emitted too: it is the dedupe identity Unhead needs to
+      // ADOPT this script instead of appending a second ld+json when the
+      // page hydrates (see SeoJsonLdScript).
+      (s) => `<script id="${xmlEscape(s.id)}" type="${s.type}">${jsonLdText(s.textContent)}</script>`,
+    ),
   ].join('\n    ')
 }
 
