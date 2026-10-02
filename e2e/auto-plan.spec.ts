@@ -347,7 +347,8 @@ test('ruleset select: dessert-only run yields only desserts', async ({ page }) =
 
   await page.getByTestId('auto-plan-button').first().click()
   await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
-  await page.getByTestId('auto-plan-ruleset').selectOption('dessert')
+  await page.getByTestId('auto-plan-ruleset').click()
+  await page.getByTestId('auto-plan-option-dessert').click()
   await page.getByTestId('auto-plan-generate').click()
   await expect(page.getByTestId('auto-plan-confirm')).toBeVisible({ timeout: 15_000 })
   await confirm(page)
@@ -359,6 +360,39 @@ test('ruleset select: dessert-only run yields only desserts', async ({ page }) =
   await expectZeroMealimeRequests(page)
 })
 
+test('the taxonomy dropdown offers Lunch and Snack, and Lunch plans only simple meals', async ({ page }) => {
+  // ADR-0046 §2.2: the dialog's meal-type options come from
+  // mealTypeFilter's exports — the old hard-coded RULESETS list had
+  // drifted and left Lunch (`simple`, the biggest occasion) and Snack
+  // unreachable from Auto-Plan. The label↔ruleset mapping is the thing
+  // that must not silently flip: picking LUNCH must yield ruleset
+  // 'simple' meals, which is what the tail of this test pins.
+  await page.goto('/plan')
+  await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
+
+  await page.getByTestId('auto-plan-button').first().click()
+  await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+  await page.getByTestId('auto-plan-ruleset').click()
+  const menu = page.getByTestId('auto-plan-ruleset-menu')
+  await expect(menu).toBeVisible()
+  // Any + the five offered occasions.
+  await expect(menu.getByRole('option')).toHaveCount(6)
+  await expect(menu.getByRole('option', { name: /^Lunch, \d+ recipes$/ })).toBeVisible()
+  await expect(menu.getByRole('option', { name: /^Snack, \d+ recipes$/ })).toBeVisible()
+
+  await page.getByTestId('auto-plan-option-simple').click()
+  await expect(page.getByTestId('auto-plan-ruleset')).toContainText('Lunch')
+  await page.getByTestId('auto-plan-generate').click()
+  await expect(page.getByTestId('auto-plan-confirm')).toBeVisible({ timeout: 15_000 })
+  await confirm(page)
+
+  const ids = await plannedIds(page)
+  expect(ids.length).toBe(4)
+  const metas = await metaFor(page, ids)
+  for (const m of metas) expect(m.ruleset).toBe('simple')
+  await expectZeroMealimeRequests(page)
+})
+
 test('empty pack (pool exhausted) can never erase or modify the plan', async ({ page }) => {
   await page.goto('/plan')
   await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
@@ -366,8 +400,10 @@ test('empty pack (pool exhausted) can never erase or modify the plan', async ({ 
   // dessert + meat leaves no candidates in the catalog → empty pack.
   await page.getByTestId('auto-plan-button').first().click()
   await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
-  await page.getByTestId('auto-plan-ruleset').selectOption('dessert')
-  await page.getByTestId('auto-plan-category').selectOption('meat')
+  await page.getByTestId('auto-plan-ruleset').click()
+  await page.getByTestId('auto-plan-option-dessert').click()
+  await page.getByTestId('auto-plan-category').click()
+  await page.getByTestId('auto-plan-option-meat').click()
   await page.getByTestId('auto-plan-generate').click()
   await expect(page.getByTestId('auto-plan-preview')).toBeVisible({ timeout: 15_000 })
 
@@ -488,7 +524,8 @@ test('backup export/import round-trips the auto-plan ui slices', async ({ page }
   // Change the persisted settings through the dialog.
   await page.getByTestId('auto-plan-button').first().click()
   await page.getByTestId('auto-plan-mode-replace').click()
-  await page.getByTestId('auto-plan-ruleset').selectOption('breakfast')
+  await page.getByTestId('auto-plan-ruleset').click()
+  await page.getByTestId('auto-plan-option-breakfast').click()
   await page.getByRole('button', { name: 'Close auto-plan' }).click()
   await page.evaluate(() => {
     const pinia = document.querySelector('#app')?.__vue_app__?.config?.globalProperties?.$pinia
@@ -520,7 +557,9 @@ test('backup export/import round-trips the auto-plan ui slices', async ({ page }
   await gotoTab(page, 'Plan')
   await page.getByTestId('auto-plan-button').first().click()
   await expect(page.getByTestId('auto-plan-mode-replace')).toHaveAttribute('aria-checked', 'true')
-  await expect(page.getByTestId('auto-plan-ruleset')).toHaveValue('breakfast')
+  // The dropdown is a button trigger, not a `<select>`: the persisted
+  // ruleset surfaces as the trigger's label (ADR-0046 §2.4).
+  await expect(page.getByTestId('auto-plan-ruleset')).toContainText('Breakfast')
   const gen = await page.evaluate(() => {
     const pinia = document.querySelector('#app')?.__vue_app__?.config?.globalProperties?.$pinia
     return pinia.state.value.ui.autoPlanGeneration
