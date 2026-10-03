@@ -83,6 +83,8 @@ const COLOR_TOKENS: Record<string, string> = {
   'nutrition-fat-soft': '--color-nutrition-fat-soft',
   warning: '--color-warning',
   'warning-soft': '--color-warning-soft',
+  success: '--color-success',
+  'success-soft': '--color-success-soft',
   danger: '--color-danger',
   'danger-soft': '--color-danger-soft',
   favourite: '--color-favourite',

@@ -54,6 +54,8 @@ colors:
   nutrition-fat-soft: "#E8C86A"
   warning: "#9A3412"
   warning-soft: "#FDBA74"
+  success: "#116149"
+  success-soft: "#34D399"
   danger: "#B91C1C"
   danger-soft: "#FCA5A5"
   favourite: "#E11D48"
@@ -215,6 +217,10 @@ components:
   badge-warning-dark:
     backgroundColor: "{colors.surface-dark-raised}"
     textColor: "{colors.warning-soft}"
+  live-room-dot:
+    backgroundColor: "{colors.success}"
+  live-room-dot-dark:
+    backgroundColor: "{colors.success-soft}"
   badge-danger:
     backgroundColor: "{colors.surface-raised}"
     textColor: "{colors.danger}"
@@ -466,7 +472,13 @@ against the same four surfaces. Muted text is at least
 opacity, imagery, inheritance and focus must still be tested in the browser.
 
 Status is not food identity: warnings use `warning` / `warning-soft`, destructive
-controls use `danger` / `danger-soft`, favourites remain rose hearts. These
+controls use `danger` / `danger-soft`, favourites remain rose hearts, and a live
+household room is signalled with `success` / `success-soft` (ADR-0049). The
+success pair is deliberately a **different green** from `hue-vegetarian`
+(`#137A38`) and `hue-vegan` (`#047857`) — a "connected" dot must never be
+mistaken for a dietary cue. It is also never attached to an `IconRole`, so it
+cannot leak into the food-hue registry; it measures **6.66:1** light and
+**7.62:1** dark against `surface-sunken`, the chip it actually sits on. These
 foregrounds use raised surfaces; do not assume every status tint works on every
 coloured panel. Keep labels or shapes as a second signal. No raw colour literals
 in components, ad-hoc Tailwind palette substitutions or undocumented gradients.

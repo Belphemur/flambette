@@ -553,6 +553,28 @@
         "hex": "#fdba74"
       }
     },
+    "success": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.067,
+          0.38,
+          0.286
+        ],
+        "hex": "#116149"
+      }
+    },
+    "success-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.204,
+          0.827,
+          0.6
+        ],
+        "hex": "#34d399"
+      }
+    },
     "danger": {
       "$value": {
         "colorSpace": "srgb",
