@@ -275,7 +275,7 @@ onMounted(async () => {
   >{{ appVersion }}</span>
   <span
   v-if="roomChip"
-  class="group/room relative flex cursor-help items-center gap-1 rounded-full bg-surface-sunken px-2.5 py-1 text-xs font-medium"
+  class="group relative flex cursor-help items-center gap-1 rounded-full bg-surface-sunken px-2.5 py-1 text-xs font-medium"
   :class="roomChip.cls"
   :aria-label="roomChip.description"
   data-test="room-chip"
@@ -297,9 +297,20 @@ onMounted(async () => {
        the chip's aria-label already says exactly this.
        Plain CSS on purpose: useIconHoverTarget exists for HueIcon, whose
        host is pointer-transparent and can never match :hover — this chip
-       is an ordinary pointer-active element. -->
+       is an ordinary pointer-active element.
+
+       HIDDEN MEANS `hidden`, NOT `invisible`, and the bubble is capped at
+       `max-w-56` and anchored `right-0`. Both are load-bearing, and the
+       first version got both wrong in a way that only showed up on a
+       phone: `visibility: hidden` still occupies layout, so a
+       `whitespace-nowrap` bubble centred with `left-1/2` beside the
+       header's right edge overflowed the Pixel 7 viewport. That made the
+       DOCUMENT horizontally scrollable, and a horizontally scrollable
+       document breaks hit-testing for the `fixed` bottom nav — every
+       tap on a nav tab silently became a no-op. `display: none`
+       contributes nothing at all, exactly as HueIcon's bubble does. -->
   <span
-  class="pointer-events-none invisible absolute left-1/2 top-full z-30 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg bg-surface-dark px-2 py-1 text-xs font-normal text-text-dark opacity-0 shadow-md transition-opacity group-hover/room:visible group-hover/room:opacity-100 group-focus-within/room:visible group-focus-within/room:opacity-100"
+  class="pointer-events-none absolute right-0 top-full z-30 mt-1.5 hidden w-max max-w-56 rounded-lg bg-surface-dark px-2 py-1 text-xs font-normal leading-snug text-text-dark shadow-md group-hover:block group-focus-within:block"
   data-test="room-chip-tooltip"
   role="tooltip"
   aria-hidden="true"

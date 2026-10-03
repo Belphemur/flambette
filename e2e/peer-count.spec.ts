@@ -52,6 +52,30 @@ test('the chip counts one peer before anyone else arrives', async ({ page }) => 
   await expectZeroMealimeRequests(page)
 })
 
+test('the live chip never makes the page scroll sideways (ADR-0049)', async ({ page }) => {
+  await blockExternalRequests(page)
+  await startRoom(page)
+
+  // The chip's tooltip bubble is `visibility: hidden` or `display: none`
+  // while closed — and ONLY the second one is safe. A hidden-but-laid-out
+  // `whitespace-nowrap` bubble beside the header's right edge overflowed
+  // the Pixel 7 viewport, which made the DOCUMENT horizontally scrollable
+  // and silently broke every tap on the `fixed` bottom nav (Playwright
+  // reported `main` intercepting the nav button). Nothing else on the page
+  // could see it, so this pins the property itself.
+  const overflow = await page.evaluate(() => ({
+    doc: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    body: document.body.scrollWidth - document.body.clientWidth,
+  }))
+  expect(overflow.doc).toBeLessThanOrEqual(0)
+  expect(overflow.body).toBeLessThanOrEqual(0)
+
+  // …and the nav is genuinely tappable, which is what the overflow broke.
+  await gotoTab(page, 'Grocery')
+  await expect(page.getByPlaceholder('Add an item not in the recipes…')).toBeVisible()
+  await expectZeroMealimeRequests(page)
+})
+
 test('a second device raises the count on BOTH phones', async ({ browser, page }) => {
   await blockExternalRequests(page)
   const code = await startRoom(page)
