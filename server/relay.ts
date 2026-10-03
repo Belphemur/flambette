@@ -345,10 +345,18 @@ function admit(ws: Socket, code: string, mode: 'create' | 'join'): void {
   // (ADR-0049) — the same number `broadcastPeers` is about to tell the
   // room, stitched in so the joining peer learns it without waiting for a
   // second frame.
+  //
+  // Clamped to the set's real size: `attach` deliberately keeps a socket
+  // that re-joins the room it is ALREADY in, so `livePeers + 1` from the
+  // core would report one more peer than exists. The clamp is adapter
+  // work on purpose — only the adapter knows whether `attach` grew the
+  // set. (The `peers` fan-out below reports the same size, so a clamped
+  // join is confirmed a frame later.)
+  const count = Math.min(verdict.count, room.peers.size)
   if (verdict.kind === 'establish') {
-    send(ws, { type: 'created', code: verdict.code, rev: verdict.rev, count: verdict.count })
+    send(ws, { type: 'created', code: verdict.code, rev: verdict.rev, count })
   } else {
-    send(ws, { type: 'joined', code: verdict.code, rev: verdict.rev, state: verdict.state, count: verdict.count })
+    send(ws, { type: 'joined', code: verdict.code, rev: verdict.rev, state: verdict.state, count })
   }
   broadcastPeers(room)
 }

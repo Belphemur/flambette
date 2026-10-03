@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { Users } from 'lucide-vue-next'
 
 /**
@@ -16,15 +17,70 @@ import { Users } from 'lucide-vue-next'
  * error toast and no modal (the caller decides by only opening this once
  * the room is actually live).
  *
- * The overlay shape is PlanTab's share sheet (`fixed inset-0` +
- * `bg-surface-dark/50`) so the two full-page surfaces in the app read as
- * one family. There is no scrim click-to-dismiss and no Escape here: the
- * only thing to do is acknowledge it, and an accidental dismissal would
- * undo the one moment this screen exists for.
+ * There is no scrim click-to-dismiss and no Escape here: the only thing
+ * to do is acknowledge it, and an accidental dismissal would undo the
+ * one moment this screen exists for. Focus MANAGEMENT is still the full
+ * job, exactly as in `NutritionModal` — `aria-modal="true"` is a promise
+ * that the app underneath is unreachable, so focus MOVES into the panel
+ * on open, Tab is TRAPPED inside it, and the trigger gets focus back on
+ * the way out. Without that, a keyboard user who arrives by link keeps
+ * tabbing through controls they cannot see.
  */
 defineProps<{ code: string }>()
 
 const emit = defineEmits<{ (e: 'dismiss'): void }>()
+
+const panel = ref<HTMLElement | null>(null)
+let restoreFocusTo: HTMLElement | null = null
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function focusables(): HTMLElement[] {
+  return panel.value
+    ? Array.from(panel.value.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (el) => el.offsetParent !== null || el === document.activeElement,
+      )
+    : []
+}
+
+/** Keep Tab (and Shift+Tab) cycling the panel's own controls. */
+function trapTab(e: KeyboardEvent): void {
+  if (e.key !== 'Tab' || !panel.value) return
+  const items = [...focusables(), panel.value]
+  if (items.length === 0) return
+  const first = items[0]
+  const last = items[items.length - 1]
+  const active = document.activeElement
+  if (!active || !panel.value.contains(active)) {
+    e.preventDefault()
+    ;(e.shiftKey ? last : first).focus()
+    return
+  }
+  if (!e.shiftKey && active === last) {
+    e.preventDefault()
+    first.focus()
+  } else if (e.shiftKey && active === first) {
+    e.preventDefault()
+    last.focus()
+  }
+}
+
+onMounted(() => {
+  restoreFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  window.addEventListener('keydown', trapTab)
+  void nextTick(() => panel.value?.focus())
+})
+onUnmounted(() => {
+  window.removeEventListener('keydown', trapTab)
+  const target = restoreFocusTo
+  restoreFocusTo = null
+  if (!target) return
+  void nextTick(() => {
+    if (document.contains(target)) target.focus()
+    else document.body.focus?.()
+  })
+})
 
 function dismiss() {
   emit('dismiss')
@@ -38,7 +94,9 @@ function dismiss() {
   data-test="join-congrats"
   >
   <div
-  class="w-full max-w-sm space-y-4 rounded-2xl bg-surface-raised p-6 text-center shadow-xl"
+  ref="panel"
+  tabindex="-1"
+  class="w-full max-w-sm space-y-4 rounded-2xl bg-surface-raised p-6 text-center shadow-xl outline-none"
   role="dialog"
   aria-modal="true"
   aria-label="Joined the household"

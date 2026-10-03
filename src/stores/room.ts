@@ -694,6 +694,14 @@ export const useRoomStore = defineStore('room', () => {
     ws = socket
 
     socket.onmessage = (event) => {
+      // A superseded socket's frame is STALE by definition: `connect` has
+      // already replaced `ws` (room switch, reconnect, or a `code_taken`
+      // re-roll), so anything this queue still delivers describes the room
+      // we left. Same guard as `onclose` below, and it matters most for
+      // `peers` (ADR-0049): an old room's headcount landing after the new
+      // room came up would put the wrong number on the chip until the next
+      // membership change.
+      if (ws !== socket) return
       try {
         handleMessage(JSON.parse(event.data as string))
       } catch {

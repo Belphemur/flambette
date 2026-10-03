@@ -151,14 +151,22 @@ function joinHouseholdRoom() {
   roomInput.value = code
   ui.setHouseholdRoom(code)
 
-  // Already in THIS room: reconnecting would drop a healthy socket just
-  // to re-establish it, so the setting is saved and the state confirmed
-  // without touching the connection.
-  if (room.inRoom && room.code === code) {
+  // Already LIVE in THIS room: reconnecting would drop a healthy socket
+  // just to re-establish it, so the setting is saved and the state
+  // confirmed without touching the connection. `live` and not merely
+  // `inRoom`: the store keeps the code through `error`, the reconnect
+  // backoff and a latched `roomGone`, and in those states the old
+  // condition short-circuited to a success toast that never retried —
+  // the user had to press Leave and join again to get out of a dead room.
+  if (room.status === 'live' && room.inRoom && room.code === code) {
     ui.showToast(`Household sync active — ${code}`, { kind: 'household' })
     return
   }
 
+  // From here the card OWNS the outcome: a `code_taken` re-roll moves
+  // this device into a different room than the one just saved, and the
+  // watcher below adopts whatever code we actually ended up in.
+  pendingHouseholdJoin = true
   if (isNewCode) room.create(code)
   else room.join(code)
   // The toast carries the share action: joining and sharing are the
@@ -177,6 +185,38 @@ function joinHouseholdRoom() {
 const rolledNewCode = ref(false)
 
 /**
+ * True between pressing `Join now` and the store settling. It is what
+ * lets the card adopt a code it did not choose: a rolled code the relay
+ * already holds comes back `code_taken` and the store re-rolls
+ * (ADR-0021), so the room this device ends up in is NOT the one saved a
+ * moment ago — and a saved code we are not in means the next launch
+ * joins a stranger's empty room.
+ */
+let pendingHouseholdJoin = false
+
+watch(
+  () => [room.status, room.code] as const,
+  ([status, code]) => {
+    if (!pendingHouseholdJoin) return
+    // Any terminal answer ends the wait; only a LIVE frame has a code
+    // worth adopting.
+    if (status !== 'live') {
+      if (status === 'error' || status === 'idle') pendingHouseholdJoin = false
+      return
+    }
+    pendingHouseholdJoin = false
+    if (!code || code === roomInput.value) return
+    roomTyping = false
+    roomInput.value = code
+    ui.setHouseholdRoom(code)
+    ui.showToast(`That code was taken — using ${code} instead`, {
+      kind: 'household',
+      duration: 6000,
+    })
+  },
+)
+
+/**
  * `New code` rolls AND joins (ADR-0049): the owner's point was that a
  * rolled code which does nothing until a second press is a dead end.
  */
@@ -193,10 +233,23 @@ function newRoomCodeAndJoin() {
 function clearHouseholdRoom() {
   roomTyping = false
   rolledNewCode.value = false
-  room.leave()
+  pendingHouseholdJoin = false
+  const saved = ui.householdRoom
+  // Only the room this card is ABOUT. A device that is live in a
+  // Plan-tab or share-link room is holding a different socket, and
+  // pressing the household card's Leave asked about the household room,
+  // not about whatever else happens to be connected. With no saved code
+  // there is nothing else to stop joining, so the live room IS the one
+  // being left.
+  const leavingHousehold = room.inRoom && (saved === '' || room.code === saved)
+  if (leavingHousehold) room.leave()
   ui.setHouseholdRoom('')
   roomInput.value = ''
-  ui.showToast('Left the household room — it will not rejoin next launch')
+  ui.showToast(
+    leavingHousehold
+      ? 'Left the household room — it will not rejoin next launch'
+      : `Stopped joining ${saved} — this device stays in the room it is in`,
+  )
 }
 
 /* ---------- Backup & restore (ADR-0013) ---------- */
@@ -446,7 +499,7 @@ function cancelBackupImport(): void {
   New code
   </button>
   <button
-  v-if="householdCode"
+  v-if="householdCode || room.inRoom"
   class="h-11 rounded-lg border px-3 text-xs font-medium"
   data-test="household-room-clear"
   aria-label="Leave the household room and stop joining it on future launches"
