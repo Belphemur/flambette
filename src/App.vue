@@ -20,7 +20,9 @@ import { useRoomStore, type RoomStatus } from './stores/room'
 import { initFavourites } from './stores/favourites'
 import { appVersion } from './lib/appVersion'
 import { homeSeoHead } from './lib/seo'
+import { normalizeRoomCode } from './lib/roomWords'
 import { useHead } from '@unhead/vue'
+import JoinCongratsModal from './components/JoinCongratsModal.vue'
 
 /**
  * The app-level DEFAULT head (ADR-0048). Every app-shell route is served
@@ -155,11 +157,40 @@ async function importSharedPlan() {
 async function joinRoomFromLink() {
   const roomCode = route.query.room
   if (typeof roomCode !== 'string' || roomCode === '') return
+  const canonical = normalizeRoomCode(roomCode)
   room.join(roomCode)
   ui.showToast('Joining live room…')
+  /**
+   * Remember that this join came from a LINK, and for which code, so the
+   * congrats modal knows who to thank (ADR-0049). Captured HERE, before
+   * the query is stripped below — by the time a `joined` frame arrives the
+   * URL is long gone, and a household auto-join (ADR-0019) must NOT open
+   * this modal: nobody handed that device a link, so there is nobody to
+   * congratulate. An unusable code is not remembered at all, so a broken
+   * link toasts and stays silent.
+   */
+  linkJoinCode.value = canonical || null
   // Strip the param so a reload doesn't re-join from the URL.
   void router.replace({ query: {} })
 }
+
+/** The code a shared link asked for; `null` for every other join. */
+const linkJoinCode = ref<string | null>(null)
+/** The code the congrats modal is celebrating; `null` while it is closed. */
+const congratsCode = ref<string | null>(null)
+
+watch(
+  () => [room.status, room.code] as const,
+  ([status, code]) => {
+    if (!linkJoinCode.value) return
+    // BOTH conditions: live, AND live in the code the link named. A
+    // reconnect into some other room must not claim a join that never
+    // happened.
+    if (status !== 'live' || code !== linkJoinCode.value) return
+    congratsCode.value = code
+    linkJoinCode.value = null
+  },
+)
 
 /**
  * ADR-0019: the saved household room joins itself on every start, so the
@@ -371,4 +402,12 @@ onMounted(async () => {
   </div>
   </nav>
   </div>
+  <!-- Arriving through a shared ?room= link (ADR-0049). Opened only once the
+       room is LIVE and is the code the link named, so a household auto-join
+       and a failed link both stay silent here. -->
+  <JoinCongratsModal
+  v-if="congratsCode"
+  :code="congratsCode"
+  @dismiss="congratsCode = null"
+  />
 </template>
