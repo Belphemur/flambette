@@ -3,6 +3,7 @@ import {
   blockExternalRequests,
   expectZeroMealimeRequests,
   gotoTab,
+  liveRoomCode,
   openFirstRecipeDetail,
   waitForCatalog,
 } from './helpers'
@@ -36,9 +37,7 @@ test('Settings copies the room join link in one tap', async ({ page }) => {
   await gotoTab(page, 'Plan')
   await page.getByRole('button', { name: 'Share', exact: true }).click()
   await page.getByTestId('start-room').click()
-  const chip = page.getByTestId('room-chip')
-  await expect(chip).toContainText('Live', { timeout: 15_000 })
-  const code = (await chip.getAttribute('title'))!.match(/Live room ([a-z0-9-]+)/)![1]
+  const code = await liveRoomCode(page)
   await page.getByRole('button', { name: 'Close share sheet' }).click()
 
   // One tap in Settings → the link is on the clipboard.
@@ -93,10 +92,7 @@ test('the join toast shares the link without a second tap', async ({ page, brows
   await gotoTab(page, 'Plan')
   await page.getByRole('button', { name: 'Share', exact: true }).click()
   await page.getByTestId('start-room').click()
-  await expect(page.getByTestId('room-chip')).toContainText('Live', { timeout: 15_000 })
-  const code = (await page.getByTestId('room-chip').getAttribute('title'))!.match(
-    /Live room ([a-z0-9-]+)/,
-  )![1]
+  const code = await liveRoomCode(page)
   await page.getByRole('button', { name: 'Close share sheet' }).click()
 
   // Settings → "Join now" carries a Share link action on its toast.

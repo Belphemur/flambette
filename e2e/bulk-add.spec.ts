@@ -3,6 +3,7 @@ import {
   blockExternalRequests,
   expectZeroMealimeRequests,
   gotoTab,
+  liveRoomCode,
   openFirstRecipeDetail,
   waitForCatalog,
 } from './helpers'
@@ -146,10 +147,7 @@ test('suggestion row mirrors room-synced customs from another context', async ({
   await gotoTab(a, 'Plan')
   await a.getByRole('button', { name: 'Share', exact: true }).click()
   await a.getByTestId('start-room').click()
-  const chip = a.getByTestId('room-chip')
-  await expect(chip).toContainText('Live', { timeout: 10_000 })
-  const title = await chip.getAttribute('title')
-  const code = title!.match(/Live room ([a-z0-9-]+)/)![1]
+  const code = await liveRoomCode(a)
   const roomUrl = `${a.url().replace(/\/plan.*$/, '')}/plan?room=${code}`
 
   // B joins in a FRESH context and gets A's remembered customs.

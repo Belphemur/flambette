@@ -3,6 +3,7 @@ import {
   blockExternalRequests,
   expectZeroMealimeRequests,
   gotoTab,
+  liveRoomCode,
   waitForCatalog,
 } from './helpers'
 
@@ -474,9 +475,7 @@ test('room sync: generated plan reaches the second context', async ({ browser })
   // Start a live room from A's share sheet.
   await a.getByRole('button', { name: 'Share', exact: true }).click()
   await a.getByTestId('start-room').click()
-  await expect(a.getByTestId('room-chip')).toContainText('Live', { timeout: 10_000 })
-  const chipTitle = await a.getByTestId('room-chip').getAttribute('title')
-  const code = chipTitle!.match(/Live room ([a-z0-9-]+)/)![1]
+  const code = await liveRoomCode(a)
   const roomUrl = `${a.url().replace(/\/plan.*$/, '')}/plan?room=${code}`
 
   const ctxB = await browser.newContext()

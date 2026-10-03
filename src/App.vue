@@ -70,9 +70,12 @@ const ROOM_STATUS_ICONS: Record<RoomStatus, Component> = {
   idle: TriangleAlert,
 }
 const ROOM_STATUS_CLS: Record<RoomStatus, string> = {
-  // Status is NOT food identity (DESIGN.md): a live room keeps the calm
-  // primary foreground and relies on the glyph (CircleDot) + the "Live"
-  // label for its signal; amber is reserved for the failure states.
+  // Status is NOT food identity (DESIGN.md): a live room gets the status
+  // family's `success` green — a dot beside the word — while the chip's own
+  // text keeps the calm primary foreground. Amber stays reserved for the
+  // failure states, so the green can never read as a warning, nor as a
+  // dietary cue: hue-vegetarian / hue-vegan are deliberately OTHER greens
+  // (ADR-0049).
   live: 'text-text',
   connecting: 'text-text-muted',
   error: 'text-warning',
@@ -88,11 +91,32 @@ const roomChip = computed(() => {
   error: 'Offline',
   idle: 'Offline',
   }
+  const code = room.code
+  const peers = room.peers
+  /**
+   * The one sentence the chip states about itself, used in TWO places: the
+   * tooltip bubble and the aria-label. Derived once so they cannot drift,
+   * and it is the e2e handle now that the native `title` is gone (ADR-0049).
+   *
+   * A headcount of `null` is a real third state — this device has not been
+   * told yet — so it is phrased as absence rather than as a number. A
+   * device that is still connecting is not a household of one.
+   */
+  const detail: Record<RoomStatus, string> = {
+    live: peers === null ? `Live room ${code}` : `Live room ${code} (${peers} in room)`,
+    connecting: 'Connecting to the household…',
+    error: `Offline — ${room.error ?? 'not connected'}`,
+    idle: 'Offline — not connected',
+  }
+  const description = detail[status]
   return {
-  icon: ROOM_STATUS_ICONS[status],
-  label: labels[status],
-  cls: ROOM_STATUS_CLS[status],
-  code: room.code,
+    icon: ROOM_STATUS_ICONS[status],
+    label: labels[status],
+    cls: ROOM_STATUS_CLS[status],
+    /** The green dot is a LIVE-only signal (ADR-0049). */
+    dot: status === 'live',
+    description,
+    code,
   }
 })
 
@@ -220,13 +244,35 @@ onMounted(async () => {
   >{{ appVersion }}</span>
   <span
   v-if="roomChip"
-  class="flex items-center gap-1 rounded-full bg-surface-sunken px-2.5 py-1 text-xs font-medium"
+  class="group/room relative flex cursor-help items-center gap-1 rounded-full bg-surface-sunken px-2.5 py-1 text-xs font-medium"
   :class="roomChip.cls"
-  :title="roomChip.code ? `Live room ${roomChip.code}` : room.error ?? undefined"
+  :aria-label="roomChip.description"
   data-test="room-chip"
   >
+  <span
+  v-if="roomChip.dot"
+  class="size-2 shrink-0 rounded-full bg-success"
+  data-test="room-chip-dot"
+  aria-hidden="true"
+  />
   <component :is="roomChip.icon" :size="14" aria-hidden="true" />
   {{ roomChip.label }}
+  <!-- The PROPER tooltip, replacing the native `title` (ADR-0049). The OS
+       one cannot be styled, does not appear on keyboard focus, and put a
+       SECOND copy of the chip's meaning in a place that could drift from
+       the aria-label. `focus-within` makes it reachable without a pointer;
+       `pointer-events-none` keeps the bubble from swallowing a click on
+       the chip, and `aria-hidden` keeps it out of the a11y tree because
+       the chip's aria-label already says exactly this.
+       Plain CSS on purpose: useIconHoverTarget exists for HueIcon, whose
+       host is pointer-transparent and can never match :hover — this chip
+       is an ordinary pointer-active element. -->
+  <span
+  class="pointer-events-none invisible absolute left-1/2 top-full z-30 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg bg-surface-dark px-2 py-1 text-xs font-normal text-text-dark opacity-0 shadow-md transition-opacity group-hover/room:visible group-hover/room:opacity-100 group-focus-within/room:visible group-focus-within/room:opacity-100"
+  data-test="room-chip-tooltip"
+  role="tooltip"
+  aria-hidden="true"
+  >{{ roomChip.description }}</span>
   </span>
   <button
   class="flex size-11 items-center justify-center rounded-full text-xl transition-colors hover:bg-surface-sunken"

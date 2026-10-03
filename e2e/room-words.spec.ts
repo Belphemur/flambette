@@ -3,6 +3,7 @@ import {
   blockExternalRequests,
   expectZeroMealimeRequests,
   gotoTab,
+  liveRoomCode,
   openFirstRecipeDetail,
   waitForCatalog,
 } from './helpers'
@@ -58,9 +59,7 @@ async function startLiveRoom(page: Page): Promise<string> {
   await gotoTab(page, 'Plan')
   await page.getByRole('button', { name: 'Share', exact: true }).click()
   await page.getByTestId('start-room').click()
-  const chip = page.getByTestId('room-chip')
-  await expect(chip).toContainText('Live', { timeout: 15_000 })
-  const code = (await chip.getAttribute('title'))!.match(/Live room ([a-z0-9-]+)/)![1]
+  const code = await liveRoomCode(page)
   // Close the sheet: it is a full-screen overlay that would swallow the
   // bottom-nav clicks the rest of the test needs.
   await page.getByRole('button', { name: 'Close share sheet' }).click()

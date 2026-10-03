@@ -4,6 +4,7 @@ import {
   dietIdSet,
   expectZeroMealimeRequests,
   gotoTab,
+  liveRoomCode,
   openFirstRecipeDetail,
   recipeCards,
   visibleVariantIds,
@@ -207,9 +208,7 @@ async function startLiveRoom(page: Page): Promise<string> {
   await gotoTab(page, 'Plan')
   await page.getByRole('button', { name: 'Share', exact: true }).click()
   await page.getByTestId('start-room').click()
-  const chip = page.getByTestId('room-chip')
-  await expect(chip).toContainText('Live', { timeout: 15_000 })
-  return (await chip.getAttribute('title'))!.match(/Live room ([a-z0-9-]+)/)![1]
+  return liveRoomCode(page)
 }
 
 /** Simulate a fresh app start: same profile, new session (no room code). */
@@ -285,7 +284,7 @@ test.describe('household room', () => {
     await restartFresh(page)
     await expect(page.getByTestId('household-toast')).toContainText(code, { timeout: 20_000 })
     await expect(page.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
-    await expect(page.getByTestId('room-chip')).toHaveAttribute('title', `Live room ${code}`)
+    await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', new RegExp(`^Live room ${code}`))
     await expectZeroMealimeRequests(page)
   })
 

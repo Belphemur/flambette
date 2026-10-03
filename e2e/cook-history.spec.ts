@@ -3,6 +3,7 @@ import {
   blockExternalRequests,
   expectZeroMealimeRequests,
   gotoTab,
+  liveRoomCode,
   openFirstRecipeDetail,
   openRecipeDetail,
   visibleVariantIds,
@@ -36,10 +37,7 @@ async function startLiveRoom(page: Page): Promise<string> {
   await gotoTab(page, 'Plan')
   await page.getByRole('button', { name: 'Share', exact: true }).click()
   await page.getByTestId('start-room').click()
-  const chip = page.getByTestId('room-chip')
-  await expect(chip).toContainText('Live', { timeout: 10_000 })
-  const title = await chip.getAttribute('title')
-  const code = title!.match(/Live room ([a-z0-9-]+)/)![1]
+  const code = await liveRoomCode(page)
   return `${page.url().replace(/\/plan.*$/, '')}/plan?room=${code}`
 }
 

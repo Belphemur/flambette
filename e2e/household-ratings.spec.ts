@@ -3,6 +3,7 @@ import {
   blockExternalRequests,
   expectZeroMealimeRequests,
   gotoTab,
+  liveRoomCode,
   openFirstRecipeDetail,
   recipeCards,
   waitForCatalog,
@@ -70,10 +71,7 @@ async function startLiveRoom(page: Page): Promise<string> {
   await gotoTab(page, 'Plan')
   await page.getByRole('button', { name: 'Share', exact: true }).click()
   await page.getByTestId('start-room').click()
-  const chip = page.getByTestId('room-chip')
-  await expect(chip).toContainText('Live', { timeout: 10_000 })
-  const title = await chip.getAttribute('title')
-  const code = title!.match(/Live room ([a-z0-9-]+)/)![1]
+  const code = await liveRoomCode(page)
   const url = `${page.url().replace(/\/plan.*$/, '')}/plan?room=${code}`
   // The share sheet is a modal that would swallow the next nav click; the
   // room survives a full navigation (the code lives in sessionStorage).

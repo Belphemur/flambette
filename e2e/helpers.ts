@@ -45,6 +45,51 @@ export async function waitForCatalog(page: Page): Promise<void> {
   await expect(recipeCards(page).first()).toBeVisible({ timeout: 15_000 })
 }
 
+/**
+ * The code of the live room the header chip is showing.
+ *
+ * Read from the chip's `aria-label` (`Live room <code> (N in room)`,
+ * ADR-0049) rather than its old native `title`, which the proper tooltip
+ * replaced. The label is the thing a screen reader announces and the
+ * thing the bubble repeats, so a spec that scrapes it is asserting the
+ * same sentence the user is shown.
+ */
+export async function liveRoomCode(page: Page): Promise<string> {
+  const chip = page.getByTestId('room-chip')
+  await expect(chip).toContainText('Live', { timeout: 15_000 })
+  const label = await chip.getAttribute('aria-label')
+  const code = label?.match(/Live room ([a-z0-9-]+)/i)?.[1]
+  if (!code) throw new Error(`room chip carries no code: aria-label=${label}`)
+  return code
+}
+
+/**
+ * The number the relay reports as live in this device's room, read off the
+ * chip's tooltip bubble.
+ *
+ * The bubble's TEXT is bound whether or not it is revealed, so this reads
+ * it without hovering: ADR-0049's tooltip is a real element rather than a
+ * `title`, and a sticky header on the Pixel 7 viewport would otherwise
+ * intercept the pointer before it reached the chip. Polled, because the
+ * count arrives on a `peers` frame sent by a second socket.
+ */
+export async function liveRoomPeers(page: Page, timeout = 15_000): Promise<number> {
+  const tooltip = page.getByTestId('room-chip-tooltip')
+  await expect(tooltip).toBeAttached({ timeout })
+  await expect
+    .poll(
+      async () => {
+        const text = (await tooltip.textContent()) ?? ''
+        const n = text.match(/\((\d+) in room\)/)?.[1]
+        return n === undefined ? null : Number(n)
+      },
+      { timeout, message: 'the room chip tooltip never reported a headcount' },
+    )
+    .not.toBeNull()
+  const text = (await tooltip.textContent()) ?? ''
+  return Number(text.match(/\((\d+) in room\)/)![1])
+}
+
 /** Open the first recipe card and wait for the detail sheet. Returns the recipe name. */
 export async function openFirstRecipeDetail(page: Page): Promise<string> {
   await recipeCards(page).first().click()

@@ -1,5 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
-import { blockExternalRequests, gotoTab, openFirstRecipeDetail, waitForCatalog, recipeCards } from './helpers'
+import {
+  blockExternalRequests,
+  gotoTab,
+  liveRoomCode,
+  openFirstRecipeDetail,
+  recipeCards,
+  waitForCatalog,
+} from './helpers'
 
 /**
  * Live room sync: two separate browser contexts share plan, custom items
@@ -34,11 +41,8 @@ async function startLiveRoom(page: Page): Promise<string> {
   await gotoTab(page, 'Plan')
   await page.getByRole('button', { name: 'Share', exact: true }).click()
   await page.getByTestId('start-room').click()
-  const chip = page.getByTestId('room-chip')
-  await expect(chip).toContainText('Live', { timeout: 10_000 })
-  // The chip title carries the room code; rebuild the share link.
-  const title = await chip.getAttribute('title')
-  const code = title!.match(/Live room ([a-z0-9-]+)/)![1]
+  // The chip's aria-label carries the room code; rebuild the share link.
+  const code = await liveRoomCode(page)
   return `${page.url().replace(/\/plan.*$/, '')}/plan?room=${code}`
 }
 
@@ -315,7 +319,12 @@ test('joining a code the relay does not know yet CREATES the room (ADR-0026)', a
   await page.goto('/plan?room=ember-willow-quartz')
   const chip = page.getByTestId('room-chip')
   await expect(chip).toContainText('Live', { timeout: 10_000 })
-  await expect(chip).toHaveAttribute('title', 'Live room ember-willow-quartz')
+  // The chip states the room in its aria-label, which the tooltip
+  // repeats verbatim (ADR-0049). This device is the room's first peer.
+  await expect(chip).toHaveAttribute(
+    'aria-label',
+    /^Live room ember-willow-quartz \(1 in room\)$/,
+  )
 
   // A second device joining that same code lands in the same live room.
   const ctxB = await page.context().browser()!.newContext()

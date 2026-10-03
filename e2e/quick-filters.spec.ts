@@ -3,6 +3,7 @@ import {
   blockExternalRequests,
   expectZeroMealimeRequests,
   gotoTab,
+  liveRoomCode,
   waitForCatalog,
 } from './helpers'
 
@@ -68,9 +69,7 @@ async function startLiveRoom(page: Page): Promise<string> {
   await gotoTab(page, 'Plan')
   await page.getByRole('button', { name: 'Share', exact: true }).click()
   await page.getByTestId('start-room').click()
-  const chip = page.getByTestId('room-chip')
-  await expect(chip).toContainText('Live', { timeout: 20_000 })
-  return (await chip.getAttribute('title'))!.match(/Live room ([a-z0-9-]+)/)![1]
+  return liveRoomCode(page)
 }
 
 test.beforeEach(async ({ page }) => {
