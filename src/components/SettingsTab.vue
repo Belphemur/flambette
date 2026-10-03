@@ -469,7 +469,7 @@ function cancelBackupImport(): void {
   class="h-11 min-w-0 flex-1 rounded-xl border bg-surface-raised px-3 text-sm outline-none focus:border-brand-text"
   />
   <button
-  class="h-11 rounded-xl border px-3 text-sm font-medium disabled:opacity-50"
+  class="h-11 rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand active:bg-brand-strong disabled:opacity-50"
   data-test="household-room-join"
   aria-label="Save this household room code and join it now"
   :disabled="!canJoinRoom"
@@ -490,7 +490,7 @@ function cancelBackupImport(): void {
   Share room link
   </button>
   <button
-  class="h-11 rounded-lg border px-3 text-xs font-medium"
+  class="h-11 rounded-lg bg-brand px-3 text-xs font-semibold text-on-brand active:bg-brand-strong"
   data-test="household-room-new"
   aria-label="Generate a new three-word room code and join it"
   @click="newRoomCodeAndJoin"
