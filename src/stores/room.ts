@@ -165,6 +165,15 @@ export const useRoomStore = defineStore('room', () => {
   const status = ref<RoomStatus>('idle')
   const code = ref<string | null>(null)
   const error = ref<string | null>(null)
+  /**
+   * How many peers are live in the room, INCLUDING this device (ADR-0049).
+   *
+   * `null` until the relay says otherwise, which is a real third state the
+   * views must render differently from a number: "connecting" is not "one
+   * person". The relay owns the count, so the client never counts
+   * anything -- it only displays what it was last told.
+   */
+  const peers = ref<number | null>(null)
 
   let ws: WebSocket | null = null
   let localRev = 0
@@ -550,6 +559,7 @@ export const useRoomStore = defineStore('room', () => {
       case 'created': {
         code.value = typeof msg.code === 'string' ? msg.code : null
         if (code.value) sessionStorage.setItem(ROOM_CODE_KEY, code.value)
+        adoptPeerCount(msg.count)
         status.value = 'live'
         reconnectAttempts = 0
         startKeepalive()
@@ -564,6 +574,7 @@ export const useRoomStore = defineStore('room', () => {
         break
       }
       case 'joined': {
+        adoptPeerCount(msg.count)
         status.value = 'live'
         reconnectAttempts = 0
         startKeepalive()
@@ -603,6 +614,13 @@ export const useRoomStore = defineStore('room', () => {
         if (rev > localRev && msg.state && typeof msg.state === 'object') {
           acceptRemote(rev, msg.state)
         }
+        break
+      }
+      case 'peers': {
+        // The only authority on the headcount (ADR-0049). Carried on both
+        // membership changes, so a peer that joins while this device is
+        // mid-cook sees the number move without doing anything.
+        adoptPeerCount(msg.count)
         break
       }
       case 'error': {
@@ -805,11 +823,28 @@ export const useRoomStore = defineStore('room', () => {
     return true
   }
 
+  /**
+   * Take a relay-supplied headcount, ignoring anything that is not one.
+   *
+   * A count of `0` for a room we are IN would be a lie (the relay counts
+   * the socket asking), so a non-positive or missing number is treated as
+   * "not known" rather than as a headcount -- the views already render
+   * `null` distinctly. Kept in one place because both the admission frames
+   * and the `peers` fan-out funnel through it.
+   */
+  function adoptPeerCount(value: unknown): void {
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) return
+    peers.value = value
+  }
+
   /** Leave the current room and go back to idle. */
   function leave() {
     code.value = null
     status.value = 'idle'
     error.value = null
+    // The count described THAT room; keeping it would leave a chip
+    // reading "3 in room" for a room this device is no longer in.
+    peers.value = null
     reconnectAttempts = 0
     wantedCode = null
     roomGone = false
@@ -827,6 +862,7 @@ export const useRoomStore = defineStore('room', () => {
     status,
     code,
     error,
+    peers,
     // computed
     inRoom,
     // actions

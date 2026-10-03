@@ -733,6 +733,55 @@ describe('room store — terminal errors stop the loop', () => {
   })
 })
 
+describe('room store — peer count is the relay\'s to report (ADR-0049)', () => {
+  test('starts unknown, then reads the count off the admission frame', async () => {
+    const room = useRoomStore()
+    // "Unknown" is a real third state, distinct from any number: the views
+    // render it differently from a room with one member.
+    expect(room.peers).toBeNull()
+    room.join('mauve-peacock-candle')
+    await sleep(5)
+    const socket = sockets[sockets.length - 1]
+    socket.receive({ type: 'created', code: 'mauve-peacock-candle', rev: 0, count: 3 })
+    expect(room.peers).toBe(3)
+  })
+
+  test('a `peers` fan-out moves the count without touching anything else', async () => {
+    const { room, socket } = await startRoom()
+    socket.receive({ type: 'created', code: 'mauve-peacock-candle', rev: 0, count: 1 })
+    socket.receive({ type: 'peers', count: 2 })
+    expect(room.peers).toBe(2)
+    // A departure is the same frame with a smaller number — nothing
+    // distinguishes leaving from joining, and nothing should.
+    socket.receive({ type: 'peers', count: 1 })
+    expect(room.peers).toBe(1)
+    expect(room.status).toBe<RoomStatus>('live')
+    expect(room.code).toBe('mauve-peacock-candle')
+  })
+
+  test('a nonsense count is ignored rather than displayed', async () => {
+    const { room, socket } = await startRoom()
+    socket.receive({ type: 'created', code: 'mauve-peacock-candle', rev: 0, count: 2 })
+    // A relay we do not recognise could send anything; a count of zero in
+    // a room this socket is in is a lie, and a fractional one is not a
+    // headcount. Both leave the last known value alone.
+    for (const bogus of [0, -1, 1.5, 'two', null, undefined]) {
+      socket.receive({ type: 'peers', count: bogus })
+      expect(room.peers).toBe(2)
+    }
+  })
+
+  test('leaving forgets the count — it described that room', async () => {
+    const { room, socket } = await startRoom()
+    socket.receive({ type: 'peers', count: 4 })
+    expect(room.peers).toBe(4)
+    room.leave()
+    // Otherwise a chip keeps reading "4 in room" for a room this device
+    // is no longer in.
+    expect(room.peers).toBeNull()
+  })
+})
+
 describe('room store — the plan identity is household state (ADR-0034)', () => {
   test('a peer adopts the room\'s plan identity, so cooks group the same way on both phones', async () => {
     const plan = usePlanStore()
