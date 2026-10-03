@@ -248,14 +248,14 @@ test.describe('household room', () => {
     // Fresh start → the app re-joins by itself, no share link involved.
     await restartFresh(page)
     await expect(page.getByTestId('household-toast')).toContainText(code, { timeout: 20_000 })
-    await expect(page.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+    await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
 
     // The second phone joins the same code and receives the plan.
     const ctxB = await browser.newContext()
     const b = await ctxB.newPage()
     await blockExternalRequests(b)
     await b.goto(`/?room=${code}`)
-    await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+    await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
     await dismissJoinCongrats(b)
     await gotoTab(b, 'Plan')
     await expect(b.getByRole('heading', { level: 3, name: recipeName })).toBeVisible({
@@ -297,7 +297,7 @@ test.describe('household room', () => {
 
     await restartFresh(page)
     await expect(page.getByTestId('household-toast')).toContainText(code, { timeout: 20_000 })
-    await expect(page.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+    await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
     await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', new RegExp(`^Live room ${code}`))
     await expectZeroMealimeRequests(page)
   })

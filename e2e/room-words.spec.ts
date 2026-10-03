@@ -90,7 +90,7 @@ test('a new room gets a three-word code that a second device joins by link', asy
   const b = await ctxB.newPage()
   await blockExternalRequests(b)
   await b.goto(`/plan?room=${code}`)
-  await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+  await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
   // A shared link is CELEBRATED (ADR-0049): acknowledge the modal the way
   // the person who was handed the link would, before using the app.
   await dismissJoinCongrats(b)
@@ -116,7 +116,7 @@ test('Settings generates a code and a saved one auto-joins after a fresh start',
   await page.getByTestId('household-room-new').click()
   const rolled = await page.getByTestId('household-room-input').inputValue()
   expect(rolled).toMatch(WORD_CODE)
-  await expect(page.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+  await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
 
   // Typing the LIVE room in a sloppy shape still normalizes to the
   // canonical hyphenated code (spaces / upper case / no separators).
@@ -131,7 +131,7 @@ test('Settings generates a code and a saved one auto-joins after a fresh start',
   await page.reload()
   await waitForApp(page)
   await expect(page.getByTestId('household-toast')).toContainText(code, { timeout: 20_000 })
-  await expect(page.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+  await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
   await expectZeroMealimeRequests(page)
 })
 
@@ -166,7 +166,7 @@ test('a legacy alphanumeric room code still joins', async ({ page }) => {
   await page.getByTestId('household-room-join').click()
   // Upper-cased on the way in, exactly as before ADR-0021.
   await expect(page.getByTestId('household-room-status')).toContainText(legacy)
-  await expect(page.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+  await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
   await expectZeroMealimeRequests(page)
 })
 
@@ -210,7 +210,7 @@ test('Join now on an EMPTY field rolls a code and CREATES its room (ADR-0049)', 
   // answer not_found (the old join-first path). "Room not found" would
   // also poison every later auto-join.
   await expect(page.getByTestId('household-toast')).toContainText(rolled, { timeout: 20_000 })
-  await expect(page.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+  await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
   await expect(page.getByTestId('household-room-status')).toContainText(rolled, { timeout: 20_000 })
   await expectZeroMealimeRequests(page)
 })
@@ -226,7 +226,7 @@ test('a newly rolled code CREATES its room (qodo 4128519644)', async ({ page }) 
 
   // "New code" joins the room it just rolled, so the chip is live in
   // `rolled` — a second press is not required to make the code real.
-  await expect(page.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+  await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
   await expect(page.getByTestId('household-room-status')).toContainText(rolled, { timeout: 20_000 })
   await expect(page.getByTestId('room-chip')).toHaveAttribute(
     'aria-label',

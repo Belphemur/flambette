@@ -18,9 +18,8 @@ import {
  * (the core computes `livePeers + 1`) and the fan-out in
  * `server/worker/room.test.ts` (the adapters walk their own peer set).
  * What only this file can see is the whole chain: relay → socket → store
- * → tooltip text, on both viewports, including the DROP — which is the
- * half that silently rots, because nothing ever asserts a count going
- * back down.
+ * → chip, on both viewports, including the DROP — which is the half that
+ * silently rots, because nothing ever asserts a count going back down.
  */
 
 /** A is the household: start a room and return its code. */
@@ -47,6 +46,14 @@ test('the chip counts one peer before anyone else arrives', async ({ page }) => 
   // The green dot (ADR-0049) rides with the live state only.
   await expect(page.getByTestId('room-chip-dot')).toBeVisible()
   await expect(page.getByTestId('room-chip-dot')).toHaveClass(/bg-success/)
+  // One peer is the ordinary case and stays the plain dot — a `1` on the
+  // header would be noise, and the chip's whole footprint is the dot.
+  await expect(page.getByTestId('room-chip-count')).toHaveCount(0)
+  // The chip renders no word of its own: the ONLY text inside it is the
+  // hidden tooltip bubble's sentence, which is what the aria-label says.
+  // (A "Live" label element here is exactly what the owner's ruling
+  // removed, and this is the pin that keeps it removed.)
+  await expect(page.getByTestId('room-chip')).toHaveText(/^Live room \S+, 1 in room$/)
   // This device is the room's first member, and it counts ITSELF.
   expect(await liveRoomPeers(page)).toBe(1)
   await expectZeroMealimeRequests(page)
@@ -84,13 +91,26 @@ test('a second device raises the count on BOTH phones', async ({ browser, page }
   const b = await ctxB.newPage()
   await blockExternalRequests(b)
   await b.goto(`/?room=${code}`)
-  await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+  await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
 
   // The JOINER learns the headcount in its own admission frame.
   await expect.poll(() => liveRoomPeers(b), { timeout: 20_000 }).toBe(2)
   // …and the peer ALREADY there is told too. A fan-out that only reached
   // the newcomer would leave the first phone permanently saying "1".
   await expect.poll(() => liveRoomPeers(page), { timeout: 20_000 }).toBe(2)
+
+  // The BADGE-DOT (ADR-0049 addendum): from two peers up, the dot carries
+  // the count, so a phone shows the household size with no tap at all.
+  // It is the owner's mobile ask, and it is the one place the number is
+  // visible without hovering.
+  await expect(b.getByTestId('room-chip-count')).toHaveText('2')
+  await expect(b.getByTestId('room-chip-count')).toHaveClass(/bg-success/)
+  await expect(page.getByTestId('room-chip-count')).toHaveText('2')
+  // The dot itself is replaced by the badge, never stacked under it.
+  await expect(b.getByTestId('room-chip-dot')).toHaveCount(0)
+  // Still dot-scale: the badge must not grow the chip into a labelled pill.
+  const chip = await b.getByTestId('room-chip').boundingBox()
+  expect(chip!.width).toBeLessThanOrEqual(32)
 
   await expectZeroMealimeRequests(b)
   await ctxB.close()
@@ -104,7 +124,7 @@ test('a departure lowers the count without a reload', async ({ browser, page }) 
   const b = await ctxB.newPage()
   await blockExternalRequests(b)
   await b.goto(`/?room=${code}`)
-  await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+  await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
   await expect.poll(() => liveRoomPeers(page), { timeout: 20_000 }).toBe(2)
 
   // Closing the tab is a real socket close, which is a membership change
@@ -112,6 +132,11 @@ test('a departure lowers the count without a reload', async ({ browser, page }) 
   // from being a high-water mark.
   await ctxB.close()
   await expect.poll(() => liveRoomPeers(page), { timeout: 20_000 }).toBe(1)
+  // …and the badge retires with the count: back to one peer, back to the
+  // plain dot. A badge frozen at "2" after the second phone is gone is the
+  // exact failure this pair of assertions exists to catch.
+  await expect(page.getByTestId('room-chip-count')).toHaveCount(0)
+  await expect(page.getByTestId('room-chip-dot')).toHaveClass(/bg-success/)
 
   await expectZeroMealimeRequests(page)
 })
@@ -129,12 +154,16 @@ test('the household card shows the count only while connected (ADR-0049)', async
   await page.getByTestId('household-room-join').click()
   await expect(page.getByTestId('household-room-status')).toContainText(code, { timeout: 20_000 })
   await expect(page.getByTestId('household-room-status')).toContainText('1 in room')
+  // The post-join landing (ADR-0049 addendum) must NOT fire here: the
+  // card is the room's own surface, and this line is the answer to the
+  // button the user just pressed.
+  await expect(page).toHaveURL(/\/settings$/)
 
   const ctxB = await browser.newContext()
   const b = await ctxB.newPage()
   await blockExternalRequests(b)
   await b.goto(`/?room=${code}`)
-  await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+  await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
   await expect
     .poll(() => page.getByTestId('household-room-status').textContent(), { timeout: 20_000 })
     .toContain('2 in room')

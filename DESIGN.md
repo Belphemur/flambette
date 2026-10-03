@@ -56,6 +56,7 @@ colors:
   warning-soft: "#FDBA74"
   success: "#116149"
   success-soft: "#34D399"
+  on-success: "#FFFFFF"
   danger: "#B91C1C"
   danger-soft: "#FCA5A5"
   favourite: "#E11D48"
@@ -478,8 +479,10 @@ success pair is deliberately a **different green** from `hue-vegetarian`
 (`#137A38`) and `hue-vegan` (`#047857`) — a "connected" dot must never be
 mistaken for a dietary cue. It is also never attached to an `IconRole`, so it
 cannot leak into the food-hue registry; it measures **6.66:1** light and
-**7.62:1** dark against `surface-sunken`, the chip it actually sits on. These
-foregrounds use raised surfaces; do not assume every status tint works on every
+**7.62:1** dark against `surface-sunken`, the chip it actually sits on.
+`on-success` is the foreground for a headcount printed ON a `success` fill
+(the chip's badge-dot): white on the deep light-mode green, dark green-black
+on the light dark-mode green, where white would be ~1.9:1. These foregrounds use raised surfaces; do not assume every status tint works on every
 coloured panel. Keep labels or shapes as a second signal. No raw colour literals
 in components, ad-hoc Tailwind palette substitutions or undocumented gradients.
 

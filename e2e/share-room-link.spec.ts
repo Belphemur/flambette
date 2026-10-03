@@ -121,7 +121,7 @@ test('the join toast shares the link without a second tap', async ({ page, brows
   const b = await ctxB.newPage()
   await blockExternalRequests(b)
   await b.goto(`/?room=${code}`)
-  await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+  await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
   await ctxB.close()
   await ctxSeed.close()
   await expectZeroMealimeRequests(page)

@@ -210,6 +210,119 @@ Gated on the `?room=` query **captured before `joinRoomFromLink` strips it**,
 plus `status === 'live'` for that code. A link that fails shows the error
 toast and no modal: the modal celebrates, it never excuses.
 
+## Decision 8 — addendum (2026-10-04): the chip IS the dot, and a badge-dot for the count
+
+Decision 6 gave the chip a dot **beside** the word "Live" plus a status
+icon. The owner looked at the built header and reversed it:
+
+> "Live shouldn't have the green dot and an icon, just the green dot is
+> enough. Also on mobile any suggestions to show the number of people in
+> the room?"
+
+**8.1 — The chip is a dot and nothing else.** No word, no icon. The status
+is one circle in a `size-7` round chip: `bg-success` live, `bg-text-muted`
+connecting, `bg-warning` error/idle. All three class strings are LITERAL
+values in a `Record<RoomStatus, string>`, because Tailwind scans source
+text for complete class names (same rule as the role registry).
+
+**8.2 — Why the label moved to `aria-label` only.** The words did not
+disappear; they moved to the one carrier that already existed for them and
+that no visual redesign can take away:
+
+| carrier | text | who reads it |
+| --- | --- | --- |
+| `aria-label` on the chip | `Live room <code>, <N> in room` / `Connecting to the household…` / `Offline — <error>` | screen readers, and the e2e suite |
+| tooltip bubble | the identical sentence | pointer and keyboard users |
+| the DOT itself | nothing | everyone, at a glance |
+
+Three reasons, in the order they mattered:
+
+1. **Footprint.** The chip was a 14px icon plus the word "Live" plus
+   padding — roughly 70px of a 412px header, of which the actual status was
+   a 8px circle. ADR-0016's bottom-tab fit is e2e-pinned and the header
+   shares that row's crowding.
+2. **The count has to be visible on a phone, and a phone has no hover.**
+   Tooltips are a desktop affordance; the owner's follow-up question was
+   exactly about mobile. Whatever the count is going to be, it cannot live
+   only behind `hover`.
+3. **Two representations of one fact is two things to keep in step.** The
+   icon, the word and the colour all encoded "live". Keeping the colour and
+   dropping the other two leaves exactly one visual truth to design.
+
+**8.3 — The badge-dot is the mobile answer to (2).** From **two** peers up,
+the dot becomes a small green pill (`room-chip-count`, `h-4 min-w-4`,
+`bg-success`, `text-on-success`) with the count inside, so a phone shows the
+household size with no interaction at all. At one peer it stays the plain
+dot: one is the ordinary case and a `1` would be noise. At
+`peers === null` (never told) it stays the plain dot too — never a `0`, and
+never an invented `1`.
+
+`on-success` is a **new token**, added to DESIGN.md → `@theme` → the
+`.dark` flip together, with the parity test as the gate. White on the deep
+light-mode green; dark green-black on the light dark-mode green, because
+white on `#34D399` measures ~1.9:1. A green pill with white digits was the
+brief; on the dark theme it is not legible, so the token is what makes the
+ruling survive both surfaces.
+
+**8.4 — Colour is no longer the only signal, because the shape and the
+position are.** ADR-0036 says a colour must never be the only signal, and
+Decision 6 satisfied it with the word "Live". The dot alone does not, so
+the mitigation is explicit rather than accidental: the chip is a
+**shape change**, not a recolour — a plain 10px circle becomes a wider
+rounded pill the moment the household is not a household of one — and the
+full sentence stays one hover, one Tab-stop or one screen-reader stop away.
+A dot-only status is a deliberate trade of glanceability for footprint,
+recorded here so a later change to the chip re-litigates it rather than
+inheriting it.
+
+**8.5 — What did NOT change.** The bubble is still `display: none` when
+closed, still `group-hover` + `group-focus-within`, still `max-w-56`
+anchored `right-0`. The Pixel 7 overflow bug (a `visibility: hidden`
+bubble still occupied layout, made the document horizontally scrollable,
+and silently killed every tap on the `fixed` bottom nav) is orthogonal to
+how much the chip says, and `peer-count.spec.ts` still pins the document
+width. The Settings card's `· N in room` line is untouched — it is a
+sentence in a panel, not a status dot.
+
+## Decision 9 — addendum (2026-10-04): a plan-less joiner lands on the recipes list
+
+A shared `?room=` link can be followed from any tab. Followed from /grocery,
+it dropped the newcomer into a grocery list derived from a plan they had
+never seen — an empty list presented as if it were theirs, which is a small
+dismiss and a real one.
+
+So: **a fresh join into an empty plan navigates to the recipes list.**
+Four guards, because a router push is a visible move:
+
+- **Fresh only.** `room.freshJoin` is armed by `join()` / `create()` and
+  disarmed by every other `connect()` — a page-reload resume and an
+  automatic reconnect walk the identical `idle → connecting → live` edge, so
+  `status` alone cannot tell them apart from a join somebody asked for. The
+  signal is a **parameter of `connect()`**, not an assignment in `join()`:
+  `connect()` assigns, so `resume()` and `scheduleReconnect()` disarm it by
+  omission. It is also disarmed on every terminal failure and by `leave()`,
+  so a failed join cannot navigate minutes later off a stale flag.
+- **Empty plan only**, read *after* the room's snapshot has landed. A
+  household that HAS meals gives the joiner a plan, and they keep the tab
+  they opened — which is right, because their grocery list is not empty.
+- **Never on /settings.** Somebody who just tapped `Join now` is asking
+  about the room, and the card's `· N in room` line under the field they
+  typed into is the answer. Landing them on the recipes list navigates away
+  from the confirmation of the thing they just did — three e2e failed on
+  exactly this, which is how the guard got written.
+- **Never from a fullscreen focus mode** (cooking / shopping have no nav to
+  navigate around and their own leave-confirm), and never a no-op push when
+  the recipes tab is already open.
+
+## Decision 10 — addendum (2026-10-04): the congrats modal states the headcount
+
+The modal celebrates a join; the count is what makes it a celebration
+rather than a receipt. `peers` is passed in as a **value captured at the
+live frame**, not read live from the store: `peers` frames keep arriving
+while the panel is up, and a sentence that rewrites itself under someone
+reading it is worse than one that is a moment out of date. `null` — never
+told — omits the sentence entirely rather than claiming a household of one.
+
 ## Alternatives considered
 
 - **Compute `count` in each adapter.** Rejected: it is one subtraction
@@ -232,6 +345,28 @@ toast and no modal: the modal celebrates, it never excuses.
 - **Reuse the green food hue for the live dot.** Rejected: DESIGN.md forbids
   status colours reading as food identity, and the two greens are close
   enough to collide.
+- **Keep the word, drop only the icon.** Rejected: the owner's ruling, and
+  the footprint argument in 8.2 — with the icon gone the word was the only
+  thing left in the chip that the dot did not already say.
+- **Show the count in the chip at every count, including 1.** Rejected: it
+  is the ordinary case on every household's first day, and a `1` next to
+  the dot is permanent noise that trains people to stop reading the chip.
+- **Put the count only in the Settings card.** That is what exists today,
+  and it is why the owner asked: the card is two taps away and the status
+  dot is where the eye already is.
+- **Navigate on every join, whatever the plan.** Rejected: it moves people
+  off the tab they deliberately opened for no reason. The empty plan is the
+  case that is actually disorienting.
+- **Navigate from /settings too.** Rejected by three e2e at once: the card
+  is where a `Join now` is confirmed, so landing anywhere else deletes the
+  feedback for the most deliberate join the app has.
+- **Derive "fresh" from a `status` edge in the view.** Rejected: resume and
+  reconnect produce the same edge, so a reload on /plan would yank the
+  view — the bug the `freshJoin` signal exists to prevent, and the reason
+  it is a store-level fact rather than a view-level heuristic.
+- **Read `room.peers` live inside the modal.** Rejected: the number would
+  change under the reader, and the modal would need its own subscription to
+  a value it opens with.
 
 ## Implementation notes
 
@@ -257,3 +392,11 @@ toast and no modal: the modal celebrates, it never excuses.
   everywhere it is read.
 - The room card has one primary action, so the only question left on it is
   *which room* — which is the one thing the user actually knows.
+- The header is now three status colours and one sentence. Every spec that
+  used to assert `toContainText('Live')` asserts the `aria-label`, and the
+  badge-dot has its own `data-test` — so a regression that drops the count
+  fails a nameable test rather than being argued about in review.
+- `freshJoin` is a public store field, which is a cost: the store now knows
+  that *somebody* cares about landing pages. It is one boolean, assigned
+  only at `connect()`, and the alternative (a view-level heuristic that
+  cannot tell a resume from a join) is a bug generator.

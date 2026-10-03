@@ -261,7 +261,7 @@ test.describe('filter sync and join reconciliation (WS3 + WS4)', () => {
     const b = await ctxB.newPage()
     await blockExternalRequests(b)
     await b.goto(`/?room=${code}`)
-    await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+    await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
     await dismissJoinCongrats(b)
 
     // Device A changes the household selection.
@@ -311,7 +311,7 @@ test.describe('filter sync and join reconciliation (WS3 + WS4)', () => {
       proOnly: true,
     })
     await b.goto(`/?room=${code}`)
-    await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+    await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
     await dismissJoinCongrats(b)
 
     // Household wins: B converges to A's selection on every SHARED

@@ -156,7 +156,7 @@ test('suggestion row mirrors room-synced customs from another context', async ({
   const b = await ctxB.newPage()
   await blockExternalRequests(b)
   await b.goto(roomUrl)
-  await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 10_000 })
+  await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 10_000 })
   await dismissJoinCongrats(b)
   await b.goto('/grocery')
 

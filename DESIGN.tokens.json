@@ -575,6 +575,17 @@
         "hex": "#34d399"
       }
     },
+    "on-success": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          1,
+          1,
+          1
+        ],
+        "hex": "#ffffff"
+      }
+    },
     "danger": {
       "$value": {
         "colorSpace": "srgb",

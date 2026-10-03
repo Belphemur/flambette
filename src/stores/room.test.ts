@@ -877,3 +877,78 @@ describe('room store — the plan identity is household state (ADR-0034)', () =>
     expect(sent.cookedHistory[0].planCreatedAt).toBe(identity.planCreatedAt)
   })
 })
+
+/**
+ * `freshJoin` (ADR-0049 addendum): the ONE signal that separates "somebody
+ * asked to be in a room" from "the store re-established the room on its
+ * own". The app shell lands a fresh joiner with an empty plan on the
+ * recipes list, and this flag is the whole guard — so the two false
+ * positives (a page reload, a dropped socket) matter more than the happy
+ * path, and each gets its own test.
+ */
+describe('the fresh-join signal', () => {
+  test('a deliberate join arms it and a live answer does NOT disarm it', async () => {
+    expect(store.freshJoin).toBe(false)
+    store.join('amber-falcon-lantern')
+    expect(store.freshJoin).toBe(true)
+    await sleep(5)
+    const socket = sockets[sockets.length - 1]
+    socket.receive({ type: 'joined', code: 'amber-falcon-lantern', rev: 3, count: 1 })
+    // Still armed: the consumer is the app shell's watcher on this very
+    // transition, so clearing it on `live` would swallow the landing.
+    expect(store.freshJoin).toBe(true)
+    expect(store.status).toBe('live')
+  })
+
+  test('a deliberate create arms it too (Settings → New code)', async () => {
+    store.create()
+    expect(store.freshJoin).toBe(true)
+  })
+
+  test('a page-reload RESUME never arms it', async () => {
+    // Exactly what onMounted does on a reload: a code in sessionStorage
+    // and no deliberate call. Landing somebody on the recipes list
+    // because they reloaded /plan would be a bug, not a feature.
+    sessionStorage.setItem(ROOM_CODE_KEY, 'rose-thistle-moss')
+    expect(store.resume()).toBe(true)
+    expect(store.freshJoin).toBe(false)
+    await sleep(5)
+    sockets[sockets.length - 1].receive({ type: 'joined', code: 'rose-thistle-moss', rev: 1 })
+    expect(store.status).toBe('live')
+    expect(store.freshJoin).toBe(false)
+  })
+
+  test('an automatic RECONNECT disarms it, even with an empty plan', async () => {
+    const { socket } = await startRoom()
+    store.freshJoin = false // the app shell consumed it on the first live
+    socket.close() // the relay went away
+    expect(store.status).toBe('connecting')
+    await sleep(BACKOFF_MS + 200) // the reconnect timer fires
+    const rejoined = sockets[sockets.length - 1]
+    expect(rejoined.url).toContain('mauve-peacock-candle')
+    rejoined.receive({ type: 'joined', code: 'mauve-peacock-candle', rev: 1 })
+    expect(store.status).toBe('live')
+    // This is the regression the flag exists for: a live room, an empty
+    // plan, and still no navigation.
+    expect(store.freshJoin).toBe(false)
+  })
+
+  test('leave() disarms it — a stale flag cannot navigate later', async () => {
+    await startRoom()
+    store.leave()
+    expect(store.freshJoin).toBe(false)
+  })
+
+  test('a refused code disarms it instead of failing to arm', async () => {
+    store.join('not-a-code')
+    expect(store.status).toBe('error')
+    expect(store.freshJoin).toBe(false)
+  })
+
+  test('a room_expired answer disarms it', async () => {
+    const { socket } = await startRoom()
+    socket.receive({ type: 'error', code: 'room_expired' })
+    expect(store.status).toBe('error')
+    expect(store.freshJoin).toBe(false)
+  })
+})

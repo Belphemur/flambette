@@ -483,7 +483,7 @@ test('room sync: generated plan reaches the second context', async ({ browser })
   const b = await ctxB.newPage()
   await blockExternalRequests(b)
   await b.goto(roomUrl)
-  await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 10_000 })
+  await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 10_000 })
   await dismissJoinCongrats(b)
 
   // The plan generated in A arrives in B: A keeps it, B joins mid-plan.

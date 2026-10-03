@@ -25,8 +25,15 @@ import { Users } from 'lucide-vue-next'
  * on open, Tab is TRAPPED inside it, and the trigger gets focus back on
  * the way out. Without that, a keyboard user who arrives by link keeps
  * tabbing through controls they cannot see.
+ *
+ * `peers` is the headcount the relay reported WHEN this modal opened
+ * (ADR-0049 addendum), passed in as a value rather than read live: the
+ * count keeps arriving on `peers` frames while the panel is up, and a
+ * sentence that rewrites itself mid-read is worse than one that is a
+ * moment out of date. `null` — nobody told us — omits the sentence
+ * entirely rather than inventing a household of one.
  */
-defineProps<{ code: string }>()
+defineProps<{ code: string; peers: number | null }>()
 
 const emit = defineEmits<{ (e: 'dismiss'): void }>()
 
@@ -109,6 +116,13 @@ function dismiss() {
   data-test="join-congrats-icon"
   />
   <h2 class="text-lg font-bold tracking-tight">You've joined the household</h2>
+  <p
+  v-if="peers !== null"
+  class="text-sm font-medium text-success"
+  data-test="join-congrats-peers"
+  >
+  {{ peers === 1 ? 'You are the first one here right now.' : `You're one of ${peers} in the room right now.` }}
+  </p>
   <p class="text-sm text-text-muted">
   Share this code with the rest of your household so everyone plans in the same room.
   </p>

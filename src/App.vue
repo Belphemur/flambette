@@ -1,16 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import type { Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDark, useToggle } from '@vueuse/core'
-import {
-  CircleAlert,
-  CircleDashed,
-  CircleDot,
-  Moon,
-  Sun,
-  TriangleAlert,
-} from 'lucide-vue-next'
+import { CircleAlert, Moon, Sun } from 'lucide-vue-next'
 import { TABS, useUiStore } from './stores/ui'
 import { getCatalog } from './lib/catalog'
 import { decodePlan } from './lib/share'
@@ -64,35 +56,32 @@ const isCooking = computed(() => route.name === 'cooking')
 const isShopping = computed(() => route.name === 'shop')
 const isFullscreenMode = computed(() => isCooking.value || isShopping.value)
 
-/** Room status chip shown in the header while sharing a live room. */
-const ROOM_STATUS_ICONS: Record<RoomStatus, Component> = {
-  live: CircleDot,
-  connecting: CircleDashed,
-  error: TriangleAlert,
-  idle: TriangleAlert,
-}
-const ROOM_STATUS_CLS: Record<RoomStatus, string> = {
-  // Status is NOT food identity (DESIGN.md): a live room gets the status
-  // family's `success` green — a dot beside the word — while the chip's own
-  // text keeps the calm primary foreground. Amber stays reserved for the
-  // failure states, so the green can never read as a warning, nor as a
-  // dietary cue: hue-vegetarian / hue-vegan are deliberately OTHER greens
-  // (ADR-0049).
-  live: 'text-text',
-  connecting: 'text-text-muted',
-  error: 'text-warning',
-  idle: 'text-warning',
+/**
+ * The header room chip is a DOT, and nothing else (ADR-0049 addendum).
+ *
+ * The owner's ruling: "Live shouldn't have the green dot and an icon, just
+ * the green dot is enough." The chip therefore carries no icon and no
+ * word — the icon and the "Live"/"Offline" text were two answers to one
+ * question, and on a 412px phone header they cost more width than the
+ * status itself was worth. The DOT is the whole affordance, and it borrows
+ * the status family (never the food-hue family): `success` green is live,
+ * `warning` amber is offline, and a muted dot is the quiet in-between.
+ * `hue-vegetarian` / `hue-vegan` are deliberately OTHER greens, so a live
+ * room can never read as a dietary cue (DESIGN.md).
+ *
+ * These are LITERAL class strings because Tailwind scans source text for
+ * complete class names.
+ */
+const ROOM_STATUS_DOT_CLS: Record<RoomStatus, string> = {
+  live: 'bg-success',
+  connecting: 'bg-text-muted',
+  error: 'bg-warning',
+  idle: 'bg-warning',
 }
 
 const roomChip = computed(() => {
   if (!room.inRoom) return null
   const status = room.status
-  const labels: Record<RoomStatus, string> = {
-  live: 'Live',
-  connecting: 'Connecting',
-  error: 'Offline',
-  idle: 'Offline',
-  }
   const code = room.code
   const peers = room.peers
   /**
@@ -105,18 +94,22 @@ const roomChip = computed(() => {
    * device that is still connecting is not a household of one.
    */
   const detail: Record<RoomStatus, string> = {
-    live: peers === null ? `Live room ${code}` : `Live room ${code} (${peers} in room)`,
+    live: peers === null ? `Live room ${code}` : `Live room ${code}, ${peers} in room`,
     connecting: 'Connecting to the household…',
     error: `Offline — ${room.error ?? 'not connected'}`,
     idle: 'Offline — not connected',
   }
   const description = detail[status]
   return {
-    icon: ROOM_STATUS_ICONS[status],
-    label: labels[status],
-    cls: ROOM_STATUS_CLS[status],
-    /** The green dot is a LIVE-only signal (ADR-0049). */
-    dot: status === 'live',
+    dotCls: ROOM_STATUS_DOT_CLS[status],
+    /**
+     * The badge-dot headcount. `null` means "render the plain dot": a
+     * household of ONE is the ordinary case and a `1` on the header would
+     * be noise, and a not-yet-told device must never be shown a `0`.
+     * The count is decorative — the sentence above is the carrier that a
+     * screen reader announces and the bubble repeats.
+     */
+    badge: status === 'live' && peers !== null && peers > 1 ? peers : null,
     description,
     code,
   }
@@ -178,6 +171,16 @@ async function joinRoomFromLink() {
 const linkJoinCode = ref<string | null>(null)
 /** The code the congrats modal is celebrating; `null` while it is closed. */
 const congratsCode = ref<string | null>(null)
+/**
+ * The headcount AT THE MOMENT the modal opened (ADR-0049 addendum).
+ *
+ * Captured with the code rather than read live: the `peers` frames keep
+ * arriving while the modal is up, and "2 in the room right now" must not
+ * silently rewrite itself under a reader who is still reading it. `null`
+ * means nobody told us yet, and the modal then says nothing about numbers
+ * rather than claiming a `1` it never received.
+ */
+const congratsPeers = ref<number | null>(null)
 
 watch(
   () => [room.status, room.code] as const,
@@ -188,7 +191,52 @@ watch(
     // happened.
     if (status !== 'live' || code !== linkJoinCode.value) return
     congratsCode.value = code
+    congratsPeers.value = room.peers
     linkJoinCode.value = null
+  },
+)
+
+/**
+ * A FRESH join into an EMPTY plan lands the joiner on the recipes list
+ * (ADR-0049 addendum).
+ *
+ * The problem: a share link (`?room=`) can be followed from anywhere, and
+ * a link followed from /plan, /grocery or /history drops somebody into a
+ * tab about a plan they have never seen. The room's state lands, and the
+ * first screen shows an empty plan (or an empty grocery list) as if it
+ * were their own. The recipes list is where the household's actual
+ * content is, so that is where a joiner with nothing planned belongs.
+ *
+ * Deliberately narrow, because a router push is a visible move:
+ *  - only a FRESH join-to-live transition. `room.freshJoin` is armed by a
+ *    deliberate `join()`/`create()` and disarmed by `leave()` and every
+ *    terminal failure, so neither a page-reload RESUME nor an automatic
+ *    RECONNECT can yank the view out from under somebody — and a join
+ *    that failed cannot navigate minutes later off a stale flag;
+ *  - only when the plan is empty AFTER the room's snapshot has landed
+ *    (`plan.plan.length === 0`). This watcher runs after the store's
+ *    `joined` handler, so a household that HAS meals lands the joiner with
+ *    a plan already in place — and they stay on the tab they opened,
+ *    which is the right answer: their grocery list is not empty after all.
+ *    The empty case is the one that greets a newcomer with a blank tab;
+ *  - never on /settings, which is the room's OWN surface: somebody who
+ *    just tapped `Join now` is asking about the room, and the card's
+ *    `· N in room` line under the field they typed into IS the answer.
+ *    Landing them on the recipes list would navigate away from the
+ *    confirmation of the thing they just did — two e2e caught exactly
+ *    that, which is how this guard got written;
+ *  - never from a fullscreen focus mode (cooking / shopping have no nav
+ *    to navigate around and their own leave-confirm);
+ *  - never a no-op push when the recipes tab is already open.
+ */
+watch(
+  () => [room.status, room.freshJoin] as const,
+  ([status, fresh]) => {
+    if (status !== 'live' || !fresh) return
+    if (plan.plan.length > 0) return
+    if (isFullscreenMode.value) return
+    if (route.name === 'recipes' || route.name === 'settings') return
+    void router.push({ name: 'recipes' })
   },
 )
 
@@ -275,19 +323,37 @@ onMounted(async () => {
   >{{ appVersion }}</span>
   <span
   v-if="roomChip"
-  class="group relative flex cursor-help items-center gap-1 rounded-full bg-surface-sunken px-2.5 py-1 text-xs font-medium"
-  :class="roomChip.cls"
+  class="group relative flex size-7 shrink-0 cursor-help items-center justify-center rounded-full bg-surface-sunken"
   :aria-label="roomChip.description"
   data-test="room-chip"
   >
+  <!-- THE CHIP IS A DOT (ADR-0049 addendum). Everything the visuals
+       dropped — "Live", the code, the headcount, the offline reason —
+       survives in the `aria-label` above, which is what a screen
+       reader announces and what the bubble below repeats verbatim.
+       There is no word and no icon here on purpose: on a 412px phone
+       header the dot is the status, and the rest is one tap away.
+
+       The BADGE-DOT branch below is the one exception to "a dot": a
+       household of two or more shows the headcount without a tap,
+       which is the owner's mobile ask. Dot-scale, so the chip's
+       footprint barely moves; `min-w` grows a couple of px for the
+       second digit. Green fill + `on-success` text is the only
+       filled-status surface in the app. The count is decorative —
+       the aria-label above is the carrier. -->
   <span
-  v-if="roomChip.dot"
-  class="size-2 shrink-0 rounded-full bg-success"
+  v-if="roomChip.badge === null"
+  class="size-2.5 shrink-0 rounded-full"
+  :class="roomChip.dotCls"
   data-test="room-chip-dot"
   aria-hidden="true"
   />
-  <component :is="roomChip.icon" :size="14" aria-hidden="true" />
-  {{ roomChip.label }}
+  <span
+  v-else
+  class="flex h-4 min-w-4 items-center justify-center rounded-full bg-success px-1 text-[10px] font-semibold leading-none text-on-success tabular-nums"
+  data-test="room-chip-count"
+  aria-hidden="true"
+  >{{ roomChip.badge }}</span>
   <!-- The PROPER tooltip, replacing the native `title` (ADR-0049). The OS
        one cannot be styled, does not appear on keyboard focus, and put a
        SECOND copy of the chip's meaning in a place that could drift from
@@ -419,6 +485,7 @@ onMounted(async () => {
   <JoinCongratsModal
   v-if="congratsCode"
   :code="congratsCode"
+  :peers="congratsPeers"
   @dismiss="congratsCode = null"
   />
 </template>
