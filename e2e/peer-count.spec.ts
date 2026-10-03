@@ -49,11 +49,16 @@ test('the chip counts one peer before anyone else arrives', async ({ page }) => 
   // One peer is the ordinary case and stays the plain dot — a `1` on the
   // header would be noise, and the chip's whole footprint is the dot.
   await expect(page.getByTestId('room-chip-count')).toHaveCount(0)
-  // The chip renders no word of its own: the ONLY text inside it is the
-  // hidden tooltip bubble's sentence, which is what the aria-label says.
-  // (A "Live" label element here is exactly what the owner's ruling
-  // removed, and this is the pin that keeps it removed.)
-  await expect(page.getByTestId('room-chip')).toHaveText(/^Live room \S+, 1 in room$/)
+  // The chip is a dot AND its word (ADR-0049 addendum 12): the visible
+  // "Live" is back beside the dot, and the aria-label still carries the
+  // full sentence. This pin keeps BOTH halves present — the owner first
+  // removed the word, then brought it back, so the pin must catch either
+  // direction of drift.
+  await expect(page.getByTestId('room-chip')).toContainText('Live')
+  await expect(page.getByTestId('room-chip')).toHaveAttribute(
+    'aria-label',
+    /^Live room \S+, 1 in room$/,
+  )
   // This device is the room's first member, and it counts ITSELF.
   expect(await liveRoomPeers(page)).toBe(1)
   await expectZeroMealimeRequests(page)
@@ -108,9 +113,11 @@ test('a second device raises the count on BOTH phones', async ({ browser, page }
   await expect(page.getByTestId('room-chip-count')).toHaveText('2')
   // The dot itself is replaced by the badge, never stacked under it.
   await expect(b.getByTestId('room-chip-dot')).toHaveCount(0)
-  // Still dot-scale: the badge must not grow the chip into a labelled pill.
+  // Dot-scale beside the word: the badge must not bloat the chip into a
+  // wide pill. The bound is generous because the WORD is back (addendum
+  // 12) — this catches the badge stacking under the dot or doubling.
   const chip = await b.getByTestId('room-chip').boundingBox()
-  expect(chip!.width).toBeLessThanOrEqual(32)
+  expect(chip!.width).toBeLessThanOrEqual(96)
 
   await expectZeroMealimeRequests(b)
   await ctxB.close()

@@ -331,6 +331,38 @@ while the panel is up, and a sentence that rewrites itself under someone
 reading it is worse than one that is a moment out of date. `null` — never
 told — omits the sentence entirely rather than claiming a household of one.
 
+## Decision 11 — addendum (2026-10-04): a link join adopts the household
+
+Following a `?room=` link used to be a one-night stand: the modal
+celebrated the join, but `ui.householdRoom` stayed empty, so ADR-0019 had
+nothing to re-join — the new member silently dropped out of the household
+on the next launch, with the congrats screen as the only memory of it.
+
+So: **the live frame of a link join saves the code as the household room.**
+From that moment the device is a member in the full ADR-0019 sense — auto
+re-join on every launch, the settings card carrying the code, `Leave` as
+the one-tap opt-out. The save sits in the SAME gate as the congrats modal
+(live, and in the code the link named), so a broken link toasts and saves
+nothing.
+
+Replacing an existing saved code is deliberate: a household's invitation
+says "join US", and a device that follows it twice to two different rooms
+meant the second one. `Leave` remains the way to say "not my household".
+
+## Decision 12 — addendum (2026-10-04): the word returns beside the dot
+
+After living with the dot-only chip, the owner reversed the word half of
+Decision 8:
+
+> "We also need to keep the text Live next to the green dot."
+
+So the chip is **[dot | badge] + word**, and the ICON stays gone — the
+owner asked for the word back, not the icon, and the icon was the element
+whose only content duplicated the word. The state labels are the record
+that already existed: `Live` / `Connecting` / `Offline`. The badge-dot
+(8.3) and the aria-label carrier (8.2) are unchanged; 8.4's colour-only
+trade-off is now moot, because the word satisfies ADR-0036 directly again.
+
 ## Alternatives considered
 
 - **Compute `count` in each adapter.** Rejected: it is one subtraction
@@ -380,6 +412,13 @@ told — omits the sentence entirely rather than claiming a household of one.
 - **Read `room.peers` live inside the modal.** Rejected: the number would
   change under the reader, and the modal would need its own subscription to
   a value it opens with.
+- **Save the household code before the room is live.** Rejected: a link
+  that never joins would leave a dead code that ADR-0019 then chases on
+  every launch — a persistent error dressed as a setting.
+- **Ask the user "make this your household?" on a link join.** Rejected:
+  the link IS the household's invitation, and the congrats modal already
+  says "you've joined the household"; a second question would make the
+  save feel like a trap.
 
 ## Implementation notes
 

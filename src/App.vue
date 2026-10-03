@@ -57,14 +57,15 @@ const isShopping = computed(() => route.name === 'shop')
 const isFullscreenMode = computed(() => isCooking.value || isShopping.value)
 
 /**
- * The header room chip is a DOT, and nothing else (ADR-0049 addendum).
+ * The header room chip: a status DOT and its WORD (ADR-0049 addenda).
  *
- * The owner's ruling: "Live shouldn't have the green dot and an icon, just
- * the green dot is enough." The chip therefore carries no icon and no
- * word — the icon and the "Live"/"Offline" text were two answers to one
- * question, and on a 412px phone header they cost more width than the
- * status itself was worth. The DOT is the whole affordance, and it borrows
- * the status family (never the food-hue family): `success` green is live,
+ * The owner's first ruling dropped the icon and the word — "Live shouldn't
+ * have the green dot and an icon, just the green dot is enough" — and the
+ * dot-only chip shipped. After living with it, the owner reversed the word
+ * half: "We also need to keep the text Live next to the green dot." So the
+ * chip is [dot | badge] + word, with NO icon: the icon was the one element
+ * whose content duplicated the word, and it stays gone. The dot borrows the
+ * status family (never the food-hue family): `success` green is live,
  * `warning` amber is offline, and a muted dot is the quiet in-between.
  * `hue-vegetarian` / `hue-vegan` are deliberately OTHER greens, so a live
  * room can never read as a dietary cue (DESIGN.md).
@@ -100,8 +101,18 @@ const roomChip = computed(() => {
     idle: 'Offline — not connected',
   }
   const description = detail[status]
+  /** The word beside the dot (ADR-0049 addendum 12): the owner brought
+   *  "Live" back after the dot-only chip. Same record for every state, so
+   *  connecting and offline are not reduced to a colour either. */
+  const label: Record<RoomStatus, string> = {
+    live: 'Live',
+    connecting: 'Connecting',
+    error: 'Offline',
+    idle: 'Offline',
+  }
   return {
     dotCls: ROOM_STATUS_DOT_CLS[status],
+    label: label[status],
     /**
      * The badge-dot headcount. `null` means "render the plain dot": a
      * household of ONE is the ordinary case and a `1` on the header would
@@ -193,6 +204,13 @@ watch(
     congratsCode.value = code
     congratsPeers.value = room.peers
     linkJoinCode.value = null
+    // A link join ADOPTS the room (ADR-0049 Decision 11): the person
+    // followed a household's invitation, so the code persists as the
+    // household room and this device re-joins it on every future launch
+    // (ADR-0019). Saved only at the LIVE frame — a link that never joins
+    // must not leave a dead code behind, and Leave (Decision 5) still
+    // undoes it in one tap.
+    ui.setHouseholdRoom(code)
   },
 )
 
@@ -329,24 +347,23 @@ onMounted(async () => {
   >{{ appVersion }}</span>
   <span
   v-if="roomChip"
-  class="group relative flex size-7 shrink-0 cursor-help items-center justify-center rounded-full bg-surface-sunken"
+  class="group relative flex shrink-0 cursor-help items-center gap-1.5 rounded-full bg-surface-sunken px-2.5 py-1.5 text-xs font-medium"
   :aria-label="roomChip.description"
   data-test="room-chip"
   >
-  <!-- THE CHIP IS A DOT (ADR-0049 addendum). Everything the visuals
-       dropped — "Live", the code, the headcount, the offline reason —
-       survives in the `aria-label` above, which is what a screen
-       reader announces and what the bubble below repeats verbatim.
-       There is no word and no icon here on purpose: on a 412px phone
-       header the dot is the status, and the rest is one tap away.
+  <!-- THE CHIP IS A DOT AND ITS WORD (ADR-0049 addenda 8 + 12). The
+       owner's first ruling dropped the icon AND the word; after living
+       with the dot-only chip, the owner brought the word back ("keep the
+       text Live next to the green dot") — the ICON stays gone, because it
+       was the element whose only content duplicated the word. Everything
+       else the visuals dropped — the code, the headcount, the offline
+       reason — survives in the `aria-label` above, which is what a
+       screen reader announces and what the bubble below repeats verbatim.
 
        The BADGE-DOT branch below is the one exception to "a dot": a
-       household of two or more shows the headcount without a tap,
-       which is the owner's mobile ask. Dot-scale, so the chip's
-       footprint barely moves; `min-w` grows a couple of px for the
-       second digit. Green fill + `on-success` text is the only
-       filled-status surface in the app. The count is decorative —
-       the aria-label above is the carrier. -->
+       household of two or more shows the headcount without a tap, which
+       is the owner's mobile ask. Dot-scale, beside the word; the count is
+       decorative — the aria-label above is the carrier. -->
   <span
   v-if="roomChip.badge === null"
   class="size-2.5 shrink-0 rounded-full"
@@ -360,6 +377,7 @@ onMounted(async () => {
   data-test="room-chip-count"
   aria-hidden="true"
   >{{ roomChip.badge }}</span>
+  <span>{{ roomChip.label }}</span>
   <!-- The PROPER tooltip, replacing the native `title` (ADR-0049). The OS
        one cannot be styled, does not appear on keyboard focus, and put a
        SECOND copy of the chip's meaning in a place that could drift from

@@ -204,3 +204,36 @@ test('the household auto-join opens NO modal — nobody handed that device a lin
   await expect(page.getByTestId('join-congrats')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
+
+test('a link join ADOPTS the household — the next launch re-joins on its own', async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  await blockExternalRequests(page)
+
+  // A cold device following the household's link. The congrats modal says
+  // "you've joined the household" — Decision 11 makes that true in the
+  // ADR-0019 sense: the code is saved, so this visit is not a one-off.
+  await page.goto('/?room=ember-falcon-bridge')
+  await expect(page.getByTestId('join-congrats')).toBeVisible({ timeout: 20_000 })
+  await page.getByTestId('join-congrats-continue').click()
+
+  // The adopted code is the household room: the settings card carries it
+  // and Leave is visible, so the opt-out is one tap away from day one.
+  await gotoTab(page, 'Settings')
+  await expect(page.getByTestId('household-room-input')).toHaveValue('ember-falcon-bridge')
+  await expect(page.getByTestId('household-room-clear')).toBeVisible()
+
+  // A FRESH session — sessionStorage cleared, so nothing can be a resume —
+  // re-joins on its own (ADR-0019), with the auto-join toast and NO
+  // congrats modal: this launch was not handed a link, and congratulating
+  // the auto-join would congratulate the device for nothing.
+  await page.evaluate(() => sessionStorage.clear())
+  await page.reload()
+  await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, {
+    timeout: 20_000,
+  })
+  await expect(page.getByTestId('household-toast')).toBeVisible()
+  await expect(page.getByTestId('join-congrats')).toHaveCount(0)
+  await expectZeroMealimeRequests(page)
+})
