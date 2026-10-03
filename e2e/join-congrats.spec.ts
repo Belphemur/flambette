@@ -133,6 +133,42 @@ test('joining from another tab with an EMPTY plan lands on the recipes list', as
   await ctxA.close()
 })
 
+test('the congrats modal TRAPS Tab — the app behind it is unreachable (review kody)', async ({
+  browser,
+}) => {
+  test.setTimeout(120_000)
+  const ctxB = await browser.newContext()
+  const b = await ctxB.newPage()
+  await blockExternalRequests(b)
+  await b.goto('/?room=rose-thistle-moss')
+  await expect(b.getByTestId('join-congrats')).toBeVisible({ timeout: 20_000 })
+
+  // `aria-modal="true"` is a promise that the app underneath cannot be
+  // reached. With ONE control the trap is easy to get wrong: the panel is
+  // `tabindex="-1"` and is not a tab stop, so a trap that treats it as the
+  // last stop never wraps, and Tab walks straight out into the app. The
+  // pin is behavioural: focus is inside the dialog before, during and
+  // after three Tabs, and the document's own focusable chrome (the nav)
+  // never receives it.
+  await expect(b.getByTestId('join-congrats-dialog')).toBeFocused()
+  const focusInside = () =>
+    b.evaluate(() => !!document.activeElement?.closest('[data-test="join-congrats"]'))
+  // Assert after EVERY Tab, not once at the end: an escaped focus lands on
+  // <body> and the next Tab brings it back, so a single end-of-test check
+  // passes on a trap that leaks every second press. The escape is real —
+  // focus on <body> means the NEXT Tab walks into the app behind.
+  for (let i = 0; i < 3; i++) {
+    await b.keyboard.press('Tab')
+    expect(await focusInside(), `Tab ${i + 1} escaped the dialog`).toBe(true)
+  }
+  // Shift+Tab out of the single control wraps the same way.
+  await b.keyboard.press('Shift+Tab')
+  expect(await focusInside()).toBe(true)
+
+  await expectZeroMealimeRequests(b)
+  await ctxB.close()
+})
+
 test('a broken link toasts and never claims a join', async ({ page }) => {
   await blockExternalRequests(page)
   await page.goto('/?room=not-a-real-code')

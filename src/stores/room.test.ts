@@ -933,6 +933,18 @@ describe('the fresh-join signal', () => {
     expect(store.freshJoin).toBe(false)
   })
 
+  test('the ADR-0019 household AUTO-join is deliberately unarmed (review kody)', async () => {
+    // It runs on EVERY launch of a device with a saved household room, so
+    // arming it would move somebody off the tab they opened, once per
+    // session, for a join they did not ask for this time round.
+    store.join('amber-falcon-lantern', false)
+    expect(store.freshJoin).toBe(false)
+    await sleep(5)
+    sockets[sockets.length - 1].receive({ type: 'joined', code: 'amber-falcon-lantern', rev: 1 })
+    expect(store.status).toBe('live')
+    expect(store.freshJoin).toBe(false)
+  })
+
   test('leave() disarms it — a stale flag cannot navigate later', async () => {
     await startRoom()
     store.leave()

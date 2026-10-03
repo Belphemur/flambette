@@ -245,11 +245,17 @@ watch(
  * daily two-phone flow needs no share link. A session resume (room store)
  * or an explicit `?room=` link wins; a failed join only toasts and never
  * blocks the app — the retry happens on the next launch.
+ *
+ * `deliberate = false` (review kody): this runs on EVERY launch of a
+ * device that already has a saved room. Arming `freshJoin` here would
+ * move somebody off the tab they opened, once per session, for a join
+ * they did not ask for this time round — the post-join landing belongs
+ * to a join somebody tapped or followed.
  */
 function autoJoinHousehold() {
   const code = ui.householdRoom
   if (!code || room.inRoom || room.status !== 'idle') return
-  room.join(code)
+  room.join(code, false)
   // The toast doubles as the share affordance: the second phone gets the
   // link straight from this confirmation (ADR-0023).
   ui.showToast(`Household sync active — ${code}`, {

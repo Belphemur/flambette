@@ -52,14 +52,29 @@ function focusables(): HTMLElement[] {
 }
 
 /** Keep Tab (and Shift+Tab) cycling the panel's own controls. */
+/**
+ * Keep Tab (and Shift+Tab) inside the panel.
+ *
+ * The trap walks `focusables()` — the CONTROLS — and never the panel
+ * itself: the panel carries `tabindex="-1"`, so it is not a tab stop,
+ * and appending it made `last` a node the user can never be on, which
+ * silently defeated the forward wrap (review kody). The panel is instead
+ * the wrap TARGET when focus is on it or outside it, which is the state
+ * it is actually opened in.
+ */
 function trapTab(e: KeyboardEvent): void {
   if (e.key !== 'Tab' || !panel.value) return
-  const items = [...focusables(), panel.value]
-  if (items.length === 0) return
-  const first = items[0]
-  const last = items[items.length - 1]
+  const stops = focusables()
+  if (stops.length === 0) {
+    // Nothing to reach: keep focus on the panel rather than letting it go.
+    e.preventDefault()
+    panel.value.focus()
+    return
+  }
+  const first = stops[0]
+  const last = stops[stops.length - 1]
   const active = document.activeElement
-  if (!active || !panel.value.contains(active)) {
+  if (!active || active === panel.value || !panel.value.contains(active)) {
     e.preventDefault()
     ;(e.shiftKey ? last : first).focus()
     return

@@ -830,8 +830,18 @@ export const useRoomStore = defineStore('room', () => {
     connect('create', undefined, true)
   }
 
-  /** Join an existing room by code (legacy or three-word, any spelling). */
-  function join(codeToJoin: string) {
+  /**
+   * Join an existing room by code (legacy or three-word, any spelling).
+   *
+   * `deliberate` says a PERSON asked for this join, which is what arms
+   * `freshJoin` (ADR-0049 addendum). Every interactive caller leaves it
+   * true: a `?room=` link, `Join now`, a rolled code. The one caller that
+   * passes `false` is the ADR-0019 household AUTO-join, which runs on
+   * every launch of a device that already has a saved room — arming it
+   * there would move somebody off the tab they opened, once per session,
+   * for a join they never asked for this time round.
+   */
+  function join(codeToJoin: string, deliberate = true) {
     const normalized = normalizeRoomCode(codeToJoin)
     if (!normalized) {
       error.value = 'That is not a room code'
@@ -846,7 +856,7 @@ export const useRoomStore = defineStore('room', () => {
     code.value = normalized
     sessionStorage.setItem(ROOM_CODE_KEY, code.value)
     reconnectAttempts = 0
-    connect('join', code.value, true)
+    connect('join', code.value, deliberate)
   }
 
   /**

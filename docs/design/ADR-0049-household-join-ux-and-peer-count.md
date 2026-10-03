@@ -294,14 +294,22 @@ dismiss and a real one.
 So: **a fresh join into an empty plan navigates to the recipes list.**
 Four guards, because a router push is a visible move:
 
-- **Fresh only.** `room.freshJoin` is armed by `join()` / `create()` and
-  disarmed by every other `connect()` — a page-reload resume and an
-  automatic reconnect walk the identical `idle → connecting → live` edge, so
-  `status` alone cannot tell them apart from a join somebody asked for. The
-  signal is a **parameter of `connect()`**, not an assignment in `join()`:
-  `connect()` assigns, so `resume()` and `scheduleReconnect()` disarm it by
-  omission. It is also disarmed on every terminal failure and by `leave()`,
-  so a failed join cannot navigate minutes later off a stale flag.
+- **Fresh only.** `room.freshJoin` is armed by a **deliberate**
+  `join()` / `create()` and disarmed by every other `connect()` — a
+  page-reload resume and an automatic reconnect walk the identical
+  `idle → connecting → live` edge, so `status` alone cannot tell them
+  apart from a join somebody asked for. The signal is a **parameter of
+  `connect()`**, not an assignment in `join()`: `connect()` assigns, so
+  `resume()` and `scheduleReconnect()` disarm it by omission. It is also
+  disarmed on every terminal failure and by `leave()`, so a failed join
+  cannot navigate minutes later off a stale flag.
+
+  The **ADR-0019 household auto-join passes `false`** (kody, review). It is
+  not a join somebody tapped — it runs on *every launch* of a device that
+  already has a saved room, so an armed flag there would bounce the user
+  off the tab they opened once per session, which is the move this whole
+  decision is trying to avoid. A `?room=` link and `Join now` are the
+  deliberate joins; the auto-join is background bookkeeping.
 - **Empty plan only**, read *after* the room's snapshot has landed. A
   household that HAS meals gives the joiner a plan, and they keep the tab
   they opened — which is right, because their grocery list is not empty.
@@ -364,6 +372,11 @@ told — omits the sentence entirely rather than claiming a household of one.
   reconnect produce the same edge, so a reload on /plan would yank the
   view — the bug the `freshJoin` signal exists to prevent, and the reason
   it is a store-level fact rather than a view-level heuristic.
+- **Treat the ADR-0019 auto-join as a landing event** (kody, review). It
+  looks like a fresh join — it walks the same edge and creates the room —
+  but it is not *asked for* by the person on that launch, and it happens on
+  every launch. `join(code, deliberate = true)` is what separates the two,
+  and `autoJoinHousehold` passes `false`.
 - **Read `room.peers` live inside the modal.** Rejected: the number would
   change under the reader, and the modal would need its own subscription to
   a value it opens with.
