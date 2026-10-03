@@ -56,10 +56,11 @@ test('the copy is never silent when the clipboard refuses', async ({ page }) => 
   // Nothing to share yet → an explicit message, never a no-op.
   await expect(page.getByTestId('share-room')).toBeDisabled()
 
+  // `New code` rolls AND joins (ADR-0049), so there is something to share
+  // and something to report as active the moment it is pressed.
   await page.getByTestId('household-room-new').click()
   const code = await page.getByTestId('household-room-input').inputValue()
-  await page.getByTestId('household-room-save').click()
-  await expect(page.getByTestId('household-room-status')).toContainText(code)
+  await expect(page.getByTestId('household-room-status')).toContainText(code, { timeout: 20_000 })
 
   // Simulate a clipboard that accepts the call but keeps its old content
   // (another app grabbing the clipboard mid-write): the app must notice
@@ -89,11 +90,21 @@ test('the join toast shares the link without a second tap', async ({ page, brows
   await openFirstRecipeDetail(page)
   await page.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
 
-  await gotoTab(page, 'Plan')
-  await page.getByRole('button', { name: 'Share', exact: true }).click()
-  await page.getByTestId('start-room').click()
-  const code = await liveRoomCode(page)
-  await page.getByRole('button', { name: 'Close share sheet' }).click()
+  // The room is CREATED by a different device, so the join below is a real
+  // join rather than the already-live confirmation (ADR-0049): this page
+  // has never been in that room, which is the two-phone flow the toast's
+  // share action exists for.
+  const ctxSeed = await browser.newContext()
+  const seed = await ctxSeed.newPage()
+  await blockExternalRequests(seed)
+  await seed.goto('/')
+  await waitForCatalog(seed)
+  await openFirstRecipeDetail(seed)
+  await seed.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
+  await gotoTab(seed, 'Plan')
+  await seed.getByRole('button', { name: 'Share', exact: true }).click()
+  await seed.getByTestId('start-room').click()
+  const code = await liveRoomCode(seed)
 
   // Settings → "Join now" carries a Share link action on its toast.
   await gotoTab(page, 'Settings')
@@ -112,5 +123,6 @@ test('the join toast shares the link without a second tap', async ({ page, brows
   await b.goto(`/?room=${code}`)
   await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
   await ctxB.close()
+  await ctxSeed.close()
   await expectZeroMealimeRequests(page)
 })

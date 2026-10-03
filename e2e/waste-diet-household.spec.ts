@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import {
   blockExternalRequests,
   dietIdSet,
+  dismissJoinCongrats,
   expectZeroMealimeRequests,
   gotoTab,
   liveRoomCode,
@@ -227,12 +228,22 @@ test.describe('household room', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
     const code = await startLiveRoom(page)
 
-    // Settings: point the persistent setting at the live room.
+    // Settings: point the persistent setting at the live room this device
+    // is already in. The `Adopt` button is gone (ADR-0049): typing the
+    // code and pressing Join now covers it, and takes the no-reconnect
+    // branch because the room is already live.
     await page.goto('/settings')
-    await page.getByTestId('household-room-adopt').click()
+    await page.getByTestId('household-room-input').fill(code)
+    await page.getByTestId('household-room-join').click()
+    await expect(page.getByTestId('household-toast')).toContainText(
+      `Household sync active — ${code}`,
+      { timeout: 20_000 },
+    )
     await expect(page.getByTestId('household-room-status')).toContainText(code)
     await page.reload()
-    await expect(page.getByTestId('household-room-status')).toContainText(code)
+    await expect(page.getByTestId('household-room-status')).toContainText(code, {
+      timeout: 20_000,
+    })
 
     // Fresh start → the app re-joins by itself, no share link involved.
     await restartFresh(page)
@@ -245,6 +256,7 @@ test.describe('household room', () => {
     await blockExternalRequests(b)
     await b.goto(`/?room=${code}`)
     await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+    await dismissJoinCongrats(b)
     await gotoTab(b, 'Plan')
     await expect(b.getByRole('heading', { level: 3, name: recipeName })).toBeVisible({
       timeout: 20_000,
@@ -278,8 +290,10 @@ test.describe('household room', () => {
     await waitForApp(page)
     const code = 'jade-otter-lantern'
     await page.getByTestId('household-room-input').fill(code)
-    await page.getByTestId('household-room-save').click()
-    await expect(page.getByTestId('household-room-status')).toContainText(code)
+    await page.getByTestId('household-room-join').click()
+    await expect(page.getByTestId('household-room-status')).toContainText(code, {
+      timeout: 20_000,
+    })
 
     await restartFresh(page)
     await expect(page.getByTestId('household-toast')).toContainText(code, { timeout: 20_000 })
@@ -292,9 +306,9 @@ test.describe('household room', () => {
     await page.goto('/settings')
     await waitForApp(page)
     // A PARTIAL word code never normalizes (ADR-0021 refuses to coerce it),
-    // so the field cannot be saved at all and nothing is ever joined.
+    // so Join now is disabled and nothing is ever joined. (An EMPTY field
+    // is enabled — it rolls a fresh code instead; see room-words.spec.)
     await page.getByTestId('household-room-input').fill('mauve-peacock')
-    await expect(page.getByTestId('household-room-save')).toBeDisabled()
     await expect(page.getByTestId('household-room-join')).toBeDisabled()
     await expect(page.getByTestId('household-room-status')).toHaveCount(0)
 

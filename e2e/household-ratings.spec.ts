@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import {
   blockExternalRequests,
+  dismissJoinCongrats,
   expectZeroMealimeRequests,
   gotoTab,
   liveRoomCode,
@@ -214,6 +215,7 @@ test('room: a favourite and a rating reach the other phone live', async ({ brows
   await blockExternalRequests(b)
   await b.goto(roomUrl)
   await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 10_000 })
+  await dismissJoinCongrats(b)
   await gotoTab(b, 'Recipes')
   const cardB = recipeCards(b).filter({ has: b.getByRole('heading', { name, exact: true }) })
   await expect(cardB.getByTestId('rating-stars')).toHaveAttribute('data-rating', '4.5')
@@ -261,6 +263,7 @@ test('room: the LAST rating written wins, and both devices agree', async ({ brow
   await blockExternalRequests(b)
   await b.goto(roomUrl)
   await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 10_000 })
+  await dismissJoinCongrats(b)
   await gotoTab(b, 'Recipes')
   const cardB = recipeCards(b).filter({ has: b.getByRole('heading', { name, exact: true }) })
   await cardB.getByRole('button', { name: 'Rate 5 of 5 stars' }).click()
@@ -328,6 +331,7 @@ test('room: an un-star reaches the other phone and is not resurrected', async ({
   await blockExternalRequests(b)
   await b.goto(roomUrl)
   await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 10_000 })
+  await dismissJoinCongrats(b)
   await gotoTab(b, 'Recipes')
   const cardB = recipeCards(b).filter({ has: b.getByRole('heading', { name, exact: true }) })
   await expect(cardB.getByRole('button', { name: 'Remove from favourites' })).toBeVisible()

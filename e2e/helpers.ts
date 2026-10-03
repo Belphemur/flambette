@@ -64,6 +64,21 @@ export async function liveRoomCode(page: Page): Promise<string> {
 }
 
 /**
+ * Acknowledge the congrats modal that a shared `?room=` link raises
+ * (ADR-0049), the way a person arriving on that link would.
+ *
+ * A no-op when the modal is not up, so a spec can call it after ANY link
+ * open without first having to know whether this page came through a link
+ * or through the household auto-join (ADR-0019, which must NOT open it).
+ */
+export async function dismissJoinCongrats(page: Page): Promise<void> {
+  const modal = page.getByTestId('join-congrats')
+  if ((await modal.count()) === 0) return
+  await page.getByTestId('join-congrats-continue').click()
+  await expect(modal).toHaveCount(0)
+}
+
+/**
  * The number the relay reports as live in this device's room, read off the
  * chip's tooltip bubble.
  *

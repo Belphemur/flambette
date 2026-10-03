@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import {
   blockExternalRequests,
+  dismissJoinCongrats,
   expectZeroMealimeRequests,
   gotoTab,
   liveRoomCode,
@@ -206,6 +207,7 @@ test('cooked history is shared by default: B in the room sees A cooked meals', a
   await blockExternalRequests(b)
   await b.goto(roomUrl)
   await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 10_000 })
+  await dismissJoinCongrats(b)
 
   // B got the SHARED plan state AND the cooked history (ADR-0032).
   await b.goto('/history')
@@ -240,6 +242,7 @@ test('an explicit opt-out keeps cooked history off the wire (ADR-0032)', async (
   await blockExternalRequests(b)
   await b.goto(roomUrl)
   await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 10_000 })
+  await dismissJoinCongrats(b)
 
   // The shared plan arrived; the opted-out history did NOT.
   await b.goto('/history')

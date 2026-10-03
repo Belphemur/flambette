@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import {
   blockExternalRequests,
+  dismissJoinCongrats,
   expectZeroMealimeRequests,
   gotoTab,
   liveRoomCode,
@@ -156,6 +157,7 @@ test('suggestion row mirrors room-synced customs from another context', async ({
   await blockExternalRequests(b)
   await b.goto(roomUrl)
   await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 10_000 })
+  await dismissJoinCongrats(b)
   await b.goto('/grocery')
 
   // B types a prefix — the synced custom shows as a mine row with the

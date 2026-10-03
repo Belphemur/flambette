@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import {
   blockExternalRequests,
+  dismissJoinCongrats,
   expectZeroMealimeRequests,
   gotoTab,
   liveRoomCode,
@@ -261,6 +262,7 @@ test.describe('filter sync and join reconciliation (WS3 + WS4)', () => {
     await blockExternalRequests(b)
     await b.goto(`/?room=${code}`)
     await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+    await dismissJoinCongrats(b)
 
     // Device A changes the household selection.
     await page.goto('/')
@@ -310,6 +312,7 @@ test.describe('filter sync and join reconciliation (WS3 + WS4)', () => {
     })
     await b.goto(`/?room=${code}`)
     await expect(b.getByTestId('room-chip')).toContainText('Live', { timeout: 20_000 })
+    await dismissJoinCongrats(b)
 
     // Household wins: B converges to A's selection on every SHARED
     // member. `favOnly` is the documented exception (ADR-0028): the
