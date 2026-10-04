@@ -6,6 +6,7 @@ import FilterDropdown from './FilterDropdown.vue'
 import type { FilterDropdownOption } from './FilterDropdown.vue'
 import { nameKey } from '../lib/grocery'
 import {
+  isSuggestionListVisible,
   suggestIngredients,
   type IngredientSuggestion,
 } from '../lib/ingredientSuggestions'
@@ -245,6 +246,24 @@ function onGlobalPointer(event: Event) {
 onMounted(() => document.addEventListener('pointerdown', onGlobalPointer))
 onBeforeUnmount(() => document.removeEventListener('pointerdown', onGlobalPointer))
 
+/**
+ * Are the suggestion rows actually RENDERED? ONE source of truth for the
+ * listbox's existence (qodo + kody-ai, the same finding twice): while the
+ * category popup is open the suggestions stand down (they would swallow
+ * the popup's clicks), so `aria-expanded`, `aria-controls` and
+ * `aria-activedescendant` must go quiet with them. Repeating the
+ * expression at the four use sites is how the two halves drifted: the
+ * `v-if` learned about `categoryMenuOpen` and the ARIA bindings did not,
+ * so the combobox announced a controlled listbox that had no node.
+ */
+const suggestionsVisible = computed(() =>
+  isSuggestionListVisible({
+    open: open.value,
+    categoryMenuOpen: categoryMenuOpen.value,
+    rowCount: rows.value.length,
+  }),
+)
+
 const ariaLabel = 'Add a custom grocery item'
 </script>
 
@@ -264,10 +283,10 @@ const ariaLabel = 'Add a custom grocery item'
   placeholder="Add an item not in the recipes…"
   :aria-label="ariaLabel"
   role="combobox"
-  :aria-expanded="open && rows.length > 0"
+  :aria-expanded="suggestionsVisible"
   aria-autocomplete="list"
-  :aria-controls="open && rows.length > 0 ? listboxId : undefined"
-  :aria-activedescendant="activeIndex >= 0 ? optionId(activeIndex) : undefined"
+  :aria-controls="suggestionsVisible ? listboxId : undefined"
+  :aria-activedescendant="suggestionsVisible && activeIndex >= 0 ? optionId(activeIndex) : undefined"
   class="h-11 w-full rounded-xl border px-4 text-sm outline-none focus:border-brand-text"
   data-test="add-bar-input"
   @input="onInput"
@@ -307,7 +326,7 @@ const ariaLabel = 'Add a custom grocery item'
   </div>
 
   <ul
-  v-if="open && !categoryMenuOpen && rows.length > 0"
+  v-if="suggestionsVisible"
   :id="listboxId"
   role="listbox"
   aria-label="Ingredient suggestions"

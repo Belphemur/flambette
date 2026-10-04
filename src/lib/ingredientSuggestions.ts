@@ -137,3 +137,22 @@ function sortScored(list: Scored[]): void {
       a.suggestion.name.localeCompare(b.suggestion.name, 'en', { sensitivity: 'base' }),
   )
 }
+
+/**
+ * Is the suggestion LISTBOX rendered right now? Pure, and the single
+ * answer for the `v-if` AND `aria-expanded` / `aria-controls` /
+ * `aria-activedescendant` (qodo + kody-ai, the same finding twice).
+ *
+ * The category popup draws over the input, so while it is open the
+ * suggestion rows stand down — but the combobox must stand down with
+ * them, or it announces an expanded listbox whose node is not in the
+ * DOM. Keeping the rule here (rather than inline in the component) is
+ * what makes the four call sites provably agree.
+ */
+export function isSuggestionListVisible(state: {
+  open: boolean
+  categoryMenuOpen: boolean
+  rowCount: number
+}): boolean {
+  return state.open && !state.categoryMenuOpen && state.rowCount > 0
+}
