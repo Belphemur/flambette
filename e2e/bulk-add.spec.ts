@@ -6,6 +6,7 @@ import {
   gotoTab,
   liveRoomCode,
   openFirstRecipeDetail,
+  pickCategoryOverride,
   waitForCatalog,
 } from './helpers'
 
@@ -62,16 +63,16 @@ test('three adds in a row: input clears & refocuses, three toasts with correct c
   await expectZeroMealimeRequests(page)
 })
 
-test('unknown "milk 2%" adds as Other, gets no category tag, and is remembered with its chosen category', async ({ page }) => {
+test('unknown "milk 2%" adds as Other, is remembered with its chosen category, and is grouped under it (ADR-0050)', async ({ page }) => {
   // Add it once as Other (no override). "Other" is the UNKNOWN bucket, so the
-  // extra row stays plain — no category tag (ADR-0015).
+  // extra lands in the Uncategorized sub-section (ADR-0050 §3 inverts
+  // ADR-0015 §3: the absence of a category is now NAMED, not flat).
   await input(page).fill('milk 2%')
   await expect(firstRow(page).locator('[data-test=suggestion-category]')).toHaveText('Other')
   await firstRow(page).click()
   await expect(page.getByTestId('added-toast')).toContainText('Added to Other')
   const milkRow = page.locator('[data-test=extra-section] li').filter({ hasText: 'milk 2%' })
   await expect(milkRow).toHaveCount(1)
-  await expect(milkRow.locator('[data-test=extra-item-category-tag]')).toHaveCount(0)
 
   // Re-add later: the remembered custom now suggestion-matches with its
   // stored category — not a fresh Other-guess.
@@ -84,18 +85,23 @@ test('unknown "milk 2%" adds as Other, gets no category tag, and is remembered w
   // Confirming with an override corrects the memory without a toast
   // (the item is already on the list — nothing new to confirm).
   await input(page).fill('milk 2%')
-  await page.locator('[data-test=ingredient-category]').selectOption('Household')
+  await pickCategoryOverride(page, 'Household')
   await input(page).press('Enter')
   await expect(page.getByTestId('added-toast')).toHaveCount(0)
 
   await input(page).fill('milk 2')
   const mineUpgraded = matchRows2(page).filter({ hasText: 'milk 2%' }).first()
   await expect(mineUpgraded.locator('[data-test=suggestion-category]')).toHaveText('Household')
-  // The corrected memory now shows as a category TAG on the extra row —
-  // the item itself stays in EXTRA ITEMS (never routed into Household).
+  // The corrected memory now GROUPS the extra under its own "Household"
+  // sub-section inside EXTRA ITEMS — the item itself stays there and is
+  // still never routed into a Household store section (ADR-0015 §2).
   await expect(
-    page.locator('[data-test=extra-section] li').filter({ hasText: 'milk 2%' }).locator('[data-test=extra-item-category-tag]'),
-  ).toHaveText('#Household')
+    page
+      .locator('[data-test=extra-subsection]')
+      .filter({ has: page.getByRole('button', { name: /^Household:/ }) })
+      .locator('li')
+      .filter({ hasText: 'milk 2%' }),
+  ).toHaveCount(1)
   await expect(page.locator('[data-test=grocery-section]').filter({ hasText: 'Household' })).toHaveCount(0)
 })
 
@@ -140,7 +146,7 @@ test('suggestion row mirrors room-synced customs from another context', async ({
   await a.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
   await gotoTab(a, 'Grocery')
   await input(a).fill('Sunshade tent')
-  await a.locator('[data-test=ingredient-category]').selectOption('Household')
+  await pickCategoryOverride(a, 'Household')
   await a.locator('[data-test=ingredient-submit]').click()
   await expect(a.getByTestId('added-toast')).toContainText('Added to Household')
 

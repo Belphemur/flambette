@@ -7,6 +7,7 @@ import {
   expectZeroMealimeRequests,
   gotoTab,
   openFirstRecipeDetail,
+  pickCategoryOverride,
   waitForCatalog,
 } from './helpers'
 import { zipStore } from '../src/lib/zip'
@@ -138,28 +139,37 @@ test.describe('Settings tab (data surface)', () => {
   })
 })
 
-test.describe('EXTRA ITEMS with category tags (ADR-0015)', () => {
+test.describe('EXTRA ITEMS sub-sectioned by category (ADR-0050)', () => {
   test.beforeEach(async ({ page }) => {
     await blockExternalRequests(page)
     await planFirstRecipe(page)
   })
 
-  test('an extra with a known category gets a TAG and stays in EXTRA ITEMS (never routed)', async ({ page }) => {
-    // Unknown name, explicit category pick (the ADR-0012 override select).
+  test('an extra with a known category gets its OWN sub-section and stays in EXTRA ITEMS (never routed)', async ({ page }) => {
+    // Unknown name, explicit category pick (the ADR-0012 override dropdown,
+    // now the shared FilterDropdown per ADR-0050 §8).
     await input(page).fill('Sunshade tent')
-    await page.locator('[data-test=ingredient-category]').selectOption('Household')
+    await pickCategoryOverride(page, 'Household')
     await page.locator('[data-test=ingredient-submit]').click()
     await expect(page.getByTestId('added-toast')).toContainText('Added to Household')
 
     const extra = page.getByTestId('extra-section')
-    const row = extra.locator('li').filter({ hasText: 'Sunshade tent' })
+    const subsection = extra.locator('[data-test=extra-subsection]').filter({ has: page.getByRole('button', { name: /^Household:/ }) })
+    const row = subsection.locator('li').filter({ hasText: 'Sunshade tent' })
     await expect(row).toHaveCount(1)
 
-    // The category renders as a small tag pill, not a section header.
-    await expect(row.locator('[data-test=extra-item-category-tag]')).toHaveText('#Household')
-    // Header stays static (EXTRA ITEMS, no chevron/toggle).
+    // The category is the sub-section heading, not a per-row pill: ADR-0050
+    // §7 removed `extra-item-category-tag` because the heading directly
+    // above the row says the same thing.
+    await expect(subsection.locator('[data-test=extra-item-category-tag]')).toHaveCount(0)
+    await expect(subsection.getByTestId('extra-subsection-toggle')).toHaveAttribute('aria-expanded', 'true')
+    await expect(subsection.getByTestId('extra-subsection-toggle')).toHaveAttribute('aria-label', 'Household: 0 of 1 checked')
+    await expect(subsection.getByTestId('section-count-pill')).toHaveText('0/1')
+    // The GROUP header stays static (no chevron/toggle) — only the
+    // sub-section headers below it collapse (re-scoped by ADR-0050 §1).
     await expect(extra.getByRole('heading')).toHaveText(/Extra items/)
-    await expect(extra.locator('[data-test=grocery-section-toggle]')).toHaveCount(0)
+    await expect(extra.locator('> h3 button')).toHaveCount(0)
+    await expect(extra.locator('> h3 svg')).toHaveCount(0)
 
     // NOT routed: no Household store section exists, and the item is not in
     // any real section row.
@@ -190,35 +200,126 @@ test.describe('EXTRA ITEMS with category tags (ADR-0015)', () => {
     await expectZeroMealimeRequests(page)
   })
 
-  test('an extra with no category stays a plain row — no tag, no section', async ({ page }) => {
-    // Unknown name, no override → the "Other" bucket = unknown, not a tag.
+  test('an extra with no category collects in the Uncategorized bucket', async ({ page }) => {
+    // Unknown name, no override → the "Other" bucket = unknown. It is no
+    // longer a flat unlabelled row: ADR-0050 §3 names that absence.
     await input(page).fill('ziplock bags')
     await page.locator('[data-test=ingredient-submit]').click()
     await expect(page.getByTestId('added-toast')).toContainText('Added to Other')
 
     const extra = page.getByTestId('extra-section')
-    const row = extra.locator('li').filter({ hasText: 'ziplock bags' })
+    const uncategorized = extra
+      .locator('[data-test=extra-subsection]')
+      .filter({ has: page.getByRole('button', { name: /^Uncategorized:/ }) })
+    const row = uncategorized.locator('li').filter({ hasText: 'ziplock bags' })
     await expect(row).toHaveCount(1)
-    await expect(row.locator('[data-test=extra-item-category-tag]')).toHaveCount(0)
-    // The row is still the plain name + remove button.
     await expect(row.getByRole('button', { name: /Remove ziplock bags/ })).toBeVisible()
+    // Still never routed into a real store section.
     await expect(page.locator('[data-test=grocery-section]').filter({ hasText: 'Other' })).toHaveCount(0)
 
     await expectZeroMealimeRequests(page)
   })
 
-  test('an index-known extra (banana → Produce) is tagged, not moved into PRODUCE', async ({ page }) => {
+  test('an index-known extra (banana → Produce) gets its own Produce sub-section, not the store PRODUCE', async ({ page }) => {
     await input(page).fill('banana')
     await firstRow(page).click()
     await expect(page.getByTestId('added-toast')).toContainText('Added to Produce')
 
-    const row = page.getByTestId('extra-section').locator('li').filter({ hasText: 'banana' })
-    await expect(row.locator('[data-test=extra-item-category-tag]')).toHaveText('#Produce')
+    const row = page
+      .getByTestId('extra-section')
+      .locator('[data-test=extra-subsection]')
+      .filter({ has: page.getByRole('button', { name: /^Produce:/ }) })
+      .locator('li')
+      .filter({ hasText: 'banana' })
+    await expect(row).toHaveCount(1)
     // The real Produce section (from the planned recipe) is untouched: it
     // has no row for the extra and keeps only its recipe-derived lines.
     const produce = page.locator('[data-test=grocery-section]').filter({ hasText: 'Produce' }).first()
     await expect(produce).toBeVisible()
     await expect(produce.locator('[data-test=grocery-row]').filter({ hasText: 'banana' })).toHaveCount(0)
+  })
+
+  test('extras group by category in STORE_SECTIONS order, Uncategorized last, empty categories omitted', async ({ page }) => {
+    await input(page).fill('banana')
+    await firstRow(page).click()
+    await input(page).fill('ziplock bags')
+    await page.locator('[data-test=ingredient-submit]').click()
+    await input(page).fill('Sunshade tent')
+    await pickCategoryOverride(page, 'Household')
+    await page.locator('[data-test=ingredient-submit]').click()
+
+    const names = page.getByTestId('extra-section').locator('[data-test=extra-subsection]')
+    await expect(names).toHaveCount(3)
+    // STORE_SECTIONS order (Produce … Household) with Uncategorized LAST,
+    // and no empty sub-section is invented for the 27 other categories.
+    await expect(names.locator('[data-test=extra-subsection-toggle]')).toHaveText([
+      /^Produce: 0 of 1 checked/,
+      /^Household: 0 of 1 checked/,
+      /^Uncategorized: 0 of 1 checked/,
+    ])
+  })
+
+  test('an extras sub-section auto-collapses when its last extra is checked off (ADR-0008 rule)', async ({ page }) => {
+    await input(page).fill('banana')
+    await firstRow(page).click()
+    await input(page).fill('apple')
+    await firstRow(page).click()
+
+    const produce = page
+      .getByTestId('extra-section')
+      .locator('[data-test=extra-subsection]')
+      .filter({ has: page.getByRole('button', { name: /^Produce:/ }) })
+    const toggle = produce.getByTestId('extra-subsection-toggle')
+    await expect(toggle).toHaveText(/Produce: 0 of 2 checked/)
+    await expect(produce.locator('[data-test=extra-row]')).toHaveCount(2)
+
+    // click(), never check(): the row DETACHES when it triggers the collapse.
+    await produce.locator('[data-test=extra-row]').first().locator('input[type=checkbox]').click()
+    await expect(toggle).toHaveText(/Produce: 1 of 2 checked/)
+    await produce.locator('[data-test=extra-row]:not(:has(input:checked))').first().locator('input[type=checkbox]').click()
+
+    // Done → rows gone, header + count pill + chevron remain.
+    await expect(produce.locator('[data-test=extra-row]')).toHaveCount(0)
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(toggle).toHaveText(/Produce: 2 of 2 checked/)
+
+    // Re-opening + unchecking re-expands (true→false).
+    await toggle.click()
+    await expect(produce.locator('[data-test=extra-row]')).toHaveCount(2)
+    await produce.locator('[data-test=extra-row]:has(input:checked)').first().locator('input[type=checkbox]').click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  test('collapsing the extras Produce does NOT collapse the store Produce (namespaced keys)', async ({ page }) => {
+    await input(page).fill('banana')
+    await firstRow(page).click()
+    await expect(page.getByTestId('added-toast')).toContainText('Added to Produce')
+
+    const extraProduce = page
+      .getByTestId('extra-section')
+      .locator('[data-test=extra-subsection]')
+      .filter({ has: page.getByRole('button', { name: /^Produce:/ }) })
+    const storeProduce = page.locator('[data-test=grocery-section]').filter({ hasText: 'Produce' }).first()
+
+    // The store section is expanded with its recipe-derived rows.
+    const storeRows = storeProduce.locator('[data-test=grocery-row]')
+    const storeTotal = await storeRows.count()
+    expect(storeTotal).toBeGreaterThan(0)
+    await expect(storeProduce.getByTestId('grocery-section-rows')).toBeVisible()
+
+    // Collapse the EXTRAS Produce: the store Produce must be untouched —
+    // both groups are called "Produce", and only the namespace keeps them
+    // apart (ADR-0050 §5).
+    await extraProduce.getByTestId('extra-subsection-toggle').click()
+    await expect(extraProduce.getByTestId('extra-subsection-rows')).toHaveCount(0)
+    await expect(storeProduce.getByTestId('grocery-section-rows')).toBeVisible()
+    await expect(storeRows).toHaveCount(storeTotal)
+
+    // …and the other way round.
+    await extraProduce.getByTestId('extra-subsection-toggle').click()
+    await storeProduce.getByTestId('grocery-section-toggle').click()
+    await expect(storeProduce.locator('[data-test=grocery-row]')).toHaveCount(0)
+    await expect(extraProduce.getByTestId('extra-subsection-rows')).toBeVisible()
   })
 })
 
