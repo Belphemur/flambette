@@ -381,7 +381,7 @@ test.describe('ShopView auto-collapse (ADR-0008 addendum)', () => {
     await expectZeroMealimeRequests(page)
   })
 
-  test('extra items stay manual-only in ShopView (no auto-collapse on a one-item extra)', async ({ page }) => {
+  test('a one-item extras sub-section auto-collapses too, uniformly with store sections (ADR-0050 addendum)', async ({ page }) => {
     await blockExternalRequests(page)
     await planFirstRecipe(page)
     await input(page).fill('Sticky tape')
@@ -392,12 +392,35 @@ test.describe('ShopView auto-collapse (ADR-0008 addendum)', () => {
     const extras = page.getByTestId('shop-custom-items')
     await expect(extras.locator('[data-test=shop-row]')).toHaveCount(1)
     await extras.locator('[data-test=shop-row]').click()
-    // The whole list is now done, but the extra group does NOT auto-collapse.
-    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(1)
+
+    // The sub-section is now done → it auto-collapses like every other
+    // group on the screen (ADR-0050 addendum: the owner reversed the
+    // manual-only rule; a single-item sub-section gets the SAME rule —
+    // the checked row stays visible in the 1/1 pill and returns on
+    // uncheck, so nothing is lost).
+    const subsection = extras.locator('[data-test=shop-extra-subsection]')
+    const subToggle = subsection.getByTestId('shop-extra-subsection-toggle')
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(0)
+    await expect(subToggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(subsection.getByTestId('section-count-pill')).toHaveText('1/1')
+
+    // The outer "Extra items" GROUP header is still not a section: it
+    // keeps its own manual-only boolean and stays expanded.
     await expect(extras.getByTestId('shop-section-toggle')).toHaveAttribute('aria-expanded', 'true')
 
+    // Manual click on the auto-collapsed header re-opens and pins it.
+    await subToggle.click()
+    await expect(subToggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(1)
+
+    // Unchecking re-expands behaviour: the row goes dim, done=false.
+    await extras.locator('[data-test=shop-row]').click()
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(1)
+    await expect(subToggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(subsection.getByTestId('section-count-pill')).toHaveText('0/1')
+
     // Manual collapse still works.
-    await extras.getByTestId('shop-section-toggle').click()
+    await subToggle.click()
     await expect(extras.locator('[data-test=shop-row]')).toHaveCount(0)
   })
 })
@@ -491,7 +514,7 @@ test.describe('ShopView extras sub-sections (ADR-0050)', () => {
     await expect(storeProduce.locator('[data-test=shop-row]')).toHaveCount(storeRowsBefore)
   })
 
-  test('ShopView extras stay manual-collapse-only, sub-sections included (ADR-0008 addendum)', async ({ page }) => {
+  test('an extras sub-section auto-collapses when done; unchecking re-expands; the store twin stays open (ADR-0050 addendum)', async ({ page }) => {
     await blockExternalRequests(page)
     await planFirstRecipe(page)
     await input(page).fill('banana')
@@ -503,23 +526,93 @@ test.describe('ShopView extras sub-sections (ADR-0050)', () => {
     const extras = page.getByTestId('shop-custom-items')
     // Prefix-located: the name carries the running N/N, which is the very
     // thing this test watches change.
+    const subsection = extras
+      .locator('[data-test=shop-extra-subsection]')
+      .filter({ has: page.locator('button[aria-label^="Produce:"]') })
     const toggle = extras.locator('button[aria-label^="Produce:"]')
 
-    // Checking the ONLY extra makes the sub-section "done" — and nothing
-    // collapses: on the shopping screen a mis-tap must not yank the list.
+    // Completing the sub-section auto-collapses it — uniformly with the
+    // store sections (ADR-0050 addendum reverses the manual-only rule;
+    // the checked row stays visible in the 1/1 pill and returns on
+    // uncheck, so a one-item sub-section loses nothing).
     await extras.locator('[data-test=shop-row]').click()
-    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(1)
-    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(0)
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(subsection.getByTestId('section-count-pill')).toHaveText('1/1')
+    // The outer "Extra items" GROUP header is not a section: manual-only.
     await expect(extras.getByTestId('shop-section-toggle')).toHaveAttribute('aria-expanded', 'true')
 
-    // Manual collapse of the sub-section still works…
+    // The recipe-derived Produce section is a DIFFERENT group: untouched
+    // by the extras collapse, and still open (it is not done).
+    const storeProduce = page
+      .locator('[data-test=shop-section]')
+      .filter({ has: page.getByText('Produce', { exact: true }) })
+    const storeRows = await storeProduce.locator('[data-test=shop-row]').count()
+    expect(storeRows).toBeGreaterThan(0)
+
+    // Manual click re-opens and pins the auto-collapsed sub-section.
     await toggle.click()
-    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(0)
-    // …and so does manual collapse of the whole extras group.
-    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
     await expect(extras.locator('[data-test=shop-row]')).toHaveCount(1)
+
+    // Unchecking drops done → auto state cleared, the group stays open.
+    await extras.locator('[data-test=shop-row]').click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(subsection.getByTestId('section-count-pill')).toHaveText('0/1')
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(1)
+
+    // Manual collapse of the whole extras GROUP still works.
     await extras.getByTestId('shop-section-toggle').click()
     await expect(extras.locator('[data-test=shop-row]')).toHaveCount(0)
+
+    await expectZeroMealimeRequests(page)
+  })
+
+  test('checked extras sink to the bottom of their sub-section, stable (ADR-0050 addendum)', async ({ page }) => {
+    await blockExternalRequests(page)
+    await planFirstRecipe(page)
+    // Three Produce extras so a MIDDLE check shows both the sink and the
+    // stability of the untouched rows.
+    for (const name of ['banana', 'celery', 'eggplant']) {
+      await input(page).fill(name)
+      await pickCategoryOverride(page, 'Produce')
+      await page.locator('[data-test=ingredient-submit]').click()
+    }
+
+    await page.getByTestId('start-shopping').click()
+
+    const produce = page
+      .getByTestId('shop-custom-items')
+      .locator('[data-test=shop-extra-subsection]')
+      .filter({ has: page.locator('button[aria-label^="Produce:"]') })
+    const names = async (): Promise<(string | undefined)[]> =>
+      produce
+        .locator('[data-test=shop-row]')
+        .evaluateAll((els) => els.map((el) => el.textContent?.trim()))
+
+    await expect(await names()).toEqual(['banana', 'celery', 'eggplant'])
+
+    // Check the MIDDLE row: it sinks last, the others keep their order.
+    await produce.locator('[data-test=shop-row]').filter({ hasText: 'celery' }).click()
+    await expect(await names()).toEqual(['banana', 'eggplant', 'celery'])
+
+    // Check another one: still stable relative to the untouched row.
+    await produce.locator('[data-test=shop-row]').filter({ hasText: 'banana' }).click()
+    await expect(await names()).toEqual(['eggplant', 'banana', 'celery'])
+
+    // Check the LAST open row: everything is done now.
+    await produce.locator('[data-test=shop-row]').filter({ hasText: 'eggplant' }).click()
+
+    // The sub-section is now done → auto-collapsed (3/3 pill).
+    await expect(produce.getByTestId('section-count-pill')).toHaveText('3/3')
+    await expect(produce.locator('[data-test=shop-row]')).toHaveCount(0)
+
+    // Re-open (manual pin): the all-checked group is UNCHANGED in order —
+    // the sink is stable even when everything is done.
+    await produce.getByTestId('shop-extra-subsection-toggle').click()
+    await expect(await names()).toEqual(['banana', 'celery', 'eggplant'])
+
+    await expectZeroMealimeRequests(page)
   })
 })
 
