@@ -66,9 +66,19 @@ test('shopping mode: custom items get their own section and collapse works', asy
   const customRow = page.locator('[data-test=shop-custom-items] [data-test=shop-row]').filter({ hasText: 'Sticky tape' })
   await expect(customRow).toBeVisible()
 
-  // Toggle via row tap: dims and counts toward progress.
+  // Toggle via row tap: dims and counts toward progress — and, being the
+  // only item, completes the sub-section, which auto-collapses it like
+  // every group on the screen (ADR-0050 addendum). The checked row stays
+  // visible in the collapsed header's 1/1 pill and returns on uncheck.
   await customRow.click()
-  await expect(customRow).toHaveClass(/opacity-40/)
+  await expect(page.locator('[data-test=shop-custom-items] [data-test=shop-row]')).toHaveCount(0)
+  const subToggle = page.locator('[data-test=shop-custom-items] [data-test=shop-extra-subsection-toggle]')
+  await expect(subToggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.locator('[data-test=shop-custom-items] [data-test=section-count-pill]')).toHaveText('1/1')
+  // Manual click re-opens and pins the auto-collapsed sub-section.
+  await subToggle.click()
+  await expect(subToggle).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.locator('[data-test=shop-custom-items] [data-test=shop-row]')).toHaveCount(1)
 
   // Collapsible sections: first section header collapses its list.
   const headers = page.locator('main section > button')
