@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ChevronDown, ChevronRight, Eraser, ShoppingCart, Sparkles, X } from 'lucide-vue-next'
 import { useGroceryList } from '../lib/useGroceryList'
+import { storeCollapseKey } from '../lib/extraSections'
 import type { GroceryItem } from '../lib/grocery'
 import { usePlanStore } from '../stores/plan'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
@@ -15,30 +16,40 @@ const { checked, loadError, loading, items, totalCount, checkedCount, sections, 
 
 /* ---------- Auto-collapse of completed categories ---------- */
 
-/** Sections the user collapsed by hand. */
+/**
+ * Collapse state is keyed by a NAMESPACED key, not a bare section name:
+ * an extras sub-section and a store section can share a name (both have a
+ * "Produce"), and toggling one must never collapse the other
+ * (extraCollapseKey / storeCollapseKey, ADR-0050 §5).
+ */
 const manualCollapsed = ref(new Set<string>())
 /** Sections collapsed automatically because every item was checked off. */
 const autoCollapsed = ref(new Set<string>())
 
-function isCollapsed(name: string): boolean {
-  return manualCollapsed.value.has(name) || autoCollapsed.value.has(name)
+function isCollapsed(key: string): boolean {
+  return manualCollapsed.value.has(key) || autoCollapsed.value.has(key)
 }
 
 /** Header click: re-open a collapsed section, or collapse an open one. */
-function toggleSection(name: string): void {
-  if (isCollapsed(name)) {
+function toggleSection(key: string): void {
+  if (isCollapsed(key)) {
   const m = new Set(manualCollapsed.value)
   const a = new Set(autoCollapsed.value)
-  m.delete(name)
-  a.delete(name)
+  m.delete(key)
+  a.delete(key)
   manualCollapsed.value = m
   autoCollapsed.value = a
   } else {
-  manualCollapsed.value = new Set(manualCollapsed.value).add(name)
+  manualCollapsed.value = new Set(manualCollapsed.value).add(key)
   }
 }
 
-/** A section is "done" when every grocery line under it is checked. */
+/**
+ * A section is "done" when every grocery line under it is checked.
+ * ONE done-map feeds ONE watcher for BOTH consumers (store sections and,
+ * from ADR-0050, the extras sub-sections) — a second collapse
+ * implementation would be a copy that silently diverges.
+ */
 const sectionDone = computed(() => {
   const m = new Map<string, boolean>()
   for (const s of sections.value) {
@@ -54,17 +65,22 @@ const sectionDone = computed(() => {
  * an uncheck re-opens only sections that were auto-collapsed.
  */
 watch(sectionDone, (now, prev) => {
-  for (const [name, done] of now) {
-  const wasDone = prev?.get(name) ?? false
+  for (const [key, done] of now) {
+  const wasDone = prev?.get(key) ?? false
   if (done && !wasDone) {
-  autoCollapsed.value = new Set(autoCollapsed.value).add(name)
-  } else if (!done && autoCollapsed.value.has(name)) {
+  autoCollapsed.value = new Set(autoCollapsed.value).add(key)
+  } else if (!done && autoCollapsed.value.has(key)) {
   const next = new Set(autoCollapsed.value)
-  next.delete(name)
+  next.delete(key)
   autoCollapsed.value = next
   }
   }
 })
+
+/** Collapse key for a recipe-derived store section (ADR-0050 §5). */
+function sectionKey(name: string): string {
+  return storeCollapseKey(name)
+}
 
 function sectionDoneCount(section: { items: GroceryItem[] }): number {
   return section.items.flatMap((i) => i.lines).filter((l) => !!checked.map[l.key]).length
@@ -250,10 +266,10 @@ function customCategory(item: string): string | undefined {
   <h3 class="pt-2">
   <button
   class="flex w-full items-center justify-between text-left"
-  :aria-expanded="!isCollapsed(section.name)"
+  :aria-expanded="!isCollapsed(sectionKey(section.name))"
   :aria-label="`${section.name}: ${sectionDoneCount(section)} of ${sectionTotalCount(section)} checked`"
   data-test="grocery-section-toggle"
-  @click="toggleSection(section.name)"
+  @click="toggleSection(sectionKey(section.name))"
   >
   <span class="text-xs font-bold tracking-wider text-text-muted uppercase">
   {{ section.name }}
@@ -263,13 +279,13 @@ function customCategory(item: string): string | undefined {
   class="rounded-full bg-surface-sunken px-2 py-px text-[10px] font-semibold text-text-muted"
   data-test="section-count-pill"
   >{{ sectionDoneCount(section) }}/{{ sectionTotalCount(section) }}</span>
-  <ChevronRight v-if="isCollapsed(section.name)" :size="16" aria-hidden="true" />
+  <ChevronRight v-if="isCollapsed(sectionKey(section.name))" :size="16" aria-hidden="true" />
   <ChevronDown v-else :size="16" aria-hidden="true" />
   </span>
   </button>
   </h3>
   <ul
-  v-if="!isCollapsed(section.name)"
+  v-if="!isCollapsed(sectionKey(section.name))"
   class="divide-y rounded-xl ring-1"
   data-test="grocery-section-rows"
   >
