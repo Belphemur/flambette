@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, type Component } from 'vue'
+import { computed, nextTick, ref, watch, type Component } from 'vue'
 import { Check, ChevronDown } from 'lucide-vue-next'
 import { useListboxMenu } from '../composables/useListboxMenu'
 import HueIcon from './HueIcon.vue'
@@ -83,7 +83,7 @@ const props = withDefaults(
   },
 )
 
-const emit = defineEmits<{ select: [value: string] }>()
+const emit = defineEmits<{ select: [value: string]; open: [boolean] }>()
 
 /** The currently selected row; drives the closed trigger's label. */
 const selected = computed(() => props.options[props.selectedIndex] ?? null)
@@ -129,6 +129,12 @@ function choose(option: FilterDropdownOption) {
   emit('select', option.value)
   menu.closeMenu({ refocus: true })
 }
+
+// Announce the open state so a caller with its OWN popup stacked over this
+// one (the add form's ingredient suggestions cover the category control —
+// ADR-0050 §8) can stand down while this popup is up. Opt-in per call
+// site; the Recipes filter bar ignores it.
+watch(menu.open, (v) => emit('open', v))
 </script>
 
 <template>

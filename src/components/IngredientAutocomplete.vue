@@ -52,6 +52,9 @@ const open = ref(false)
 const activeIndex = ref(-1)
 /** Explicit category override for the NEXT add (empty = use row's own). */
 const category = ref<string>('')
+/** The category popup is open: the ingredient suggestions stand down
+ *  (they are drawn over the control and would swallow its clicks). */
+const categoryMenuOpen = ref(false)
 const wrapper = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLInputElement | null>(null)
 const listboxId = `ingredient-listbox-${Math.random().toString(36).slice(2, 8)}`
@@ -299,11 +302,12 @@ const ariaLabel = 'Add a custom grocery item'
   :active="category !== ''"
   menu-width="w-full"
   @select="(v) => (category = v)"
+  @open="categoryMenuOpen = $event"
   />
   </div>
 
   <ul
-  v-if="open && rows.length > 0"
+  v-if="open && !categoryMenuOpen && rows.length > 0"
   :id="listboxId"
   role="listbox"
   aria-label="Ingredient suggestions"

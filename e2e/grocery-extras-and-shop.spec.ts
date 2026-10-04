@@ -167,7 +167,7 @@ test.describe('EXTRA ITEMS sub-sectioned by category (ADR-0050)', () => {
     await expect(subsection.getByTestId('section-count-pill')).toHaveText('0/1')
     // The GROUP header stays static (no chevron/toggle) — only the
     // sub-section headers below it collapse (re-scoped by ADR-0050 §1).
-    await expect(extra.getByRole('heading')).toHaveText(/Extra items/)
+    await expect(extra.getByRole('heading', { name: 'Extra items' })).toBeVisible()
     await expect(extra.locator('> h3 button')).toHaveCount(0)
     await expect(extra.locator('> h3 svg')).toHaveCount(0)
 
@@ -252,36 +252,41 @@ test.describe('EXTRA ITEMS sub-sectioned by category (ADR-0050)', () => {
     await expect(names).toHaveCount(3)
     // STORE_SECTIONS order (Produce … Household) with Uncategorized LAST,
     // and no empty sub-section is invented for the 27 other categories.
-    await expect(names.locator('[data-test=extra-subsection-toggle]')).toHaveText([
-      /^Produce: 0 of 1 checked/,
-      /^Household: 0 of 1 checked/,
-      /^Uncategorized: 0 of 1 checked/,
+    const labels = await names
+      .locator('[data-test=extra-subsection-toggle]')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')))
+    expect(labels).toEqual([
+      'Produce: 0 of 1 checked',
+      'Household: 0 of 1 checked',
+      'Uncategorized: 0 of 1 checked',
     ])
   })
 
   test('an extras sub-section auto-collapses when its last extra is checked off (ADR-0008 rule)', async ({ page }) => {
     await input(page).fill('banana')
     await firstRow(page).click()
-    await input(page).fill('apple')
-    await firstRow(page).click()
+    await input(page).fill('granny smith')
+    await pickCategoryOverride(page, 'Produce')
+    await page.locator('[data-test=ingredient-submit]').click()
 
     const produce = page
       .getByTestId('extra-section')
       .locator('[data-test=extra-subsection]')
       .filter({ has: page.getByRole('button', { name: /^Produce:/ }) })
     const toggle = produce.getByTestId('extra-subsection-toggle')
-    await expect(toggle).toHaveText(/Produce: 0 of 2 checked/)
+    await expect(toggle).toHaveAttribute('aria-label', 'Produce: 0 of 2 checked')
     await expect(produce.locator('[data-test=extra-row]')).toHaveCount(2)
 
     // click(), never check(): the row DETACHES when it triggers the collapse.
-    await produce.locator('[data-test=extra-row]').first().locator('input[type=checkbox]').click()
-    await expect(toggle).toHaveText(/Produce: 1 of 2 checked/)
+    await produce.locator('[data-test=extra-row]:not(:has(input:checked))').first().locator('input[type=checkbox]').click()
+    await expect(toggle).toHaveAttribute('aria-label', 'Produce: 1 of 2 checked')
     await produce.locator('[data-test=extra-row]:not(:has(input:checked))').first().locator('input[type=checkbox]').click()
 
     // Done → rows gone, header + count pill + chevron remain.
     await expect(produce.locator('[data-test=extra-row]')).toHaveCount(0)
     await expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    await expect(toggle).toHaveText(/Produce: 2 of 2 checked/)
+    await expect(toggle).toHaveAttribute('aria-label', 'Produce: 2 of 2 checked')
+    await expect(toggle.getByTestId('section-count-pill')).toHaveText('2/2')
 
     // Re-opening + unchecking re-expands (true→false).
     await toggle.click()

@@ -14,6 +14,49 @@ const router = useRouter()
 const { checked, loadError, loading, items, totalCount, checkedCount, sections, ensureDocs, confirmAndClearGrocery } =
   useGroceryList()
 
+/* ---------- Custom (free-form) grocery items ---------- */
+
+const customIngredients = useCustomIngredientsStore()
+
+/** Ref of the add form (for the emptyState→list focus handoff, ADR-0014). */
+const addForm = ref<InstanceType<typeof IngredientAutocomplete> | null>(null)
+/**
+ * The add form mounts as the compact empty-state variant first; the first
+ * add makes customItems non-empty so that instance unmounts. Hand the
+ * keyboard to the freshly mounted main-form instance instead of dropping
+ * focus (the bulk-add loop never loses the keyboard, ADR-0014).
+ */
+watch(
+  () => plan.customItems.length > 0 || plan.plan.length > 0,
+  () => void nextTick(() => addForm.value?.focus()),
+)
+
+/**
+ * Extras grouped into their own category sub-sections (ADR-0050). The
+ * grouping is a PURE lib function, unit-tested next to `grocery.ts` —
+ * only the per-extra memory lookup lives here.
+ *
+ * The categories come from `customIngredients`, which is DEVICE-LOCAL and
+ * out of the room sync payload (ADR-0012), so a second household device
+ * may render the same shared extras under different sub-sections (or all
+ * under Uncategorized). Pre-existing behaviour, now visible by design.
+ */
+const extraGroups = computed(() =>
+  groupExtras(
+    plan.customItems.map((name) => ({ name, category: customIngredients.find(name)?.category })),
+  ),
+)
+
+/** Checkbox key for an extra row (shared by the row and the done-map). */
+function extraCheckedKey(item: string): string {
+  return `custom||${item.toLowerCase()}`
+}
+
+/** How many of a sub-section's extras are checked off. */
+function extraDoneCount(group: { items: { name: string }[] }): number {
+  return group.items.filter((i) => !!checked.map[extraCheckedKey(i.name)]).length
+}
+
 /* ---------- Auto-collapse of completed categories ---------- */
 
 /**
@@ -100,48 +143,6 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   return section.items.reduce((n, i) => n + i.lines.length, 0)
 }
 
-/* ---------- Custom (free-form) grocery items ---------- */
-
-const customIngredients = useCustomIngredientsStore()
-
-/** Ref of the add form (for the emptyState→list focus handoff, ADR-0014). */
-const addForm = ref<InstanceType<typeof IngredientAutocomplete> | null>(null)
-/**
- * The add form mounts as the compact empty-state variant first; the first
- * add makes customItems non-empty so that instance unmounts. Hand the
- * keyboard to the freshly mounted main-form instance instead of dropping
- * focus (the bulk-add loop never loses the keyboard, ADR-0014).
- */
-watch(
-  () => plan.customItems.length > 0 || plan.plan.length > 0,
-  () => void nextTick(() => addForm.value?.focus()),
-)
-
-/**
- * Extras grouped into their own category sub-sections (ADR-0050). The
- * grouping is a PURE lib function, unit-tested next to `grocery.ts` —
- * only the per-extra memory lookup lives here.
- *
- * The categories come from `customIngredients`, which is DEVICE-LOCAL and
- * out of the room sync payload (ADR-0012), so a second household device
- * may render the same shared extras under different sub-sections (or all
- * under Uncategorized). Pre-existing behaviour, now visible by design.
- */
-const extraGroups = computed(() =>
-  groupExtras(
-    plan.customItems.map((name) => ({ name, category: customIngredients.find(name)?.category })),
-  ),
-)
-
-/** Checkbox key for an extra row (shared by the row and the done-map). */
-function extraCheckedKey(item: string): string {
-  return `custom||${item.toLowerCase()}`
-}
-
-/** How many of a sub-section's extras are checked off. */
-function extraDoneCount(group: { items: { name: string }[] }): number {
-  return group.items.filter((i) => !!checked.map[extraCheckedKey(i.name)]).length
-}
 </script>
 
 <template>
