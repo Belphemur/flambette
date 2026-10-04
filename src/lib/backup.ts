@@ -173,6 +173,13 @@ export const STORE_SLICES: SliceDef<any>[] = [
       }
       grocery.clearAll()
       grocery.map = map
+      // `plan.json` (which carries `customItems`) is applied BEFORE this
+      // slice, so the live extras are known here — reconcile against them.
+      // An archive can legitimately hold a `custom||<name>` key for an
+      // extra it no longer lists (hand-edited, or exported by a build
+      // whose extras had already been removed), and the residue makes a
+      // re-added extra read as already-done → auto-collapsed away.
+      grocery.reconcileExtras(usePlanStore().customItems)
     },
   },
   /* Personal cooked history (plan store, personal slice — always in backups).

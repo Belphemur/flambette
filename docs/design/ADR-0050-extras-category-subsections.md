@@ -353,3 +353,76 @@ transitions collapse).
 - ADR-0008 and ADR-0015 are NOT edited; this addendum is the record of the
   reversal. The e2e specs that pinned manual-only behaviour were rewritten to
   pin the uniform rule.
+
+## Addendum (2026-10-05) — the `custom||` checked key is reconciled, not just dropped at one call site
+
+Closes the residue §A2 left open. That addendum fixed the ONE path its author
+knew about (a user removing an extra in `GroceryTab`) and correctly noted the
+room path as "pre-existing, out of scope". Reading the code rather than the
+note showed the diagnosis was **wrong in both directions**.
+
+### The diagnosis was wrong: room sync CONVERGES, it does not leak
+
+`room.applyRemote` does `groomery.map = checked` — a WHOLESALE replace from
+the snapshot. After a sync the local map is exactly what the sender held, and
+the sender cleaned up at its own removal site. So a peer deleting an extra
+converges BOTH devices onto "no key". Room sync was never the leak.
+
+### The real leak: two payload fields with no invariant between them
+
+`customItems` and `checked` travel as **separate fields** — in a room
+snapshot, in a backup archive (`plan.json` vs `checked.json`), and in a share
+link. Nothing ties them together, so any peer at any app version can hand us a
+`custom||<name>` key for an extra that is not in `customItems`. The residue is
+invisible but harmful: the orphan key reads as "already done", so re-adding
+that name lands in a sub-section the done-map immediately calls COMPLETE, and
+§Phase-3's uniform auto-collapse hides the row the user just added. §A2's fix
+made the common case safe; it did nothing for a key that arrives from outside.
+
+### The decision: one pure reconciler, called at the boundaries
+
+`src/lib/extraCheckedKeys.ts` owns the knowledge as a PURE function over plain
+data:
+
+- `extraCheckedKey(name)` — the ONE definition of the key format. The Grocery
+  tab, ShopView and the reconciler now share it instead of each re-spelling
+  `` `custom||${name.toLowerCase()}` ``.
+- `reconcileCheckedExtras(checked, extras)` — drops every `custom||` key with
+  no matching extra, keeps everything else, and reports `changed`.
+
+It is wired at the **boundaries that can create the disagreement**, not at the
+one call site that used to leak:
+
+| boundary | why |
+| --- | --- |
+| `room.applyRemote` | an inbound snapshot is the wholesale replace that can introduce it |
+| `backup.ts` `checked.json` writer | an archive carries `plan.json` and `checked.json` as separate slices; `plan.json` is applied first, so the live extras are known |
+
+`reconcileExtras` returns `changed`, so a no-op costs nothing — and in
+`applyRemote` specifically it needs **no republish**: the dropped key
+described an item the household no longer has, so no peer is missing state
+because of it. (ADR-0028's reconciliation is about rows the room LACKS; this
+key is not one, and republishing would risk a feedback loop for nothing.)
+
+### Why not a watcher on `customItems` (SOLID)
+
+A watcher would have been shorter, and wrong on two counts: it needs the
+grocery store *inside* the plan store — which §A2 explicitly rejected, since
+the plan store is room-synced and backup-registered while the `custom||`
+format belongs to the renderers — and it would also fire on every unrelated
+mutation of the plan. Reconciling at the ingress keeps the plan store free of
+a view-owned dependency and confines the work to the two moments the two
+facts can actually diverge.
+
+**The trade, named:** DRY over KISS — the loser would have been a
+`custom||`-prefix test re-spelled at each future ingress point, drifting the
+first time the key format or the "what is an orphan" rule changed.
+
+### Not touched
+
+- `GroceryTab.removeExtra`'s explicit `checked.forget(...)` stays: it is the
+  *immediate* local path (no snapshot round-trip), and it is what makes the
+  removal feel instant. The reconciler is the backstop for keys that arrive
+  from outside, not a replacement.
+- `plan.clearCustomItems()` needs no wiring — `useConfirm.performClear` calls
+  `grocery.clearAll()` in the same breath, so that path is already whole.
