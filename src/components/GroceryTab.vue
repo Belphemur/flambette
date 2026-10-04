@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ChevronDown, ChevronRight, Eraser, ShoppingCart, Sparkles, X } from 'lucide-vue-next'
 import { useGroceryList } from '../lib/useGroceryList'
 import { extraCollapseKey, groupExtras, storeCollapseKey } from '../lib/extraSections'
+import { extraCheckedKey } from '../lib/extraCheckedKeys'
 import type { GroceryItem } from '../lib/grocery'
 import { usePlanStore } from '../stores/plan'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
@@ -47,10 +48,13 @@ const extraGroups = computed(() =>
   ),
 )
 
-/** Checkbox key for an extra row (shared by the row and the done-map). */
-function extraCheckedKey(item: string): string {
-  return `custom||${item.toLowerCase()}`
-}
+/**
+ * Checkbox key for an extra row comes from `extraCheckedKey`, imported at
+ * the top from `src/lib/extraCheckedKeys.ts` — the ONE definition, shared
+ * with ShopView, the done-map and the reconciler. Never re-spell the format
+ * here: the reconciler has to recognise an extras key for what it is, and a
+ * second copy of the prefix is how the two key spaces would drift apart.
+ */
 
 /**
  * Remove an extra AND its checkbox key (ADR-0050 addendum). The checked

@@ -5,6 +5,7 @@ import { Check, ChevronDown, ChevronRight, Eraser, ShoppingCart, X } from 'lucid
 import { useGroceryList } from '../lib/useGroceryList'
 import { extraCollapseKey, groupExtras, storeCollapseKey, type ExtraGroup } from '../lib/extraSections'
 import { sinkChecked } from '../lib/sink'
+import { extraCheckedKey } from '../lib/extraCheckedKeys'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
 import IngredientAutocomplete from './IngredientAutocomplete.vue'
 
@@ -82,10 +83,12 @@ const extraGroups = computed(() =>
   ),
 )
 
-/** Checkbox key for an extra row (mirrors the Grocery tab's). */
-function extraCheckedKey(item: string): string {
-  return `custom||${item.toLowerCase()}`
-}
+/**
+ * Checkbox key for an extra row comes from `extraCheckedKey` (imported at
+ * the top) — the same ONE definition the Grocery tab and the reconciler use.
+ * This used to be a local "mirror" of the Grocery tab's copy, which is
+ * precisely how two key formats drift apart.
+ */
 
 /** How many of a sub-section's extras are checked off (for the N/N pill). */
 function extraDoneCount(group: { items: { name: string }[] }): number {

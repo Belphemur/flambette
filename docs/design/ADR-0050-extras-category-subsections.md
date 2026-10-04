@@ -426,3 +426,53 @@ first time the key format or the "what is an orphan" rule changed.
   from outside, not a replacement.
 - `plan.clearCustomItems()` needs no wiring — `useConfirm.performClear` calls
   `grocery.clearAll()` in the same breath, so that path is already whole.
+
+### Review follow-up: the third ingress point, and why the prefix changed
+
+Two findings from the round-2 bot review of this fix, both real, both acted on.
+
+**1. `?p=` share links were a missed ingress point.** kody-ai (high) caught it:
+`App.vue`'s `importSharedPlan` calls `plan.replacePlan(shared.entries,
+shared.custom)` — which replaces `customItems` while leaving `grocery.map`
+untouched. A link carries no checked state, so any locally checked
+`custom||<name>` for an extra the link does not list became exactly the
+residue this addendum exists to remove. `reconcileExtras` is now called there
+too, making the ingress set what the docs claimed: a room snapshot, a backup
+archive, and a share link.
+
+**2. The `custom||` prefix was ambiguous with a grocery LINE key — so it
+changed to `extra::`.** Recipe-derived line keys are
+`` `${nameKey}||${display}` `` (`src/lib/grocery.ts`), so `custom||` is not a
+namespace of its own: an ingredient normalizing to exactly `custom` yields a
+line key of the very same shape, and the reconciler would have deleted a real
+grocery line's checked state (kody-ai, medium).
+
+No catalog ingredient normalizes to `custom` today — verified across all 2,759
+recipe docs / 349 distinct names, and the ingredient index has no such entry —
+so this was latent, not live. It is fixed anyway: the catalog is DATA, and a
+latent trap that only stays closed while the data stays frozen is not a
+guarantee. `::` cannot occur in a `nameKey`, so with `extra::` the two key
+spaces are disjoint BY CONSTRUCTION rather than by coincidence.
+
+Because the prefix change would strand every household's existing checked
+extras, `reconcileCheckedExtras` also RECOGNISES the legacy form and migrates a
+live `custom||<name>` to `extra::<name>` in place. An upgrade therefore keeps
+every check the user had.
+
+**The one legacy ambiguity, and the direction it resolves.** A legacy key whose
+segment matches no live extra is KEPT, not dropped: `custom||6 medium carrots`
+is indistinguishable from an extra named `6 medium carrots`, and structure
+alone cannot decide it. Ground truth is the live extras list — no match means
+it is far more likely a line key, so it survives. The deliberate cost: an
+orphan under the LEGACY prefix is not garbage-collected (an orphan under
+`extra::` is). That is the right way round — dropping a live grocery line is
+silent and breaks shopping mid-trip, while a retained extra check is visible
+and clears the moment the user unchecks it.
+
+### Three key-format copies became one
+
+The format was re-spelled in `GroceryTab`, in `ShopView` (commented as
+"mirrors the Grocery tab's") and inline in `useGroceryList`. All three now
+import `extraCheckedKey`. That duplication is what made finding 2 possible to
+miss in the first place, and it is the DRY loss this repo's coding-philosophy
+skill names: a second copy of one fact is where the two spaces drifted.
