@@ -49,6 +49,49 @@ describe('grocery.reconcileExtras', () => {
     expect(grocery.map).toEqual({ '999||tomato': true })
   })
 
+  test('migrateLegacyKeys re-keys a PERSISTED pre-ADR-0050 map on reload', () => {
+    // The data-loss case kody-ai flagged (high): the ingress points only cover
+    // state arriving from OUTSIDE, so a plain reload after the prefix change
+    // hydrated `custom||<name>` keys while the renderers read
+    // `extra::<name>` — every already-checked extra would render UNCHECKED.
+    const plan = usePlanStore()
+    const grocery = useGroceryStore()
+    plan.customItems = ['kale', 'apple']
+    // What localStorage held from the older build.
+    grocery.map = { 'custom||kale': true, 'custom||apple': true, '999||tomato': true }
+
+    grocery.migrateLegacyKeys()
+
+    expect(grocery.isChecked('extra::kale')).toBe(true)
+    expect(grocery.isChecked('extra::apple')).toBe(true)
+    expect(grocery.map['999||tomato']).toBe(true)
+    // No legacy key survives.
+    expect(Object.keys(grocery.map).some((k) => k.startsWith('custom||'))).toBe(false)
+  })
+
+  test('migrateLegacyKeys is idempotent and a no-op on a current map', () => {
+    const plan = usePlanStore()
+    const grocery = useGroceryStore()
+    plan.customItems = ['kale']
+    grocery.map = { 'extra::kale': true }
+
+    grocery.migrateLegacyKeys()
+    expect(grocery.map).toEqual({ 'extra::kale': true })
+  })
+
+  test('migrateLegacyKeys leaves an ambiguous legacy key (possible line key) alone', () => {
+    const plan = usePlanStore()
+    const grocery = useGroceryStore()
+    plan.customItems = ['kale']
+    // Matches no live extra, so it is far more likely a line key for an
+    // ingredient named "custom" than an extra nobody has.
+    grocery.map = { 'custom||6 medium carrots': true }
+
+    grocery.migrateLegacyKeys()
+
+    expect(grocery.map).toEqual({ 'custom||6 medium carrots': true })
+  })
+
   test('the healed state is what re-adding the extra then reads', () => {
     // The end-to-end shape of the bug: without reconciliation, re-adding
     // "ghost" lands already-checked, so its sub-section is instantly "done"

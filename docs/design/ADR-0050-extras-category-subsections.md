@@ -476,3 +476,36 @@ The format was re-spelled in `GroceryTab`, in `ShopView` (commented as
 import `extraCheckedKey`. That duplication is what made finding 2 possible to
 miss in the first place, and it is the DRY loss this repo's coding-philosophy
 skill names: a second copy of one fact is where the two spaces drifted.
+
+### The migration also has to run on a plain RELOAD (found in review, and it was a data-loss bug)
+
+kody-ai (high) caught the gap this prefix change opened, and it is the most
+serious finding in this PR's review history: the three ingress points only
+cover state arriving from **outside**. A plain reload is not one of them.
+
+After upgrade, `mealime-planner:v1:checked` hydrates `custom||<name>` keys
+while `GroceryTab`, `ShopView` and `useGroceryList` all read
+`extraCheckedKey(name)` = `extra::<name>`. Nothing reconciles them, so
+**every already-checked extra renders unchecked** — silent, on the very screen
+the user is shopping from, and indistinguishable from "my list forgot". The
+reconciler's migration was real but insufficient: it protected the wire and
+the archive, not the user's own storage.
+
+Fixed in the store's `persist.afterHydrate`, which is where this repo already
+puts every other persisted-blob migration (`ui.ts`: `migrateLegacyFilters`,
+`adoptHistoryShareDefault`, `repairDefaultServings`, `repairUnitSystem`).
+
+Two details that are load-bearing rather than incidental:
+
+- **It is handed the LIVE extras.** `reconcileCheckedExtras` re-keys a legacy
+  key only when its segment matches a real extra — that is precisely how it
+  avoids mistaking a line key for an extras key. Reconciling against an empty
+  list (the obvious first attempt) therefore migrates **nothing** and the bug
+  ships anyway, silently. The plan store persists in its own slice and hydrates
+  independently, so the extras are read lazily rather than assuming an order.
+- **It short-circuits when no legacy key is present**, so the common path
+  costs one `Object.keys` scan and no store write; the hook is idempotent.
+
+Three unit cases pin it: the persisted-blob reload keeps every check and keeps
+its line keys, a second run changes nothing, and an ambiguous legacy key (a
+possible line key) is still left alone.
