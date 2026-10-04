@@ -3,7 +3,8 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Check, ChevronDown, ChevronRight, Eraser, ShoppingCart, X } from 'lucide-vue-next'
 import { useGroceryList } from '../lib/useGroceryList'
-import { extraCollapseKey, groupExtras, storeCollapseKey } from '../lib/extraSections'
+import { extraCollapseKey, groupExtras, storeCollapseKey, type ExtraGroup } from '../lib/extraSections'
+import { sinkChecked } from '../lib/sink'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
 import IngredientAutocomplete from './IngredientAutocomplete.vue'
 
@@ -101,12 +102,24 @@ function storeKey(name: string): string {
   return storeCollapseKey(name)
 }
 
-/** A section is "done" when every grocery line under it is checked. */
+/**
+ * A group is "done" when every grocery line under it is checked. ONE map
+ * feeds ONE watcher for BOTH kinds of group on this screen — recipe-derived
+ * store sections AND extras sub-sections (ADR-0050 addendum: the owner
+ * reversed the manual-only rule; the shopping screen keeps one rule, not
+ * two) — exactly the Grocery tab's shape.
+ */
 const sectionDone = computed(() => {
   const m = new Map<string, boolean>()
   for (const s of sections.value) {
     const lines = s.items.flatMap((i) => i.lines)
     m.set(storeKey(s.name), lines.length > 0 && lines.every((l) => !!checked.map[l.key]))
+  }
+  for (const g of extraGroups.value) {
+    m.set(
+      extraKey(g.name),
+      g.items.length > 0 && g.items.every((i) => !!checked.map[extraCheckedKey(i.name)]),
+    )
   }
   return m
 })
@@ -123,10 +136,14 @@ const sectionDone = computed(() => {
  * Doing it the other way round would hide the group before the sink
  * order settled, and the re-expanded list would come back mid-sink.
  *
- * Extras are deliberately NOT in this map: on the shopping screen the
- * extras group stays MANUAL-collapse-only (ADR-0008 addendum), so a
- * one-item extra that happens to be the last unchecked line must not
- * yank the list mid-trip. ADR-0050 addendum.
+ * Extras sub-sections ARE in this map now (ADR-0050 addendum, 2026-10-05:
+ * the owner reversed ADR-0008's addendum and ADR-0050's own manual-only
+ * rule — a group reading N/N while its neighbour is collapsed reads as
+ * "not working", so ONE done→collapse rule applies to every group on this
+ * screen, a one-item sub-section included). The outer "Extra items" GROUP
+ * header is still not a section and stays manual-only. The same ordering
+ * contract holds for the extras path: the sink re-sorts a sub-section's
+ * rows BEFORE the collapse hides it.
  */
 watch(
   sectionDone,
@@ -147,6 +164,24 @@ watch(
 
 function sectionDoneCount(section: { items: { lines: { key: string }[] }[] }): number {
   return section.items.flatMap((i) => i.lines).filter((l) => !!checked.map[l.key]).length
+}
+
+/**
+ * Rendered row order: checked items sink to the bottom, stable within
+ * each group (ADR-0008) — ONE sink helper for both kinds of group, so
+ * store sections and extras sub-sections cannot drift apart.
+ */
+function sinkedStoreRows(section: {
+  items: { name: string; lines: { key: string; text?: string }[] }[]
+}) {
+  return sinkChecked(
+    section.items.flatMap((item) => item.lines.map((line) => ({ item, line }))),
+    (e) => !!checked.map[e.line.key],
+  )
+}
+
+function sinkedExtraRows(group: ExtraGroup) {
+  return sinkChecked(group.items, (i) => !!checked.map[extraCheckedKey(i.name)])
 }
 
 function sectionTotalCount(section: { items: { lines: unknown[] }[] }): number {
@@ -221,14 +256,16 @@ function exitShopping() {
   </div>
 
   <template v-else>
-  <!-- Extra items stay manual-only: they are the user's own scratch
-  pad, and a mis-tap on a one-item extra would yank the list (ADR-0008
-  addendum). Inside, they are grouped into their OWN category
-  sub-sections (ADR-0050) — the same `groupExtras` grouping the Grocery
-  tab uses, in the SHOPPING screen's own visual language (larger rows,
-  chevron headers, N/N pills). An extras "Produce" sub-section is NOT
-  the recipe-derived "Produce" below it (ADR-0015 §2, still in force):
-  the namespaced collapse keys are what keep the two apart. -->
+  <!-- The outer "Extra items" GROUP header stays manual-only (it is a
+  group label, not a section). Its sub-sections now follow the SAME
+  done→collapse rule as the store sections below (ADR-0050 addendum:
+  the owner reversed the earlier manual-only rule — consistency, one
+  rule for every group on the shopping screen). Grouped into their OWN
+  category sub-sections (ADR-0050) via the same `groupExtras` the
+  Grocery tab uses, rows sunk by the same `sinkChecked` helper. An
+  extras "Produce" sub-section is NOT the recipe-derived "Produce"
+  below it (ADR-0015 §2, still in force): the namespaced collapse keys
+  are what keep the two apart. -->
   <section
   v-if="plan.customItems.length > 0"
   class="mb-6"
@@ -278,7 +315,9 @@ function exitShopping() {
   class="divide-y"
   data-test="shop-extra-subsection-rows"
   >
-  <li v-for="item in group.items" :key="item.name">
+  <!-- Checked items sink, stable within the sub-section — the same
+  sink the store sections render through. -->
+  <li v-for="item in sinkedExtraRows(group)" :key="item.name">
   <button
   class="flex min-h-16 w-full items-center gap-4 py-2 text-left text-lg"
   :class="checked.map[extraCheckedKey(item.name)] ? 'opacity-40' : ''"
@@ -333,13 +372,10 @@ function exitShopping() {
   </button>
   <template v-if="!isCollapsed(storeKey(section.name))">
   <ul class="divide-y" data-test="shop-section-rows">
-  <!-- Unchecked first (checked items sink), stable within each group -->
-  <li
-  v-for="entry in [...section.items]
-  .flatMap((item) => item.lines.map((line) => ({ item, line })))
-  .sort((x, y) => Number(!!checked.map[x.line.key]) - Number(!!checked.map[y.line.key]))"
-  :key="entry.line.key"
-  >
+  <!-- Unchecked first (checked items sink), stable within each group;
+  the ordering lives once in src/lib/sink.ts, shared with the extras
+  sub-sections above. -->
+  <li v-for="entry in sinkedStoreRows(section)" :key="entry.line.key">
   <button
   class="flex min-h-16 w-full items-center gap-4 py-2 text-left text-lg"
   :class="checked.map[entry.line.key] ? 'opacity-40' : ''"

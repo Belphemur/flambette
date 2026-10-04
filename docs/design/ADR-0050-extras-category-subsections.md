@@ -275,3 +275,81 @@ not in the DOM.
   `aria-activedescendant`. Repeating the expression at four sites is how
   the two halves drifted in the first place; the pure helper makes the
   rule unit-testable.
+
+## Addendum (2026-10-05) — the owner reverses the ShopView manual-only rule; one sink for every group
+
+Phase 3 of this PR. **This is a deliberate reversal of two prior ADRs** —
+ADR-0008's addendum (ShopView auto-collapse covers store sections only) and
+this ADR's own §A1 bullet ("Auto-collapse is still MANUAL-only on this
+screen") — recorded as such rather than as a correction of their reasoning.
+The earlier reasoning was right for its moment; the owner's screenshot showed
+what it costs once both kinds of group sit on the same screen.
+
+### What changed and why
+
+The owner's `/shop` screenshot showed the extras `Produce 2/2` sub-section —
+every row checked — still EXPANDED, directly above the recipe-derived
+`Produce 6/6` correctly auto-collapsed. Same screen, two different rules for
+groups that look identical and both read `N/N`. The owner reversed the
+manual-only rule: **auto-collapse applies in `/shop`, including the extras
+sub-sections.** The original concern (a mis-tap on a one-item extra yanks the
+list mid-trip) no longer outweighs the consistency requirement: a group that
+reads `N/N` while its neighbour is collapsed reads as "not working". One rule
+for every group on the shopping screen.
+
+### The single-item judgement call: uniform, no exemption
+
+The original objection was specifically about a ONE-item sub-section: one tap
+checks the last row, the group collapses, and the row the user just tapped
+disappears. A size exemption ("don't auto-collapse sub-sections with a single
+item") would answer it — but an exemption is a SECOND rule, and "consistent"
+was the whole point of the reversal. So the shipped rule is uniform: every
+extras sub-section auto-collapses on completion, a one-item one included.
+
+Nothing is lost by it: the checked row stays visible in the collapsed header's
+`1/1` pill, a manual click on the header re-opens and pins it (the store
+sections' exact behaviour), and unchecking re-expands it. The Grocery tab
+already behaves this way for one-item groups. If a future owner wants the
+exemption, it is a one-line condition in the done-map — proposed, not shipped.
+
+### DRY: the checked-sink is now ONE helper
+
+The store sections' checked-sink lived as an inline `.sort(...)` inside the
+store-section `v-for` — knowledge the extras sub-sections needed the moment
+they joined the screen's rules. It is extracted to `src/lib/sink.ts`
+(`sinkChecked(rows, isChecked)`), pure, stable by construction (a single-pass
+partition — not reliance on `Array.prototype.sort`'s engine-guaranteed
+stability over a `flatMap`-built copy), unit-tested in `src/lib/sink.test.ts`
+(stability, all-checked, none-checked, empty, no-mutation), and rendered
+through by BOTH the store sections and the extras sub-sections. The inline
+sort is deleted. **The trade, named:** DRY won over KISS — the loser (keeping
+the inline sort and adding a second one for extras) would have been two sort
+expressions that drift apart the first time the ordering rule changes, which
+is exactly the failure mode this repo's coding-philosophy skill warns about.
+
+### The done-map: ONE map, ONE watcher (SOLID kept)
+
+`ShopView`'s `sectionDone` computed now carries BOTH kinds of group under
+their namespaced keys (`extraCollapseKey` / `storeCollapseKey`, §5): the
+extras sub-sections are entries in the SAME map, fed by the SAME
+`flush: 'post'` watcher. ADR-0008's ordering rationale is extended, not
+replaced: the watcher still runs AFTER the sink has re-rendered, so a group
+hides only once its checked row has already sunk to the bottom — doing it the
+other way round would hide the group before the sink order settled. Manual
+collapse still wins over auto (clicking an auto-collapsed header re-opens and
+pins it), the collapse fires on the false→true transition only, and a
+sub-section that mounts already-complete does not collapse on first paint
+(the watcher's `prev?.get(name) ?? false` guard means only observed
+transitions collapse).
+
+### What was NOT touched
+
+- The outer "Extra items" GROUP header keeps its own single boolean and stays
+  manual-collapse-only: it is a group label, not a section (§A1), and it has
+  no done-state of its own.
+- ADR-0015 §2 (never routed) is untouched: an extras `Produce` is still never
+  in the recipe-derived `Produce` section, and the namespaced keys keep the
+  two apart.
+- ADR-0008 and ADR-0015 are NOT edited; this addendum is the record of the
+  reversal. The e2e specs that pinned manual-only behaviour were rewritten to
+  pin the uniform rule.
