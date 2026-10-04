@@ -52,6 +52,27 @@ function extraCheckedKey(item: string): string {
   return `custom||${item.toLowerCase()}`
 }
 
+/**
+ * Remove an extra AND its checkbox key (ADR-0050 addendum). The checked
+ * map is keyed by the extra's NAME, so a removed extra used to leave
+ * `custom||<name>` behind; re-adding it then read as an already-done
+ * row, the sub-section's done-map went false→true and ADR-0008's
+ * watcher collapsed the group that had just been emptied — hiding the
+ * row the user had just added.
+ *
+ * The cleanup lives HERE, at the removal site, not in
+ * `plan.removeCustomItem`: the plan store owns `customItems`, the
+ * grocery store owns checkbox keys, and wiring plan → grocery would
+ * make a synced, backup-registered store depend on a view-owned one for
+ * a key whose format (`custom||<lowercased name>`) the RENDERERS own.
+ * `checked.forget` is a one-key store primitive that knows nothing about
+ * extras.
+ */
+function removeExtra(name: string): void {
+  plan.removeCustomItem(name)
+  checked.forget(extraCheckedKey(name))
+}
+
 /** How many of a sub-section's extras are checked off. */
 function extraDoneCount(group: { items: { name: string }[] }): number {
   return group.items.filter((i) => !!checked.map[extraCheckedKey(i.name)]).length
@@ -302,7 +323,7 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   <button
   class="flex size-11 shrink-0 items-center justify-center rounded-lg text-text-muted hover:text-favourite"
   :aria-label="`Remove ${item.name} from the grocery list`"
-  @click="plan.removeCustomItem(item.name)"
+  @click="removeExtra(item.name)"
   >
   <X :size="16" aria-hidden="true" />
   </button>
