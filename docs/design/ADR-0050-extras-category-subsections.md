@@ -193,3 +193,85 @@ see and act on it.
 - 2026-10-04 — removed the per-row tag rather than keeping it "for
   accessibility": the sub-section heading carries the category, and the
   tag would be a duplicate of the line directly above it.
+## Addendum — 2026-10-05 (PR #44 review follow-up)
+
+Three decisions taken while landing this ADR, none of which reverse
+anything above.
+
+### A1. ShopView sub-sections extras too (same lib, own visual language)
+
+The Grocery tab got the sub-sections, the shopping screen did not: the
+owner showed `/shop` with one flat "Extra items" list (egg, eggplants,
+celery) above "Produce", which is the pre-ADR-0050 shape. A shopper
+scanning a store aisle is exactly the reader who needs the categories.
+
+- **Same `groupExtras`**, same `STORE_SECTIONS` order, same
+  Uncategorized-last, same omitted-empty rule. The screen renders its own
+  rows and its own chrome, but the GROUPING stays one pure function
+  (`src/lib/extraSections.ts`) — a second implementation would drift the
+  first time a rule changed, which is the DRY failure this repo's
+  coding-philosophy skill names.
+- **The extras GROUP header keeps its own single boolean**
+  (`extrasGroupCollapsed`) rather than joining the namespaced sets: it is
+  a group label, not a section, and it is manual-only like everything
+  else extras on that screen.
+- **Sub-section headers carry an `N/N` pill and the
+  `${name}: ${done} of ${total} checked` accessible name**, matching
+  `shop-section-toggle` — consistency inside the screen matters more
+  than mirroring the Grocery tab's smaller uppercase type. The outer
+  "Extra items" header keeps NO pill, exactly as the owner's screenshot
+  shows it: it is a group label whose count would just restate its
+  children.
+- **Never routed, here too (ADR-0015 §2):** an extras `Produce`
+  sub-section is not the recipe-derived `Produce` section below it. Both
+  are now named keys in the SAME screen, so `ShopView`'s collapse state
+  moved to the namespaced `extraCollapseKey` / `storeCollapseKey` — the
+  same structural separation §5 gives the Grocery tab.
+- **Auto-collapse is still MANUAL-only on this screen.** ADR-0008's
+  addendum keeps it and e2e pins it; this ADR adds grouping only. The
+  auto-collapse watcher therefore still walks store sections only, and
+  the extras sub-sections are absent from the done-map by construction
+  rather than by a special case. (Proposal for the owner, not shipped:
+  now that a sub-section is a real group with a done-map of its own, the
+  same "done → collapse" rule would be consistent here. It would also
+  mean a mis-tap on a one-item extra yanks the list mid-trip, which is
+  the exact reason the addendum says no.)
+
+### A2. `removeCustomItem` takes its checked key with it (and the plan store stays clean)
+
+`plan.removeCustomItem` spliced the extra out of `customItems` and left
+`custom||<name>` set in the grocery checked map. The stale key predates
+this ADR (identical on `b02f8f1`), but auto-collapse turned it into a
+visible bug: re-adding a checked extra — or re-adding it under a
+different category, so it lands in a fresh sub-section — made the
+done-map read false→true and the watcher collapsed the group that had
+just been emptied, hiding the row the user had just added.
+
+- The cleanup lives at the **removal site** (`GroceryTab`'s
+  `removeExtra`), via a new one-key primitive `checked.forget(key)` on
+  the grocery store.
+- **Not** inside `plan.removeCustomItem`: the plan store owns
+  `customItems` and is synced + backup-registered; the grocery store
+  owns the checkbox keys, whose format (`custom||<lowercased name>`) is
+  a RENDERER's convention. Importing the grocery store into plan would
+  put a view-owned dependency inside the synced store for a key it does
+  not understand, and would make every non-Grocery caller (a future
+  kitchen-mode list, a room-driven removal) silently responsible for a
+  rule they cannot see.
+- `forget` is a key-agnostic primitive; it replaces the map immutably so
+  the done-map computeds re-evaluate synchronously.
+
+### A3. The add-item combobox's ARIA state follows the listbox
+
+`IngredientAutocomplete`'s suggestion `<ul>` renders only when
+`open && !categoryMenuOpen && rows.length > 0`, but `aria-expanded` and
+`aria-controls` tested only `open && rows.length > 0`. While the category
+popup was open the combobox announced an expanded listbox whose node was
+not in the DOM.
+
+- ONE derived value, `suggestionsVisible`, computed from the pure
+  `isSuggestionListVisible()` in `src/lib/ingredientSuggestions.ts`,
+  drives the `v-if`, `aria-expanded`, `aria-controls` AND
+  `aria-activedescendant`. Repeating the expression at four sites is how
+  the two halves drifted in the first place; the pure helper makes the
+  rule unit-testable.
