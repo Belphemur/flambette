@@ -65,6 +65,22 @@ export async function liveRoomCode(page: Page): Promise<string> {
 }
 
 /**
+ * Pick a store-category override in the add form, the way a person does:
+ * open the SHARED `FilterDropdown` (ADR-0050 §8 replaced the native
+ * `<select>`, so `selectOption()` is gone) and click the option row.
+ *
+ * `value: ''` picks the "no override yet" placeholder.
+ */
+export async function pickCategoryOverride(page: Page, value: string): Promise<void> {
+  await page.locator('[data-test=ingredient-category]').click()
+  const menu = page.locator('[data-test=ingredient-category-menu]')
+  await expect(menu).toBeVisible()
+  const slug = value === '' ? 'none' : value
+  await menu.locator(`[data-test="ingredient-category-option-${slug}"]`).click()
+  await expect(menu).toHaveCount(0)
+}
+
+/**
  * Acknowledge the congrats modal that a shared `?room=` link raises
  * (ADR-0049), the way a person arriving on that link would.
  *

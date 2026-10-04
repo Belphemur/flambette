@@ -2,8 +2,11 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Plus } from 'lucide-vue-next'
 import { STORE_SECTIONS } from '../lib/sections'
+import FilterDropdown from './FilterDropdown.vue'
+import type { FilterDropdownOption } from './FilterDropdown.vue'
 import { nameKey } from '../lib/grocery'
 import {
+  isSuggestionListVisible,
   suggestIngredients,
   type IngredientSuggestion,
 } from '../lib/ingredientSuggestions'
@@ -50,12 +53,31 @@ const open = ref(false)
 const activeIndex = ref(-1)
 /** Explicit category override for the NEXT add (empty = use row's own). */
 const category = ref<string>('')
+/** The category popup is open: the ingredient suggestions stand down
+ *  (they are drawn over the control and would swallow its clicks). */
+const categoryMenuOpen = ref(false)
 const wrapper = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLInputElement | null>(null)
 const listboxId = `ingredient-listbox-${Math.random().toString(36).slice(2, 8)}`
 
 const showCategory = computed(() => query.value.trim().length > 0)
 const canSubmit = computed(() => query.value.trim().length > 0)
+
+/**
+ * Category options for the shared dropdown (ADR-0050 §8). The empty-value
+ * "Pick a store category" placeholder is the FIRST entry so "no override
+ * yet" stays expressible and the trigger reads as unset by default; the
+ * rest comes from the canonical `STORE_SECTIONS` constant (no second copy
+ * of the taxonomy).
+ */
+const CATEGORY_PLACEHOLDER = 'Pick a store category'
+const categoryOptions = computed<FilterDropdownOption[]>(() => [
+  { value: '', label: CATEGORY_PLACEHOLDER },
+  ...STORE_SECTIONS.map((s) => ({ value: s, label: s })),
+])
+const categorySelectedIndex = computed(() =>
+  Math.max(0, categoryOptions.value.findIndex((o) => o.value === category.value)),
+)
 
 /** The persistent "add this exact text" row — always row 0 (ADR-0014). */
 const typedRow = computed<IngredientSuggestion | null>(() => {
@@ -224,6 +246,24 @@ function onGlobalPointer(event: Event) {
 onMounted(() => document.addEventListener('pointerdown', onGlobalPointer))
 onBeforeUnmount(() => document.removeEventListener('pointerdown', onGlobalPointer))
 
+/**
+ * Are the suggestion rows actually RENDERED? ONE source of truth for the
+ * listbox's existence (qodo + kody-ai, the same finding twice): while the
+ * category popup is open the suggestions stand down (they would swallow
+ * the popup's clicks), so `aria-expanded`, `aria-controls` and
+ * `aria-activedescendant` must go quiet with them. Repeating the
+ * expression at the four use sites is how the two halves drifted: the
+ * `v-if` learned about `categoryMenuOpen` and the ARIA bindings did not,
+ * so the combobox announced a controlled listbox that had no node.
+ */
+const suggestionsVisible = computed(() =>
+  isSuggestionListVisible({
+    open: open.value,
+    categoryMenuOpen: categoryMenuOpen.value,
+    rowCount: rows.value.length,
+  }),
+)
+
 const ariaLabel = 'Add a custom grocery item'
 </script>
 
@@ -243,10 +283,10 @@ const ariaLabel = 'Add a custom grocery item'
   placeholder="Add an item not in the recipes…"
   :aria-label="ariaLabel"
   role="combobox"
-  :aria-expanded="open && rows.length > 0"
+  :aria-expanded="suggestionsVisible"
   aria-autocomplete="list"
-  :aria-controls="open && rows.length > 0 ? listboxId : undefined"
-  :aria-activedescendant="activeIndex >= 0 ? optionId(activeIndex) : undefined"
+  :aria-controls="suggestionsVisible ? listboxId : undefined"
+  :aria-activedescendant="suggestionsVisible && activeIndex >= 0 ? optionId(activeIndex) : undefined"
   class="h-11 w-full rounded-xl border px-4 text-sm outline-none focus:border-brand-text"
   data-test="add-bar-input"
   @input="onInput"
@@ -263,20 +303,30 @@ const ariaLabel = 'Add a custom grocery item'
   </form>
 
   <!-- Category chooser: explicit override for the NEXT add; resets on
-  every add so the row categories stay authoritative afterwards. -->
-  <select
-  v-if="showCategory"
-  v-model="category"
-  aria-label="Store category for this item"
-  data-test="ingredient-category"
-  class="mt-2 h-9 w-full rounded-lg border px-2 text-xs text-text-muted"
-  >
-  <option value="" disabled>Pick a store category</option>
-  <option v-for="s in STORE_SECTIONS" :key="s" :value="s">{{ s }}</option>
-  </select>
+  every add so the row categories stay authoritative afterwards. It is
+  the SHARED FilterDropdown (ADR-0045), consumed here for the first time
+  outside a filter bar: `fullWidth: false` because this is a stacked
+  full-width row under the input, not a grid cell (ADR-0046 2.2
+  precedent). The component clamps/flips its popup, which is what makes
+  it usable at the bottom of a phone viewport. -->
+  <div v-if="showCategory" class="mt-2">
+  <FilterDropdown
+  :options="categoryOptions"
+  :selected-index="categorySelectedIndex"
+  label="Store category for this item"
+  trigger-test="ingredient-category"
+  menu-test="ingredient-category-menu"
+  :option-test="(o) => `ingredient-category-option-${o.value || 'none'}`"
+  :full-width="false"
+  :active="category !== ''"
+  menu-width="w-full"
+  @select="(v) => (category = v)"
+  @open="categoryMenuOpen = $event"
+  />
+  </div>
 
   <ul
-  v-if="open && rows.length > 0"
+  v-if="suggestionsVisible"
   :id="listboxId"
   role="listbox"
   aria-label="Ingredient suggestions"

@@ -319,6 +319,19 @@ export const useRoomStore = defineStore('room', () => {
         if (value) checked[key] = true
       }
       grocery.map = checked
+      // A snapshot carries `customItems` and `checked` as SEPARATE fields
+      // with no invariant tying them together, so any peer (at any app
+      // version) can send a `custom||<name>` key for an extra that is not
+      // in its `customItems`. The residue is invisible but harmful: the
+      // key reads as "already done", so re-adding that name lands in a
+      // sub-section the done-map immediately calls COMPLETE and ADR-0050's
+      // auto-collapse hides the row the user just added. Drop it HERE —
+      // this wholesale replace is the one point where an inbound snapshot
+      // can introduce the disagreement. The dropped key needs no
+      // republish: it described an item the household no longer has, so no
+      // peer is missing state because of it (ADR-0028's reconciliation is
+      // about rows the room LACKS, and this key is not one).
+      grocery.reconcileExtras(state.customItems ?? [])
       plan.setClearedIngredients(state.cleared ?? {})
       // Household custom-ingredient memory (ADR-0012); absent on old
       // payloads → treated as "nothing shared yet", NOT as "wipe local".

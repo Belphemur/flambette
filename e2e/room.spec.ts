@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { extraCheckedKey } from '../src/lib/extraCheckedKeys'
 import {
   blockExternalRequests,
   gotoTab,
@@ -93,7 +94,10 @@ test('room lifecycle: A shares, B joins and both see each other live', async ({ 
         }),
       { timeout: 10_000 },
     )
-    .toContain('custom||b brings dessert')
+    // The key format is `extra::<lowercased name>` (ADR-0050) — imported
+    // from the ONE definition rather than re-spelled, which is exactly the
+    // duplication that let the prefix drift out of sync with this assertion.
+    .toContain(extraCheckedKey('B brings dessert'))
 
   // A's plan edits propagate to B too (reverse direction).
   await a.goto('/plan')

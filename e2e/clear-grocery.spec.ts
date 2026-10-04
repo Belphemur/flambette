@@ -77,9 +77,21 @@ test('checking the last item prompts to clear; Cancel aborts, then Clear works',
   await toast.locator('[data-test=toast-action-secondary]').click()
   await expect(toast).toHaveCount(0)
   await expect(page.getByText(/(\d+) \/ (\d+) items/)).toHaveText(`${total} / ${total} items`)
-  await expect(page.locator('[data-test=extra-section] li')).toHaveCount(1)
+  // State untouched — and since the ONLY extra is now checked off, its
+  // sub-section auto-collapsed like any other category (ADR-0050 §5): the
+  // rows are hidden but the header + N/N pill + chevron remain.
+  const extraSubsection = page.getByTestId('extra-section').locator('[data-test=extra-subsection]')
+  await expect(extraSubsection.getByTestId('extra-subsection-toggle')).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  )
+  await expect(extraSubsection.getByTestId('section-count-pill')).toHaveText('1/1')
+  await expect(page.locator('[data-test=extra-section] li')).toHaveCount(0)
 
-  // Re-trigger (uncheck one, check it again) and confirm this time.
+  // Re-trigger (re-open a collapsed category — the ADR-0008 escape hatch,
+// needed since EVERY group is now auto-collapsed — uncheck one, check it
+// again) and confirm this time.
+  await page.locator('[data-test=grocery-section-toggle]').first().click()
   await page.locator('main input[type=checkbox]:checked').first().click()
   await page.locator('main input[type=checkbox]:not(:checked)').first().click()
   await expect(toast).toContainText('All items checked — clear the grocery list? Ingredients stay hidden until you cook the meals.')

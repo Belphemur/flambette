@@ -8,6 +8,7 @@ import { getCatalog } from './lib/catalog'
 import { decodePlan } from './lib/share'
 import { useShareRoomLink } from './composables/useShareRoomLink'
 import { usePlanStore } from './stores/plan'
+import { useGroceryStore } from './stores/grocery'
 import { useRoomStore, type RoomStatus } from './stores/room'
 import { initFavourites } from './stores/favourites'
 import { appVersion } from './lib/appVersion'
@@ -149,6 +150,14 @@ async function importSharedPlan() {
   const shared = await decodePlan(p)
   if (shared) {
   plan.replacePlan(shared.entries, shared.custom)
+  // A `?p=` link replaces `customItems` but carries NO checked state, so a
+  // locally checked `custom||<name>` for an extra the link does not list
+  // becomes orphan residue: it reads "already done", so re-adding that
+  // name lands in a sub-section the done-map calls COMPLETE and
+  // ADR-0050's auto-collapse hides the new row. Third ingress point for
+  // `reconcileExtras` (the others are a room snapshot and a backup
+  // archive) — see `src/lib/extraCheckedKeys.ts`.
+  useGroceryStore().reconcileExtras(shared.custom)
   ui.showToast('Plan loaded from link')
   } else {
   ui.showToast("Couldn't load the shared plan")

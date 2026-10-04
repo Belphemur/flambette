@@ -7,6 +7,7 @@ import {
 } from './grocery'
 import { localizeQuantity } from './units'
 import { STORE_SECTIONS } from './sections'
+import { extraCheckedKey } from './extraCheckedKeys'
 import type { RecipeDoc, VariantMeta } from './types'
 import {
   confirmAndClearGrocery,
@@ -93,7 +94,7 @@ export function useGroceryList() {
   const checkedCount = computed(
     () =>
       items.value.reduce((n, item) => n + item.lines.filter((l) => checked.map[l.key]).length, 0) +
-      plan.customItems.filter((i) => checked.map[`custom||${i.toLowerCase()}`]).length,
+      plan.customItems.filter((i) => checked.map[extraCheckedKey(i)]).length,
   )
 
   /** Sections with items, in canonical order. */

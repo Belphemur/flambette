@@ -7,6 +7,7 @@ import {
   expectZeroMealimeRequests,
   gotoTab,
   openFirstRecipeDetail,
+  pickCategoryOverride,
   waitForCatalog,
 } from './helpers'
 import { zipStore } from '../src/lib/zip'
@@ -138,28 +139,37 @@ test.describe('Settings tab (data surface)', () => {
   })
 })
 
-test.describe('EXTRA ITEMS with category tags (ADR-0015)', () => {
+test.describe('EXTRA ITEMS sub-sectioned by category (ADR-0050)', () => {
   test.beforeEach(async ({ page }) => {
     await blockExternalRequests(page)
     await planFirstRecipe(page)
   })
 
-  test('an extra with a known category gets a TAG and stays in EXTRA ITEMS (never routed)', async ({ page }) => {
-    // Unknown name, explicit category pick (the ADR-0012 override select).
+  test('an extra with a known category gets its OWN sub-section and stays in EXTRA ITEMS (never routed)', async ({ page }) => {
+    // Unknown name, explicit category pick (the ADR-0012 override dropdown,
+    // now the shared FilterDropdown per ADR-0050 §8).
     await input(page).fill('Sunshade tent')
-    await page.locator('[data-test=ingredient-category]').selectOption('Household')
+    await pickCategoryOverride(page, 'Household')
     await page.locator('[data-test=ingredient-submit]').click()
     await expect(page.getByTestId('added-toast')).toContainText('Added to Household')
 
     const extra = page.getByTestId('extra-section')
-    const row = extra.locator('li').filter({ hasText: 'Sunshade tent' })
+    const subsection = extra.locator('[data-test=extra-subsection]').filter({ has: page.getByRole('button', { name: /^Household:/ }) })
+    const row = subsection.locator('li').filter({ hasText: 'Sunshade tent' })
     await expect(row).toHaveCount(1)
 
-    // The category renders as a small tag pill, not a section header.
-    await expect(row.locator('[data-test=extra-item-category-tag]')).toHaveText('#Household')
-    // Header stays static (EXTRA ITEMS, no chevron/toggle).
-    await expect(extra.getByRole('heading')).toHaveText(/Extra items/)
-    await expect(extra.locator('[data-test=grocery-section-toggle]')).toHaveCount(0)
+    // The category is the sub-section heading, not a per-row pill: ADR-0050
+    // §7 removed `extra-item-category-tag` because the heading directly
+    // above the row says the same thing.
+    await expect(subsection.locator('[data-test=extra-item-category-tag]')).toHaveCount(0)
+    await expect(subsection.getByTestId('extra-subsection-toggle')).toHaveAttribute('aria-expanded', 'true')
+    await expect(subsection.getByTestId('extra-subsection-toggle')).toHaveAttribute('aria-label', 'Household: 0 of 1 checked')
+    await expect(subsection.getByTestId('section-count-pill')).toHaveText('0/1')
+    // The GROUP header stays static (no chevron/toggle) — only the
+    // sub-section headers below it collapse (re-scoped by ADR-0050 §1).
+    await expect(extra.getByRole('heading', { name: 'Extra items' })).toBeVisible()
+    await expect(extra.locator('> h3 button')).toHaveCount(0)
+    await expect(extra.locator('> h3 svg')).toHaveCount(0)
 
     // NOT routed: no Household store section exists, and the item is not in
     // any real section row.
@@ -190,35 +200,131 @@ test.describe('EXTRA ITEMS with category tags (ADR-0015)', () => {
     await expectZeroMealimeRequests(page)
   })
 
-  test('an extra with no category stays a plain row — no tag, no section', async ({ page }) => {
-    // Unknown name, no override → the "Other" bucket = unknown, not a tag.
+  test('an extra with no category collects in the Uncategorized bucket', async ({ page }) => {
+    // Unknown name, no override → the "Other" bucket = unknown. It is no
+    // longer a flat unlabelled row: ADR-0050 §3 names that absence.
     await input(page).fill('ziplock bags')
     await page.locator('[data-test=ingredient-submit]').click()
     await expect(page.getByTestId('added-toast')).toContainText('Added to Other')
 
     const extra = page.getByTestId('extra-section')
-    const row = extra.locator('li').filter({ hasText: 'ziplock bags' })
+    const uncategorized = extra
+      .locator('[data-test=extra-subsection]')
+      .filter({ has: page.getByRole('button', { name: /^Uncategorized:/ }) })
+    const row = uncategorized.locator('li').filter({ hasText: 'ziplock bags' })
     await expect(row).toHaveCount(1)
-    await expect(row.locator('[data-test=extra-item-category-tag]')).toHaveCount(0)
-    // The row is still the plain name + remove button.
     await expect(row.getByRole('button', { name: /Remove ziplock bags/ })).toBeVisible()
+    // Still never routed into a real store section.
     await expect(page.locator('[data-test=grocery-section]').filter({ hasText: 'Other' })).toHaveCount(0)
 
     await expectZeroMealimeRequests(page)
   })
 
-  test('an index-known extra (banana → Produce) is tagged, not moved into PRODUCE', async ({ page }) => {
+  test('an index-known extra (banana → Produce) gets its own Produce sub-section, not the store PRODUCE', async ({ page }) => {
     await input(page).fill('banana')
     await firstRow(page).click()
     await expect(page.getByTestId('added-toast')).toContainText('Added to Produce')
 
-    const row = page.getByTestId('extra-section').locator('li').filter({ hasText: 'banana' })
-    await expect(row.locator('[data-test=extra-item-category-tag]')).toHaveText('#Produce')
+    const row = page
+      .getByTestId('extra-section')
+      .locator('[data-test=extra-subsection]')
+      .filter({ has: page.getByRole('button', { name: /^Produce:/ }) })
+      .locator('li')
+      .filter({ hasText: 'banana' })
+    await expect(row).toHaveCount(1)
     // The real Produce section (from the planned recipe) is untouched: it
     // has no row for the extra and keeps only its recipe-derived lines.
     const produce = page.locator('[data-test=grocery-section]').filter({ hasText: 'Produce' }).first()
     await expect(produce).toBeVisible()
     await expect(produce.locator('[data-test=grocery-row]').filter({ hasText: 'banana' })).toHaveCount(0)
+  })
+
+  test('extras group by category in STORE_SECTIONS order, Uncategorized last, empty categories omitted', async ({ page }) => {
+    await input(page).fill('banana')
+    await firstRow(page).click()
+    await input(page).fill('ziplock bags')
+    await page.locator('[data-test=ingredient-submit]').click()
+    await input(page).fill('Sunshade tent')
+    await pickCategoryOverride(page, 'Household')
+    await page.locator('[data-test=ingredient-submit]').click()
+
+    const names = page.getByTestId('extra-section').locator('[data-test=extra-subsection]')
+    await expect(names).toHaveCount(3)
+    // STORE_SECTIONS order (Produce … Household) with Uncategorized LAST,
+    // and no empty sub-section is invented for the 27 other categories.
+    const labels = await names
+      .locator('[data-test=extra-subsection-toggle]')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')))
+    expect(labels).toEqual([
+      'Produce: 0 of 1 checked',
+      'Household: 0 of 1 checked',
+      'Uncategorized: 0 of 1 checked',
+    ])
+  })
+
+  test('an extras sub-section auto-collapses when its last extra is checked off (ADR-0008 rule)', async ({ page }) => {
+    await input(page).fill('banana')
+    await firstRow(page).click()
+    await input(page).fill('granny smith')
+    await pickCategoryOverride(page, 'Produce')
+    await page.locator('[data-test=ingredient-submit]').click()
+
+    const produce = page
+      .getByTestId('extra-section')
+      .locator('[data-test=extra-subsection]')
+      .filter({ has: page.getByRole('button', { name: /^Produce:/ }) })
+    const toggle = produce.getByTestId('extra-subsection-toggle')
+    await expect(toggle).toHaveAttribute('aria-label', 'Produce: 0 of 2 checked')
+    await expect(produce.locator('[data-test=extra-row]')).toHaveCount(2)
+
+    // click(), never check(): the row DETACHES when it triggers the collapse.
+    await produce.locator('[data-test=extra-row]:not(:has(input:checked))').first().locator('input[type=checkbox]').click()
+    await expect(toggle).toHaveAttribute('aria-label', 'Produce: 1 of 2 checked')
+    await produce.locator('[data-test=extra-row]:not(:has(input:checked))').first().locator('input[type=checkbox]').click()
+
+    // Done → rows gone, header + count pill + chevron remain.
+    await expect(produce.locator('[data-test=extra-row]')).toHaveCount(0)
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(toggle).toHaveAttribute('aria-label', 'Produce: 2 of 2 checked')
+    await expect(toggle.getByTestId('section-count-pill')).toHaveText('2/2')
+
+    // Re-opening + unchecking re-expands (true→false).
+    await toggle.click()
+    await expect(produce.locator('[data-test=extra-row]')).toHaveCount(2)
+    await produce.locator('[data-test=extra-row]:has(input:checked)').first().locator('input[type=checkbox]').click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  test('collapsing the extras Produce does NOT collapse the store Produce (namespaced keys)', async ({ page }) => {
+    await input(page).fill('banana')
+    await firstRow(page).click()
+    await expect(page.getByTestId('added-toast')).toContainText('Added to Produce')
+
+    const extraProduce = page
+      .getByTestId('extra-section')
+      .locator('[data-test=extra-subsection]')
+      .filter({ has: page.getByRole('button', { name: /^Produce:/ }) })
+    const storeProduce = page.locator('[data-test=grocery-section]').filter({ hasText: 'Produce' }).first()
+
+    // The store section is expanded with its recipe-derived rows.
+    const storeRows = storeProduce.locator('[data-test=grocery-row]')
+    const storeTotal = await storeRows.count()
+    expect(storeTotal).toBeGreaterThan(0)
+    await expect(storeProduce.getByTestId('grocery-section-rows')).toBeVisible()
+
+    // Collapse the EXTRAS Produce: the store Produce must be untouched —
+    // both groups are called "Produce", and only the namespace keeps them
+    // apart (ADR-0050 §5).
+    await extraProduce.getByTestId('extra-subsection-toggle').click()
+    await expect(extraProduce.getByTestId('extra-subsection-rows')).toHaveCount(0)
+    await expect(storeProduce.getByTestId('grocery-section-rows')).toBeVisible()
+    await expect(storeRows).toHaveCount(storeTotal)
+
+    // …and the other way round.
+    await extraProduce.getByTestId('extra-subsection-toggle').click()
+    await storeProduce.getByTestId('grocery-section-toggle').click()
+    await expect(storeProduce.locator('[data-test=grocery-row]')).toHaveCount(0)
+    await expect(extraProduce.getByTestId('extra-subsection-rows')).toBeVisible()
   })
 })
 
@@ -275,7 +381,7 @@ test.describe('ShopView auto-collapse (ADR-0008 addendum)', () => {
     await expectZeroMealimeRequests(page)
   })
 
-  test('extra items stay manual-only in ShopView (no auto-collapse on a one-item extra)', async ({ page }) => {
+  test('a one-item extras sub-section auto-collapses too, uniformly with store sections (ADR-0050 addendum)', async ({ page }) => {
     await blockExternalRequests(page)
     await planFirstRecipe(page)
     await input(page).fill('Sticky tape')
@@ -286,12 +392,315 @@ test.describe('ShopView auto-collapse (ADR-0008 addendum)', () => {
     const extras = page.getByTestId('shop-custom-items')
     await expect(extras.locator('[data-test=shop-row]')).toHaveCount(1)
     await extras.locator('[data-test=shop-row]').click()
-    // The whole list is now done, but the extra group does NOT auto-collapse.
-    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(1)
+
+    // The sub-section is now done → it auto-collapses like every other
+    // group on the screen (ADR-0050 addendum: the owner reversed the
+    // manual-only rule; a single-item sub-section gets the SAME rule —
+    // the checked row stays visible in the 1/1 pill and returns on
+    // uncheck, so nothing is lost).
+    const subsection = extras.locator('[data-test=shop-extra-subsection]')
+    const subToggle = subsection.getByTestId('shop-extra-subsection-toggle')
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(0)
+    await expect(subToggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(subsection.getByTestId('section-count-pill')).toHaveText('1/1')
+
+    // The outer "Extra items" GROUP header is still not a section: it
+    // keeps its own manual-only boolean and stays expanded.
     await expect(extras.getByTestId('shop-section-toggle')).toHaveAttribute('aria-expanded', 'true')
 
+    // Manual click on the auto-collapsed header re-opens and pins it.
+    await subToggle.click()
+    await expect(subToggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(1)
+
+    // Unchecking re-expands behaviour: the row goes dim, done=false.
+    await extras.locator('[data-test=shop-row]').click()
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(1)
+    await expect(subToggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(subsection.getByTestId('section-count-pill')).toHaveText('0/1')
+
     // Manual collapse still works.
+    await subToggle.click()
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(0)
+  })
+})
+
+/**
+ * ADR-0050 follow-up: the SHOPPING screen gets the same extras
+ * sub-sectioning the Grocery tab already had (the owner showed
+ * /shop with one flat "Extra items" list above "Produce"), plus the two
+ * fixes the PR's reviewers found: the combobox announcing a listbox
+ * that is not in the DOM, and a re-added extra vanishing into a
+ * collapsed group.
+ */
+test.describe('ShopView extras sub-sections (ADR-0050)', () => {
+  test('extras are grouped by their own category, same order as the Grocery tab', async ({ page }) => {
+    await blockExternalRequests(page)
+    await planFirstRecipe(page)
+
+    // Two Produce extras, one Dairy, one with no remembered category.
+    await input(page).fill('banana')
+    await pickCategoryOverride(page, 'Produce')
+    await page.locator('[data-test=ingredient-submit]').click()
+    await input(page).fill('celery')
+    await pickCategoryOverride(page, 'Produce')
+    await page.locator('[data-test=ingredient-submit]').click()
+    await input(page).fill('egg')
+    await pickCategoryOverride(page, 'Dairy, Cheese & Eggs')
+    await page.locator('[data-test=ingredient-submit]').click()
+    await input(page).fill('Sticky tape')
+    await page.locator('[data-test=ingredient-submit]').click()
+
+    await page.getByTestId('start-shopping').click()
+    await expect(page.getByTestId('shopping-progress')).toBeVisible()
+
+    const extras = page.getByTestId('shop-custom-items')
+    await expect(extras).toBeVisible()
+
+    // STORE_SECTIONS order (Produce before Dairy, Cheese & Eggs), with
+    // Uncategorized LAST, and empty groups omitted entirely.
+    const order = await extras
+      .locator('[data-test=shop-extra-subsection]')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('data-extra-category')))
+    expect(order).toEqual(['Produce', 'Dairy, Cheese & Eggs', 'Uncategorized'])
+
+    // The rows really are inside their sub-section, not one flat list.
+    const produce = extras
+      .locator('[data-test=shop-extra-subsection]')
+      .filter({ has: page.locator('button[aria-label^="Produce:"]') })
+    await expect(produce.locator('[data-test=shop-row]')).toHaveCount(2)
+    await expect(produce).toContainText('banana')
+    await expect(produce).toContainText('celery')
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(4)
+
+    // The sub-section headers are shop headers: N/N pill + accessible name.
+    await expect(
+      extras.getByRole('button', { name: 'Produce: 0 of 2 checked' }),
+    ).toBeVisible()
+    await expect(
+      extras.getByRole('button', { name: 'Uncategorized: 0 of 1 checked' }).getByTestId('section-count-pill'),
+    ).toHaveText('0/1')
+
+    await expectZeroMealimeRequests(page)
+  })
+
+  test('an extras sub-section is never routed into the matching store section (ADR-0015 §2)', async ({ page }) => {
+    await blockExternalRequests(page)
+    await planFirstRecipe(page)
+    await input(page).fill('banana')
+    await pickCategoryOverride(page, 'Produce')
+    await page.locator('[data-test=ingredient-submit]').click()
+
+    await page.getByTestId('start-shopping').click()
+
+    const storeProduce = page
+      .locator('[data-test=shop-section]')
+      .filter({ has: page.getByText('Produce', { exact: true }) })
+    const storeRowsBefore = await storeProduce.locator('[data-test=shop-row]').count()
+    await expect(storeRowsBefore).toBeGreaterThan(0)
+    await expect(storeProduce).not.toContainText('banana')
+
+    const extrasProduce = page
+      .getByTestId('shop-custom-items')
+      .locator('[data-test=shop-extra-subsection]')
+      .filter({ has: page.locator('button[aria-label^="Produce:"]') })
+    await expect(extrasProduce).toBeVisible()
+    await expect(extrasProduce.locator('[data-test=shop-row]')).toHaveCount(1)
+
+    // Collapsing the EXTRAS Produce leaves the recipe-derived one open —
+    // both are called "Produce", only the namespace separates them.
+    await extrasProduce.getByTestId('shop-extra-subsection-toggle').click()
+    await expect(extrasProduce.getByTestId('shop-extra-subsection-rows')).toHaveCount(0)
+    await expect(storeProduce.locator('[data-test=shop-row]')).toHaveCount(storeRowsBefore)
+  })
+
+  test('an extras sub-section auto-collapses when done; unchecking re-expands; the store twin stays open (ADR-0050 addendum)', async ({ page }) => {
+    await blockExternalRequests(page)
+    await planFirstRecipe(page)
+    await input(page).fill('banana')
+    await pickCategoryOverride(page, 'Produce')
+    await page.locator('[data-test=ingredient-submit]').click()
+
+    await page.getByTestId('start-shopping').click()
+
+    const extras = page.getByTestId('shop-custom-items')
+    // Prefix-located: the name carries the running N/N, which is the very
+    // thing this test watches change.
+    const subsection = extras
+      .locator('[data-test=shop-extra-subsection]')
+      .filter({ has: page.locator('button[aria-label^="Produce:"]') })
+    const toggle = extras.locator('button[aria-label^="Produce:"]')
+
+    // Completing the sub-section auto-collapses it — uniformly with the
+    // store sections (ADR-0050 addendum reverses the manual-only rule;
+    // the checked row stays visible in the 1/1 pill and returns on
+    // uncheck, so a one-item sub-section loses nothing).
+    await extras.locator('[data-test=shop-row]').click()
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(0)
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(subsection.getByTestId('section-count-pill')).toHaveText('1/1')
+    // The outer "Extra items" GROUP header is not a section: manual-only.
+    await expect(extras.getByTestId('shop-section-toggle')).toHaveAttribute('aria-expanded', 'true')
+
+    // The recipe-derived Produce section is a DIFFERENT group: untouched
+    // by the extras collapse, and still open (it is not done).
+    const storeProduce = page
+      .locator('[data-test=shop-section]')
+      .filter({ has: page.getByText('Produce', { exact: true }) })
+    const storeRows = await storeProduce.locator('[data-test=shop-row]').count()
+    expect(storeRows).toBeGreaterThan(0)
+
+    // Manual click re-opens and pins the auto-collapsed sub-section.
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(1)
+
+    // Unchecking drops done → auto state cleared, the group stays open.
+    await extras.locator('[data-test=shop-row]').click()
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(subsection.getByTestId('section-count-pill')).toHaveText('0/1')
+    await expect(extras.locator('[data-test=shop-row]')).toHaveCount(1)
+
+    // Manual collapse of the whole extras GROUP still works.
     await extras.getByTestId('shop-section-toggle').click()
     await expect(extras.locator('[data-test=shop-row]')).toHaveCount(0)
+
+    await expectZeroMealimeRequests(page)
+  })
+
+  test('checked extras sink to the bottom of their sub-section, stable (ADR-0050 addendum)', async ({ page }) => {
+    await blockExternalRequests(page)
+    await planFirstRecipe(page)
+    // Three Produce extras so a MIDDLE check shows both the sink and the
+    // stability of the untouched rows.
+    for (const name of ['banana', 'celery', 'eggplant']) {
+      await input(page).fill(name)
+      await pickCategoryOverride(page, 'Produce')
+      await page.locator('[data-test=ingredient-submit]').click()
+    }
+
+    await page.getByTestId('start-shopping').click()
+
+    const produce = page
+      .getByTestId('shop-custom-items')
+      .locator('[data-test=shop-extra-subsection]')
+      .filter({ has: page.locator('button[aria-label^="Produce:"]') })
+    const names = async (): Promise<(string | undefined)[]> =>
+      produce
+        .locator('[data-test=shop-row]')
+        .evaluateAll((els) => els.map((el) => el.textContent?.trim()))
+
+    await expect(await names()).toEqual(['banana', 'celery', 'eggplant'])
+
+    // Check the MIDDLE row: it sinks last, the others keep their order.
+    await produce.locator('[data-test=shop-row]').filter({ hasText: 'celery' }).click()
+    await expect(await names()).toEqual(['banana', 'eggplant', 'celery'])
+
+    // Check another one: still stable relative to the untouched row.
+    await produce.locator('[data-test=shop-row]').filter({ hasText: 'banana' }).click()
+    await expect(await names()).toEqual(['eggplant', 'banana', 'celery'])
+
+    // Check the LAST open row: everything is done now.
+    await produce.locator('[data-test=shop-row]').filter({ hasText: 'eggplant' }).click()
+
+    // The sub-section is now done → auto-collapsed (3/3 pill).
+    await expect(produce.getByTestId('section-count-pill')).toHaveText('3/3')
+    await expect(produce.locator('[data-test=shop-row]')).toHaveCount(0)
+
+    // Re-open (manual pin): the all-checked group is UNCHANGED in order —
+    // the sink is stable even when everything is done.
+    await produce.getByTestId('shop-extra-subsection-toggle').click()
+    await expect(await names()).toEqual(['banana', 'celery', 'eggplant'])
+
+    await expectZeroMealimeRequests(page)
+  })
+})
+
+test.describe('extras checkbox key hygiene (ADR-0050 addendum)', () => {
+  test('removing an extra drops its checked key: the re-added row is unchecked and visible', async ({ page }) => {
+    await blockExternalRequests(page)
+    await planFirstRecipe(page)
+
+    // A SECOND, never-checked extra keeps the sub-section out of "done",
+    // so checking one row does not auto-collapse it and the row under
+    // test stays in the DOM (ADR-0008; same reason the sibling specs
+    // click() rather than check()).
+    await input(page).fill('Cellophane')
+    await page.locator('[data-test=ingredient-submit]').click()
+    await input(page).fill('Sticky tape')
+    await page.locator('[data-test=ingredient-submit]').click()
+    await expect(page.getByTestId('extra-section')).toContainText('Sticky tape')
+
+    const extraRow = page
+      .getByTestId('extra-section')
+      .locator('[data-test=extra-row]')
+      .filter({ hasText: 'Sticky tape' })
+    await extraRow.locator('input[type=checkbox]').click()
+    await expect(extraRow.locator('input[type=checkbox]')).toBeChecked()
+
+    // Removing it must take the checkbox key with it.
+    await page.getByRole('button', { name: 'Remove Sticky tape from the grocery list' }).click()
+    await expect(page.getByTestId('extra-section')).not.toContainText('Sticky tape')
+
+    // Re-add the SAME name. Before the fix, the stale `custom||sticky
+    // tape` key made the row read as already-done, the sub-section's
+    // done-map went false→true and the watcher collapsed the group that
+    // had just been emptied — the new row vanished behind its header.
+    await input(page).fill('Sticky tape')
+    await page.locator('[data-test=ingredient-submit]').click()
+
+    const readded = page
+      .getByTestId('extra-section')
+      .locator('[data-test=extra-row]')
+      .filter({ hasText: 'Sticky tape' })
+    await expect(readded).toBeVisible()
+    await expect(readded.locator('input[type=checkbox]')).not.toBeChecked()
+    // And the group is still OPEN: a collapse here is the bug, so assert
+    // the state the watcher must NOT reach.
+    await expect(page.locator('[data-test=extra-section] button[aria-label^="Uncategorized:"]')).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    await expect(page.getByTestId('extra-section').locator('[data-test=extra-row]')).toHaveCount(2)
+
+    await expectZeroMealimeRequests(page)
+  })
+})
+
+test.describe('add-item combobox ARIA (ADR-0050 addendum)', () => {
+  test('aria-expanded / aria-controls track whether the listbox is actually rendered', async ({ page }) => {
+    await blockExternalRequests(page)
+    await planFirstRecipe(page)
+
+    const field = input(page)
+    await field.fill('banana')
+    const listbox = page.getByTestId('ingredient-suggestions')
+    await expect(listbox).toBeVisible()
+    await expect(field).toHaveAttribute('aria-expanded', 'true')
+    const controls = await field.getAttribute('aria-controls')
+    expect(controls).toBe(await listbox.getAttribute('id'))
+
+    // Opening the category popup stands the suggestions down — so the
+    // combobox must stop claiming a controlled listbox that is gone.
+    await page.locator('[data-test=ingredient-category]').click()
+    const menu = page.locator('[data-test=ingredient-category-menu]')
+    await expect(menu).toBeVisible()
+    await expect(listbox).toHaveCount(0)
+    await expect(field).toHaveAttribute('aria-expanded', 'false')
+    expect(await field.getAttribute('aria-controls')).toBeNull()
+    expect(await field.getAttribute('aria-activedescendant')).toBeNull()
+
+    // Choosing a category closes the popup. Typing brings the listbox
+    // back and aria-expanded says so again — the same derived value in
+    // both directions, which is what the pre-fix code got wrong on one
+    // side of the transition only.
+    await menu.locator('[data-test=ingredient-category-option-Produce]').click()
+    await expect(menu).toHaveCount(0)
+    await field.fill('bananas')
+    await expect(listbox).toBeVisible()
+    await expect(field).toHaveAttribute('aria-expanded', 'true')
+    expect(await field.getAttribute('aria-controls')).toBe(await listbox.getAttribute('id'))
+
+    await expectZeroMealimeRequests(page)
   })
 })

@@ -3,9 +3,14 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Check, ChevronDown, ChevronRight, Eraser, ShoppingCart, X } from 'lucide-vue-next'
 import { useGroceryList } from '../lib/useGroceryList'
+import { extraCollapseKey, groupExtras, storeCollapseKey, type ExtraGroup } from '../lib/extraSections'
+import { sinkChecked } from '../lib/sink'
+import { extraCheckedKey } from '../lib/extraCheckedKeys'
+import { useCustomIngredientsStore } from '../stores/customIngredients'
 import IngredientAutocomplete from './IngredientAutocomplete.vue'
 
 const router = useRouter()
+const customIngredients = useCustomIngredientsStore()
 const {
   checked,
   loadError,
@@ -20,40 +25,104 @@ const {
 
 /* ---------- Auto-collapse of completed categories (ADR-0008 addendum) ---------- */
 
-/** Collapsed store sections (open by default). */
-const collapsed = ref(new Set<string>())
+/**
+ * Collapse state is NAMESPACED (extraCollapseKey / storeCollapseKey,
+ * ADR-0050 §5): an extras "Produce" sub-section and a recipe-derived
+ * "Produce" section are different groups, and the shopping screen now
+ * renders both under names the user can see side by side.
+ */
+const manualCollapsed = ref(new Set<string>())
 /** Sections collapsed automatically because every item was checked off. */
 const autoCollapsed = ref(new Set<string>())
+/**
+ * The outer "Extra items" group header keeps its own single boolean: it
+ * is a GROUP label, not a section, and its row is manual-collapse-only
+ * like every extras row on this screen (ADR-0008 addendum).
+ */
+const extrasGroupCollapsed = ref(false)
 
-function isCollapsed(name: string): boolean {
-  return collapsed.value.has(name) || autoCollapsed.value.has(name)
+function isCollapsed(key: string): boolean {
+  return manualCollapsed.value.has(key) || autoCollapsed.value.has(key)
 }
 
-function toggleSection(name: string) {
+function toggleSection(key: string) {
   // A header click always wins over the auto state (like the Grocery
   // tab): clicking an auto-collapsed header re-opens ONLY that category
   // and pins it open until it is done again — other auto-collapsed
   // categories keep their state (qodo 4128519637).
-  const next = new Set(collapsed.value)
-  if (isCollapsed(name)) {
-  next.delete(name)
-  if (autoCollapsed.value.has(name)) {
-  const auto = new Set(autoCollapsed.value)
-  auto.delete(name)
-  autoCollapsed.value = auto
-  }
+  const next = new Set(manualCollapsed.value)
+  if (isCollapsed(key)) {
+    next.delete(key)
+    if (autoCollapsed.value.has(key)) {
+      const auto = new Set(autoCollapsed.value)
+      auto.delete(key)
+      autoCollapsed.value = auto
+    }
   } else {
-  next.add(name)
+    next.add(key)
   }
-  collapsed.value = next
+  manualCollapsed.value = next
 }
 
-/** A section is "done" when every grocery line under it is checked. */
+function toggleExtrasGroup(): void {
+  extrasGroupCollapsed.value = !extrasGroupCollapsed.value
+}
+
+/* ---------- Extras sub-sections (ADR-0050) ---------- */
+
+/**
+ * The SAME grouping lib the Grocery tab uses — extras are grouped into
+ * their own category sub-sections there, and the shopping screen used to
+ * keep one flat list, which is what the owner's screenshot shows. A
+ * second implementation here would drift from the Grocery tab the first
+ * time a rule changed, so there is none (DRY beats everything else).
+ */
+const extraGroups = computed(() =>
+  groupExtras(
+    plan.customItems.map((name) => ({ name, category: customIngredients.find(name)?.category })),
+  ),
+)
+
+/**
+ * Checkbox key for an extra row comes from `extraCheckedKey` (imported at
+ * the top) — the same ONE definition the Grocery tab and the reconciler use.
+ * This used to be a local "mirror" of the Grocery tab's copy, which is
+ * precisely how two key formats drift apart.
+ */
+
+/** How many of a sub-section's extras are checked off (for the N/N pill). */
+function extraDoneCount(group: { items: { name: string }[] }): number {
+  return group.items.filter((i) => !!checked.map[extraCheckedKey(i.name)]).length
+}
+
+/** Collapse key for an extras sub-section. */
+function extraKey(name: string): string {
+  return extraCollapseKey(name)
+}
+
+/** Collapse key for a recipe-derived store section. */
+function storeKey(name: string): string {
+  return storeCollapseKey(name)
+}
+
+/**
+ * A group is "done" when every grocery line under it is checked. ONE map
+ * feeds ONE watcher for BOTH kinds of group on this screen — recipe-derived
+ * store sections AND extras sub-sections (ADR-0050 addendum: the owner
+ * reversed the manual-only rule; the shopping screen keeps one rule, not
+ * two) — exactly the Grocery tab's shape.
+ */
 const sectionDone = computed(() => {
   const m = new Map<string, boolean>()
   for (const s of sections.value) {
-  const lines = s.items.flatMap((i) => i.lines)
-  m.set(s.name, lines.length > 0 && lines.every((l) => !!checked.map[l.key]))
+    const lines = s.items.flatMap((i) => i.lines)
+    m.set(storeKey(s.name), lines.length > 0 && lines.every((l) => !!checked.map[l.key]))
+  }
+  for (const g of extraGroups.value) {
+    m.set(
+      extraKey(g.name),
+      g.items.length > 0 && g.items.every((i) => !!checked.map[extraCheckedKey(i.name)]),
+    )
   }
   return m
 })
@@ -69,6 +138,15 @@ const sectionDone = computed(() => {
  * whole group, so the header reads N/N for a frame before it hides.
  * Doing it the other way round would hide the group before the sink
  * order settled, and the re-expanded list would come back mid-sink.
+ *
+ * Extras sub-sections ARE in this map now (ADR-0050 addendum, 2026-10-05:
+ * the owner reversed ADR-0008's addendum and ADR-0050's own manual-only
+ * rule — a group reading N/N while its neighbour is collapsed reads as
+ * "not working", so ONE done→collapse rule applies to every group on this
+ * screen, a one-item sub-section included). The outer "Extra items" GROUP
+ * header is still not a section and stays manual-only. The same ordering
+ * contract holds for the extras path: the sink re-sorts a sub-section's
+ * rows BEFORE the collapse hides it.
  */
 watch(
   sectionDone,
@@ -89,6 +167,24 @@ watch(
 
 function sectionDoneCount(section: { items: { lines: { key: string }[] }[] }): number {
   return section.items.flatMap((i) => i.lines).filter((l) => !!checked.map[l.key]).length
+}
+
+/**
+ * Rendered row order: checked items sink to the bottom, stable within
+ * each group (ADR-0008) — ONE sink helper for both kinds of group, so
+ * store sections and extras sub-sections cannot drift apart.
+ */
+function sinkedStoreRows(section: {
+  items: { name: string; lines: { key: string; text?: string }[] }[]
+}) {
+  return sinkChecked(
+    section.items.flatMap((item) => item.lines.map((line) => ({ item, line }))),
+    (e) => !!checked.map[e.line.key],
+  )
+}
+
+function sinkedExtraRows(group: ExtraGroup) {
+  return sinkChecked(group.items, (i) => !!checked.map[extraCheckedKey(i.name)])
 }
 
 function sectionTotalCount(section: { items: { lines: unknown[] }[] }): number {
@@ -163,8 +259,16 @@ function exitShopping() {
   </div>
 
   <template v-else>
-  <!-- Extra items stay manual-only: they are the user's own scratch
-  pad, and a mis-tap on a one-item extra would yank the list. -->
+  <!-- The outer "Extra items" GROUP header stays manual-only (it is a
+  group label, not a section). Its sub-sections now follow the SAME
+  done→collapse rule as the store sections below (ADR-0050 addendum:
+  the owner reversed the earlier manual-only rule — consistency, one
+  rule for every group on the shopping screen). Grouped into their OWN
+  category sub-sections (ADR-0050) via the same `groupExtras` the
+  Grocery tab uses, rows sunk by the same `sinkChecked` helper. An
+  extras "Produce" sub-section is NOT the recipe-derived "Produce"
+  below it (ADR-0015 §2, still in force): the namespaced collapse keys
+  are what keep the two apart. -->
   <section
   v-if="plan.customItems.length > 0"
   class="mb-6"
@@ -172,42 +276,74 @@ function exitShopping() {
   >
   <button
   class="flex w-full items-center justify-between rounded-lg py-2 text-left"
-  :aria-expanded="!collapsed.has('Extra items')"
+  :aria-expanded="!extrasGroupCollapsed"
+  aria-label="Extra items"
   data-test="shop-section-toggle"
-  @click="toggleSection('Extra items')"
+  @click="toggleExtrasGroup"
   >
   <span class="text-lg font-bold tracking-tight">Extra items</span>
   <span class="text-lg">
-  <ChevronRight v-if="collapsed.has('Extra items')" :size="20" aria-hidden="true" />
+  <ChevronRight v-if="extrasGroupCollapsed" :size="20" aria-hidden="true" />
   <ChevronDown v-else :size="20" aria-hidden="true" />
   </span>
   </button>
-  <ul v-if="!collapsed.has('Extra items')" class="divide-y">
-  <li v-for="item in plan.customItems" :key="item">
+  <div v-if="!extrasGroupCollapsed" class="space-y-1">
+  <div
+  v-for="group in extraGroups"
+  :key="group.name"
+  data-test="shop-extra-subsection"
+  :data-extra-category="group.name"
+  >
+  <button
+  class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left"
+  :aria-expanded="!isCollapsed(extraKey(group.name))"
+  :aria-label="`${group.name}: ${extraDoneCount(group)} of ${group.items.length} checked`"
+  data-test="shop-extra-subsection-toggle"
+  @click="toggleSection(extraKey(group.name))"
+  >
+  <span class="text-base font-semibold">{{ group.name }}</span>
+  <span class="flex items-center gap-2">
+  <span
+  class="rounded-full bg-surface-sunken px-2 py-px text-[10px] font-semibold text-text-muted"
+  data-test="section-count-pill"
+  >{{ extraDoneCount(group) }}/{{ group.items.length }}</span>
+  <span class="text-base">
+  <ChevronRight v-if="isCollapsed(extraKey(group.name))" :size="18" aria-hidden="true" />
+  <ChevronDown v-else :size="18" aria-hidden="true" />
+  </span>
+  </span>
+  </button>
+  <ul
+  v-if="!isCollapsed(extraKey(group.name))"
+  class="divide-y"
+  data-test="shop-extra-subsection-rows"
+  >
+  <!-- Checked items sink, stable within the sub-section — the same
+  sink the store sections render through. -->
+  <li v-for="item in sinkedExtraRows(group)" :key="item.name">
   <button
   class="flex min-h-16 w-full items-center gap-4 py-2 text-left text-lg"
-  :class="checked.map[`custom||${item.toLowerCase()}`] ? 'opacity-40' : ''"
+  :class="checked.map[extraCheckedKey(item.name)] ? 'opacity-40' : ''"
   data-test="shop-row"
-  @click="checked.toggleChecked(`custom||${item.toLowerCase()}`)"
+  @click="checked.toggleChecked(extraCheckedKey(item.name))"
   >
   <span
   class="flex size-8 shrink-0 items-center justify-center rounded-full border-2 text-xl"
-  :class="checked.map[`custom||${item.toLowerCase()}`] ? 'border-brand bg-brand text-on-brand' : ''"
+  :class="checked.map[extraCheckedKey(item.name)] ? 'border-brand bg-brand text-on-brand' : ''"
   aria-hidden="true"
   >
-  <Check
-  v-if="checked.map[`custom||${item.toLowerCase()}`]"
-  :size="18"
-  />
+  <Check v-if="checked.map[extraCheckedKey(item.name)]" :size="18" />
   </span>
   <span
   class="min-w-0 flex-1 truncate"
-  :class="checked.map[`custom||${item.toLowerCase()}`] ? 'line-through' : ''"
-  >{{ item }}</span
+  :class="checked.map[extraCheckedKey(item.name)] ? 'line-through' : ''"
+  >{{ item.name }}</span
   >
   </button>
   </li>
   </ul>
+  </div>
+  </div>
   </section>
 
   <!-- Store sections: auto-collapse on done (ADR-0008 addendum), same
@@ -220,10 +356,10 @@ function exitShopping() {
   >
   <button
   class="flex w-full items-center justify-between rounded-lg py-2 text-left"
-  :aria-expanded="!isCollapsed(section.name)"
+  :aria-expanded="!isCollapsed(storeKey(section.name))"
   :aria-label="`${section.name}: ${sectionDoneCount(section)} of ${sectionTotalCount(section)} checked`"
   data-test="shop-section-toggle"
-  @click="toggleSection(section.name)"
+  @click="toggleSection(storeKey(section.name))"
   >
   <span class="text-lg font-bold tracking-tight">{{ section.name }}</span>
   <span class="flex items-center gap-2">
@@ -232,20 +368,17 @@ function exitShopping() {
   data-test="section-count-pill"
   >{{ sectionDoneCount(section) }}/{{ sectionTotalCount(section) }}</span>
   <span class="text-lg">
-  <ChevronRight v-if="isCollapsed(section.name)" :size="20" aria-hidden="true" />
+  <ChevronRight v-if="isCollapsed(storeKey(section.name))" :size="20" aria-hidden="true" />
   <ChevronDown v-else :size="20" aria-hidden="true" />
   </span>
   </span>
   </button>
-  <template v-if="!isCollapsed(section.name)">
+  <template v-if="!isCollapsed(storeKey(section.name))">
   <ul class="divide-y" data-test="shop-section-rows">
-  <!-- Unchecked first (checked items sink), stable within each group -->
-  <li
-  v-for="entry in [...section.items]
-  .flatMap((item) => item.lines.map((line) => ({ item, line })))
-  .sort((x, y) => Number(!!checked.map[x.line.key]) - Number(!!checked.map[y.line.key]))"
-  :key="entry.line.key"
-  >
+  <!-- Unchecked first (checked items sink), stable within each group;
+  the ordering lives once in src/lib/sink.ts, shared with the extras
+  sub-sections above. -->
+  <li v-for="entry in sinkedStoreRows(section)" :key="entry.line.key">
   <button
   class="flex min-h-16 w-full items-center gap-4 py-2 text-left text-lg"
   :class="checked.map[entry.line.key] ? 'opacity-40' : ''"

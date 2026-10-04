@@ -3,6 +3,8 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ChevronDown, ChevronRight, Eraser, ShoppingCart, Sparkles, X } from 'lucide-vue-next'
 import { useGroceryList } from '../lib/useGroceryList'
+import { extraCollapseKey, groupExtras, storeCollapseKey } from '../lib/extraSections'
+import { extraCheckedKey } from '../lib/extraCheckedKeys'
 import type { GroceryItem } from '../lib/grocery'
 import { usePlanStore } from '../stores/plan'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
@@ -12,67 +14,6 @@ const plan = usePlanStore()
 const router = useRouter()
 const { checked, loadError, loading, items, totalCount, checkedCount, sections, ensureDocs, confirmAndClearGrocery } =
   useGroceryList()
-
-/* ---------- Auto-collapse of completed categories ---------- */
-
-/** Sections the user collapsed by hand. */
-const manualCollapsed = ref(new Set<string>())
-/** Sections collapsed automatically because every item was checked off. */
-const autoCollapsed = ref(new Set<string>())
-
-function isCollapsed(name: string): boolean {
-  return manualCollapsed.value.has(name) || autoCollapsed.value.has(name)
-}
-
-/** Header click: re-open a collapsed section, or collapse an open one. */
-function toggleSection(name: string): void {
-  if (isCollapsed(name)) {
-  const m = new Set(manualCollapsed.value)
-  const a = new Set(autoCollapsed.value)
-  m.delete(name)
-  a.delete(name)
-  manualCollapsed.value = m
-  autoCollapsed.value = a
-  } else {
-  manualCollapsed.value = new Set(manualCollapsed.value).add(name)
-  }
-}
-
-/** A section is "done" when every grocery line under it is checked. */
-const sectionDone = computed(() => {
-  const m = new Map<string, boolean>()
-  for (const s of sections.value) {
-  const lines = s.items.flatMap((i) => i.lines)
-  m.set(s.name, lines.length > 0 && lines.every((l) => !!checked.map[l.key]))
-  }
-  return m
-})
-
-/**
- * Collapse a section the moment it becomes fully checked; re-open it as
- * soon as any item is unchecked. Manual collapses are left alone here —
- * an uncheck re-opens only sections that were auto-collapsed.
- */
-watch(sectionDone, (now, prev) => {
-  for (const [name, done] of now) {
-  const wasDone = prev?.get(name) ?? false
-  if (done && !wasDone) {
-  autoCollapsed.value = new Set(autoCollapsed.value).add(name)
-  } else if (!done && autoCollapsed.value.has(name)) {
-  const next = new Set(autoCollapsed.value)
-  next.delete(name)
-  autoCollapsed.value = next
-  }
-  }
-})
-
-function sectionDoneCount(section: { items: GroceryItem[] }): number {
-  return section.items.flatMap((i) => i.lines).filter((l) => !!checked.map[l.key]).length
-}
-
-function sectionTotalCount(section: { items: GroceryItem[] }): number {
-  return section.items.reduce((n, i) => n + i.lines.length, 0)
-}
 
 /* ---------- Custom (free-form) grocery items ---------- */
 
@@ -91,14 +32,142 @@ watch(
   () => void nextTick(() => addForm.value?.focus()),
 )
 
-/** Remembered store category for an extra row. "Other" (and a missing
- *  memory) is the UNKNOWN bucket, not a real store section — an extra with
- *  no known category renders as a plain row with no tag (ADR-0015). */
-function customCategory(item: string): string | undefined {
-  const category = customIngredients.find(item)?.category
-  if (!category || category === 'Other') return undefined
-  return category
+/**
+ * Extras grouped into their own category sub-sections (ADR-0050). The
+ * grouping is a PURE lib function, unit-tested next to `grocery.ts` —
+ * only the per-extra memory lookup lives here.
+ *
+ * The categories come from `customIngredients`, which is DEVICE-LOCAL and
+ * out of the room sync payload (ADR-0012), so a second household device
+ * may render the same shared extras under different sub-sections (or all
+ * under Uncategorized). Pre-existing behaviour, now visible by design.
+ */
+const extraGroups = computed(() =>
+  groupExtras(
+    plan.customItems.map((name) => ({ name, category: customIngredients.find(name)?.category })),
+  ),
+)
+
+/**
+ * Checkbox key for an extra row comes from `extraCheckedKey`, imported at
+ * the top from `src/lib/extraCheckedKeys.ts` — the ONE definition, shared
+ * with ShopView, the done-map and the reconciler. Never re-spell the format
+ * here: the reconciler has to recognise an extras key for what it is, and a
+ * second copy of the prefix is how the two key spaces would drift apart.
+ */
+
+/**
+ * Remove an extra AND its checkbox key (ADR-0050 addendum). The checked
+ * map is keyed by the extra's NAME, so a removed extra used to leave
+ * `custom||<name>` behind; re-adding it then read as an already-done
+ * row, the sub-section's done-map went false→true and ADR-0008's
+ * watcher collapsed the group that had just been emptied — hiding the
+ * row the user had just added.
+ *
+ * The cleanup lives HERE, at the removal site, not in
+ * `plan.removeCustomItem`: the plan store owns `customItems`, the
+ * grocery store owns checkbox keys, and wiring plan → grocery would
+ * make a synced, backup-registered store depend on a view-owned one for
+ * a key whose format (`custom||<lowercased name>`) the RENDERERS own.
+ * `checked.forget` is a one-key store primitive that knows nothing about
+ * extras.
+ */
+function removeExtra(name: string): void {
+  plan.removeCustomItem(name)
+  checked.forget(extraCheckedKey(name))
 }
+
+/** How many of a sub-section's extras are checked off. */
+function extraDoneCount(group: { items: { name: string }[] }): number {
+  return group.items.filter((i) => !!checked.map[extraCheckedKey(i.name)]).length
+}
+
+/* ---------- Auto-collapse of completed categories ---------- */
+
+/**
+ * Collapse state is keyed by a NAMESPACED key, not a bare section name:
+ * an extras sub-section and a store section can share a name (both have a
+ * "Produce"), and toggling one must never collapse the other
+ * (extraCollapseKey / storeCollapseKey, ADR-0050 §5).
+ */
+const manualCollapsed = ref(new Set<string>())
+/** Sections collapsed automatically because every item was checked off. */
+const autoCollapsed = ref(new Set<string>())
+
+function isCollapsed(key: string): boolean {
+  return manualCollapsed.value.has(key) || autoCollapsed.value.has(key)
+}
+
+/** Header click: re-open a collapsed section, or collapse an open one. */
+function toggleSection(key: string): void {
+  if (isCollapsed(key)) {
+  const m = new Set(manualCollapsed.value)
+  const a = new Set(autoCollapsed.value)
+  m.delete(key)
+  a.delete(key)
+  manualCollapsed.value = m
+  autoCollapsed.value = a
+  } else {
+  manualCollapsed.value = new Set(manualCollapsed.value).add(key)
+  }
+}
+
+/**
+ * A section is "done" when every grocery line under it is checked.
+ * ONE done-map feeds ONE watcher for BOTH consumers (store sections and,
+ * from ADR-0050, the extras sub-sections) — a second collapse
+ * implementation would be a copy that silently diverges.
+ */
+const sectionDone = computed(() => {
+  const m = new Map<string, boolean>()
+  for (const s of sections.value) {
+  const lines = s.items.flatMap((i) => i.lines)
+  m.set(sectionKey(s.name), lines.length > 0 && lines.every((l) => !!checked.map[l.key]))
+  }
+  // The SAME done-map also carries the extras sub-sections (ADR-0050), so
+  // ONE watcher drives both lists' auto-collapse (ADR-0008's rule).
+  for (const g of extraGroups.value) {
+  m.set(extraKey(g.name), g.items.length > 0 && extraDoneCount(g) === g.items.length)
+  }
+  return m
+})
+
+/**
+ * Collapse a section the moment it becomes fully checked; re-open it as
+ * soon as any item is unchecked. Manual collapses are left alone here —
+ * an uncheck re-opens only sections that were auto-collapsed.
+ */
+watch(sectionDone, (now, prev) => {
+  for (const [key, done] of now) {
+  const wasDone = prev?.get(key) ?? false
+  if (done && !wasDone) {
+  autoCollapsed.value = new Set(autoCollapsed.value).add(key)
+  } else if (!done && autoCollapsed.value.has(key)) {
+  const next = new Set(autoCollapsed.value)
+  next.delete(key)
+  autoCollapsed.value = next
+  }
+  }
+})
+
+/** Collapse key for a recipe-derived store section (ADR-0050 §5). */
+function sectionKey(name: string): string {
+  return storeCollapseKey(name)
+}
+
+/** Collapse key for an extras sub-section (ADR-0050 §5). */
+function extraKey(name: string): string {
+  return extraCollapseKey(name)
+}
+
+function sectionDoneCount(section: { items: GroceryItem[] }): number {
+  return section.items.flatMap((i) => i.lines).filter((l) => !!checked.map[l.key]).length
+}
+
+function sectionTotalCount(section: { items: GroceryItem[] }): number {
+  return section.items.reduce((n, i) => n + i.lines.length, 0)
+}
+
 </script>
 
 <template>
@@ -182,26 +251,61 @@ function customCategory(item: string): string | undefined {
   </div>
   </template>
 
-  <!-- EXTRA ITEMS (ADR-0015): the static group for free-form items —
-  not part of any planned meal. It renders FIRST (above every real
-  store section) with the add-row anchored under its header, and a
-  known category is shown as a TAG: the item stays here and is
-  never routed into the category section (the user keeps manual
-  control of placement). -->
+  <!-- EXTRA ITEMS (ADR-0015 -> ADR-0050): the group for free-form items --
+  not part of any planned meal. It renders FIRST (above every real store
+  section) with the add-row anchored under its header, and it is a VIEW:
+  inside it, extras are grouped into their OWN category sub-sections
+  (Produce, ..., Uncategorized last) with the same count pill, chevron and
+  auto-collapse as a store section.
+  A sub-section is NEVER a move (ADR-0015 2, still in force): an extra
+  tagged Produce lives in the extras group's Produce sub-section and must
+  not appear in the recipe-derived Produce store section below. -->
   <div v-if="plan.customItems.length > 0" class="space-y-1.5" data-test="extra-section">
   <h3 class="flex items-center gap-2 px-1 pt-2 text-xs font-bold tracking-wider text-text-muted uppercase">
   Extra items
-  <span class="rounded-full bg-surface-sunken px-2 py-px text-[10px] font-semibold text-text-muted">
+  <span class="rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold text-text-muted">
   {{ plan.customItems.length }}
   </span>
   </h3>
 
   <IngredientAutocomplete ref="addForm" />
 
-  <ul class="divide-y rounded-xl ring-1">
+  <div
+  v-for="group in extraGroups"
+  :key="group.name"
+  class="space-y-1.5"
+  data-test="extra-subsection"
+  :data-extra-category="group.name"
+  >
+  <h3 class="pt-2">
+  <button
+  class="flex w-full items-center justify-between text-left"
+  :aria-expanded="!isCollapsed(extraKey(group.name))"
+  :aria-label="`${group.name}: ${extraDoneCount(group)} of ${group.items.length} checked`"
+  data-test="extra-subsection-toggle"
+  @click="toggleSection(extraKey(group.name))"
+  >
+  <span class="text-xs font-bold tracking-wider text-text-muted uppercase">
+  {{ group.name }}
+  </span>
+  <span class="flex items-center gap-2">
+  <span
+  class="rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold text-text-muted"
+  data-test="section-count-pill"
+  >{{ extraDoneCount(group) }}/{{ group.items.length }}</span>
+  <ChevronRight v-if="isCollapsed(extraKey(group.name))" :size="16" aria-hidden="true" />
+  <ChevronDown v-else :size="16" aria-hidden="true" />
+  </span>
+  </button>
+  </h3>
+  <ul
+  v-if="!isCollapsed(extraKey(group.name))"
+  class="divide-y rounded-xl ring-1"
+  data-test="extra-subsection-rows"
+  >
   <li
-  v-for="item in plan.customItems"
-  :key="item"
+  v-for="item in group.items"
+  :key="item.name"
   class="flex min-h-11 items-center gap-3 px-3 py-2"
   data-test="extra-row"
   >
@@ -209,33 +313,27 @@ function customCategory(item: string): string | undefined {
   <input
   type="checkbox"
   class="size-5 shrink-0 accent-brand"
-  :checked="!!checked.map[`custom||${item.toLowerCase()}`]"
-  @change="checked.toggleChecked(`custom||${item.toLowerCase()}`)"
+  :checked="!!checked.map[extraCheckedKey(item.name)]"
+  @change="checked.toggleChecked(extraCheckedKey(item.name))"
   />
+  <!-- No per-row category tag (ADR-0050 7): the sub-section heading
+  directly above IS the category, so a #Produce pill here would only
+  repeat it. The heading carries the accessible name instead. -->
   <span
   class="min-w-0 truncate text-sm"
-  :class="checked.map[`custom||${item.toLowerCase()}`] ? 'text-text-muted line-through' : ''"
-  >{{ item }}</span>
-  <!-- Category TAG (ADR-0015): a shrink-0 flex sibling OUTSIDE
-  the truncating name span (never clipped) reading the
-  remembered store category. The item stays in EXTRA
-  ITEMS — this is a label, not a move. -->
-  <span
-  v-if="customCategory(item)"
-  class="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand-text"
-  data-test="extra-item-category-tag"
-  :aria-label="`Category: ${customCategory(item)} (stays in Extra items)`"
-  >#{{ customCategory(item) }}</span>
+  :class="checked.map[extraCheckedKey(item.name)] ? 'text-text-muted line-through' : ''"
+  >{{ item.name }}</span>
   </label>
   <button
   class="flex size-11 shrink-0 items-center justify-center rounded-lg text-text-muted hover:text-favourite"
-  :aria-label="`Remove ${item} from the grocery list`"
-  @click="plan.removeCustomItem(item)"
+  :aria-label="`Remove ${item.name} from the grocery list`"
+  @click="removeExtra(item.name)"
   >
   <X :size="16" aria-hidden="true" />
   </button>
   </li>
   </ul>
+  </div>
   </div>
 
   <!-- No extras yet: the same add-row, unheaded, at the very top. -->
@@ -250,10 +348,10 @@ function customCategory(item: string): string | undefined {
   <h3 class="pt-2">
   <button
   class="flex w-full items-center justify-between text-left"
-  :aria-expanded="!isCollapsed(section.name)"
+  :aria-expanded="!isCollapsed(sectionKey(section.name))"
   :aria-label="`${section.name}: ${sectionDoneCount(section)} of ${sectionTotalCount(section)} checked`"
   data-test="grocery-section-toggle"
-  @click="toggleSection(section.name)"
+  @click="toggleSection(sectionKey(section.name))"
   >
   <span class="text-xs font-bold tracking-wider text-text-muted uppercase">
   {{ section.name }}
@@ -263,13 +361,13 @@ function customCategory(item: string): string | undefined {
   class="rounded-full bg-surface-sunken px-2 py-px text-[10px] font-semibold text-text-muted"
   data-test="section-count-pill"
   >{{ sectionDoneCount(section) }}/{{ sectionTotalCount(section) }}</span>
-  <ChevronRight v-if="isCollapsed(section.name)" :size="16" aria-hidden="true" />
+  <ChevronRight v-if="isCollapsed(sectionKey(section.name))" :size="16" aria-hidden="true" />
   <ChevronDown v-else :size="16" aria-hidden="true" />
   </span>
   </button>
   </h3>
   <ul
-  v-if="!isCollapsed(section.name)"
+  v-if="!isCollapsed(sectionKey(section.name))"
   class="divide-y rounded-xl ring-1"
   data-test="grocery-section-rows"
   >
