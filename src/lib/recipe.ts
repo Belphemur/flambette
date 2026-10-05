@@ -52,17 +52,39 @@ export const seasoningNames: ReadonlySet<string> = new Set([
   'onion powder',
 ])
 
-/** Substrings that veto a seasoning match ("red bell pepper" etc.). */
-const SEASONING_EXCLUSIONS = ['bell']
+/**
+ * Substrings that veto a seasoning match — a season DESCRIBES, it never
+ * IS, when embedded in a longer name (ADR-0009, ADR-0054):
+ *
+ * - `bell` — "red bell pepper" is a vegetable.
+ * - `ginger root` — the fresh root scales LINEARLY upstream (302/306
+ *   archived metric-6 → metric-2 pairs scale exactly ×⅓; measured
+ *   2026-10-05). It is the root, not the spice.
+ * - `sesame ginger dressing` — a measured dressing scales linearly
+ *   (¾ cup → ½ → ¼ in the archive), however much ginger it name-drops.
+ */
+const SEASONING_EXCLUSIONS = ['bell', 'ginger root', 'sesame ginger dressing']
+
+/**
+ * The keyword list compiled to WORD-BOUNDARY regexes (plural-tolerant).
+ * Substring matching matched `unsalted` for `salt` (460 line items wrong:
+ * butter and roasted nuts are not seasonings) — the boundary is what makes
+ * `\bsalt\b` fail inside `unsalted`. The census over all 2,759 docs shows
+ * the ONLY verdicts that change are the four unsalted names; every
+ * legitimate match ("sea salt", "chilies", "red pepper flakes") still
+ * matches, so the sub-linear rule's coverage is unchanged.
+ */
+const KEYWORD_RES: ReadonlyArray<RegExp> = [...seasoningNames].map((kw) => {
+  if (kw === 'bay leaf') return /\bbay (?:leaves|leafs?)\b/
+  const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+')
+  return new RegExp(`\\b${escaped}(?:e?s)?\\b`)
+})
 
 /** True when `text` (an ingredient name or a step-detail line) is a seasoning. */
 export function isSeasoning(text: string): boolean {
   const s = text.toLowerCase()
   if (SEASONING_EXCLUSIONS.some((x) => s.includes(x))) return false
-  for (const kw of seasoningNames) {
-    if (s.includes(kw)) return true
-  }
-  return false
+  return KEYWORD_RES.some((re) => re.test(s))
 }
 
 /**
