@@ -33,9 +33,11 @@ import {
   Clock,
   Heart,
   Minus,
+  NotebookPen,
   Plus,
   Utensils,
 } from 'lucide-vue-next'
+import { isUserRecipeId } from '../lib/userRecipes'
 
 const plan = usePlanStore()
 const favourites = useFavouritesStore()
@@ -96,6 +98,15 @@ const canMoreServings = computed(() => servings.value < MAX_SERVINGS)
 
 const meta = computed<VariantMeta | null>(
   () => catalog.value?.byId.get(props.id) ?? null,
+)
+
+/**
+ * True when THIS recipe is household-authored (ADR-0054): the artifact's
+ * id set is the only answer, and the marker below is its only face on the
+ * detail sheet — permanent authorship, unlike the card's 30-day NEW badge.
+ */
+const isHouseholdRecipe = computed(() =>
+  isUserRecipeId(props.id, catalog.value?.userRecipeIds ?? new Set()),
 )
 
 /**
@@ -372,6 +383,21 @@ function startCooking() {
   <span class="text-label-md text-text-muted">rate it for your household</span>
   <span class="flex items-center gap-1 text-label-md text-text-muted" data-test="serves-label">
   <Utensils :size="16" aria-hidden="true" />serves {{ servings }}
+  </span>
+  <!-- ADR-0054: the PERMANENT authorship marker. The card's NEW badge
+  expires after 30 days; this one does not — it states who authored the
+  recipe, never how recently. Household status colour (DESIGN.md), a
+  label and never an IconRole (a recipe is not "the plum one"), and the
+  tooltip is the grocery provenance pill's pattern (cursor-help +
+  title, a flex sibling OUTSIDE any truncating span). -->
+  <span
+  v-if="isHouseholdRecipe"
+  class="flex cursor-help items-center gap-1 text-label-md font-medium text-household"
+  data-test="user-recipe-badge"
+  :aria-label="'Household recipe: authored by this household, not part of the imported catalog'"
+  title="Household recipe — authored by this household, not part of the imported catalog"
+  >
+  <NotebookPen :size="16" aria-hidden="true" />Household recipe
   </span>
   </div>
   <p

@@ -140,6 +140,8 @@
   --color-danger-soft: #fca5a5;
   --color-favourite: #e11d48;
   --color-favourite-soft: #fb7185;
+  --color-household: #86198f;
+  --color-household-soft: #e879f9;
 
   /* --- Layout: the fluid app container (DESIGN.md `spacing.container`)
      and the immersive reading column kept by the cooking view
@@ -214,6 +216,7 @@
   --color-on-success: #0a2e22;
   --color-danger: var(--color-danger-soft, #fca5a5);
   --color-favourite: var(--color-favourite-soft);
+  --color-household: var(--color-household-soft);
 
   /* Selected surfaces: DESIGN.md pairs `primary-tint` in light with the
      deliberately darker `primary-tint-dark` in dark, because a cream

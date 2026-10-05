@@ -91,6 +91,8 @@ const COLOR_TOKENS: Record<string, string> = {
   'danger-soft': '--color-danger-soft',
   favourite: '--color-favourite',
   'favourite-soft': '--color-favourite-soft',
+  household: '--color-household',
+  'household-soft': '--color-household-soft',
 }
 
 /** Non-colour tokens that must also stay in step. */

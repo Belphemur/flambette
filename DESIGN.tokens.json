@@ -629,6 +629,28 @@
         ],
         "hex": "#fb7185"
       }
+    },
+    "household": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.525,
+          0.098,
+          0.561
+        ],
+        "hex": "#86198f"
+      }
+    },
+    "household-soft": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0.91,
+          0.475,
+          0.976
+        ],
+        "hex": "#e879f9"
+      }
     }
   },
   "spacing": {

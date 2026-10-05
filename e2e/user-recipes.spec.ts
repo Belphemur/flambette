@@ -130,11 +130,23 @@ test.describe('user recipes and the source filter (ADR-0054)', () => {
     await page.goto(`/recipe/${PANCAKE_ID}`)
     await dismissJoinCongrats(page)
     await expect(page.getByTestId('detail-title')).toContainText('Fluffy Pancakes')
+    // The PERMANENT authorship marker: visible on the detail sheet with the
+    // tooltip affordance (the card's NEW badge is the 30-day recency face;
+    // this one never expires). A Mealime recipe must NOT carry it.
+    const badge = page.getByTestId('user-recipe-badge')
+    await expect(badge).toBeVisible()
+    await expect(badge).toContainText('Household recipe')
+    await expect(badge).toHaveAttribute('title', /authored by this household/)
+    await page.goto('/recipe/17452')
+    await expect(page.getByTestId('user-recipe-badge')).toHaveCount(0)
     // The per-serving headline comes from meta.calories, which the authoring
     // script DERIVED from the committed CIQUAL table (never hand-typed):
     // 381.53 kcal at 8 servings, displayed rounded to 382. The sodium line
     // is the same derivation (850.4 mg -> 850).
     // The facts modal opens and shows real derived rows, sodium included.
+    await page.goto(`/recipe/${PANCAKE_ID}`)
+    await dismissJoinCongrats(page)
+    await expect(page.getByTestId('detail-title')).toContainText('Fluffy Pancakes')
     await page.getByTestId('nutrition-open').click()
     await expect(page.getByTestId('nutrition-group-minerals')).toContainText('Sodium')
     await expectZeroMealimeRequests(page)
