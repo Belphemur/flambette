@@ -69,15 +69,17 @@ it is exactly the fabrication ADR-0054 forbids.
    `public/img/recipes/`; keep the stem stable so `imageSrc` resolves.
    Completion criterion: both files exist at the exact dimensions.
 6. **TEMPERATURE FORMAT (MANDATORY).** Step prose writes temperatures
-   EXACTLY in the grammar the client localizes: signed Celsius.
-   - RECOMMENDED (the UI's dual display, catalog-style): the EXACT pair —
+   EXACTLY as the UI's dual display reads them: the catalog-style dual
+   pair, signed both sides.
+   - REQUIRED: the dual pair with the EXACT conversion —
      `Preheat oven to 220°C (425°F)` / `in a 90°C (194°F) oven`. The °F
-     value MUST be the exact round(°C × 9/5 + 32); an approximate pair
+     value MUST be `round(°C × 9/5 + 32)`; an approximate pair
      (`90°C (190°F)`) reads as TWO different temperatures to the
-     converter (87.8°C ≠ 90°C, outside the sloppiness tolerance) and
-     double-converts.
-   - MINIMUM: signed Celsius alone (`in a 90°C oven`) — the display adds
-     the °F half at render time in single-system modes.
+     converter (190°F = 87.8°C ≠ 90°C, outside the sloppiness tolerance)
+     and double-converts in single-system modes.
+   - MINIMUM (acceptable when the °F half cannot be verified): signed
+     Celsius alone (`in a 90°C oven`) — the display adds the °F half at
+     render time in single-system modes.
    - FORBIDDEN: `220C`, `220 C`, `220c` (unsigned = prose; `TEMP_RE` in
      `src/lib/units.ts` requires the degree sign) and approximate pairs.
    Rationale: `localizeTemperatures` recognizes an exact pair as ONE
