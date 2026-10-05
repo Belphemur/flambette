@@ -68,28 +68,24 @@ it is exactly the fabrication ADR-0054 forbids.
    `{thumbnail,presentation}_user_recipe_<slug>_<hash>.webp` under
    `public/img/recipes/`; keep the stem stable so `imageSrc` resolves.
    Completion criterion: both files exist at the exact dimensions.
-6. **TEMPERATURE FORMAT (MANDATORY).** Step prose writes temperatures
-   EXACTLY as the UI's dual display reads them: the catalog-style dual
-   pair, signed both sides.
-   - REQUIRED: the dual pair with the EXACT conversion —
-     `Preheat oven to 220°C (425°F)` / `in a 90°C (194°F) oven`. The °F
-     value MUST be `round(°C × 9/5 + 32)`; an approximate pair
-     (`90°C (190°F)`) reads as TWO different temperatures to the
-     converter (190°F = 87.8°C ≠ 90°C, outside the sloppiness tolerance)
-     and double-converts in single-system modes.
-   - MINIMUM (acceptable when the °F half cannot be verified): signed
-     Celsius alone (`in a 90°C oven`) — the display adds the °F half at
-     render time in single-system modes.
-   - FORBIDDEN: `220C`, `220 C`, `220c` (unsigned = prose; `TEMP_RE` in
-     `src/lib/units.ts` requires the degree sign) and approximate pairs.
-   Rationale: `localizeTemperatures` recognizes an exact pair as ONE
-   temperature restated (`dual` keeps it verbatim, metric/imperial each
-   collapse it to a single token), and converts a lone Celsius token in
-   imperial. Normalize the owner's markdown at authoring time, never at
-   display time.
+6. **TEMPERATURE FORMAT (MANDATORY).** Step prose writes temperatures in
+   the signed grammar the client localizes — the dual pair is the
+   preferred authoring form (it is what the UI's dual mode shows).
+   - PREFERRED: the catalog-style dual pair — `Preheat oven to
+     220°C (425°F)` / `in a 90°C (194°F) oven`. Both sides signed; the °F
+     value should be `round(°C × 9/5 + 32)` when known. `PAIR_TOLERANCE_C`
+     (= 7) in `src/lib/units.ts` is generous: any pair restating the SAME
+     temperature (within ~7°C of each other) collapses to one token per
+     single-system display; only a parenthetical stating a genuinely
+     DIFFERENT temperature (>7°C apart) converts independently.
+   - MINIMUM: signed Celsius alone (`in a 90°C oven`) — the display adds
+     the °F half at render time in single-system modes.
+   - FORBIDDEN: unsigned tokens (`220C`, `220 C`, `220c`); `TEMP_RE` in
+     `src/lib/units.ts` requires the degree sign, so an unsigned mention
+     is prose and an imperial reader sees no conversion.
    Completion criterion: `localizeText(doc, 'dual')` keeps both tokens
    verbatim; `metric`/`imperial` each show exactly ONE temperature per
-   mention.
+   same-temperature mention.
 7. **Gates, in order, and never report one you did not run:**
    `bun run test:unit` → `bun run data:verify` → `bun run test:data` →
    `bun run build` (pages = 2759 + user recipes). A failing generator

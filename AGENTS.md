@@ -559,8 +559,8 @@ read the one matching the task BEFORE improvising:
 - **`.agents/skills/mealime-add-recipe/SKILL.md`** — adding a household
   (user) recipe: artifact entry, CIQUAL-derived nutrition, image norms,
   the gate order, the temperature rule (dual catalog-style pairs
-  REQUIRED — exact `90°C (194°F)`; unsigned `90C` is prose the converter
-  ignores, approximate pairs double-convert), and the display rules
+  preferred — `90°C (194°F)`, °F within the 7°C pair tolerance; unsigned
+  `90C` is prose the converter ignores), and the display rules
   (authored-servings seed, humanized rounding, one seasoning-aware
   scaler). ADR-0054 is its design record.
 
