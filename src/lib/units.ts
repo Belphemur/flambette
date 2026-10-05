@@ -124,11 +124,17 @@ function unitKey(unit: string): string {
 
 /* ---------- Temperatures and lengths in prose ---------- */
 
-/** `220°C`, `450 °F`, `205.5°C`. The catalog always writes the degree sign. */
-const TEMP_RE = /(\d+(?:\.\d+)?)\s*°\s*([CF])/g
+/**
+ * `220°C`, `450 °F`, `205.5°C`. The catalog always writes the degree sign —
+ * but a HOUSEHOLD recipe may not (`90C` typed straight from the owner's
+ * markdown), so the degree sign is optional and `\b` closes the token so
+ * "90C" never eats "90Cell". The converter writes the sign canonically on
+ * output, so the emitted text keeps the catalog's notation.
+ */
+const TEMP_RE = /(\d+(?:\.\d+)?)\s*°?\s*([CF])\b/g
 
-/** A dual-notation pair: `220°C (425°F)` or `450°F (232°C)`. */
-const TEMP_PAIR_RE = /(\d+(?:\.\d+)?)\s*°\s*([CF])[ \t]*\([ \t]*(\d+(?:\.\d+)?)[ \t]*°[ \t]*([CF])[ \t]*\)/g
+/** A dual-notation pair: `220°C (425°F)` or `450°F (232°C)` — degree signs optional both sides. */
+const TEMP_PAIR_RE = /(\d+(?:\.\d+)?)\s*°?\s*([CF])\b[ \t]*\([ \t]*(\d+(?:\.\d+)?)[ \t]*°?[ \t]*([CF])\b[ \t]*\)/g
 
 /** A leading amount with an optional fraction: `5`, `2 ½`, `3/4`. */
 const LENGTH_AMOUNT = String.raw`\d+(?:[.,]\d+)?(?:\s+[¼½¾⅓⅔⅛⅜⅝⅞])?(?:\s*\/\s*\d+)?`
