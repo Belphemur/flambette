@@ -96,15 +96,37 @@ class DietaryCoverage(unittest.TestCase):
 
 
 class TestIndexOutput(unittest.TestCase):
-    """Assertions on the committed artifact the client actually imports."""
+    """Assertions on the COMMITTED artifact the client actually imports.
+
+    These read `public/data/ingredients.json` as it sits on disk. They
+    deliberately do NOT call `mod.main()` to refresh it first: a golden that
+    regenerates its own subject passes against a stale or truncated committed
+    file, and the build and the release both consume the committed one (Qodo
+    caught exactly that on PR #48). Staleness is the separate job of
+    `test_the_committed_index_is_not_stale`, which compares a fresh build
+    against the file instead of overwriting it.
+    """
 
     @classmethod
     def setUpClass(cls):
-        rc = mod.main()
-        assert rc == 0, "extractor exited %s" % rc
+        if not os.path.exists(OUT):
+            raise AssertionError("%s missing — run `bun run data:ingredients`" % OUT)
         with open(OUT) as f:
             cls.doc = json.load(f)
         cls.by_key = {i["nameKey"]: i for i in cls.doc["ingredients"]}
+
+    def test_the_committed_index_is_not_stale(self):
+        # The gate that matters most: a fresh build must MATCH what is
+        # committed. `--check` is the same assertion in script form (and is
+        # what CI runs); calling main() here would silently repair the file
+        # and make this test unfailable.
+        committed = {k: v for k, v in self.doc.items() if k != "generatedAt"}
+        fresh = {k: v for k, v in mod.build().items()
+                 if k not in ("generatedAt", "_summary")}
+        self.assertEqual(
+            fresh, committed,
+            "committed ingredients.json is stale — re-run `bun run data:ingredients`",
+        )
 
     def test_count_matches_the_row_list(self):
         self.assertEqual(self.doc["count"], len(self.doc["ingredients"]))
@@ -161,7 +183,8 @@ class TestIndexOutput(unittest.TestCase):
 
     def test_substitutes_file_beside_what_they_substitute(self):
         # The category is what files an item into the section the user then
-        # shops by, so a GF flour sitting in Bakery is a real defect.
+        # shops by, so a GF flour sitting in Bakery is a real defect — and so
+        # is one flour split across two aisles.
         for key, section in (
             ("gluten-free bread flour", "Baking & Spices"),
             ("gluten-free bread", "Bakery"),
@@ -171,18 +194,32 @@ class TestIndexOutput(unittest.TestCase):
         ):
             self.assertEqual(self.by_key[key]["category"], section, "%r filed wrongly" % key)
 
+    def test_every_flour_sits_in_one_aisle(self):
+        # Raised in PR #48 review: plain "oat flour" sat in Rice, Grains &
+        # Beans while "gluten-free oat flour" sat in Baking & Spices, so the
+        # two halves of one product were shoppable in different aisles. Any
+        # name ending in "flour" belongs beside the other flours.
+        flours = {k: v["category"] for k, v in self.by_key.items()
+                  if k.endswith("flour") and "flour blend" not in k}
+        self.assertTrue(flours, "no flours in the index — the check is vacuous")
+        wrong = {k: c for k, c in flours.items() if c != "Baking & Spices"}
+        self.assertEqual(wrong, {}, "flour outside Baking & Spices: %s" % wrong)
+
+    def test_no_inedible_row_reaches_the_index(self):
+        # Raised in PR #48 review: silica gel (a packet desiccant) was
+        # authored into the baking aisle and would be offered to a shopper
+        # typing "sil". A grocery list is food; keep it food.
+        for inedible in ("silica gel", "silica", "desiccant", "oxygen absorber"):
+            self.assertNotIn(inedible, self.by_key, "%r is not food" % inedible)
+
     def test_the_build_is_idempotent(self):
-        # Re-running must not grow the index (a non-idempotent merge would
-        # silently duplicate suggestions on every catalog refresh).
-        before = self.doc["count"]
-        with open(OUT) as f:
-            snapshot = json.load(f)
-        self.assertEqual(mod.main(), 0)
-        with open(OUT) as f:
-            again = json.load(f)
-        self.assertEqual(again["count"], before)
-        strip = lambda d: {k: v for k, v in d.items() if k != "generatedAt"}
-        self.assertEqual(strip(again), strip(snapshot))
+        # build() must be a pure function of the catalog + the table: same
+        # input, same rows. (A non-idempotent merge would silently duplicate
+        # suggestions on every catalog refresh.) Compare CONTENT, not the
+        # `generatedAt` stamp, which is a fresh timestamp by design.
+        strip = lambda d: {k: v for k, v in d.items()
+                           if k not in ("generatedAt", "_summary")}
+        self.assertEqual(strip(mod.build()), strip(mod.build()))
 
 
 if __name__ == "__main__":

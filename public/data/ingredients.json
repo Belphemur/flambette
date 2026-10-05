@@ -1,6 +1,6 @@
 {
- "generatedAt": "2026-10-05T12:47:11",
- "count": 872,
+ "generatedAt": "2026-10-05T12:55:26",
+ "count": 871,
  "ingredients": [
   {
    "name": "2% milk",
@@ -3179,7 +3179,7 @@
   {
    "name": "oat flour",
    "nameKey": "oat flour",
-   "category": "Rice, Grains & Beans",
+   "category": "Baking & Spices",
    "unit": null
   },
   {
@@ -4374,12 +4374,6 @@
    "name": "shrimp",
    "nameKey": "shrimp",
    "category": "Meat & Seafood",
-   "unit": null
-  },
-  {
-   "name": "silica gel",
-   "nameKey": "silica gel",
-   "category": "Baking & Spices",
    "unit": null
   },
   {

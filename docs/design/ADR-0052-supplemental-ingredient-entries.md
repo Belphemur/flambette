@@ -42,7 +42,7 @@ recipe is a *new recipe*, which is the opposite of the small ask.
 ## Decision
 
 Add a hand-authored **`SUPPLEMENTAL` table** to `extract_ingredients.py`,
-merged into the index after the catalog walk. **+534 rows: 338 → 872.**
+merged into the index after the catalog walk. **+533 rows: 338 → 871.**
 
 The table is authored in three tranches, each from a different gap-hunt
 (§Authoring below): the dietary families, then an everyday-staple census, then
@@ -198,14 +198,19 @@ An absent hint is honest; a wrong one is worse.
 ## Verification
 
 - `bun run test:data` (new gate) — `scripts/test_extract_ingredients.py`,
-  **13 goldens**: every row names a real `StoreSection`; no duplicate display
+  **16 goldens**: every row names a real `StoreSection`; no duplicate display
   names; no two rows share a nameKey; **no row shadows a catalog ingredient**;
   every row reaches the output; no row carries an invented unit; nameKeys
   unique + sorted; the dietary names are searchable; substitutes file beside
-  what they substitute; the build is idempotent. Plus the census itself as a
-  golden — `test_the_catalog_names_no_dietary_alternative_at_all` — which
-  FAILS LOUDLY if a catalog refresh ever introduces `gluten`/`lactose`/
-  `oat milk`, because that is the moment this table should shrink.
+  what they substitute; **every flour sits in one aisle**; **no inedible row
+  reaches the index**; **`build()` is idempotent**; and **the committed index
+  is not stale**. Plus the census itself as a golden —
+  `test_the_catalog_names_no_dietary_alternative_at_all` — which FAILS LOUDLY
+  if a catalog refresh ever introduces `gluten`/`lactose`/`oat milk`, because
+  that is the moment this table should shrink.
+- `python3 scripts/extract_ingredients.py --check` — script form of the
+  staleness golden, run in CI beside the goldens. Exits 1 on a stale or
+  missing artifact without writing to it.
 - `bun run build` — green (the index is a static import, inlined by Vite; the
   chunk is a lazily-imported 53 kB module, 7.6 kB gzipped, so it does not
   weigh on first paint).
@@ -216,6 +221,9 @@ An absent hint is honest; a wrong one is worse.
   under that section.
 - Diff check on the artifact: **0 of the 338 catalog rows changed, 0 lost** —
   the direct evidence the filler rule held.
+- Negative tests: deleting a row from the committed artifact makes the
+  goldens fail and `--check` exit 1, so the gate is proven able to fail
+  rather than merely green.
 
 ### As-built notes
 
@@ -231,25 +239,27 @@ An absent hint is honest; a wrong one is worse.
    namekey` does NOT flag them; a whitespace/punctuation-collapsing check did,
    during authoring. One row was dropped. Duplicates in the *index* would be
    harmless-ish, but two rows differing only in spacing is table rot.
-3. **36 authored rows were pruned as already-present.** Pruning happens at
-   authoring time, not silently at merge time: the golden then asserts the
-   table is catalog-clean, so the file itself never carries a dead row.
+3. **57 authored rows were pruned as already-present** (36 in tranche 1, the
+   rest as later tranches exposed overlaps). Pruning happens at authoring
+   time, not silently at merge time: the golden then asserts the table is
+   catalog-clean, so the file itself never carries a dead row.
 4. **The data goldens are wired into the existing `unit` CI job** as
    `test:data` (with ADR-0043's recipe types and ADR-0041's timer hints, which
    previously ran only by hand). A hand-authored table is exactly the kind of
    thing `bun test` cannot see.
 5. **The table is authored in tranches, each from a different gap-hunt, and
-   every count in this ADR is the SUM of them.** Tranche 1 (**284 rows**) was
+   every count in this ADR is the SUM of them.** Tranche 1 (**263 rows**) was
    the dietary ask. Tranche 2 (**168 rows**) came from censusing a hand-written
    ~450-name household shopping list against the built index, keeping only names
    with no whole-word match in any existing key — that word-boundary rule is
    what stops "fettuccine" being called a gap when "fettuccine pasta" is
    already indexed (a naive substring diff would have added ~130 duplicate
    rows). Tranche 3 (**102 rows**) came from the CIQUAL diff below.
-   **534 authored rows, 534 landed, 0 skipped** — every row is a real gap, so
-   the filler rule dropped nothing this time. **338 → 872 in the artifact.**
-   (Tranche 1 is 264, not the 284 first committed: 20 rows were pruned against
-   the catalog as the later tranches exposed overlaps.)
+   **533 authored rows, 533 landed, 0 skipped** — every row is a real gap, so
+   the filler rule dropped nothing. **338 → 871 in the artifact.** (Tranche 1
+   is 263, not the 284 first committed: 21 rows were pruned against the
+   catalog as later tranches exposed overlaps and the review below caught
+   defects.)
 6. **CIQUAL is a REVIEW LIST, never an import.**
    `scripts/fetch_ciqual.py` (gitignored output under `data/reference/`,
    `bun run data:ciqual`) fetches the ANSES table so the diff can be re-run
@@ -268,3 +278,33 @@ An absent hint is honest; a wrong one is worse.
    Source: CIQUAL 2020 **English** edition via Zenodo record 4770202 (ODbL) —
    the newest English edition CIQUAL published as one spreadsheet; the live site
    has moved to a newer French edition served per-food-item with no bulk export.
+7. **The goldens read the COMMITTED artifact; they never regenerate it.**
+   The first cut of `TestIndexOutput.setUpClass` called `mod.main()` before
+   reading the file, which meant a stale or truncated committed index was
+   silently overwritten and the gate passed — the build and the release both
+   consume the committed file, so that made the gate unfailable on the one
+   thing it existed to check. Fixed: the goldens read the file as it sits, and
+   a new `test_the_committed_index_is_not_stale` compares a fresh `build()`
+   against it (content only — `generatedAt` is a fresh timestamp by design).
+   `scripts/extract_ingredients.py --check` is the same assertion in script
+   form and runs in CI beside the goldens. Verified by deleting a row from
+   the committed artifact: the goldens then fail, and `--check` exits 1.
+8. **PR review (Qodo) raised four findings; three were real and are fixed
+   here, one was not.**
+   - *silica gel in the baking aisle* — **real defect, fixed.** A packet
+     desiccant is not food and was being offered to anyone typing "sil".
+     Removed, with `test_no_inedible_row_reaches_the_index` pinning it.
+   - *oat flour filed under grains while gluten-free oat flour sat in
+     baking* — **real defect, fixed.** One product was shoppable in two
+     aisles. Now `Baking & Spices`, with
+     `test_every_flour_sits_in_one_aisle` making the whole flour family agree
+     rather than patching the one name the reviewer happened to see.
+   - *the goldens regenerate their own subject* — **real defect, fixed**, see
+     note 7.
+   - *"gluten-free whole wheat flour" is self-contradictory* — **not a
+     defect.** It is a real retail product name (Bob's Red Mill, One Degree
+     Organics and King Arthur Baking all sell it): a whole-wheat-flavoured
+     blend made without wheat gluten. The shopper types the name off the
+     packet, so the index must carry it; renaming it to "whole grain GF
+     flour" would make the suggestion unsayable. The row stays, with a
+     comment saying so, because this will be re-raised otherwise.

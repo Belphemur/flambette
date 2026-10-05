@@ -57,6 +57,10 @@ import re
 import sys
 from datetime import datetime
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+OUT_PATH = os.path.join(ROOT, "public", "data", "ingredients.json")
+
 # ---------------------------------------------------------------------------
 # TS-parity helpers (mirror src/lib/grocery.ts / src/lib/quantity.ts)
 # ---------------------------------------------------------------------------
@@ -286,6 +290,12 @@ SUPPLEMENTAL: list[tuple[str, str]] = [
     ("gluten-free all-purpose flour", "Baking & Spices"),
     ("gluten-free bread flour", "Baking & Spices"),
     ("gluten-free cake flour", "Baking & Spices"),
+    # NOT a contradiction: "gluten-free whole wheat flour" is a real retail
+    # product name (Bob's Red Mill, One Degree Organics and King Arthur Baking
+    # all sell it) — a whole-wheat-flavoured blend made without wheat gluten.
+    # The shopper types the name off the packet, so the index must carry it;
+    # renaming it to "whole grain GF flour" would make it unsayable. Raised
+    # twice in PR review as a bug; it is not one.
     ("gluten-free whole wheat flour", "Baking & Spices"),
     ("gluten-free oat flour", "Baking & Spices"),
     ("gluten-free rice flour", "Baking & Spices"),
@@ -299,7 +309,6 @@ SUPPLEMENTAL: list[tuple[str, str]] = [
     ("cream of tartar", "Baking & Spices"),
     ("active dry yeast", "Baking & Spices"),
     ("baker's yeast", "Baking & Spices"),
-    ("silica gel", "Baking & Spices"),
     # ---- Gluten-free bakery ---------------------------------------------
     ("gluten-free bread", "Bakery"),
     ("gluten-free breadcrumbs", "Bakery"),
@@ -429,7 +438,7 @@ SUPPLEMENTAL: list[tuple[str, str]] = [
     ("brown rice", "Rice, Grains & Beans"),
     ("white rice", "Rice, Grains & Beans"),
     ("wild rice", "Rice, Grains & Beans"),
-    ("oat flour", "Rice, Grains & Beans"),
+    ("oat flour", "Baking & Spices"),
     ("steel-cut oats", "Rice, Grains & Beans"),
     ("rolled oats", "Rice, Grains & Beans"),
     ("farro", "Rice, Grains & Beans"),
@@ -897,8 +906,14 @@ def snapshot_section_map() -> dict:
     return out
 
 
-def main() -> int:
-    recipe_files = recipe_doc_paths()
+def build() -> dict:
+    """The full artifact as a dict: catalog census + SUPPLEMENTAL fillers.
+
+    Split out from main() so `--check` can compare a fresh build against the
+    committed file WITHOUT writing (see main). The `generatedAt` stamp is the
+    only deliberately unstable field, so the comparison strips it.
+    """
+    recipe_files = recipe_doc_paths(ROOT)
     if len(recipe_files) != 2759:
         print(f"warning: expected 2,759 recipe docs, found {len(recipe_files)}", file=sys.stderr)
 
@@ -971,23 +986,63 @@ def main() -> int:
         added += 1
     ingredients.sort(key=lambda i: i["nameKey"])
 
-    payload = {
+    return {
         "generatedAt": datetime.now().isoformat(timespec="seconds"),
         "count": len(ingredients),
         "ingredients": ingredients,
+        # Not part of the artifact: the print-only summary below, handed back
+        # so main() can report it without build() printing during --check.
+        "_summary": {
+            "docs": len(recipe_files),
+            "added": added,
+            "shadowed": sorted(shadowed),
+            "overrides": len(matched_overrides),
+        },
     }
-    out_path = os.path.join("public", "data", "ingredients.json")
-    with open(out_path, "w", encoding="utf-8") as f:
+
+
+def _content(payload: dict) -> str:
+    """The artifact as written to disk, `generatedAt` held constant.
+
+    `--check` and the goldens both compare CONTENT, never the timestamp: a
+    fresh build and a committed file legitimately differ in `generatedAt`
+    while being the same artifact. Pinning the stamp is what makes "is the
+    committed index stale?" a decidable question.
+    """
+    doc = {k: v for k, v in payload.items() if k not in ("generatedAt", "_summary")}
+    return json.dumps(doc, ensure_ascii=False, indent=1, sort_keys=True) + "\n"
+
+
+def main() -> int:
+    payload = build()
+    summary = payload.pop("_summary")
+    ingredients = payload["ingredients"]
+
+    if "--check" in sys.argv:
+        if not os.path.exists(OUT_PATH):
+            print("CHECK FAIL: %s missing" % os.path.relpath(OUT_PATH, ROOT))
+            return 1
+        with open(OUT_PATH, encoding="utf-8") as f:
+            committed = json.load(f)
+        if _content({**committed, "generatedAt": ""}) != _content(payload):
+            print("CHECK FAIL: committed ingredients.json is stale — "
+                  "re-run `bun run data:ingredients`")
+            return 1
+        print("check ok: ingredients.json is current (%d ingredients)"
+              % len(ingredients))
+        return 0
+
+    with open(OUT_PATH, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=1)
         f.write("\n")
 
     # ---- summary ----
     coverage = collections.Counter(i["category"] for i in ingredients)
-    print(f"read {len(recipe_files)} recipe docs -> {len(ingredients)} ingredients")
-    print(f"ADR-0052 supplemental rows added: {added} "
-          f"(skipped {len(shadowed)} already in the catalog: {', '.join(sorted(shadowed))})")
-    print(f"snapshot section overrides applied: {len(matched_overrides)} "
-          f"({', '.join(sorted(overrides[k] for k in matched_overrides))})")
+    print(f"read {summary['docs']} recipe docs -> {len(ingredients)} ingredients")
+    print(f"ADR-0052 supplemental rows added: {summary['added']} "
+          f"(skipped {len(summary['shadowed'])} already in the catalog: "
+          f"{', '.join(summary['shadowed'])})")
+    print(f"snapshot section overrides applied: {summary['overrides']}")
     print("category coverage:")
     for cat, n in coverage.most_common():
         print(f"  {cat}: {n}")

@@ -79,9 +79,15 @@ jobs:
         # The committed public/data artifacts are build-time derivations, so
         # the invariants behind them (ADR-0012/ADR-0052 ingredient index,
         # ADR-0043 recipe types, ADR-0041 timer hints) need a gate too — a
-        # hand-authored table that shadows the catalog, or a stale artifact,
-        # is invisible to bun test.
+        # hand-authored table that shadows the catalog is invisible to
+        # bun test.
         run: bun run test:data
+
+      - name: Committed ingredient index is not stale
+        # The goldens read the COMMITTED artifact (the build and the release
+        # both consume it), so a table edit that was never regenerated has to
+        # fail here. Script form of the same assertion the goldens make.
+        run: python3 scripts/extract_ingredients.py --check
 
   # The Cloudflare relay (ADR-0038): type-check the worker against the
   # generated runtime types, then drive the Room Durable Object in real
