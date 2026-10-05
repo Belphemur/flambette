@@ -95,8 +95,9 @@ describe('formatFraction renders unicode fraction glyphs', () => {
 
   test('integers and off-grid values stay decimal', () => {
     expect(formatFraction(2)).toBe('2')
-    expect(formatFraction(0.1)).toBe('0.1')
-    expect(formatFraction(2.34)).toBe('2.3')
+    expect(formatFraction(2.2)).toBe('2.2')
+    // 0.34 is within formatFraction's 0.02 snap tolerance of ⅓ (pre-existing).
+    expect(formatFraction(2.34)).toBe('2 ⅓')
     expect(formatFraction(1.05)).toBe('1.1')
   })
 
@@ -142,11 +143,14 @@ describe('scaleMetricAmount — the upstream metric profile scaling model', () =
     expect(scaleMetricAmount(100, 1 / 3, 'ml')).toBe(33)
   })
 
-  test('kg: exact gram products stay exact, everything else rounds to 2 decimals', () => {
+  test('kg: exact gram products stay exact, precision follows the source', () => {
     expect(scaleMetricAmount(1.362, 2 / 3, 'kg')).toBe(0.908)
     expect(scaleMetricAmount(1.02, 1 / 3, 'kg')).toBe(0.34)
     expect(scaleMetricAmount(2.04, 1 / 3, 'kg')).toBe(0.68)
-    expect(scaleMetricAmount(0.341, 1 / 3, 'kg')).toBe(0.11)
+    // A 3-decimal source (the ounce-derived stragglers) floors to 3 decimals.
+    expect(scaleMetricAmount(0.341, 1 / 3, 'kg')).toBe(0.113)
+    // A 2-decimal source rounds to 2.
+    expect(scaleMetricAmount(0.68, 1 / 3, 'kg')).toBe(0.23)
   })
 
   test('counts and spoons: exact products stay, inexact round', () => {
@@ -200,18 +204,30 @@ describe('scaleQuantity — string-level, unit-aware', () => {
     expect(scaleQuantity('67.5 ml', 1 / 3)).toBe('22 ½ ml')
   })
 
-  test('metric cups keep cup vocabulary on clean fractions and swap to ml below a cup', () => {
-    // 2 cups ×⅔ → 1 ⅓ cups (49 occurrences in the archive)
+  test('metric cups stay cups: exact fractions kept, inexact on the ⅛ grid', () => {
+    // 2 cups ×⅔ → 1 ⅓ cups (49 exact matches in the archive)
     expect(scaleQuantity('2 cups', 2 / 3)).toBe('1 ⅓ cups')
     // 3 cups ×⅔ → 2 cups
     expect(scaleQuantity('3 cups', 2 / 3)).toBe('2 cups')
-    // 1 cup ×⅓ → 80 ml (the cup→ml swap the upstream metric-2 authors)
-    expect(scaleQuantity('1 cup', 1 / 3)).toBe('80 ml')
-    expect(scaleQuantity('2 cups', 1 / 3)).toBe('160 ml')
+    // 1 cup ×⅔ → ⅔ cup (209 archive matches; the rare cup→ml swap is noise)
+    expect(scaleQuantity('1 cup', 2 / 3)).toBe('⅔ cup')
+    // ⅓ cup ×⅔ → ¼ cup (223 archive matches — the ⅛ grid, not thirds)
+    expect(scaleQuantity('⅓ cup', 2 / 3)).toBe('¼ cup')
+    // ¼ cup ×⅔ → ⅛ cup
+    expect(scaleQuantity('¼ cup', 2 / 3)).toBe('⅛ cup')
   })
 
-  test('counts keep their unit and round like the archive', () => {
+  test('container counts quantize to the nearest ½ and singularize at 1', () => {
+    expect(scaleQuantity('1 (142 g) pkg', 2 / 3)).toBe('½ (142 g) pkg')
+    expect(scaleQuantity('1 ½ (142 g) pkgs', 2 / 3)).toBe('1 (142 g) pkg')
+    expect(scaleQuantity('1 ½ small bunches', 2 / 3)).toBe('1 small bunch')
+    expect(scaleQuantity('2 (398 ml) cans', 1 / 3)).toBe('½ (398 ml) can')
+  })
+
+  test('counts round to the nearest integer and singularize at 1', () => {
     expect(scaleQuantity('6 cloves', 2 / 3)).toBe('4 cloves')
+    expect(scaleQuantity('2 cloves', 2 / 3)).toBe('1 clove')
+    expect(scaleQuantity('3 cloves', 1 / 3)).toBe('1 clove')
     expect(scaleQuantity('4.5 medium', 1 / 3)).toBe('1 ½ medium')
     expect(scaleQuantity('5 slices', 1 / 3)).toBe('2 slices')
   })
@@ -233,6 +249,7 @@ describe('parseQuantity/formatAmount unchanged contract', () => {
   test('parseQuantity still reads glyph and ASCII fractions', () => {
     expect(parseQuantity('2 ½ cm')).toEqual({ amount: 2.5, unit: 'cm' })
     expect(parseQuantity('3/4 cup')).toEqual({ amount: 0.75, unit: 'cup' })
+    expect(parseQuantity('2 1/2 cups')).toEqual({ amount: 2.5, unit: 'cups' })
     expect(parseQuantity('½ (142 g) pkg')?.amount).toBe(0.5)
   })
 })

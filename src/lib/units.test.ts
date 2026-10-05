@@ -78,7 +78,9 @@ describe('cups are purchasable VOLUME containers (owner steer, ADR-0047)', () =>
     expect(localizeQuantity('1 (240 ml) cup', 'metric')).toBe('1 (240 ml) cup')
     expect(localizeQuantity('1 (8 fl oz) cup', 'imperial')).toBe('1 (8 fl oz) cup')
     // The authored annotation converts like any other; a second one is not added.
-    expect(localizeQuantity('1 (240 ml) cup', 'imperial')).toBe('1 (8.1 fl oz) cup')
+    // 240 ml is a tbsp multiple (16) ≤ 720, so the ADR-0054 measured carve-out
+    // keeps it ml — the same rule that keeps a '90 ml' line ml in us-6.
+    expect(localizeQuantity('1 (240 ml) cup', 'imperial')).toBe('1 (240 ml) cup')
   })
 })
 
@@ -236,11 +238,12 @@ describe('quantities (ADR-0047 §1)', () => {
     expect(localizeQuantity('0.5 kg', 'imperial')).toBe('1 lb')
   })
 
-  test('volume: ml → fl oz, quantized to the ¼ fl oz grid', () => {
-    // ADR-0054 (measured): line-level fl oz are quantized (never 1-decimal
-    // prose). 250 ml ≈ 8.45 fl oz renders on the ¼ grid as 8 ½.
-    expect(localizeQuantity('250 ml', 'imperial')).toBe('8 ½ fl oz')
-    expect(localizeQuantity('398 ml', 'imperial')).toBe('13 ½ fl oz')
+  test('volume: ml → fl oz, whole above 6 fl oz, ¼ grid below', () => {
+    // ADR-0054 (measured): line-level fl oz are whole numbers above 6
+    // (every fractional candidate ≥ 6 rounds out upstream) and ¼-grid
+    // below. 250 ml ≈ 8.45 fl oz renders 8.
+    expect(localizeQuantity('250 ml', 'imperial')).toBe('8 fl oz')
+    expect(localizeQuantity('398 ml', 'imperial')).toBe('13 fl oz')
   })
 
   test('a container quantity converts its ANNOTATION and keeps the count and noun', () => {
@@ -354,12 +357,14 @@ describe('quantized imperial localization (ADR-0054, measured)', () => {
     expect(localizeQuantity('0.91 kg', 'imperial')).toBe('2 lb')
   })
 
-  test('ml → fl oz on the ¼-fl-oz grid, fraction glyphs', () => {
+  test('ml → fl oz: whole numbers at 6+, the ¼ grid below', () => {
     expect(localizeQuantity('355 ml', 'imperial')).toBe('12 fl oz')
     expect(localizeQuantity('177 ml', 'imperial')).toBe('6 fl oz')
     expect(localizeQuantity('1062 ml', 'imperial')).toBe('36 fl oz')
     expect(localizeQuantity('708 ml', 'imperial')).toBe('24 fl oz')
     expect(localizeQuantity('2129 ml', 'imperial')).toBe('72 fl oz')
+    expect(localizeQuantity('2124 ml', 'imperial')).toBe('72 fl oz')
+    expect(localizeQuantity('1230 ml', 'imperial')).toBe('42 fl oz')
     expect(localizeQuantity('133 ml', 'imperial')).toBe('4 ½ fl oz')
     expect(localizeQuantity('67 ml', 'imperial')).toBe('2 ¼ fl oz')
   })
@@ -375,9 +380,9 @@ describe('quantized imperial localization (ADR-0054, measured)', () => {
   })
 
   test('can-size annotations render the canned good in oz, not arithmetic fl oz', () => {
-    // us-6 authors '(398 ml)' as '(14.5 oz)' / '(15 oz)', '(213 ml)' as
-    // '(8 oz)', '(170 ml)' as '(6 oz)', '(284 ml)' as '(10 oz)'.
-    expect(localizeQuantity('1 (398 ml) can', 'imperial')).toBe('1 (14.5 oz) can')
+    // us-6 authors '(398 ml)' as '(15 oz)' (6×; 14.5/13.5 once each),
+    // '(213 ml)' as '(8 oz)', '(170 ml)' as '(6 oz)', '(284 ml)' as '(10 oz)'.
+    expect(localizeQuantity('1 (398 ml) can', 'imperial')).toBe('1 (15 oz) can')
     expect(localizeQuantity('1 (213 ml) can', 'imperial')).toBe('1 (8 oz) can')
     expect(localizeQuantity('1 (170 ml) jar', 'imperial')).toBe('1 (6 oz) jar')
     expect(localizeQuantity('1 (284 ml) can', 'imperial')).toBe('1 (10 oz) can')

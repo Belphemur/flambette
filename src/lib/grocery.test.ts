@@ -53,7 +53,7 @@ describe('aggregateGroceries container units (ADR-0017)', () => {
       input(doc('A', 6, [['½ (142 g) pkg', 'spinach']]), 1),
       input(doc('B', 4, [['¾ (142 g) pkg', 'spinach']]), 1),
     ]
-    expect(displays(docs, 'spinach')).toEqual(['1 1/4 (142 g) pkgs'])
+    expect(displays(docs, 'spinach')).toEqual(['1 ¼ (142 g) pkgs'])
   })
 
   test('different annotations stay on separate lines', () => {

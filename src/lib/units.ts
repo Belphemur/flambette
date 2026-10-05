@@ -24,7 +24,7 @@
  * Pure lib: no Vue/Pinia imports, unit-tested like the rest of `src/lib`.
  */
 
-import { formatAmount, parseQuantity } from './quantity'
+import { formatAmount, formatFraction, parseQuantity } from './quantity'
 
 /**
  * The three settings. `dual` — the catalog exactly as authored — is the
@@ -133,11 +133,13 @@ const TEMP_PAIR_RE = /(\d+(?:\.\d+)?)\s*°\s*([CF])[ \t]*\([ \t]*(\d+(?:\.\d+)?)
 /** A leading amount with an optional fraction: `5`, `2 ½`, `3/4`. */
 const LENGTH_AMOUNT = String.raw`\d+(?:[.,]\d+)?(?:\s+[¼½¾⅓⅔⅛⅜⅝⅞])?(?:\s*\/\s*\d+)?`
 
-/**
- * A length mention: `5 cm`, `2 ½ cm`, `1 inch`, `6 inches`.
+/** A length mention: `5 cm`, `2 ½ cm`, `6-mm`, `1 inch`, `6 inches`.
  *
  * The corpus hyphenates lengths 408 times (`3-inch`, `1 ¼-cm`), so the
- * separator is a space OR a hyphen.
+ * separator is a space OR a hyphen — and it is CAPTURED (group 2) so the
+ * conversion preserves the authoring style (`6-mm` → `¼-inch`). The mm
+ * alternative closes the ADR-0047 known gap: the corpus spells
+ * millimetres ONLY hyphenated-after-a-number (`6-mm`, 166 prose steps).
  *
  * There is deliberately NO bare `in` alternative: the catalog writes lengths
  * in full (`inch`/`inches`) and, more importantly, `<number> in` is ordinary
@@ -148,7 +150,7 @@ const LENGTH_AMOUNT = String.raw`\d+(?:[.,]\d+)?(?:\s+[¼½¾⅓⅔⅛⅜⅝⅞]
  * of `<number> in`, 0 of `<number>-in`.
  */
 const LENGTH_RE = new RegExp(
-  `(${LENGTH_AMOUNT})[ \\t]*(?:-[ \\t]*)?(cm|inch(?:es)?)(?![a-z])`,
+  `(${LENGTH_AMOUNT})([ \\t]*(?:-[ \\t]*)?)(cm|mm|inch(?:es)?)(?![a-z])`,
   'gi',
 )
 
@@ -285,20 +287,27 @@ function localizeTemperatures(text: string, system: UnitSystem): string {
   )
 }
 
-/** The length pass: `5 cm` ↔ `1 inch`, fractions included. */
+/** The length pass: `5 cm` ↔ `2 inches`, fractions included, mm now covered.
+ *
+ * ADR-0054: converted lengths quantize to the ¼-inch grid and render as
+ * fraction glyphs (`6-mm` → `¼-inch`, NOT `0.2 inch`), and the authoring
+ * separator is preserved — a hyphenated source stays hyphenated.
+ */
 function localizeLengths(text: string, system: UnitSystem): string {
-  return text.replace(LENGTH_RE, (match, amountRaw: string, unitRaw: string) => {
+  return text.replace(LENGTH_RE, (match, amountRaw: string, sep: string, unitRaw: string) => {
     const parsed = parseQuantity(amountRaw)
     if (!parsed || !(parsed.amount > 0)) return match
+    const glue = sep.includes('-') ? '-' : ' '
     const u = unitRaw.toLowerCase()
-    if (u === 'cm') {
-      if (system === 'metric') return match
-      const inches = parsed.amount / CENTIMETRES_PER_INCH
-      return `${formatAmount(inches)} ${inchLabel(inches)}`
+    if (u === 'cm' || u === 'mm') {
+      const cm = u === 'mm' ? parsed.amount / 10 : parsed.amount
+      if (system === 'metric') return `${formatAmount(cm)}${glue}cm`
+      const inches = qzTo(cm / CENTIMETRES_PER_INCH, 0.25)
+      return `${formatFraction(inches)}${glue}${inchLabel(inches)}`
     }
     // inch / in
     if (system === 'imperial') return match
-    return `${formatAmount(parsed.amount * CENTIMETRES_PER_INCH)} cm`
+    return `${formatAmount(parsed.amount * CENTIMETRES_PER_INCH)}${glue}cm`
   })
 }
 
@@ -339,6 +348,53 @@ const LEADING_AMOUNT_RE = new RegExp(
 const MILLILITRES_PER_CUP = 240
 /** US cup, US fluid ounces. */
 const FLUID_OUNCES_PER_CUP = 8
+
+/** Quantize to a fraction grid: `qzTo(15.87, 0.5)` → `16`. */
+function qzTo(v: number, step: number): number {
+  return Math.round(v / step) * step
+}
+
+function isMultiple(v: number, step: number): boolean {
+  const q = v / step
+  return Math.abs(q - Math.round(q)) < 1e-6
+}
+
+/**
+ * Spoon-scale ml the us profile keeps AS ml (ADR-0054, measured): `90 ml`
+ * (69×), `135 ml` (33×), `45 ml` (15×), `30 ml` (5×), `270 ml` and `720 ml`
+ * all stay ml in us-6. Above the spoon scale a tbsp multiple converts
+ * anyway (`1065 ml` → `36 fl oz`), so the ceiling is where the evidence
+ * ends: 720 ml.
+ */
+function keepsMillilitres(amount: number): boolean {
+  return isMultiple(amount, 15) && amount <= 720
+}
+
+/**
+ * The canned-good sizes the us profile renders in NET-WEIGHT-style oz
+ * rather than arithmetic fl oz (ADR-0054, measured): us-6 authors
+ * `(398 ml)` as `(14.5 oz)`/`(15 oz)`, `(213 ml)` as `(8 oz)`, `(170 ml)`
+ * as `(6 oz)`, `(284 ml)` as `(10 oz)`. Annotation context only — a bare
+ * `398 ml` line converts arithmetically.
+ */
+const CAN_SIZE_OZ: ReadonlyMap<number, string> = new Map([
+  [398, '15'],
+  [213, '8'],
+  [170, '6'],
+  [284, '10'],
+])
+
+/**
+ * Line-level fl oz quantization (ADR-0054, measured): below 6 fl oz the
+ * ¼ grid applies (`67 ml` → `2 ¼ fl oz`, `133 ml` → `4 ½ fl oz` — the only
+ * fractional values the us profile authors); at 6 fl oz and above the us
+ * profile renders whole numbers (`708 ml` → `24`, `2124 ml` → `72`,
+ * `1230 ml` → `42` — every fractional candidate above 6 rounds out).
+ */
+function flOzQuantized(amount: number): number {
+  const fl = amount / MILLILITRES_PER_FLUID_OUNCE
+  return fl >= 6 ? Math.round(fl) : qzTo(fl, 0.25)
+}
 
 /**
  * The ANNOTATION a purchasable VOLUME container gains in a single-system
@@ -382,7 +438,11 @@ function isCupToken(rest: string): boolean {
  * (`1 small bunch`) or a unit that is already imperial-native
  * (cups in dual, tbsp, oz, lb, inch).
  */
-export function localizeQuantity(raw: string, system: UnitSystem): string {
+export function localizeQuantity(
+  raw: string,
+  system: UnitSystem,
+  options?: { readonly annotationContext?: boolean },
+): string {
   if (!isSingleSystem(system)) return raw
   const parsed = parseQuantity(raw)
   if (!parsed) {
@@ -400,9 +460,11 @@ export function localizeQuantity(raw: string, system: UnitSystem): string {
   const ann = rest.match(/^(\([^)]*\))\s*/)
   if (ann) {
     // The annotation carries the unit in container quantities: localize
-    // its INNER text and keep the parentheses verbatim.
+    // its INNER text and keep the parentheses verbatim. Upstream authors
+    // annotations in plain decimals (`(8.5 fl oz)`), so the inner pass is
+    // told it is annotation context (decimal rendering, can-size table).
     const inner = ann[1].slice(1, -1).trim()
-    annotation = `(${localizeQuantity(inner, system)})`
+    annotation = `(${localizeQuantity(inner, system, { annotationContext: true })})`
     rest = rest.slice(ann[0].length).trim()
   }
 
@@ -431,8 +493,38 @@ export function localizeQuantity(raw: string, system: UnitSystem): string {
     return rest ? `${head} ${rest}` : head
   }
   const [factor, label] = conversion
-  const converted = amount * factor
-  const head = formatAmount(converted)
+  const key = unitKey(last)
+  // The us profile keeps spoon-scale ml verbatim ('90 ml' → '90 ml').
+  if (key === 'ml' && keepsMillilitres(amount)) {
+    return rest ? `${headText} ${rest}` : headText
+  }
+  // Annotations render the way the us profile authors them: plain decimals
+  // (`(3.8 oz)`, `(8 fl oz)`), can sizes in oz, no quantization.
+  if (options?.annotationContext) {
+    if (key === 'ml') {
+      const can = CAN_SIZE_OZ.get(amount)
+      if (can !== undefined) return `${can} oz`
+    }
+    const converted = amount * factor
+    const head = formatAmount(converted)
+    const noun = label === 'inch' ? inchLabel(converted) : label
+    return annotation ? `${head} ${annotation} ${noun}` : `${head} ${noun}`
+  }
+  // ADR-0054: the quantization grids the us profile actually authors —
+  // ½ oz for grams, ¼ lb for kilograms, ¼ fl oz below 6 for millilitres,
+  // ¼ inch for centimetres — rendered as fraction glyphs
+  // (`2 ¼ fl oz`, `4 ½ oz`, `2 ¼ lb`).
+  const converted =
+    key === 'g'
+      ? qzTo(amount / GRAMS_PER_OUNCE, 0.5)
+      : key === 'kg'
+        ? qzTo(amount / KILOGRAMS_PER_POUND, 0.25)
+        : key === 'ml'
+          ? flOzQuantized(amount)
+          : key === 'cm'
+            ? qzTo(amount / CENTIMETRES_PER_INCH, 0.25)
+            : amount * factor
+  const head = formatFraction(converted)
   const noun = label === 'inch' ? inchLabel(converted) : label
   // `rest` IS the bare token that converted, so the rendered noun replaces
   // it — never both, or an imperial line would read `8 oz lb`.

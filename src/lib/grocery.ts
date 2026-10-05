@@ -4,7 +4,7 @@ import {
   formatContainerQuantity,
   parseContainerQuantity,
 } from './containers'
-import { parseQuantity, formatAmount } from './quantity'
+import { parseQuantity, formatMetricAmount } from './quantity'
 import { isSeasoning, scaleQuantity } from './recipe'
 import { bucketFor, type StoreSection } from './sections'
 import type { RecipeDoc } from './types'
@@ -214,7 +214,10 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   for (const [normalized, group] of groups) {
     const lines: GroceryLine[] = []
     for (const { unit, amount } of group.byUnit.values()) {
-      const display = unit ? `${formatAmount(amount)} ${unit}` : formatAmount(amount)
+      // ADR-0054: unit-aware rendering — integer ml/g, fraction glyphs.
+      const display = unit
+        ? `${formatMetricAmount(amount, unit)} ${unit}`
+        : formatMetricAmount(amount, '')
       lines.push({ key: `${normalized}||${display}`, display })
     }
     for (const { container, annotation, amount, verbatim } of group.containers.values()) {
