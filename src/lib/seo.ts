@@ -13,7 +13,7 @@
  *  2. `src/components/RecipeDetail.vue` — the client side. Unhead's
  *     `useHead` re-derives the SAME payloads reactively, so an SPA
  *     navigation between recipes updates the document head exactly as the
- *     prerendered page would have (a stale `?p=` share link must not
+ *     prerendered page would have (a stale `?room=` share link must not
  *     carry the previous recipe's title into a new one).
  *
  * Anti-spam contract (the "no SEO spam" rules from ADR-0048):

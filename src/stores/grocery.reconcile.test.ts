@@ -7,11 +7,14 @@ import { EXTRA_KEY_PREFIX } from '../lib/extraCheckedKeys'
 /**
  * `reconcileExtras` is the store-level entry point, called at the boundaries
  * where `customItems` and `checked` arrive from OUTSIDE as separate fields:
- * a room snapshot (`room.applyRemote`), a backup archive (`backup.ts`'s
- * `checked.json` writer) and a shared plan link (`App.vue`'s
- * `importSharedPlan`). These cases pin that it heals the desync, and — just
- * as important — that it reports no change when there is nothing to heal (so
- * callers can skip a write / a republish).
+ * a room snapshot (`room.applyRemote`) and a backup archive (`backup.ts`'s
+ * `checked.json` writer). These cases pin that it heals the desync, and —
+ * just as important — that it reports no change when there is nothing to
+ * heal (so callers can skip a write / a republish).
+ *
+ * (ADR-0051 retired one-shot `?p=` plan links, which had been a THIRD
+ * ingress point. It also removed one of the ways this desync could arise:
+ * a share link replaced `customItems` while carrying no checked state.)
  */
 describe('grocery.reconcileExtras', () => {
   beforeEach(() => setActivePinia(createPinia()))

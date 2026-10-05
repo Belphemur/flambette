@@ -52,7 +52,7 @@ describe('plan identity (ADR-0034)', () => {
   })
 
   test('replacePlan is a NEW plan: it never keeps the previous identity', () => {
-    // Auto-Plan in replace mode, a `?p=` share import and an inbound room
+    // Auto-Plan in replace mode and an inbound room
     // snapshot all go through replacePlan. Keeping the old id would file
     // the next cook under a plan this device no longer has, and would
     // publish that stale id to every peer.

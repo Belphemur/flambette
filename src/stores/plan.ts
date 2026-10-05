@@ -417,7 +417,7 @@ export const usePlanStore = defineStore(
       }))
       customItems.value = custom
       // A wholesale replacement IS a new plan (Auto-Plan in replace mode,
-      // a `?p=` share import, an inbound room snapshot). Keeping the
+      // an inbound room snapshot). Keeping the
       // previous identity would file the next cook under a plan this
       // device no longer has — and would publish that stale id to every
       // peer. Mint (or clear) exactly like the empty -> non-empty rule.
