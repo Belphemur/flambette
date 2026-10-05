@@ -162,7 +162,8 @@ describe('lengths in prose and annotations (ADR-0047 §4)', () => {
   })
 
   test('fractional lengths convert too', () => {
-    // formatAmount's 1-decimal grammar: 2.5 cm is 0.98 inch → "1 inch".
+    // ADR-0054: lengths quantize to the ¼-inch grid and render fraction
+    // glyphs — 2.5 cm is 0.98 inch → "1 inch".
     expect(localizeText('Cut into 2 ½ cm pieces.', 'imperial')).toBe('Cut into 1 inch pieces.')
   })
 
@@ -172,9 +173,11 @@ describe('lengths in prose and annotations (ADR-0047 §4)', () => {
   })
 
   test('a HYPHENATED length converts in both systems (408 corpus occurrences)', () => {
-    expect(localizeText('Cut into 3-inch pieces.', 'metric')).toBe('Cut into 7.6 cm pieces.')
+    // ADR-0054: the separator is preserved — a hyphenated source renders a
+    // hyphenated conversion, the way the corpus writes both systems.
+    expect(localizeText('Cut into 3-inch pieces.', 'metric')).toBe('Cut into 7.6-cm pieces.')
     expect(localizeText('Slice 1 ¼-cm thick wedges.', 'imperial')).toBe(
-      'Slice 0.5 inch thick wedges.',
+      'Slice ½-inch thick wedges.',
     )
     // Already imperial: the authored string is the target system, kept verbatim.
     expect(localizeText('Cut into 3-inch pieces.', 'imperial')).toBe('Cut into 3-inch pieces.')
@@ -225,15 +228,19 @@ describe('lengths in prose and annotations (ADR-0047 §4)', () => {
 })
 
 describe('quantities (ADR-0047 §1)', () => {
-  test('mass: kg → lb and g → oz', () => {
-    expect(localizeQuantity('450 g', 'imperial')).toBe('15.9 oz')
-    expect(localizeQuantity('1.5 kg', 'imperial')).toBe('3.3 lb')
-    expect(localizeQuantity('0.5 kg', 'imperial')).toBe('1.1 lb')
+  test('mass: kg → lb and g → oz, quantized like the us profile authors', () => {
+    // ADR-0054 (measured): g quantizes to ½ oz, kg to ¼ lb, both rendered
+    // as fraction glyphs. 450 g ≈ 15.9 oz is 16 oz on the ½-oz grid.
+    expect(localizeQuantity('450 g', 'imperial')).toBe('16 oz')
+    expect(localizeQuantity('1.5 kg', 'imperial')).toBe('3 ¼ lb')
+    expect(localizeQuantity('0.5 kg', 'imperial')).toBe('1 lb')
   })
 
-  test('volume: ml → fl oz', () => {
-    expect(localizeQuantity('250 ml', 'imperial')).toBe('8.5 fl oz')
-    expect(localizeQuantity('398 ml', 'imperial')).toBe('13.5 fl oz')
+  test('volume: ml → fl oz, quantized to the ¼ fl oz grid', () => {
+    // ADR-0054 (measured): line-level fl oz are quantized (never 1-decimal
+    // prose). 250 ml ≈ 8.45 fl oz renders on the ¼ grid as 8 ½.
+    expect(localizeQuantity('250 ml', 'imperial')).toBe('8 ½ fl oz')
+    expect(localizeQuantity('398 ml', 'imperial')).toBe('13 ½ fl oz')
   })
 
   test('a container quantity converts its ANNOTATION and keeps the count and noun', () => {
@@ -317,5 +324,75 @@ describe('scaled steps (one shared helper, ADR-0047 §4)', () => {
   test('structural: unrelated members survive the spread', () => {
     const out = localizeSteps([{ primary: '450°F', details: [], concurrent: false }], 'imperial')
     expect(out[0].concurrent).toBe(false)
+  })
+})
+
+/**
+ * ADR-0054 — quantized imperial localization, measured from the upstream
+ * us-6 profile archive. Every golden below is a real (metric-6 → us-6)
+ * authored pair: the quantization grids (½ oz, ¼ lb, ¼ fl oz), the glyph
+ * rendering, the tbsp-multiple ml values that STAY ml, and the can-size
+ * annotations are all what the upstream profile actually writes.
+ */
+describe('quantized imperial localization (ADR-0054, measured)', () => {
+  test('g → oz on the ½-oz grid, fraction glyphs', () => {
+    expect(localizeQuantity('42 g', 'imperial')).toBe('1 ½ oz')
+    expect(localizeQuantity('85 g', 'imperial')).toBe('3 oz')
+    expect(localizeQuantity('425 g', 'imperial')).toBe('15 oz')
+    expect(localizeQuantity('128 g', 'imperial')).toBe('4 ½ oz')
+    expect(localizeQuantity('213 g', 'imperial')).toBe('7 ½ oz')
+    expect(localizeQuantity('680 g', 'imperial')).toBe('24 oz')
+  })
+
+  test('kg → lb on the ¼-lb grid, fraction glyphs', () => {
+    expect(localizeQuantity('1.02 kg', 'imperial')).toBe('2 ¼ lb')
+    expect(localizeQuantity('0.68 kg', 'imperial')).toBe('1 ½ lb')
+    expect(localizeQuantity('0.34 kg', 'imperial')).toBe('¾ lb')
+    expect(localizeQuantity('1.7 kg', 'imperial')).toBe('3 ¾ lb')
+    expect(localizeQuantity('0.23 kg', 'imperial')).toBe('½ lb')
+    expect(localizeQuantity('1.13 kg', 'imperial')).toBe('2 ½ lb')
+    expect(localizeQuantity('0.91 kg', 'imperial')).toBe('2 lb')
+  })
+
+  test('ml → fl oz on the ¼-fl-oz grid, fraction glyphs', () => {
+    expect(localizeQuantity('355 ml', 'imperial')).toBe('12 fl oz')
+    expect(localizeQuantity('177 ml', 'imperial')).toBe('6 fl oz')
+    expect(localizeQuantity('1062 ml', 'imperial')).toBe('36 fl oz')
+    expect(localizeQuantity('708 ml', 'imperial')).toBe('24 fl oz')
+    expect(localizeQuantity('2129 ml', 'imperial')).toBe('72 fl oz')
+    expect(localizeQuantity('133 ml', 'imperial')).toBe('4 ½ fl oz')
+    expect(localizeQuantity('67 ml', 'imperial')).toBe('2 ¼ fl oz')
+  })
+
+  test('tbsp-multiple ml values ≤ 720 STAY ml (the us profile keeps them)', () => {
+    // 90 ml (69×), 135 ml (33×), 45 ml (15×), 30 ml (5×), 270 ml in us-6.
+    // 1065 ml is also a tbsp multiple but 36 fl oz on the nose — above the
+    // spoon scale it converts.
+    for (const q of ['90 ml', '135 ml', '45 ml', '30 ml', '270 ml']) {
+      expect(localizeQuantity(q, 'imperial')).toBe(q)
+    }
+    expect(localizeQuantity('1065 ml', 'imperial')).toBe('36 fl oz')
+  })
+
+  test('can-size annotations render the canned good in oz, not arithmetic fl oz', () => {
+    // us-6 authors '(398 ml)' as '(14.5 oz)' / '(15 oz)', '(213 ml)' as
+    // '(8 oz)', '(170 ml)' as '(6 oz)', '(284 ml)' as '(10 oz)'.
+    expect(localizeQuantity('1 (398 ml) can', 'imperial')).toBe('1 (14.5 oz) can')
+    expect(localizeQuantity('1 (213 ml) can', 'imperial')).toBe('1 (8 oz) can')
+    expect(localizeQuantity('1 (170 ml) jar', 'imperial')).toBe('1 (6 oz) jar')
+    expect(localizeQuantity('1 (284 ml) can', 'imperial')).toBe('1 (10 oz) can')
+    // metric mode: the authored ml annotation is the identity.
+    expect(localizeQuantity('1 (398 ml) can', 'metric')).toBe('1 (398 ml) can')
+  })
+
+  test('millimetre lengths convert (the ADR-0047 known gap, closed)', () => {
+    expect(localizeText('Cut into 6-mm pieces.', 'imperial')).toBe('Cut into ¼-inch pieces.')
+    expect(localizeText('Cut into 6 mm pieces.', 'imperial')).toBe('Cut into ¼ inch pieces.')
+    expect(localizeText('Slice 1 cm-thick rounds.', 'metric')).toBe('Slice 1 cm-thick rounds.')
+    // metric direction: mm → cm keeps the 1-decimal grammar.
+    expect(localizeText('Cut into 6 mm pieces.', 'metric')).toBe('Cut into 0.6 cm pieces.')
+    expect(localizeText('Cut into 6-mm pieces.', 'metric')).toBe('Cut into 0.6-cm pieces.')
+    // already-imperial mm is nonsense; already-metric cm is the identity.
+    expect(localizeText('Cut into 12-mm pieces.', 'imperial')).toBe('Cut into ½-inch pieces.')
   })
 })
