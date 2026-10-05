@@ -63,7 +63,7 @@ architecture is shaped the way it is.
 | [0050](ADR-0050-extras-category-subsections.md) | Extra items are sub-sectioned by their own store category _(supersedes ADR-0015)_ | 2026-10-04 |
 | [0051](ADR-0051-rooms-only-sharing.md) | rooms are the only way to share a plan — one-shot `?p=` links retired _(supersedes ADR-0004)_ | 2026-10-04 |
 | [0052](ADR-0052-supplemental-ingredient-entries.md) | supplemental ingredient entries (gluten-free / lactose-free / dairy-free) | 2026-10-05 |
-| [0053](ADR-0053-generated-adr-index.md) | the ADR index is generated, and AGENTS.md links it | — |
+| [0053](ADR-0053-generated-adr-index.md) | the ADR index is generated, and AGENTS.md links it | 2026-10-05 |
 
 ## Not in force
 
