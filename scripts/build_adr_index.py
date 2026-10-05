@@ -40,11 +40,21 @@ def classify(raw):
     URL 2026-09-23; superseded-in-part by ADR-0051)'). The index needs one
     sortable column, and what an agent needs to know before skimming is whether
     the record still governs -- a supersession question, not a date one.
+
+    The supersession test matches the PAST PARTICIPLE `superseded`, never the
+    stem: a live record reads 'Accepted (supersedes ADR-0035)', and keying on
+    `supersed` filed that governing record under "Not in force" -- the exact
+    inversion the table exists to prevent. Direction is the whole signal:
+    `superseded by X` retires this record, `supersedes X` retires another.
     """
     s = raw.lower()
-    if "supersed" in s and "part" in s:
-        return "accepted (superseded in part)"
-    if "supersed" in s:
+    if re.search(r"superseded", s):
+        # 'superseded-in-part' still stands for what it does cover, so it stays
+        # in force rather than being lumped in with the fully retired records.
+        # The separator varies across records (hyphen, space, slash), so match
+        # the words either side of it rather than one literal spelling.
+        if re.search(r"in[\s\-/]*part", s):
+            return "accepted (superseded in part)"
         return "superseded"
     if s.startswith("proposed") or "design approved" in s:
         return "proposed"

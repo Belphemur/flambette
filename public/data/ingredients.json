@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-10-05T12:55:26",
+ "generatedAt": "2026-10-05T14:21:49",
  "count": 871,
  "ingredients": [
   {
@@ -843,8 +843,8 @@
    "unit": "sticks"
   },
   {
-   "name": "celiac seed",
-   "nameKey": "celiac seed",
+   "name": "celery seed",
+   "nameKey": "celery seed",
    "category": "Oils, Sauces & Condiments",
    "unit": null
   },

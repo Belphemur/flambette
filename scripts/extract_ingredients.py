@@ -695,7 +695,7 @@ SUPPLEMENTAL: list[tuple[str, str]] = [
     ("anchovy paste", "Oils, Sauces & Condiments"),
     ("canola oil", "Oils, Sauces & Condiments"),
     ("caraway seed", "Oils, Sauces & Condiments"),
-    ("celiac seed", "Oils, Sauces & Condiments"),
+    ("celery seed", "Oils, Sauces & Condiments"),  # the dried seed, a spice — not celeriac
     ("distilled vinegar", "Oils, Sauces & Condiments"),
     ("fennel seed", "Oils, Sauces & Condiments"),
     ("fenugreek", "Oils, Sauces & Condiments"),

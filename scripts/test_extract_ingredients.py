@@ -205,6 +205,25 @@ class TestIndexOutput(unittest.TestCase):
         wrong = {k: c for k, c in flours.items() if c != "Baking & Spices"}
         self.assertEqual(wrong, {}, "flour outside Baking & Spices: %s" % wrong)
 
+    def test_no_typo_slips_into_the_shipped_index(self):
+        # PR #48 review: the row ("celiac seed", ...) shipped a typo that
+        # matched no catalog key, so it passed every "is this a real gap"
+        # check and landed in the artifact as an autocomplete suggestion. A
+        # misspelling is unfalsifiable by construction — nothing in the catalog
+        # contradicts it — so it needs an explicit denylist.
+        for typo in ("celiac seed", "celiac", "gluteen free", "lactosey",
+                     "gluten free bread", "oatmilk", "almond milk powder-free"):
+            self.assertNotIn(typo, self.by_key, "%r is a typo that shipped" % typo)
+
+    def test_spice_aisle_rows_are_seeds_not_stalks(self):
+        # 'celery seed' is a dried spice; 'celery' is already a catalog row in
+        # Produce, and 'celeriac' is its own vegetable. All three must coexist
+        # without collapsing into each other.
+        self.assertEqual(self.by_key["celery seed"]["category"],
+                         "Oils, Sauces & Condiments")
+        self.assertIn("celery", self.by_key)
+        self.assertEqual(self.by_key["celery"]["category"], "Produce")
+
     def test_no_inedible_row_reaches_the_index(self):
         # Raised in PR #48 review: silica gel (a packet desiccant) was
         # authored into the baking aisle and would be offered to a shopper

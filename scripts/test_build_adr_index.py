@@ -90,6 +90,47 @@ class TestIndexOutput(unittest.TestCase):
         for st in rows:
             self.assertIn(st.strip(), allowed, "unknown status bucket %r" % st)
 
+    def test_supersession_direction_is_respected(self):
+        # PR #48 review (kody-ai): classify() keyed on the stem "supersed", so
+        # a GOVERNING record reading "Accepted (supersedes ADR-0035)" was filed
+        # under "Not in force" — the exact inversion the table exists to
+        # prevent. The allowed-set check above cannot catch it, because the
+        # wrong bucket is still a legal one. Direction is the whole signal:
+        # "superseded by X" retires THIS record, "supersedes X" retires another.
+        cases = [
+            ("Accepted (supersedes ADR-0035)", "accepted"),
+            ("accepted (supersedes ADR-0011)", "accepted"),
+            ("Superseded by ADR-0036", "superseded"),
+            ("Superseded for visual direction by ADR-0036", "superseded"),
+            ("accepted (share URL 2026-09-23; superseded-in-part by ADR-0051)",
+             "accepted (superseded in part)"),
+            ("accepted", "accepted"),
+            ("Proposed", "proposed"),
+        ]
+        for raw, expected in cases:
+            self.assertEqual(mod.classify(raw), expected,
+                             "classify(%r) should be %r" % (raw, expected))
+
+    def test_no_governing_record_is_listed_as_retired(self):
+        # The end-to-end consequence of the direction bug: a record whose
+        # Status says it SUPERSEDES another one still governs and must appear
+        # under "In force", never in the "Not in force" table.
+        retired = re.findall(
+            r"^\| \[(\d{4})\]\([^)]+\) \|[^|]*\|[^|]*\|\s*"
+            r"(superseded|accepted \(superseded in part\))\s*\|",
+            self.text, re.M)
+        for num, bucket in retired:
+            fname = [f for f in os.listdir(DESIGN)
+                     if f.startswith("ADR-%s-" % num)]
+            self.assertTrue(fname, "no file for ADR-%s" % num)
+            head = open(os.path.join(DESIGN, fname[0])).read()[:3000]
+            m = re.search(r"status\s*:?\s*\**\s*([^\n*]+)", head, re.I)
+            raw = (m.group(1) if m else "").lower()
+            self.assertIn("superseded", raw,
+                          "ADR-%s is bucketed %r but its Status says %r — a "
+                          "record that SUPERSEDES another one still governs"
+                          % (num, bucket, raw.strip()[:60]))
+
     def test_collisions_are_disclosed_not_hidden(self):
         # The folder currently reuses four numbers. The index must SAY so: the
         # alternative is two records sharing a number with nothing warning a
