@@ -70,18 +70,24 @@ it is exactly the fabrication ADR-0054 forbids.
    Completion criterion: both files exist at the exact dimensions.
 6. **TEMPERATURE FORMAT (MANDATORY).** Step prose writes temperatures
    EXACTLY in the grammar the client localizes: signed Celsius.
-   - REQUIRED: `Preheat oven to 220°C` / `in a 90°C oven`.
-   - FORBIDDEN: `220C`, `220 C`, `220c`, any `°F` token, and dual pairs
-     (`220°C (425°F)`) hand-authored.
-   Rationale: `localizeTemperatures` (`src/lib/units.ts`) matches
-   `/\d+\s*°\s*([CF])/` — the degree sign is REQUIRED. Without it the
-   mention is plain prose: an imperial reader sees the raw `90C` token
-   with no conversion. A hand-authored dual pair is its own bug class —
-   the display adds `(194°F)` itself from the authored Celsius token, and
-   an authored pair can double-convert. Normalize the owner's markdown at
-   authoring time, never at display time.
-   Completion criterion: `localizeText(doc, 'imperial')` shows exactly one
-   `…°F` per Celsius mention; `…°C` verbatim in metric.
+   - RECOMMENDED (the UI's dual display, catalog-style): the EXACT pair —
+     `Preheat oven to 220°C (425°F)` / `in a 90°C (194°F) oven`. The °F
+     value MUST be the exact round(°C × 9/5 + 32); an approximate pair
+     (`90°C (190°F)`) reads as TWO different temperatures to the
+     converter (87.8°C ≠ 90°C, outside the sloppiness tolerance) and
+     double-converts.
+   - MINIMUM: signed Celsius alone (`in a 90°C oven`) — the display adds
+     the °F half at render time in single-system modes.
+   - FORBIDDEN: `220C`, `220 C`, `220c` (unsigned = prose; `TEMP_RE` in
+     `src/lib/units.ts` requires the degree sign) and approximate pairs.
+   Rationale: `localizeTemperatures` recognizes an exact pair as ONE
+   temperature restated (`dual` keeps it verbatim, metric/imperial each
+   collapse it to a single token), and converts a lone Celsius token in
+   imperial. Normalize the owner's markdown at authoring time, never at
+   display time.
+   Completion criterion: `localizeText(doc, 'dual')` keeps both tokens
+   verbatim; `metric`/`imperial` each show exactly ONE temperature per
+   mention.
 7. **Gates, in order, and never report one you did not run:**
    `bun run test:unit` → `bun run data:verify` → `bun run test:data` →
    `bun run build` (pages = 2759 + user recipes). A failing generator

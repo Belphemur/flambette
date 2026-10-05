@@ -558,10 +558,11 @@ read the one matching the task BEFORE improvising:
 
 - **`.agents/skills/mealime-add-recipe/SKILL.md`** — adding a household
   (user) recipe: artifact entry, CIQUAL-derived nutrition, image norms,
-  the gate order, the MANDATORY signed-Celsius temperature rule (the
-  degree sign is what `localizeText` localizes — `90C` is prose, `90°C`
-  converts), and the display rules (authored-servings seed, humanized
-  rounding, one seasoning-aware scaler). ADR-0054 is its design record.
+  the gate order, the temperature rule (dual catalog-style pairs
+  REQUIRED — exact `90°C (194°F)`; unsigned `90C` is prose the converter
+  ignores, approximate pairs double-convert), and the display rules
+  (authored-servings seed, humanized rounding, one seasoning-aware
+  scaler). ADR-0054 is its design record.
 
 When a procedure is discovered in-session (not derivable from an ADR or
 this file), write it as a new skill there instead of letting it live in

@@ -99,7 +99,7 @@ INSTRUCTIONS = [
         "60 ml batter",
     ),
     (
-        "Keep the cooked pancakes warm on a baking sheet in a 90°C oven, and serve "
+        "Keep the cooked pancakes warm on a baking sheet in a 90°C (194°F) oven, and serve "
         "them straight away with butter, maple syrup and fresh fruit.",
         None,
     ),
