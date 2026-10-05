@@ -108,7 +108,7 @@ const FRACTION_TOLERANCE = 0.02
  * is a whole package, but a 3-recipe sum may be `1 ½ small bunch`), so this
  * complements `formatAmount`, which flattens everything to 1 decimal.
  *
- * ADR-0054: rendered with the catalog's own UNICODE fraction glyphs — the
+ * ADR-0057: rendered with the catalog's own UNICODE fraction glyphs — the
  * upstream profiles author `1 ⅓ cups`, `½ (142 g) pkg`, `4 ½ oz`, and the
  * ASCII `a/b` spelling appeared nowhere in any profile.
  */
@@ -132,7 +132,7 @@ export function formatFraction(amount: number): string {
   return formatAmount(amount)
 }
 
-/* ---------- ADR-0054: the upstream profile scaling model ---------- */
+/* ---------- ADR-0057: the upstream profile scaling model ---------- */
 
 /** International avoirdupois ounce, grams (mirrors units.ts). */
 const OZ_GRAMS = 28.3495
@@ -163,7 +163,7 @@ function collapseUnitKey(unit: string): string {
 
 /**
  * Scale an authored metric amount the way the upstream profiles do
- * (ADR-0054, measured from metric-6 → metric-4/metric-2 pairs):
+ * (ADR-0057, measured from metric-6 → metric-4/metric-2 pairs):
  *
  * - **g** — the source amount sits on the ½-oz grid (the catalog authors
  *   ounce-derived grams), so re-quantize the source, scale, round to
@@ -258,7 +258,7 @@ function isCommonFraction(frac: number): boolean {
 }
 
 /**
- * Scale a `cup`-unit quantity (ADR-0054, measured over 880 upstream cup
+ * Scale a `cup`-unit quantity (ADR-0057, measured over 880 upstream cup
  * pairs): the scaled value STAYS cups — exact common fractions render as
  * glyphs (`1 cup ×⅔ → ⅔ cup`, `2 cups ×⅔ → 1 ⅓ cups`), everything else
  * quantizes to the ⅛ grid (`⅓ cup ×⅔ → ¼ cup`, `¼ cup ×⅔ → ⅛ cup`).
@@ -282,7 +282,7 @@ function scaleCupQuantity(amount: number, factor: number, unit: string): string 
 
 /**
  * Container nouns whose COUNT the profiles quantize to the nearest ½
- * (ADR-0054, measured): `1 (142 g) pkg ×⅔ → ½ (142 g) pkg`,
+ * (ADR-0057, measured): `1 (142 g) pkg ×⅔ → ½ (142 g) pkg`,
  * `1 ½ pkgs ×⅔ → 1 pkg`. Same noun family as ADR-0017's grocery rule,
  * but this is the per-recipe DISPLAY path — no ceil here.
  */
@@ -332,7 +332,7 @@ function singularizeUnit(unit: string): string {
 
 /**
  * Scale a display quantity by a factor. Non-parseable quantities pass
- * through verbatim. The scaling is the ADR-0054 profile model
+ * through verbatim. The scaling is the ADR-0057 profile model
  * (`scaleMetricAmount`), with the profile's own unit-class grammar on top:
  * cups quantize on the ⅛ grid, container counts on the ½ grid, counts
  * round, and everything singularizes at 1. `2129 ml` at ⅔ is `1420 ml`,

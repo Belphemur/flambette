@@ -2,12 +2,12 @@ import { describe, expect, test } from 'bun:test'
 import { isSeasoning, scaleQuantity } from './recipe'
 
 /**
- * ADR-0009's sub-linear seasoning rule, with the ADR-0054 classifier fix:
+ * ADR-0009's sub-linear seasoning rule, with the ADR-0057 classifier fix:
  * word-boundary matching (unsalted butter is not a seasoning) and
  * compound-name exclusions (ginger root and sesame ginger dressing scale
  * LINEARLY upstream — measured 302/306 exact ×⅓ in the profile archive).
  */
-describe('isSeasoning — the ADR-0054 classifier fix', () => {
+describe('isSeasoning — the ADR-0057 classifier fix', () => {
   test('unsalted never triggers the salt keyword (word boundaries)', () => {
     expect(isSeasoning('butter, unsalted')).toBe(false)
     expect(isSeasoning('unsalted butter')).toBe(false)

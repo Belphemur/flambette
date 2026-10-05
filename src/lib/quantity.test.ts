@@ -69,7 +69,7 @@ import {
 } from './quantity'
 
 /**
- * ADR-0054. The goldens below are measured from the upstream profile
+ * ADR-0057. The goldens below are measured from the upstream profile
  * archive (`/home/balor/workspace/mealime-media/raw_profiles/`): the
  * metric-6 committed catalog scaled ×⅔ / ×⅓ must reproduce what the
  * upstream metric-4 / metric-2 profiles actually author, and the rendered

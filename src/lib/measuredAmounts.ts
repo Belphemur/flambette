@@ -119,7 +119,7 @@ export function measuredQuantity(item: LineItem, factor: number, base: number): 
     isSeasoning(item.ingredient_name),
     item.ingredient_name,
   )
-  // ADR-0054: unit-aware rendering — integer ml/g, fraction glyphs.
+  // ADR-0057: unit-aware rendering — integer ml/g, fraction glyphs.
   const rendered = formatMetricAmount(scaled, parsed.unit)
   return parsed.unit ? `${rendered} ${parsed.unit}` : rendered
 }

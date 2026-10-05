@@ -289,7 +289,7 @@ function localizeTemperatures(text: string, system: UnitSystem): string {
 
 /** The length pass: `5 cm` ↔ `2 inches`, fractions included, mm now covered.
  *
- * ADR-0054: converted lengths quantize to the ¼-inch grid and render as
+ * ADR-0057: converted lengths quantize to the ¼-inch grid and render as
  * fraction glyphs (`6-mm` → `¼-inch`, NOT `0.2 inch`), and the authoring
  * separator is preserved — a hyphenated source stays hyphenated.
  */
@@ -360,7 +360,7 @@ function isMultiple(v: number, step: number): boolean {
 }
 
 /**
- * Spoon-scale ml the us profile keeps AS ml (ADR-0054, measured): `90 ml`
+ * Spoon-scale ml the us profile keeps AS ml (ADR-0057, measured): `90 ml`
  * (69×), `135 ml` (33×), `45 ml` (15×), `30 ml` (5×), `270 ml` and `720 ml`
  * all stay ml in us-6. Above the spoon scale a tbsp multiple converts
  * anyway (`1065 ml` → `36 fl oz`), so the ceiling is where the evidence
@@ -372,7 +372,7 @@ function keepsMillilitres(amount: number): boolean {
 
 /**
  * The canned-good sizes the us profile renders in NET-WEIGHT-style oz
- * rather than arithmetic fl oz (ADR-0054, measured): us-6 authors
+ * rather than arithmetic fl oz (ADR-0057, measured): us-6 authors
  * `(398 ml)` as `(14.5 oz)`/`(15 oz)`, `(213 ml)` as `(8 oz)`, `(170 ml)`
  * as `(6 oz)`, `(284 ml)` as `(10 oz)`. Annotation context only — a bare
  * `398 ml` line converts arithmetically.
@@ -385,7 +385,7 @@ const CAN_SIZE_OZ: ReadonlyMap<number, string> = new Map([
 ])
 
 /**
- * Line-level fl oz quantization (ADR-0054, measured): below 6 fl oz the
+ * Line-level fl oz quantization (ADR-0057, measured): below 6 fl oz the
  * ¼ grid applies (`67 ml` → `2 ¼ fl oz`, `133 ml` → `4 ½ fl oz` — the only
  * fractional values the us profile authors); at 6 fl oz and above the us
  * profile renders whole numbers (`708 ml` → `24`, `2124 ml` → `72`,
@@ -510,7 +510,7 @@ export function localizeQuantity(
     const noun = label === 'inch' ? inchLabel(converted) : label
     return annotation ? `${head} ${annotation} ${noun}` : `${head} ${noun}`
   }
-  // ADR-0054: the quantization grids the us profile actually authors —
+  // ADR-0057: the quantization grids the us profile actually authors —
   // ½ oz for grams, ¼ lb for kilograms, ¼ fl oz below 6 for millilitres,
   // ¼ inch for centimetres — rendered as fraction glyphs
   // (`2 ¼ fl oz`, `4 ½ oz`, `2 ¼ lb`).

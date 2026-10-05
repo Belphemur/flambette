@@ -54,7 +54,7 @@ export const seasoningNames: ReadonlySet<string> = new Set([
 
 /**
  * Substrings that veto a seasoning match — a season DESCRIBES, it never
- * IS, when embedded in a longer name (ADR-0009, ADR-0054):
+ * IS, when embedded in a longer name (ADR-0009, ADR-0057):
  *
  * - `bell` — "red bell pepper" is a vegetable.
  * - `ginger root` — the fresh root scales LINEARLY upstream (302/306

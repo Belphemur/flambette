@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Golden: the ADR-0054 profile archive, and what it proves about our converter.
+"""Golden: the ADR-0057 profile archive, and what it proves about our converter.
 
 This suite has two jobs, and the second is why it exists at all.
 
@@ -38,7 +38,7 @@ DEFAULT_ARCHIVE = os.path.join(os.path.dirname(ROOT), "mealime-media", "raw_prof
 MM_LENGTH_RE = re.compile(r"(\d+(?:[.,]\d+)?)[ \t]*-[ \t]*mm(?![a-z])")
 
 # Floor for the ADR-0047 vs upstream agreement rate, measured over the FULL
-# corpus (2 759 docs, 187 unique differing pairs). ADR-0054's converter change
+# corpus (2 759 docs, 187 unique differing pairs). ADR-0057's converter change
 # (the measured quantization grids + fraction glyphs + can-size table + the
 # keep-ml carve-out) raised the rate from 124/187 = 66.3% to 156/187 = 83.4%;
 # the pin below is the NEW measured figure (floor 0.83). The rate is a
@@ -47,12 +47,12 @@ MM_LENGTH_RE = re.compile(r"(\d+(?:[.,]\d+)?)[ \t]*-[ \t]*mm(?![a-z])")
 # -> `15 oz`) is a product fact no conversion can derive and noun inflection
 # (`pkg` -> `pkgs`) is upstream's pluralisation. The remaining 31-pair residue
 # is upstream re-authoring noise (pkg/pkgs flips, berry pints, odd can
-# labels) — see ADR-0054's residue section.
+# labels) — see ADR-0057's residue section.
 MIN_AGREEMENT = 0.83
 
 # The count of instruction steps whose N-mm length the converter leaves
 # unconverted, measured over the archived imperial profile. ADR-0047 shipped
-# with the gap OPEN (166 of 166 unconverted); ADR-0054's converter change
+# with the gap OPEN (166 of 166 unconverted); ADR-0057's converter change
 # added `mm` to LENGTH_RE with fraction-aware output (`6-mm` -> `¼-inch`) and
 # the pin is now 0. Any nonzero value means the prose pass regressed, which is
 # exactly what the assertion is for.
@@ -100,7 +100,7 @@ class ArchiveShapeTest(unittest.TestCase):
                           % self.archive)
 
     def test_index_lists_the_profiles_we_archived(self):
-        """All six renders of the 2x3 matrix (ADR-0054: 2 unit systems x
+        """All six renders of the 2x3 matrix (ADR-0057: 2 unit systems x
         serving counts 2/4/6, reachable via set_profile)."""
         for label in ("metric-2", "metric-4", "metric-6", "us-2", "us-4", "us-6"):
             self.assertIn(label, self.profiles,
@@ -148,7 +148,7 @@ class ArchiveShapeTest(unittest.TestCase):
 
         Two profiles of the same catalog expose DIFFERENT variant ids. If this
         ever starts failing, upstream stabilised ids and `merge_builder()`'s
-        id-keyed merge became safe — revisit ADR-0054 then, not before.
+        id-keyed merge became safe — revisit ADR-0057 then, not before.
         """
         payloads = {}
         for label in ("us-6", "metric-4"):
@@ -157,7 +157,7 @@ class ArchiveShapeTest(unittest.TestCase):
         ida = {m["id"] for m in payloads["us-6"]["variant_meta"]}
         idb = {m["id"] for m in payloads["metric-4"]["variant_meta"]}
         self.assertEqual(ida & idb, set(),
-                         "variant ids now overlap across profiles; ADR-0054's "
+                         "variant ids now overlap across profiles; ADR-0057's "
                          "identity finding needs revisiting")
 
     def test_every_archived_doc_matches_its_profile(self):
@@ -247,9 +247,9 @@ class ConversionParityTest(unittest.TestCase):
         return {m: got for m, got in json.loads(r.stdout.strip().splitlines()[-1])}
 
     def test_conversion_agreement_has_not_regressed(self):
-        """Floor at the measured full-corpus rate, 156/187 = 83.4% (ADR-0054).
+        """Floor at the measured full-corpus rate, 156/187 = 83.4% (ADR-0057).
 
-        The 0.73 in ADR-0054 came from a 300-recipe sample; the full corpus
+        The 0.73 in ADR-0057 came from a 300-recipe sample; the full corpus
         measures lower because the imperial render's own rounding is noisier
         than the sample suggested. Divergence is legitimate (see
         MIN_AGREEMENT), so this catches REGRESSION, not disagreement.
@@ -272,7 +272,7 @@ class ConversionParityTest(unittest.TestCase):
         archived imperial docs and checks the converter directly.
 
         ADR-0047 shipped with the gap OPEN (166 unconverted) and this was a
-        known-gap pin. ADR-0054's converter change closed it — `mm` joined the
+        known-gap pin. ADR-0057's converter change closed it — `mm` joined the
         LENGTH_RE alternation and the output went fraction-aware (`6-mm` ->
         `¼-inch`, the ⅛ ladder, separator preserved) — so the pin is now 0 and
         the assertion is a REGRESSION gate: any unconverted N-mm step fails.

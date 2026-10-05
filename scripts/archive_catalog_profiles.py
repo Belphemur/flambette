@@ -86,7 +86,7 @@ CDN_ROOT = "https://cdn-recipes.mealime.com"
 SET_PROFILE_URL = "https://api.mealime.com/api/v2/set_profile"
 PAYLOAD = {"source": "my-web", "client_id": "archive-profiles"}
 
-# The account settings that re-render the catalog (ADR-0054). Verified live:
+# The account settings that re-render the catalog (ADR-0057). Verified live:
 # unit_family_id 1 = Metric, 2 = US; serving_count the app itself offers is
 # 2 / 4 / 6. `set_profile` responds {} and takes effect on the NEXT
 # `get_builder_data` call, which then returns the WHOLE catalog re-rendered.
@@ -257,7 +257,7 @@ def archive(label, builder, skip_existing=True):
 
 def set_profile(token, unit_family, serving_count):
     """Switch the account's render profile. Effect lands on the NEXT
-    `get_builder_data` call (ADR-0054 §5)."""
+    `get_builder_data` call (ADR-0057 §5)."""
     body = {
         "profile": {
             "recipe_type_id": 1,

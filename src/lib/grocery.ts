@@ -214,7 +214,7 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   for (const [normalized, group] of groups) {
     const lines: GroceryLine[] = []
     for (const { unit, amount } of group.byUnit.values()) {
-      // ADR-0054: unit-aware rendering — integer ml/g, fraction glyphs.
+      // ADR-0057: unit-aware rendering — integer ml/g, fraction glyphs.
       const display = unit
         ? `${formatMetricAmount(amount, unit)} ${unit}`
         : formatMetricAmount(amount, '')
