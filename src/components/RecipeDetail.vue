@@ -155,12 +155,13 @@ function setUnitSystem(system: UnitSystem) {
 }
 
 const scaledIngredients = computed(() => {
-  if (!doc.value) return []
-  return doc.value.line_items.map((item) => ({
+  const current = doc.value
+  if (!current) return []
+  return current.line_items.map((item) => ({
   ...item,
   // Scale first, then convert: the authored quantity is metric, so this is
   // the only place the number in front of the user ever changes system.
-  quantity: localizeQuantity(measuredQuantity(item, factor.value, doc.value.serving_count) ?? item.quantity, unitSystem.value),
+  quantity: localizeQuantity(measuredQuantity(item, factor.value, current.serving_count) ?? item.quantity, unitSystem.value),
   }))
 })
 
