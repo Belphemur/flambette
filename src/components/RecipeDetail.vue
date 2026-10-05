@@ -345,7 +345,7 @@ function startCooking() {
 
   <div class="space-y-4">
   <header class="space-y-3">
-  <div class="flex items-center gap-2 text-label-md text-text-muted">
+  <div class="flex flex-wrap items-center gap-2 text-label-md text-text-muted">
   <span
   v-if="meta.is_pro"
   class="rounded bg-surface-dark px-1.5 py-0.5 font-bold text-warning-soft"
@@ -354,16 +354,18 @@ function startCooking() {
   <!-- Type icon only: no redundant category word beside an
   already informative icon (DESIGN.md Components). The
   icon is role="img" with the category as its name, and
-  the text survives only for a category we have no hue
-  for, so an unrecognised type is never silently
-  dropped. -->
+  the text survives only when NEITHER icon applies, so
+  an unrecognised type is never silently dropped — and a
+  household recipe (no ingredient-TYPE category, ADR-0054)
+  keeps the SAME icon-only design as an imported one
+  instead of growing a text label the catalog never shows. -->
   <HueIcon
   v-if="typeRole"
   :role="typeRole"
   :size="18"
   :label="ICON_ROLES[typeRole].label"
   />
-  <span v-else class="capitalize">{{
+  <span v-else-if="!mealTypeRole" class="capitalize">{{
   catalog?.dataById.get(meta.id)?.category_name ?? meta.ruleset
   }}</span>
   <!-- The occasion wears its OWN hue (ADR-0043): never a protein hue,
@@ -374,6 +376,21 @@ function startCooking() {
   :size="18"
   :label="ICON_ROLES[mealTypeRole].label"
   />
+  <!-- ADR-0054: the PERMANENT authorship marker, styled like the two
+  icons above — an icon in the SAME row, carrying its meaning in the
+  tooltip + accessible name (the grocery provenance pill's pattern:
+  cursor-help + title). The card's NEW badge is the 30-day recency
+  face; this one never expires. Household status colour (DESIGN.md);
+  a label, never an IconRole — a recipe is not "the plum one". -->
+  <NotebookPen
+  v-if="isHouseholdRecipe"
+  :size="18"
+  role="img"
+  class="cursor-help text-household"
+  data-test="user-recipe-badge"
+  :aria-label="'Household recipe: authored by this household, not part of the imported catalog'"
+  title="Household recipe — authored by this household, not part of the imported catalog"
+  />
   </div>
   <h2 class="text-headline-md sm:text-headline-lg" data-test="detail-title">
   {{ meta.name }}
@@ -383,21 +400,6 @@ function startCooking() {
   <span class="text-label-md text-text-muted">rate it for your household</span>
   <span class="flex items-center gap-1 text-label-md text-text-muted" data-test="serves-label">
   <Utensils :size="16" aria-hidden="true" />serves {{ servings }}
-  </span>
-  <!-- ADR-0054: the PERMANENT authorship marker. The card's NEW badge
-  expires after 30 days; this one does not — it states who authored the
-  recipe, never how recently. Household status colour (DESIGN.md), a
-  label and never an IconRole (a recipe is not "the plum one"), and the
-  tooltip is the grocery provenance pill's pattern (cursor-help +
-  title, a flex sibling OUTSIDE any truncating span). -->
-  <span
-  v-if="isHouseholdRecipe"
-  class="flex cursor-help items-center gap-1 text-label-md font-medium text-household"
-  data-test="user-recipe-badge"
-  :aria-label="'Household recipe: authored by this household, not part of the imported catalog'"
-  title="Household recipe — authored by this household, not part of the imported catalog"
-  >
-  <NotebookPen :size="16" aria-hidden="true" />Household recipe
   </span>
   </div>
   <p

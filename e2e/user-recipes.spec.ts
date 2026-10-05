@@ -135,8 +135,9 @@ test.describe('user recipes and the source filter (ADR-0054)', () => {
     // this one never expires). A Mealime recipe must NOT carry it.
     const badge = page.getByTestId('user-recipe-badge')
     await expect(badge).toBeVisible()
-    await expect(badge).toContainText('Household recipe')
     await expect(badge).toHaveAttribute('title', /authored by this household/)
+    // Icon-only marker, same row as the type/occasion icons: no text pill.
+    await expect(badge).toHaveClass(/text-household/)
     await page.goto('/recipe/17452')
     await expect(page.getByTestId('user-recipe-badge')).toHaveCount(0)
     // The per-serving headline comes from meta.calories, which the authoring
