@@ -159,7 +159,9 @@ describe('scaleMetricAmount — the upstream metric profile scaling model', () =
     expect(scaleMetricAmount(4.5, 1 / 3, 'medium')).toBe(1.5)
     expect(scaleMetricAmount(5, 1 / 3, 'cloves')).toBe(2)
     expect(scaleMetricAmount(3, 2 / 3, 'tbsp')).toBe(2)
-    expect(scaleMetricAmount(2, 2 / 3, 'tbsp')).toBe(1)
+    // 2 ×⅔ = 1⅓ is not exact; `1 ½ tbsp` IS an authored token, so the
+    // nearest-authored snap picks it (ADR-0054 spoon grammar).
+    expect(scaleMetricAmount(2, 2 / 3, 'tbsp')).toBe(1.5)
   })
 
   test('cups: exact products stay exact (rendered as fractions)', () => {
@@ -218,7 +220,14 @@ describe('scaleQuantity — string-level, unit-aware', () => {
   })
 
   test('container counts quantize to the nearest ½ and singularize at 1', () => {
+    // pkg census ×⅔ (annotated): `1 ½ → 1` (262, exact-keep), `1 → ½`
+    // (7 rows — nearest-½ for inexact products); bare `1 small pkg → 1`
+    // (301, whole-round). The one-off `→ ⅔` rendering is re-authoring.
     expect(scaleQuantity('1 (142 g) pkg', 2 / 3)).toBe('½ (142 g) pkg')
+    expect(scaleQuantity('1 ½ (142 g) pkg', 2 / 3)).toBe('1 (142 g) pkg')
+    // Zero-guard: a sub-½ scaled count floors at ½ — upstream never renders 0
+    // (4,568/4,568 sub-½ corpus pairs are nonzero). kody-ai's case:
+    expect(scaleQuantity('½ (142 g) pkg', 1 / 3)).toBe('½ (142 g) pkg')
     expect(scaleQuantity('1 ½ (142 g) pkgs', 2 / 3)).toBe('1 (142 g) pkg')
     expect(scaleQuantity('1 ½ small bunches', 2 / 3)).toBe('1 small bunch')
     expect(scaleQuantity('2 (398 ml) cans', 1 / 3)).toBe('½ (398 ml) can')

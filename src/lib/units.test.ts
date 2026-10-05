@@ -394,9 +394,11 @@ describe('quantized imperial localization (ADR-0057, measured)', () => {
     expect(localizeText('Cut into 6-mm pieces.', 'imperial')).toBe('Cut into ¼-inch pieces.')
     expect(localizeText('Cut into 6 mm pieces.', 'imperial')).toBe('Cut into ¼ inch pieces.')
     expect(localizeText('Slice 1 cm-thick rounds.', 'metric')).toBe('Slice 1 cm-thick rounds.')
-    // metric direction: mm → cm keeps the 1-decimal grammar.
-    expect(localizeText('Cut into 6 mm pieces.', 'metric')).toBe('Cut into 0.6 cm pieces.')
-    expect(localizeText('Cut into 6-mm pieces.', 'metric')).toBe('Cut into 0.6-cm pieces.')
+    // Metric mode is the authored identity: upstream keeps metric
+    // spans verbatim in every metric profile (the ADR-0054 census:
+    // `2 ½ cm`, `1 ¼-cm-thick` are static in all three profiles).
+    expect(localizeText('Cut into 6 mm pieces.', 'metric')).toBe('Cut into 6 mm pieces.')
+    expect(localizeText('Cut into 6-mm pieces.', 'metric')).toBe('Cut into 6-mm pieces.')
     // already-imperial mm is nonsense; already-metric cm is the identity.
     expect(localizeText('Cut into 12-mm pieces.', 'imperial')).toBe('Cut into ½-inch pieces.')
   })

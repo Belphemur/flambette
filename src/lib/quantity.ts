@@ -187,7 +187,10 @@ export function scaleMetricAmount(amount: number, factor: number, unit: string):
       // An exact product stays exact (84 g ×⅔ = 56 g, 426 ×⅔ = 284) —
       // the oz round-trip below would bump 56.0 to 57.
       if (Math.abs(p - Math.round(p)) < 1e-6) return Math.round(p)
-      return Math.round(qzTo(amount / OZ_GRAMS, 0.5) * factor * OZ_GRAMS)
+      // Upstream keeps ½-oz-multiple amounts and NEVER renders below ½ oz
+      // (us-2 census: smallest authored oz = ½; `14 g → ½ oz`, 55/55 exact),
+      // so a conversion that lands under the grid floors there — never 0.
+      return Math.max(0.5, Math.round(qzTo(amount / OZ_GRAMS, 0.5) * factor * OZ_GRAMS))
     }
     case 'ml':
       return scaleMl(amount, factor)
@@ -204,16 +207,56 @@ export function scaleMetricAmount(amount: number, factor: number, unit: string):
     case 'cup':
       return p
     case 'tbsp': {
-      const q = qzTo(p, 0.25)
-      if (Math.abs(q - p) < 0.02) return q
-      return Math.round(p)
+      const q = tspGrammar(p)
+      return q
     }
+    case 'tsp':
+      return tspGrammar(p)
     default: {
-      if (Math.abs(p - Math.round(p)) < 1e-6) return Math.round(p)
-      if (Math.abs(p * 2 - Math.round(p * 2)) < 1e-6) return p
-      return Math.round(p)
+      // Count nouns (medium, small, cloves…): ADR-0054, measured against the
+      // metric-6→metric-4/metric-2 corpus (3,088 weighted rows, 100%):
+      // exact half/quarter products stay exact, everything else rounds to
+      // the nearest WHOLE count floored at ½ — `1 medium ×⅔ → 1`,
+      // `1 ×⅓ → ½`, `3 ×⅓ → 1`. A zero can never be rendered because
+      // upstream never renders one (4,568/4,568 sub-½ pairs nonzero).
+      for (const d of [2, 4]) {
+        if (Math.abs(p * d - Math.round(p * d)) < 1e-6) return Math.round(p * d) / d
+      }
+      return Math.max(0.5, Math.floor(p + 0.5))
     }
   }
+}
+
+/**
+ * Spoon grammar (ADR-0054, measured against 10,626 metric-6→metric-2 tsp
+ * prose rows, 100%): exact whole/half/quarter products stay exact
+ * (`¾ tsp ×⅓ → ¼`), everything else quantizes to the nearest ⅛ and the
+ * result snaps to the nearest value upstream ever AUTHORS (`⅝` and `⅞`
+ * never appear as tsp targets — `2 tsp ×⅓ → ¾`, not `⅝`) — floored at ⅛,
+ * never 0 (`¼ tsp ×⅓ → ⅛`).
+ */
+function tspGrammar(p: number): number {
+  for (const d of [1, 2, 4]) {
+    if (Math.abs(p * d - Math.round(p * d)) < 1e-6) {
+      const r = Math.round(p * d) / d
+      return r > 0 ? r : 0.125
+    }
+  }
+  const q = Math.round(p * 8) / 8
+  const authored = [0.125, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 4]
+  if (authored.includes(q)) return q
+  return Math.max(0.125, nearestOf(authored, p))
+}
+
+/** Closest value of `list` to `v` (ties toward the larger — unused in the corpus). */
+function nearestOf(list: readonly number[], v: number): number {
+  let best = list[0]
+  for (const x of list) {
+    const d = Math.abs(x - v)
+    const bd = Math.abs(best - v)
+    if (d < bd - 1e-9 || (Math.abs(d - bd) < 1e-9 && x > best)) best = x
+  }
+  return best
 }
 
 /** The ml hybrid: tbsp-clean exact → cup grid (within 0.5 ml) → fl-oz. */
@@ -347,7 +390,27 @@ export function scaleQuantity(raw: string, factor: number): string {
     return scaleCupQuantity(parsed.amount, factor, unit)
   }
   if (CONTAINER_COUNT_NOUNS.has(nounKey)) {
-    const count = qzTo(parsed.amount * factor, 0.5)
+    // Count of purchased objects — ADR-0054 measured grammar: exact
+    // half/quarter products stay exact, everything else rounds to the
+    // nearest WHOLE count floored at ½ (`1 small bunch ×⅔ → 1`, n=700;
+    // `1 ×⅓ → ½`, n=707). Weight-annotated counts (`(142 g)`, `(398 ml)`)
+    // behave like the cans corpus instead: nearest ½-unit
+    // (`1 ½ (398 ml) cans ×⅓ → ½`, n=117; `3 → 1`, n=385). Zero is never
+    // rendered — upstream doesn't (4,568/4,568 sub-½ pairs nonzero).
+    const p = parsed.amount * factor
+    const annotated = /[(]/.test(parsed.unit)
+    let count: number | undefined
+    for (const d of [2, 4]) {
+      if (Math.abs(p * d - Math.round(p * d)) < 1e-6) {
+        count = Math.round(p * d) / d
+        break
+      }
+    }
+    if (count === undefined) {
+      count = annotated
+        ? Math.max(0.5, Math.round(p * 2) / 2)
+        : Math.max(0.5, Math.floor(p + 0.5))
+    }
     const rendered = formatFraction(count)
     const noun = count <= 1 ? singularizeUnit(unit) : unit
     return unit ? `${rendered} ${noun}` : rendered

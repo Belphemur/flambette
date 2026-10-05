@@ -300,15 +300,45 @@ function localizeLengths(text: string, system: UnitSystem): string {
     const glue = sep.includes('-') ? '-' : ' '
     const u = unitRaw.toLowerCase()
     if (u === 'cm' || u === 'mm') {
+      // Upstream AUTHORS fractions in every metric profile (`2 ½ cm`,
+      // `1 ¼-cm-thick`, all static across 2/4/6 servings) — metric mode is
+      // the IDENTITY for authored spans, exactly like dual.
+      if (system === 'metric') return match
       const cm = u === 'mm' ? parsed.amount / 10 : parsed.amount
-      if (system === 'metric') return `${formatAmount(cm)}${glue}cm`
-      const inches = qzTo(cm / CENTIMETRES_PER_INCH, 0.25)
+      const inches = inchRender(cm)
       return `${formatFraction(inches)}${glue}${inchLabel(inches)}`
     }
     // inch / in
     if (system === 'imperial') return match
     return `${formatAmount(parsed.amount * CENTIMETRES_PER_INCH)}${glue}cm`
   })
+}
+
+/**
+ * cm/mm → inch, ADR-0057 measured (652 joined step rows, 99.7%): nearest ⅛
+ * below 2 inches (`6 mm → ¼-inch`, `3 mm → ⅛-inch`, `2 cm → ¾-inch`,
+ * `2 ½ cm → 1-inch` — upstream metricates inches at 2.5 cm/inch), whole
+ * inches at 2 and above (`5 cm → 2`, `15 cm → 6`). Floored at ⅛ — zero is
+ * never an inch span.
+ */
+function inchRender(cm: number): number {
+  const inches = cm / CENTIMETRES_PER_INCH
+  if (inches >= 2) return Math.round(inches)
+  return Math.max(0.125, Math.round(inches * 8) / 8)
+}
+
+/**
+ * kg → lb, ADR-0057 measured (1,760 joined line rows, 99.6%): an exact
+ * third-product keeps the third (`0.15 kg → ⅓ lb`, 7/7 — 0.3307 sits
+ * within tolerance of ⅓), everything else quantizes to the nearest ¼ lb
+ * floored there — upstream never renders less than `¼ lb`.
+ */
+function kgLbRender(kg: number): number {
+  const pounds = kg / KILOGRAMS_PER_POUND
+  for (const d of [3, 4]) {
+    if (Math.abs(pounds * d - Math.round(pounds * d)) < 0.02) return Math.round(pounds * d) / d
+  }
+  return Math.max(0.25, Math.round(pounds * 4) / 4)
 }
 
 /**
@@ -511,18 +541,19 @@ export function localizeQuantity(
     return annotation ? `${head} ${annotation} ${noun}` : `${head} ${noun}`
   }
   // ADR-0057: the quantization grids the us profile actually authors —
-  // ½ oz for grams, ¼ lb for kilograms, ¼ fl oz below 6 for millilitres,
-  // ¼ inch for centimetres — rendered as fraction glyphs
-  // (`2 ¼ fl oz`, `4 ½ oz`, `2 ¼ lb`).
+  // ½ oz for grams (floored at ½ oz: `14 g → ½ oz`, never `0 oz`), ¼ lb
+  // for kilograms, ¼ fl oz below 6 for millilitres, ⅛ inch for
+  // centimetres — rendered as fraction glyphs (`2 ¼ fl oz`, `4 ½ oz`,
+  // `2 ¼ lb`).
   const converted =
     key === 'g'
-      ? qzTo(amount / GRAMS_PER_OUNCE, 0.5)
+      ? Math.max(0.5, qzTo(amount / GRAMS_PER_OUNCE, 0.5))
       : key === 'kg'
-        ? qzTo(amount / KILOGRAMS_PER_POUND, 0.25)
+        ? kgLbRender(amount)
         : key === 'ml'
           ? flOzQuantized(amount)
           : key === 'cm'
-            ? qzTo(amount / CENTIMETRES_PER_INCH, 0.25)
+            ? inchRender(amount)
             : amount * factor
   const head = formatFraction(converted)
   const noun = label === 'inch' ? inchLabel(converted) : label

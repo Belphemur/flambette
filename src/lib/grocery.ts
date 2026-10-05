@@ -4,7 +4,7 @@ import {
   formatContainerQuantity,
   parseContainerQuantity,
 } from './containers'
-import { parseQuantity, formatMetricAmount } from './quantity'
+import { parseQuantity, formatMetricAmount, scaleMetricAmount } from './quantity'
 import { isSeasoning, scaleQuantity } from './recipe'
 import { bucketFor, type StoreSection } from './sections'
 import type { RecipeDoc } from './types'
@@ -193,13 +193,15 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       const parsed = parseQuantity(item.quantity)
       if (parsed) {
         const key = unitKey(parsed.unit)
-        const scaled = scaleQuantity(
-          parsed.amount,
-          base,
-          target,
-          isSeasoning(item.ingredient_name),
-          item.ingredient_name,
-        )
+        // ADR-0054: non-seasonings scale through the QUANTIZED grammar
+        // (`scaleMetricAmount` — the same vocabulary recipe detail uses), so
+        // the grocery sum and the recipe-detail chip can never disagree:
+        // `2129 ml ×⅔` renders `1420 ml` on BOTH surfaces. Summing two
+        // ½-quanta yields integers, so the aggregate keeps the vocabulary;
+        // seasonings keep `recipe.scaleQuantity`'s sub-linear rule.
+        const scaled = isSeasoning(item.ingredient_name)
+          ? scaleQuantity(parsed.amount, base, target, true, item.ingredient_name)
+          : scaleMetricAmount(parsed.amount, factor, parsed.unit)
         const current = group.byUnit.get(key)
         if (current) current.amount += scaled
         else group.byUnit.set(key, { unit: parsed.unit, amount: scaled })
