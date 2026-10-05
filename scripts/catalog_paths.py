@@ -26,6 +26,29 @@ import sys
 
 DOC_NAME = re.compile(r"^\d+\.json$")
 
+# The reserved band's base, mirrored from src/lib/userRecipes.ts
+# (`USER_RECIPE_ID_BASE = 900_000`). Kept as a plain constant rather than
+# imported: the python build scripts are stdlib-only by design (ADR-0054 §5).
+USER_RECIPE_ID_BASE = 900_000
+
+
+def _guard_user_id(vid, entries, what):
+    """Shared band + duplicate gate for both loader views.
+
+    An id below USER_RECIPE_ID_BASE would SHADOW a frozen Mealime record in
+    every consumer that keys by id, and a repeat suppresses nothing: the
+    pack merge is last-wins while the census count double-counts. Both are
+    dropped LOUDLY, never merged (mirror of src/lib/catalog.ts's refusals).
+    """
+    if vid < USER_RECIPE_ID_BASE:
+        print(f"warning: user recipe id {vid} is below the reserved band "
+              f"({USER_RECIPE_ID_BASE}); skipped", file=sys.stderr)
+        return None
+    if vid in {v for v, _ in entries}:
+        print(f"warning: duplicate user recipe id {vid}; keeping the FIRST entry", file=sys.stderr)
+        return None
+    return vid
+
 
 def recipe_doc_paths(root=None):
     """Sorted absolute paths of the catalog docs, sidecars excluded."""
@@ -65,7 +88,10 @@ def user_recipe_docs(root=None):
         if vid is None or not doc:
             print("warning: user_recipes.json entry without meta.id; skipped", file=sys.stderr)
             continue
-        entries.append((int(vid), doc))
+        vid = _guard_user_id(int(vid), entries, "docs")
+        if vid is None:
+            continue
+        entries.append((vid, doc))
     return sorted(entries, key=lambda pair: pair[0])
 
 
@@ -113,5 +139,8 @@ def user_recipe_entries(root=None):
         if vid is None:
             print("warning: user_recipes.json entry without meta.id; skipped", file=sys.stderr)
             continue
-        out.append((int(vid), entry))
+        vid = _guard_user_id(int(vid), out, "entries")
+        if vid is None:
+            continue
+        out.append((vid, entry))
     return sorted(out, key=lambda pair: pair[0])

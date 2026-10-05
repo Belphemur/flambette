@@ -2,7 +2,6 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
-import { isUserRecipeId } from '../lib/userRecipes'
 import { imageSrc, onImgError } from '../lib/images'
 import { humanizeScaledQuantity, scaleQuantity } from '../lib/quantity'
 import {
@@ -224,14 +223,11 @@ async function loadDoc() {
   // load so a recipe opened after the user changed the default elsewhere
   // starts at the current one.
   const entry = plan.plan.find((e) => e.variantId === m.id)
-  // A HOUSEHOLD recipe opens at its AUTHORED serving count: the batch is a
-  // fact the author committed (the pancake is 8), and seeding the household
-  // default here would scale the authored list into fractional nonsense
-  // (2.3 eggs) the owner never wrote. A visitor can still step the count.
-  servings.value = entry?.servings ??
-    (isUserRecipeId(m.id, catalog.value?.userRecipeIds ?? new Set())
-      ? m.serving_count
-      : ui.defaultServings)
+  // ONE seeding rule for every recipe, household-authored or not: the
+  // owner's saved default defines the servings (a settings decision, not a
+  // per-recipe one). The fractional-noise problem that scaling creates is
+  // handled where it belongs - the DISPLAY rounding (humanizeScaledQuantity).
+  servings.value = entry?.servings ?? ui.defaultServings
   try {
     const loaded = await getRecipe(m)
     // Race guard: navigating to another recipe while this fetch is in
