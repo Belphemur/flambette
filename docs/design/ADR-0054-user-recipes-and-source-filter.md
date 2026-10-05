@@ -1,4 +1,4 @@
-# ADR-0052: User recipes live in the catalog, and "source" replaces the PRO filter
+# ADR-0054: User recipes live in the catalog, and "source" replaces the PRO filter
 
 * Extends: ADR-0001 (offline frozen catalog), ADR-0027 (unified quick
   filters), ADR-0024 (Auto-Plan pack builder), ADR-0036 (design tokens +
