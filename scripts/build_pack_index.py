@@ -228,7 +228,7 @@ def main() -> int:
     unparsed_qty = 0
     dup_name_merges = 0
 
-    for vid, doc in iter_recipe_docs():
+    for vid, doc in iter_recipe_docs(ROOT):
         vid = str(vid)
 
         # One row per nameKey, merged with the ADR-0017 rule so the index

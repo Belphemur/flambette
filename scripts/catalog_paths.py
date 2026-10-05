@@ -99,8 +99,14 @@ def user_recipe_entries(root=None):
     out = []
     for entry in payload.get("recipes") or []:
         meta = entry.get("meta") or {}
-        vid = meta.get("id", (entry.get("doc") or {}).get("id"))
+        # meta.id is REQUIRED here (not doc.id fallback): the census appends
+        # `meta` to builder_data's variant_meta and re-indexes by meta.id —
+        # an entry whose id lives only under doc would raise KeyError there.
+        # Same LOUD-skip spirit as the runtime parser; warn so the bad entry
+        # is visible.
+        vid = meta.get("id")
         if vid is None:
+            print("warning: user_recipes.json entry without meta.id; skipped", file=sys.stderr)
             continue
         out.append((int(vid), entry))
     return sorted(out, key=lambda pair: pair[0])

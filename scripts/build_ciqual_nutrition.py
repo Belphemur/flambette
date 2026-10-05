@@ -575,8 +575,8 @@ def build_food(key, spec, names, comps, units):
         # so a total over it would be a partial sum published as complete).
         # The keys are the app's names, not const codes.
         "not_measured": [
-            k for k, v in sorted(NUTRIENT_CODES.items())
-            if str(v) in {str(c) for c in rows} and str(v) in dash_rows
+            k for k in sorted(NUTRIENT_CODES)
+            if str(NUTRIENT_CODES[k]) in {str(c) for c in rows} and k in dash_rows
         ],
         "per100g": {k: round2(v) for k, v in sorted(per100.items())},
     }
@@ -744,6 +744,11 @@ def recipe_nutrition(doc, table):
     unit_grams = table.get("unitGrams", {})
     liquid_density = table.get("liquidDensity", {})
     contributions = []  # (ingredient key, grams, per100g block)
+    if not (doc.get("line_items") or []):
+        # A doc with no line items has nothing to total: an EMPTY block is the
+        # honest output (check() runs this over every committed recipe, so a
+        # raise here would fail the whole data gate on one degenerate entry).
+        return {}
     for line in doc.get("line_items") or []:
         grams = line_item_grams(line, unit_grams, liquid_density)
         if grams is None:

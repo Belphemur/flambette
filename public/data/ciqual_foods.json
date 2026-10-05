@@ -153,7 +153,20 @@
     "fructose",
     "lactose"
    ],
-   "not_measured": [],
+   "not_measured": [
+    "b12_cobalamin",
+    "cholesterol",
+    "galactose",
+    "monounsaturated",
+    "omega_3",
+    "omega_6",
+    "polyunsaturated",
+    "saturated",
+    "starch",
+    "vitamin_a",
+    "vitamin_c",
+    "vitamin_d"
+   ],
    "per100g": {
     "alcohol": 0.0,
     "ash": 1.06,
@@ -202,7 +215,14 @@
     "saturated",
     "sucrose"
    ],
-   "not_measured": [],
+   "not_measured": [
+    "energy",
+    "fructose",
+    "galactose",
+    "lactose",
+    "selenium",
+    "starch"
+   ],
    "per100g": {
     "alcohol": 0.0,
     "ash": 55.0,
@@ -381,7 +401,12 @@
    "below_limit": [
     "selenium"
    ],
-   "not_measured": [],
+   "not_measured": [
+    "energy",
+    "omega_3",
+    "omega_6",
+    "sugar_alcohol"
+   ],
    "per100g": {
     "alcohol": 0.0,
     "ash": 0.02,
@@ -438,7 +463,10 @@
    "below_limit": [
     "selenium"
    ],
-   "not_measured": [],
+   "not_measured": [
+    "energy",
+    "sugar_alcohol"
+   ],
    "per100g": {
     "alcohol": 0.0,
     "ash": 0.26,
@@ -495,7 +523,17 @@
    "choice": "Sel blanc alimentaire non iodé non fluoré — plain sodium chloride (0 kcal, a REAL zero, not an absent value).",
    "confidence_note": null,
    "below_limit": [],
-   "not_measured": [],
+   "not_measured": [
+    "fructose",
+    "galactose",
+    "glucose",
+    "lactose",
+    "maltose",
+    "omega_3",
+    "omega_6",
+    "starch",
+    "sucrose"
+   ],
    "per100g": {
     "alcohol": 0.0,
     "ash": 99.9,
@@ -544,7 +582,24 @@
    "choice": "Vanille, extrait alcoolique — the alcohol-based vanilla extract the recipe calls for.",
    "confidence_note": null,
    "below_limit": [],
-   "not_measured": [],
+   "not_measured": [
+    "calcium",
+    "fructose",
+    "galactose",
+    "glucose",
+    "lactose",
+    "maltose",
+    "monounsaturated",
+    "omega_3",
+    "omega_6",
+    "polyunsaturated",
+    "saturated",
+    "selenium",
+    "starch",
+    "sucrose",
+    "sugars",
+    "vitamin_e"
+   ],
    "per100g": {
     "alcohol": 32.9,
     "ash": 0.22,
@@ -594,7 +649,10 @@
     "starch",
     "sucrose"
    ],
-   "not_measured": [],
+   "not_measured": [
+    "galactose",
+    "sugars"
+   ],
    "per100g": {
     "alcohol": 0.0,
     "ash": 0.84,
