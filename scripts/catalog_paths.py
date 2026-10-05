@@ -57,8 +57,13 @@ def user_recipe_docs(root=None):
     entries = []
     for entry in payload.get("recipes") or []:
         doc = entry.get("doc") or {}
-        vid = (entry.get("meta") or {}).get("id", doc.get("id"))
+        # meta.id REQUIRED (no doc.id fallback): the doc-only view must agree
+        # with user_recipe_entries and the runtime parser (parseUserRecipes
+        # requires meta.id) — a doc-only id would make the pack index see a
+        # recipe the runtime never loads. (kody round 2, PR #49.)
+        vid = (entry.get("meta") or {}).get("id")
         if vid is None or not doc:
+            print("warning: user_recipes.json entry without meta.id; skipped", file=sys.stderr)
             continue
         entries.append((int(vid), doc))
     return sorted(entries, key=lambda pair: pair[0])

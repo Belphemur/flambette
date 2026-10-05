@@ -216,7 +216,6 @@
     "sucrose"
    ],
    "not_measured": [
-    "energy",
     "fructose",
     "galactose",
     "lactose",
@@ -402,7 +401,6 @@
     "selenium"
    ],
    "not_measured": [
-    "energy",
     "omega_3",
     "omega_6",
     "sugar_alcohol"
@@ -464,7 +462,6 @@
     "selenium"
    ],
    "not_measured": [
-    "energy",
     "sugar_alcohol"
    ],
    "per100g": {
@@ -650,8 +647,7 @@
     "sucrose"
    ],
    "not_measured": [
-    "galactose",
-    "sugars"
+    "galactose"
    ],
    "per100g": {
     "alcohol": 0.0,

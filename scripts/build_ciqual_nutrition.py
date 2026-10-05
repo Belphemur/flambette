@@ -550,10 +550,20 @@ def build_food(key, spec, names, comps, units):
         energy_source = "atwater"
 
     sugars = derive_sugars(per100)
+    sugars_derived = sugars is not None and per100.get("sugars") != sugars
     if sugars is None:
         per100.pop("sugars", None)
     else:
         per100["sugars"] = sugars
+    # A DERIVED key is not a measured one: energy filled by Atwater (its
+    # CIQUAL row is `-`) and sugars synthesized from sub-keys (whole milk)
+    # must NOT also be listed in not_measured, or the artifact would call
+    # the same number "published" and "not measured". (kody round 2, PR #49.)
+    derived_keys = set()
+    if energy_source == "atwater":
+        derived_keys.add("energy")
+    if sugars_derived:
+        derived_keys.add("sugars")
 
     # The WORST grade among the rows that made it in, so a food whose macros
     # are calculated (C) never inherits the A of one analysed salt row.
@@ -576,7 +586,9 @@ def build_food(key, spec, names, comps, units):
         # The keys are the app's names, not const codes.
         "not_measured": [
             k for k in sorted(NUTRIENT_CODES)
-            if str(NUTRIENT_CODES[k]) in {str(c) for c in rows} and k in dash_rows
+            if k not in derived_keys
+            and str(NUTRIENT_CODES[k]) in {str(c) for c in rows}
+            and k in dash_rows
         ],
         "per100g": {k: round2(v) for k, v in sorted(per100.items())},
     }
