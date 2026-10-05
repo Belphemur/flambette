@@ -551,20 +551,6 @@ Parity rules for anything mirroring TS into Python:
 - All 2,759 recipes are authored `serving_count = 6`; index amounts are at
   the authored servings and scale at read time, never baked.
 
-## Repo skills (.agents/skills/)
-
-Task-level procedures live as SKILL.md files under `.agents/skills/` —
-read the one matching the task BEFORE improvising:
-
-- **`.agents/skills/add-recipe/SKILL.md`** — adding a household (user)
-  recipe: artifact entry, CIQUAL-derived nutrition, image norms, the gate
-  order, and the display rules (authored-servings seed, humanized rounding,
-  one seasoning-aware scaler). ADR-0054 is its design record.
-
-When a procedure is discovered in-session (not derivable from an ADR or
-this file), write it as a new skill there instead of letting it live in
-chat history.
-
 ## Known pitfalls
 
 - Secure-context-only APIs (`navigator.clipboard`, `navigator.share`) do
