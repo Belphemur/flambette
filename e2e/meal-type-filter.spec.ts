@@ -42,7 +42,7 @@ async function rulesetCounts(page: Page): Promise<Record<string, number>> {
   return page.evaluate(async () => {
     const data = await fetch('/data/builder_data.json').then((r) => r.json())
     const feasible = new Set<number>(data.feasible_variants as number[])
-    // ADR-0052: user recipes are merged into the served catalog at load, so
+    // ADR-0054: user recipes are merged into the served catalog at load, so
     // their rulesets count too (they are filterable, therefore countable).
     // The counts here and the committed recipe_types.json then move together.
     const users = await fetch('/data/user_recipes.json')

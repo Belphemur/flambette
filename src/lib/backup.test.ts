@@ -37,7 +37,7 @@ describe('settings import (ADR-0013 registry)', () => {
     return slice
   }
 
-  test('a pre-ADR-0052 backup migrates proOnly to source (backup import path)', () => {
+  test('a pre-ADR-0054 backup migrates proOnly to source (backup import path)', () => {
     // The backup archive is the third inbound path for the filters (the
     // other two being the persisted ui blob and a peer's room snapshot),
     // and it goes through the same normalizeQuickFilters branch. A backup
@@ -75,7 +75,7 @@ describe('settings import (ADR-0013 registry)', () => {
       maxTime: null,
       sortBy: 'rating',
       favOnly: false,
-      // A pre-ADR-0052 blob's `proOnly: false` maps to 'all' — the same
+      // A pre-ADR-0054 blob's `proOnly: false` maps to 'all' — the same
       // default the reset produces. Asserted so the legacy key is
       // visibly accounted for rather than silently ignored.
       source: 'all',

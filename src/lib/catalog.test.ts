@@ -5,7 +5,7 @@ import type { BuilderData, RecipeDoc, VariantData, VariantMeta } from './types'
 import { USER_RECIPE_ID_BASE } from './userRecipes'
 
 /**
- * The ADR-0052 catalog merge. This is the one piece of decision that
+ * The ADR-0054 catalog merge. This is the one piece of decision that
  * decides whether a household recipe is visible to EVERY engine at once
  * (search, diets, meal type, Auto-Plan, grocery, cooking, favourites,
  * ratings, the room payload) — so it is pinned here against the real

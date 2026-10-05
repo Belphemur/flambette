@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Author the household's first user recipe (ADR-0052) — the fluffy pancake.
+"""Author the household's first user recipe (ADR-0054) — the fluffy pancake.
 
 A one-shot authoring helper, kept in the repo so the numbers in
 `public/data/user_recipes.json` are REPRODUCIBLE and reviewable rather than
@@ -13,7 +13,7 @@ Why a script at all, when the recipe is just JSON?
   * The `nutrition` block is DERIVED from the committed CIQUAL table
     (`build_ciqual_nutrition.recipe_nutrition`), including `meta.calories` and
     `meta.sodium_mg` which are PER SERVING (ADR-0004). A hand-typed block is
-    exactly the fabrication ADR-0052 forbids, and it would drift from the
+    exactly the fabrication ADR-0054 forbids, and it would drift from the
     table the moment an ingredient changed.
   * The `line_items` are the single source for both the nutrition derivation
     and the grocery list, so a quantity can never disagree with itself.
@@ -32,7 +32,7 @@ sys.path.insert(0, HERE)
 
 from build_ciqual_nutrition import recipe_nutrition, load_table  # noqa: E402
 
-# ADR-0052 reserves the 900 000+ band for household recipes (the frozen
+# ADR-0054 reserves the 900 000+ band for household recipes (the frozen
 # catalog's highest id is 40 919), so a user id can never shadow a Mealime one.
 VARIANT_ID = 900_001
 RECIPE_ID = 900_001

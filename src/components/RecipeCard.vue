@@ -32,7 +32,7 @@ const mealTypeRole = computed(() => mealRole(props.meta.ruleset))
 const isFavourite = computed(() => favourites.isFavourite(props.meta.id))
 
 /**
- * ADR-0052: the NEW badge — this card's recipe was authored by the
+ * ADR-0054: the NEW badge — this card's recipe was authored by the
  * household, and was added less than `NEW_BADGE_DAYS` ago.
  *
  * Two things it deliberately does NOT say. It does not say "Mealime"

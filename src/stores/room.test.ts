@@ -530,7 +530,7 @@ describe('room store — quick filters are household state (ADR-0028)', () => {
           sortBy: 'time',
           favOnly: true,
           source: 'new',
-          // A peer still on the pre-ADR-0052 code sends the retired
+          // A peer still on the pre-ADR-0054 code sends the retired
           // boolean; it must map to 'pro' rather than being dropped.
           proOnly: true,
         },
@@ -541,7 +541,7 @@ describe('room store — quick filters are household state (ADR-0028)', () => {
     expect(ui.quickFilters.diets).toEqual(['vegan'])
     expect(ui.quickFilters.protein).toBe('fish')
     expect(ui.quickFilters.sortBy).toBe('time')
-    // `source` is HOUSEHOLD state (ADR-0052 §3), so the explicit value
+    // `source` is HOUSEHOLD state (ADR-0054 §3), so the explicit value
     // wins over the legacy key a mid-migration peer also sent.
     expect(ui.quickFilters.source).toBe('new')
     // …but `favOnly` is PERSONAL: a peer's switch must not be adopted
@@ -549,8 +549,8 @@ describe('room store — quick filters are household state (ADR-0028)', () => {
     expect(ui.quickFilters.favOnly).toBe(false)
   })
 
-  test('a peer still sending proOnly gets the migrated source (ADR-0052 §3)', async () => {
-    // An older phone in the household runs the pre-ADR-0052 build and
+  test('a peer still sending proOnly gets the migrated source (ADR-0054 §3)', async () => {
+    // An older phone in the household runs the pre-ADR-0054 build and
     // sends `{ proOnly: true }` with no `source` key. Without the
     // migration in normalizeQuickFilters the source would default to
     // 'all' and the household would silently stop seeing the narrowing

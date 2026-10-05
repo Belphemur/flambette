@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Golden tests for scripts/build_ciqual_nutrition.py (ADR-0052, locked L5).
+"""Golden tests for scripts/build_ciqual_nutrition.py (ADR-0054, locked L5).
 
 Style follows scripts/test_extract_recipe_types.py: stdlib `unittest`, run
 directly (`python3 scripts/test_build_ciqual_nutrition.py`) and wired into

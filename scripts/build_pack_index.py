@@ -202,7 +202,7 @@ def main() -> int:
     # `<id>.timer.json` sidecars, and a bare `*.json` glob silently folds those
     # into the index (they parse as empty recipes and double the row count).
     #
-    # ADR-0052: the household's own recipes live in user_recipes.json, not in
+    # ADR-0054: the household's own recipes live in user_recipes.json, not in
     # the frozen directory, so the walk is `iter_recipe_docs` (both sources in
     # one pass). Locked decision L2 makes them Auto-Plan eligible: a recipe the
     # planner cannot see is scored as if it needed no ingredients at all.

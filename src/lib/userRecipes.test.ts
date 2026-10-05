@@ -8,7 +8,7 @@ import {
 } from './userRecipes'
 
 /**
- * User recipes (ADR-0052). Two independent facts, pinned apart on
+ * User recipes (ADR-0054). Two independent facts, pinned apart on
  * purpose: AUTHORSHIP is decided by the loaded artifact's id set and is
  * permanent, while RECENCY expires after `NEW_BADGE_DAYS` and drives the
  * NEW badge only (locked decision L1).
@@ -49,7 +49,7 @@ describe('isUserRecipeId', () => {
   })
 
   test('an empty set means no user recipes, and the app still works', () => {
-    // A build whose user_recipes.json failed to load (ADR-0052 §1
+    // A build whose user_recipes.json failed to load (ADR-0054 §1
     // degrade-gracefully) must render the catalog, not crash a facet.
     expect(isUserRecipeId(17452, new Set())).toBe(false)
     expect(isUserRecipeId(PANCAKE, new Set())).toBe(false)

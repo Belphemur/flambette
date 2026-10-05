@@ -158,7 +158,7 @@ let snapshot: SnapshotMeta[] | null = null
 
 /**
  * The served catalog's variant metadata, read straight off disk: the frozen
- * builder_data PLUS the household's own recipes (ADR-0052), which are merged
+ * builder_data PLUS the household's own recipes (ADR-0054), which are merged
  * into the same array at load and therefore classify like any other variant.
  */
 function catalogSnapshot(): SnapshotMeta[] {

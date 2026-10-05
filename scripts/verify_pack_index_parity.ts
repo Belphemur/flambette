@@ -30,7 +30,7 @@ function unitKeyTs(unit: string): string {
 
 const index = JSON.parse(readFileSync(`${BASE}/pack_index.json`, 'utf8'))
 const builder = JSON.parse(readFileSync(`${BASE}/builder_data.json`, 'utf8'))
-// ADR-0052: the household's own recipes are Auto-Plan eligible (locked L2),
+// ADR-0054: the household's own recipes are Auto-Plan eligible (locked L2),
 // so they are parity-checked too — they travel through the same Python
 // nameKey/container/amount path as the frozen catalog.
 const userRecipes = JSON.parse(readFileSync(`${BASE}/user_recipes.json`, 'utf8')).recipes ?? []
@@ -104,7 +104,7 @@ console.log(
 console.log('nameKey parity (pack index): implicit (a non-matching key exits above)')
 
 /**
- * nameKey parity for the CIQUAL nutrition mirror (ADR-0052).
+ * nameKey parity for the CIQUAL nutrition mirror (ADR-0054).
  *
  * `scripts/build_ciqual_nutrition.py` keys its audited food table by the SAME
  * `nameKey` the grocery list uses, so a recipe's `line_items` resolve a CIQUAL

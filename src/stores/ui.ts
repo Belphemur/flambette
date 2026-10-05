@@ -380,13 +380,13 @@ export const useUiStore = defineStore(
       } catch {
         return // storage unavailable: nothing to migrate
       }
-      // ADR-0052: the ADR-0049-era `proOnly` boolean must be read from the
+      // ADR-0054: the ADR-0049-era `proOnly` boolean must be read from the
       // RAW blob, never from the hydrated state. Hydration $patch deep-merges
       // the blob into the DEFAULT filters, so the merged object always
       // carries `source: 'all'` — and an in-state migration would let that
       // default short-circuit the legacy member ("explicit source wins"),
       // silently downgrading a household's pinned PRO filter to All. The raw
-      // blob is the only place a pre-ADR-0052 `proOnly` (with no `source`
+      // blob is the only place a pre-ADR-0054 `proOnly` (with no `source`
       // beside it) is still distinguishable from a fresh install.
       const legacyProOnly = legacyProOnlySource(raw)
       const migrated = migrateLegacyUiFilters(raw)

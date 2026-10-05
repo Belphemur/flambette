@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Derive per-100 g nutrition for user-recipe ingredients from CIQUAL 2020.
 
-ADR-0052, locked decision L5: a user recipe's `nutrition` block is COMPUTED
+ADR-0054, locked decision L5: a user recipe's `nutrition` block is COMPUTED
 at build time from a European government food-composition table, never typed
 by hand and never fitted against the frozen Mealime catalog.
 

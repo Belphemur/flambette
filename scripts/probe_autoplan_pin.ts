@@ -27,7 +27,7 @@ const index = JSON.parse(
 const builder = JSON.parse(
   readFileSync(resolve(process.cwd(), 'public/data/builder_data.json'), 'utf8')
 )
-// ADR-0052: the household's own recipes merge into the catalog at load and
+// ADR-0054: the household's own recipes merge into the catalog at load and
 // ride in dataById, so the mirror has to include them (the app's eligible
 // loop iterates catalog.dataById).
 const userPayload = JSON.parse(

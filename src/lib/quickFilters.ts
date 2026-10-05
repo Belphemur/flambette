@@ -54,7 +54,7 @@ export const PROTEIN_VALUES: readonly ProteinFilter[] = PROTEIN_OPTIONS.map((o) 
 export const TIME_OPTIONS: readonly (number | null)[] = [null, 20, 30, 45]
 
 /**
- * Where a recipe came from (ADR-0052 §3) — the replacement for the
+ * Where a recipe came from (ADR-0054 §3) — the replacement for the
  * retired `proOnly` boolean.
  *
  *   - `all`: the whole catalog, Mealime's and the household's own.
@@ -91,7 +91,7 @@ export function matchesSource(
   if (source === 'all') return true
   if (source === 'pro') return meta.is_pro === true
   // The artifact's id set is the ONLY truth for "the household wrote
-  // this" — `VariantMeta` is frozen and gains no flag (ADR-0052 §1).
+  // this" — `VariantMeta` is frozen and gains no flag (ADR-0054 §1).
   return isUserRecipeId(meta.id, userRecipeIds)
 }
 
@@ -139,7 +139,7 @@ export interface QuickFilters {
   sortBy: SortBy
   favOnly: boolean
   /**
-   * Which catalog the recipe came from (ADR-0052 §3). Part of the SHARED
+   * Which catalog the recipe came from (ADR-0054 §3). Part of the SHARED
    * (household) half, like every member but `favOnly`: a household
    * browsing "New" is browsing together.
    */
@@ -213,7 +213,7 @@ export function normalizeQuickFilters(value: unknown): QuickFilters | null {
 }
 
 /**
- * The ONE coercion point for the source facet, and the whole of ADR-0052
+ * The ONE coercion point for the source facet, and the whole of ADR-0054
  * §3's migration.
  *
  * An explicit `source` always wins. A payload carrying only the retired
@@ -262,7 +262,7 @@ export function sameQuickFilters(a: QuickFilters, b: QuickFilters): boolean {
  *
  * The legacy blob is forwarded WHOLE, not as `{ diets }` alone, so the
  * `proOnly` boolean a v0.12-era blob may also carry still reaches
- * `normalizeQuickFilters` and becomes `source: 'pro'` (ADR-0052 §3). A
+ * `normalizeQuickFilters` and becomes `source: 'pro'` (ADR-0054 §3). A
  * blob that predates the unified model predates `proOnly` too, so this is
  * belt-and-braces — but the branch that would drop it is exactly the
  * kind of silent data loss this repo's conventions forbid.
@@ -286,7 +286,7 @@ export function migrateLegacyUiFilters(raw: string | null): QuickFilters | null 
 }
 
 /**
- * The RAW-blob half of the `proOnly` migration (ADR-0052 §3).
+ * The RAW-blob half of the `proOnly` migration (ADR-0054 §3).
  *
  * The ui store hydrates by $patch deep-merging the persisted blob into the
  * DEFAULT filters, so the hydrated `quickFilters` ALWAYS carries
@@ -294,7 +294,7 @@ export function migrateLegacyUiFilters(raw: string | null): QuickFilters | null 
  * win over the legacy member and silently downgrade a pinned PRO filter.
  * This helper reads the RAW blob instead and answers the only question that
  * matters: does the blob carry a retired `proOnly` with NO explicit `source`
- * beside it (i.e. a genuinely pre-ADR-0052 blob, never a fresh install — a
+ * beside it (i.e. a genuinely pre-ADR-0054 blob, never a fresh install — a
  * fresh install's blob has neither member)?
  *
  * Returns `{ source }` to spread OVER the hydrated filters, or null when the

@@ -1,5 +1,5 @@
 /**
- * User recipes (ADR-0052) — the two facts every surface needs about a
+ * User recipes (ADR-0054) — the two facts every surface needs about a
  * recipe the household authored, as PURE functions.
  *
  * A user recipe is a catalog entry: its `meta` is merged into
@@ -28,7 +28,7 @@
  */
 
 /**
- * The lowest id the user-recipe band uses (ADR-0052 §1). The first
+ * The lowest id the user-recipe band uses (ADR-0054 §1). The first
  * user recipe is allocated exactly this id, and `nextUserRecipeId`
  * climbs from there.
  *
@@ -55,7 +55,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000
 
 /**
  * True when `id` is one of the loaded user-recipe ids — the artifact is
- * the only truth here (ADR-0052 §1), and an id that is merely inside the
+ * the only truth here (ADR-0054 §1), and an id that is merely inside the
  * reserved band is not a user recipe if the artifact does not say so.
  *
  * `ids` is a `ReadonlySet` so a caller can pass `catalog.userRecipeIds`

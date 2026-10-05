@@ -11,7 +11,7 @@ as recipes with no line items, which doubled the pack index's row count and
 inflated the ingredient counts. Every script that walks the catalog must go
 through :func:`recipe_doc_paths`, which keeps only the numeric doc names.
 
-ADR-0052 adds a SECOND doc source: the household's own recipes, which live
+ADR-0054 adds a SECOND doc source: the household's own recipes, which live
 inside `public/data/user_recipes.json` rather than as files in the frozen
 catalog directory. :func:`iter_recipe_docs` walks both in ONE order-stable pass
 so a generator cannot silently see one and not the other — a planner that does

@@ -102,7 +102,7 @@ describe('normalizeQuickFilters', () => {
     }
   })
 
-  test('the retired proOnly boolean migrates to the source facet (ADR-0052 §3)', () => {
+  test('the retired proOnly boolean migrates to the source facet (ADR-0054 §3)', () => {
     // A RENAME, not a reinterpretation: the old chip said "PRO recipes
     // only", so a household that had it pinned keeps exactly that grid.
     expect(normalizeQuickFilters({ proOnly: true })?.source).toBe('pro')
@@ -169,7 +169,7 @@ describe('sameQuickFilters / hasActiveFilters', () => {
   })
 })
 
-describe('matchesSource (ADR-0052 §3)', () => {
+describe('matchesSource (ADR-0054 §3)', () => {
   const MEALIME = { id: 17452, is_pro: false }
   const MEALIME_PRO = { id: 17453, is_pro: true }
   const OURS = { id: USER_RECIPE_ID_BASE, is_pro: false }
@@ -239,8 +239,8 @@ describe('migrateLegacyUiFilters (a v0.12 localStorage blob)', () => {
   })
 })
 
-describe('legacyProOnlySource (ADR-0052 §3 — the RAW-blob migration)', () => {
-  test('a pre-ADR-0052 blob with proOnly:true maps to pro', () => {
+describe('legacyProOnlySource (ADR-0054 §3 — the RAW-blob migration)', () => {
+  test('a pre-ADR-0054 blob with proOnly:true maps to pro', () => {
     const blob = JSON.stringify({
       shareCookedHistory: false,
       quickFilters: { diets: [], protein: [], maxTime: null, sortBy: 'latest', favOnly: false, proOnly: true },

@@ -136,7 +136,7 @@ function setSort(value: string) {
   patchFilters({ sortBy: value as SortBy })
 }
 
-/* ---------- Source (ADR-0052) ---------- */
+/* ---------- Source (ADR-0054) ---------- */
 
 /**
  * All / PRO / New, with a per-bucket count beside each option.
@@ -280,7 +280,7 @@ const results = computed<VariantMeta[]>(() => {
 
   const facets = (meta: VariantMeta): boolean => {
   if (f.favOnly && !favourites.ids.has(meta.id)) return false
-  // ADR-0052: 'pro' is the retired proOnly chip, 'new' is the household's
+  // ADR-0054: 'pro' is the retired proOnly chip, 'new' is the household's
   // own recipes (permanent — only the card's NEW badge expires).
   if (!matchesSource(f.source, meta, c.userRecipeIds)) return false
   if (f.protein !== '' && c.dataById.get(meta.id)?.category_name !== f.protein)
@@ -417,7 +417,7 @@ onUnmounted(() => observer?.disconnect())
   <span class="truncate">Favourites</span>
   </button>
 
-  <!-- Source (ADR-0052): a DROPDOWN, replacing the PRO chip. Rendered
+  <!-- Source (ADR-0054): a DROPDOWN, replacing the PRO chip. Rendered
   through the shared FilterDropdown (ADR-0045) so the listbox semantics,
   the roving tabindex and the Pixel 7 fit are the ones the other three
   dropdowns already have — never a fourth hand-rolled popup. -->

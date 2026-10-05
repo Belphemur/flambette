@@ -72,7 +72,7 @@ def build():
     unmatched = 0
     seen_ids = set()
 
-    # ADR-0052: the household's own recipes are filterable exactly like the
+    # ADR-0054: the household's own recipes are filterable exactly like the
     # frozen catalog's (they are merged into `byId` at load), so their
     # `ruleset` has to be counted here too — a Breakfast chip that says 151
     # while the pancake is on screen and filterable would be a lie.

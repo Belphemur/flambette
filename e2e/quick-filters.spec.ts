@@ -39,7 +39,7 @@ function resultCount(page: Page) {
 async function catalogSize(page: Page): Promise<number> {
   return page.evaluate(async () => {
     const data = await fetch('/data/builder_data.json').then((r) => r.json())
-    // ADR-0052: user recipes are merged into the served catalog at load, so
+    // ADR-0054: user recipes are merged into the served catalog at load, so
     // the live total is the builder's own PLUS the household's.
     const users = await fetch('/data/user_recipes.json')
       .then((r) => r.json())
@@ -314,7 +314,7 @@ test.describe('filter sync and join reconciliation (WS3 + WS4)', () => {
       maxTime: 20,
       sortBy: 'calories',
       favOnly: true,
-      // ADR-0052: the source facet is HOUSEHOLD state, so B seeds a
+      // ADR-0054: the source facet is HOUSEHOLD state, so B seeds a
       // divergent one and must still converge on A's.
       source: 'new',
     })

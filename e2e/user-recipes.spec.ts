@@ -7,7 +7,7 @@ import {
 } from './helpers'
 
 /**
- * ADR-0052: the household's own recipes are first-class catalog entries.
+ * ADR-0054: the household's own recipes are first-class catalog entries.
  *
  * Covers, in order:
  *  - the Source dropdown filters All / PRO / New and the New bucket shows
@@ -55,7 +55,7 @@ async function openSourceMenu(page: Page) {
   await expect(page.getByTestId('source-menu')).toBeVisible()
 }
 
-test.describe('user recipes and the source filter (ADR-0052)', () => {
+test.describe('user recipes and the source filter (ADR-0054)', () => {
   test.beforeEach(async ({ page }) => {
     await blockExternalRequests(page)
     await page.goto('/')

@@ -41,7 +41,7 @@ describe('the committed meal-type table', () => {
   test('the app-facing counts are the catalog fact they claim to be', () => {
     // 151 breakfasts is the number the Mealime app shows for this very
     // field, which is how the taxonomy was identified in the first place.
-    // ADR-0052 then adds the household's own pancake (ruleset breakfast),
+    // ADR-0054 then adds the household's own pancake (ruleset breakfast),
     // counted by scripts/extract_recipe_types.py like any other variant: 152.
     expect(mealTypeCount(-1)).toBe(152)
     expect(mealTypeCount(-2)).toBe(91)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Ingredient-index extractor for the offline ingredient autocomplete (ADR-0012,
-widened by ADR-0052).
+widened by ADR-0052 (supplemental) and ADR-0054 (user recipes)).
 
 Walks the frozen local catalog (public/data/recipes/*.json, 2,759 docs) and
 produces public/data/ingredients.json — one row per distinct ingredient

@@ -75,7 +75,7 @@ function main(): number {
   const builder = JSON.parse(
     readFileSync(join(DATA, 'builder_data.json'), 'utf8'),
   ) as BuilderData
-  // ADR-0052: the household's own recipes are served by /recipe/:id like any
+  // ADR-0054: the household's own recipes are served by /recipe/:id like any
   // other variant (they are merged into byId at load), so they are
   // prerendered too — from the doc embedded in user_recipes.json, not from
   // the frozen recipes/ directory.

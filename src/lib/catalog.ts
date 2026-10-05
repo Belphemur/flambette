@@ -6,7 +6,7 @@ import { USER_RECIPE_ID_BASE } from './userRecipes'
  * Catalog: fetches + indexes the builder_data snapshot and lazy-fetches
  * full recipe documents from the local catalog (cached in memory).
  *
- * ADR-0052 adds the household's OWN recipes to the same catalog. They
+ * ADR-0054 adds the household's OWN recipes to the same catalog. They
  * arrive in a second static asset, `data/user_recipes.json`, and are
  * MERGED into the builder data rather than kept beside it: search, the
  * diet chips, the meal-type facet, Auto-Plan, the grocery derivation,
@@ -69,7 +69,7 @@ export interface Catalog {
   /** favourited variant ids */
   favouriteIds: Set<number>
   /**
-   * The ids of the household's own recipes (ADR-0052). Membership is
+   * The ids of the household's own recipes (ADR-0054). Membership is
    * decided HERE and nowhere else: `VariantMeta` is frozen and gains no
    * flag, so this set is the only answer available to a component that
    * holds one card.
@@ -107,7 +107,7 @@ export function userRecipeAddedAt(id: number): number | undefined {
  * Merge the two sources into the catalog's indexes.
  *
  * Exported (rather than module-private) as the TEST SEAM: the merge is
- * the one piece of ADR-0052 that decides whether a user recipe is
+ * the one piece of ADR-0054 that decides whether a user recipe is
  * visible to every engine, and it is pure — no fetch, no Vue — so the
  * degradation paths below can be pinned by bun-test instead of only by a
  * browser.
@@ -120,7 +120,7 @@ export function buildCatalog(data: BuilderData, users: UserRecipeEntry[]): Catal
     dataById.set(Number(id), vd)
   }
 
-  // ADR-0052: merge the household's recipes into the SAME indexes, so no
+  // ADR-0054: merge the household's recipes into the SAME indexes, so no
   // engine needs to know they exist separately.
   const userRecipeIds = new Set<number>()
   const userRecipeDocs = new Map<number, RecipeDoc>()
