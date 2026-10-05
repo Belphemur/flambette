@@ -58,6 +58,8 @@ export interface UserRecipesFile {
 
 export interface Catalog {
   data: BuilderData
+  /** `data.variant_meta` plus the merged user metas (see buildCatalog). */
+  variantMeta: VariantMeta[]
   /** variant id -> meta */
   byId: Map<number, VariantMeta>
   /** variant id -> variant_data entry */
@@ -123,6 +125,12 @@ export function buildCatalog(data: BuilderData, users: UserRecipeEntry[]): Catal
   const userRecipeIds = new Set<number>()
   const userRecipeDocs = new Map<number, RecipeDoc>()
   const userRecipeAddedAt = new Map<number, number>()
+  // The MERGED meta list the result pipelines read (see `variantMeta` on the
+  // Catalog interface). Built fresh rather than pushed onto
+  // `data.variant_meta` in place: the raw builder object is shared (tests,
+  // HMR, a re-load) and mutating an input is how a "no user recipes" build
+  // quietly becomes one that has them.
+  const userMetas: VariantMeta[] = []
   for (const entry of users) {
     const id = entry.meta.id
     // Defence in depth, and the reason the property is structural rather
@@ -142,6 +150,7 @@ export function buildCatalog(data: BuilderData, users: UserRecipeEntry[]): Catal
     userRecipeIds.add(id)
     userRecipeDocs.set(id, entry.doc)
     userRecipeAddedAt.set(id, entry.addedAt)
+    userMetas.push(entry.meta)
   }
   userDocsById.clear()
   for (const [id, doc] of userRecipeDocs) userDocsById.set(id, doc)
@@ -149,6 +158,13 @@ export function buildCatalog(data: BuilderData, users: UserRecipeEntry[]): Catal
   const categories = [...new Set([...dataById.values()].map((v) => v.category_name))].sort()
   return {
     data,
+    /**
+     * `data.variant_meta` PLUS the merged user metas — the one list every
+     * result pipeline (grid, search index, diet index, Auto-Plan) reads, so
+     * a user recipe is visible to all of them by construction. `data`
+     * itself is never mutated: it is the fetched builder payload.
+     */
+    variantMeta: userMetas.length ? [...data.variant_meta, ...userMetas] : data.variant_meta,
     byId,
     dataById,
     categories,

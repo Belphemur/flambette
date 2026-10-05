@@ -5,6 +5,7 @@ import {
   matchesSource,
   mergeSharedFilters,
   migrateLegacyUiFilters,
+  legacyProOnlySource,
   normalizeQuickFilters,
   proteinLabel,
   sameQuickFilters,
@@ -235,6 +236,39 @@ describe('migrateLegacyUiFilters (a v0.12 localStorage blob)', () => {
     expect(migrateLegacyUiFilters('not json')).toBeNull()
     expect(migrateLegacyUiFilters('[]')).toBeNull()
     expect(migrateLegacyUiFilters(JSON.stringify({ dietFilters: 'vegan' }))).toBeNull()
+  })
+})
+
+describe('legacyProOnlySource (ADR-0052 §3 — the RAW-blob migration)', () => {
+  test('a pre-ADR-0052 blob with proOnly:true maps to pro', () => {
+    const blob = JSON.stringify({
+      shareCookedHistory: false,
+      quickFilters: { diets: [], protein: [], maxTime: null, sortBy: 'latest', favOnly: false, proOnly: true },
+    })
+    expect(legacyProOnlySource(blob)).toEqual({ source: 'pro' })
+  })
+
+  test('proOnly:false maps to all', () => {
+    const blob = JSON.stringify({ quickFilters: { proOnly: false } })
+    expect(legacyProOnlySource(blob)).toEqual({ source: 'all' })
+  })
+
+  test('a CURRENT blob (source present) is not a legacy blob — no override', () => {
+    // $patch deep-merges the blob into the defaults, so the hydrated state
+    // always carries source: 'all'. Only the RAW blob can tell a current
+    // spelling from a retired one, and a current one must win.
+    const current = JSON.stringify({ quickFilters: { ...defaultQuickFilters(), proOnly: true } })
+    expect(legacyProOnlySource(current)).toBeNull()
+  })
+
+  test('a fresh install (neither member) says nothing', () => {
+    expect(legacyProOnlySource(JSON.stringify({ quickFilters: defaultQuickFilters() }))).toBeNull()
+    expect(legacyProOnlySource(null)).toBeNull()
+    expect(legacyProOnlySource('junk')).toBeNull()
+  })
+
+  test('a top-level proOnly (pre-ADR-0027 shape) is honoured too', () => {
+    expect(legacyProOnlySource(JSON.stringify({ dietFilters: ['vegan'], proOnly: true }))).toEqual({ source: 'pro' })
   })
 })
 

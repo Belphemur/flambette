@@ -156,11 +156,23 @@ interface SnapshotMeta {
 
 let snapshot: SnapshotMeta[] | null = null
 
-/** The frozen catalog's variant metadata, read straight off disk. */
+/**
+ * The served catalog's variant metadata, read straight off disk: the frozen
+ * builder_data PLUS the household's own recipes (ADR-0052), which are merged
+ * into the same array at load and therefore classify like any other variant.
+ */
 function catalogSnapshot(): SnapshotMeta[] {
   if (!snapshot) {
     const raw = readFileSync(resolve(REPO_ROOT, 'public/data/builder_data.json'), 'utf8')
-    snapshot = (JSON.parse(raw) as { variant_meta: SnapshotMeta[] }).variant_meta
+    const meta = (JSON.parse(raw) as { variant_meta: SnapshotMeta[] }).variant_meta
+    const userRaw = readFileSync(
+      resolve(REPO_ROOT, 'public/data/user_recipes.json'),
+      'utf8',
+    )
+    const users = (JSON.parse(userRaw) as { recipes: { meta: SnapshotMeta }[] }).recipes.map(
+      (r) => r.meta,
+    )
+    snapshot = [...meta, ...users]
   }
   return snapshot
 }

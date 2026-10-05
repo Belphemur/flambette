@@ -285,6 +285,43 @@ export function migrateLegacyUiFilters(raw: string | null): QuickFilters | null 
   return normalizeQuickFilters({ ...v, diets: v.dietFilters })
 }
 
+/**
+ * The RAW-blob half of the `proOnly` migration (ADR-0052 §3).
+ *
+ * The ui store hydrates by $patch deep-merging the persisted blob into the
+ * DEFAULT filters, so the hydrated `quickFilters` ALWAYS carries
+ * `source: 'all'` — a migration reading hydrated state would let that default
+ * win over the legacy member and silently downgrade a pinned PRO filter.
+ * This helper reads the RAW blob instead and answers the only question that
+ * matters: does the blob carry a retired `proOnly` with NO explicit `source`
+ * beside it (i.e. a genuinely pre-ADR-0052 blob, never a fresh install — a
+ * fresh install's blob has neither member)?
+ *
+ * Returns `{ source }` to spread OVER the hydrated filters, or null when the
+ * blob says nothing about source.
+ */
+export function legacyProOnlySource(raw: string | null): { source: SourceFilter } | null {
+  if (!raw) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return null
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
+  const blob = parsed as Record<string, unknown>
+  const blobProOnly = (blob.proOnly ?? (typeof blob.quickFilters === 'object' && blob.quickFilters !== null
+    ? (blob.quickFilters as Record<string, unknown>).proOnly
+    : undefined))
+  if (blobProOnly === undefined) return null
+  const blobSource =
+    typeof blob.quickFilters === 'object' && blob.quickFilters !== null
+      ? (blob.quickFilters as Record<string, unknown>).source
+      : undefined
+  if (blobSource !== undefined) return null // current spelling present: not a legacy blob
+  return { source: blobProOnly === true ? 'pro' : 'all' }
+}
+
 /** True when anything narrows the result set (the search box is separate). */
 export function hasActiveFilters(f: QuickFilters): boolean {
   return (

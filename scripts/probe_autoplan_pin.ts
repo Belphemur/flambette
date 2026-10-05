@@ -27,15 +27,25 @@ const index = JSON.parse(
 const builder = JSON.parse(
   readFileSync(resolve(process.cwd(), 'public/data/builder_data.json'), 'utf8')
 )
+// ADR-0052: the household's own recipes merge into the catalog at load and
+// ride in dataById, so the mirror has to include them (the app's eligible
+// loop iterates catalog.dataById).
+const userPayload = JSON.parse(
+  readFileSync(resolve(process.cwd(), 'public/data/user_recipes.json'), 'utf8')
+)
+const userEntries: any[] = userPayload.recipes ?? []
 
-const metaById = new Map<number, any>(builder.variant_meta.map((m: any) => [m.id, m]))
+const metaById = new Map<number, any>([
+  ...builder.variant_meta.map((m: any) => [m.id, m] as const),
+  ...userEntries.map((r: any) => [r.meta.id, r.meta] as const),
+])
 
 // Mirror useAutoPlan.runAutoPlan exactly (no diets, ruleset 'any', ADD mode):
 // every catalog variant is eligible, and ratings are Bayesian-smoothed toward
 // the ELIGIBLE-slice mean with the variant's own rating_count as the weight.
 const RATING_PRIOR_WEIGHT = 10
 
-const eligible = builder.feasible_variants.filter(
+const eligible = [...builder.feasible_variants, ...userEntries.map((r: any) => r.meta.id)].filter(
   (v: number) => metaById.get(v)?.ruleset === DEFAULT_RULESET,
 )
 const mean =
@@ -54,7 +64,7 @@ const plan = buildAutoPlan(index as any, {
   generation: 0,
   excludeIds: [],
   ratings,
-  tags: new Map(builder.variant_meta.map((m: any) => [m.id, m.variety_tag_ids ?? []])),
+  tags: new Map([...builder.variant_meta, ...userEntries.map((r: any) => r.meta)].map((m: any) => [m.id, m.variety_tag_ids ?? []])),
 })
 
 const got = [...plan.variantIds]

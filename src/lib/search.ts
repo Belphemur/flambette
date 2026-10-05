@@ -31,7 +31,7 @@ export function getSearchIndex(): MiniSearch<SearchDoc> | null {
       },
     })
     index.addAll(
-      c.data.variant_meta.map((meta) => ({
+      c.variantMeta.map((meta) => ({
         id: meta.id,
         name: meta.name,
         ingredients: meta.ingredient_names.join(' '),

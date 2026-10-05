@@ -69,7 +69,7 @@ function patchFilters(part: Partial<QuickFilters>) {
 /** Whole-catalog verdicts + chip counts, classified once at load time. */
 const dietIndex = computed(() => {
   const c = catalog.value
-  return c ? dietIndexFor(c.data.variant_meta) : null
+  return c ? dietIndexFor(c.variantMeta) : null
 })
 
 /** Active diet rules, ANDed together. */
@@ -301,9 +301,9 @@ const results = computed<VariantMeta[]>(() => {
   // Indexed fuzzy/prefix search over name + ingredients, intersected with
   // the active facet filters.
   const matched = new Set(searchVariantIds(q))
-  list = c.data.variant_meta.filter((meta) => matched.has(meta.id) && facets(meta))
+  list = c.variantMeta.filter((meta) => matched.has(meta.id) && facets(meta))
   } else {
-  list = c.data.variant_meta.filter(facets)
+  list = c.variantMeta.filter(facets)
   }
 
   list = [...list]

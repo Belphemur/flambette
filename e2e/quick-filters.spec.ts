@@ -39,7 +39,13 @@ function resultCount(page: Page) {
 async function catalogSize(page: Page): Promise<number> {
   return page.evaluate(async () => {
     const data = await fetch('/data/builder_data.json').then((r) => r.json())
-    return (data.feasible_variants as number[]).length
+    // ADR-0052: user recipes are merged into the served catalog at load, so
+    // the live total is the builder's own PLUS the household's.
+    const users = await fetch('/data/user_recipes.json')
+      .then((r) => r.json())
+      .then((p) => (p.recipes as unknown[]).length)
+      .catch(() => 0)
+    return (data.feasible_variants as number[]).length + users
   })
 }
 

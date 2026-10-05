@@ -38,7 +38,7 @@ VARIANT_ID = 900_001
 RECIPE_ID = 900_001
 # `recipe_id` is only used for display/lookup inside the app; the band keeps it
 # out of the frozen catalog's own range (max 4433) for the same reason.
-ADDED_AT_MS = 1_759_000_000_000  # 2025-09-30T12:26:40Z, owner-supplied
+ADDED_AT_MS = 1_790_812_800_000  # 2026-10-01T00:00:00Z (the day the recipe was added)
 STEM = "user_recipe_fluffy-pancake_fc1f294f"
 IMAGE_BASE = "https://cdn-uploads.mealime.com/uploads/recipe/thumbnail/900/"
 
