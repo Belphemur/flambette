@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   relay:
-    image: ghcr.io/belphemur/flambette-relay:1.5.0
+    image: ghcr.io/belphemur/flambette-relay:2.0.0
     # Build from the REPO ROOT, not ./server: the relay core re-exports the
     # canonical room-code helper from src/lib/roomWords.ts (ADR-0040).
     # build:
