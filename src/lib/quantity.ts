@@ -112,17 +112,6 @@ export function formatFraction(amount: number): string {
   return formatAmount(amount)
 }
 
-/**
- * Scale a display quantity by a factor. Non-parseable quantities pass
- * through verbatim.
- */
-export function scaleQuantity(raw: string, factor: number): string {
-  const parsed = parseQuantity(raw)
-  if (!parsed || factor === 1) return raw
-  const scaled = formatAmount(parsed.amount * factor)
-  return parsed.unit ? `${scaled} ${parsed.unit}` : scaled
-}
-
 /** Total "popularity" score (sum over weekdays) for sorting. */
 export function popularityScore(popularity: Record<string, number>): number {
   return Object.values(popularity).reduce((a, b) => a + b, 0)

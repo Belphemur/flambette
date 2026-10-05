@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
-import { humanizeScaledQuantity, scaleQuantity } from '../lib/quantity'
+import { measuredQuantity } from '../lib/measuredAmounts'
 import {
   localizeQuantity,
   localizeSteps,
@@ -160,7 +160,7 @@ const scaledIngredients = computed(() => {
   ...item,
   // Scale first, then convert: the authored quantity is metric, so this is
   // the only place the number in front of the user ever changes system.
-  quantity: localizeQuantity(humanizeScaledQuantity(scaleQuantity(item.quantity, factor.value)), unitSystem.value),
+  quantity: localizeQuantity(measuredQuantity(item, factor.value, doc.value.serving_count) ?? item.quantity, unitSystem.value),
   }))
 })
 
