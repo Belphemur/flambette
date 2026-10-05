@@ -825,17 +825,43 @@ def check():
                 "meta.sodium_mg %s != derived sodium %s" % (meta.get("sodium_mg"), expected.get("sodium"))
             )
         # The card's macros line comes from the SAME derived block, so the
-        # offline gate must pin it too: a changed line item passing with
-        # stale fats/carbs/protein on the recipe card is exactly the drift
-        # this gate exists to catch. (qodo finding #6, PR #49.)
+        # offline gate must pin it too — as CALORIE FRACTIONS (the catalog's
+        # own builder_data convention, e.g. fats 0.54 on a 759 kcal dish;
+        # the card plots the fraction directly). Recompute the fraction from
+        # the derived grams with the same kcal/g the authoring script uses,
+        # so a changed line item can no longer pass with stale card macros.
         macro_drift = []
         macros = meta.get("macros") or {}
-        for app_key, derived_key in (("fats", "fat"), ("carbs", "carbs"), ("protein", "protein")):
-            got, want = macros.get(app_key), expected.get(derived_key)
-            if got is None or want is None or abs(got - want) > 0.01:
-                macro_drift.append(
-                    "meta.macros.%s %s != derived %s %s" % (app_key, got, derived_key, want)
-                )
+        kcal_per_macro = {"fats": 9.0, "carbs": 4.0, "protein": 4.0}
+        derived_grams = {
+            "fats": expected.get("fat"),
+            "carbs": expected.get("carbs"),
+            "protein": expected.get("protein"),
+        }
+        if any(v is None for v in derived_grams.values()):
+            macro_drift.append("derived block lacks the macros kcal needs")
+        else:
+            g_fats, g_carbs, g_protein = (
+                derived_grams["fats"], derived_grams["carbs"], derived_grams["protein"]
+            )
+            assert g_fats is not None and g_carbs is not None and g_protein is not None
+            kcal_total = (
+                g_fats * kcal_per_macro["fats"]
+                + g_carbs * kcal_per_macro["carbs"]
+                + g_protein * kcal_per_macro["protein"]
+            )
+            if kcal_total <= 0:
+                macro_drift.append("macros kcal total is %s; cannot verify fractions" % kcal_total)
+            else:
+                for key, grams in (
+                    ("fats", g_fats), ("carbs", g_carbs), ("protein", g_protein)
+                ):
+                    want = grams * kcal_per_macro[key] / kcal_total
+                    got = macros.get(key)
+                    if got is None or abs(got - want) > 0.01:
+                        macro_drift.append(
+                            "meta.macros.%s %s != derived fraction %.4f" % (key, got, want)
+                        )
         head.extend(macro_drift)
         if drift or head:
             problems += 1

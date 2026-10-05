@@ -2,8 +2,9 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
+import { isUserRecipeId } from '../lib/userRecipes'
 import { imageSrc, onImgError } from '../lib/images'
-import { scaleQuantity } from '../lib/quantity'
+import { humanizeScaledQuantity, scaleQuantity } from '../lib/quantity'
 import {
   localizeQuantity,
   localizeSteps,
@@ -160,7 +161,7 @@ const scaledIngredients = computed(() => {
   ...item,
   // Scale first, then convert: the authored quantity is metric, so this is
   // the only place the number in front of the user ever changes system.
-  quantity: localizeQuantity(scaleQuantity(item.quantity, factor.value), unitSystem.value),
+  quantity: localizeQuantity(humanizeScaledQuantity(scaleQuantity(item.quantity, factor.value)), unitSystem.value),
   }))
 })
 
@@ -223,7 +224,14 @@ async function loadDoc() {
   // load so a recipe opened after the user changed the default elsewhere
   // starts at the current one.
   const entry = plan.plan.find((e) => e.variantId === m.id)
-  servings.value = entry?.servings ?? ui.defaultServings
+  // A HOUSEHOLD recipe opens at its AUTHORED serving count: the batch is a
+  // fact the author committed (the pancake is 8), and seeding the household
+  // default here would scale the authored list into fractional nonsense
+  // (2.3 eggs) the owner never wrote. A visitor can still step the count.
+  servings.value = entry?.servings ??
+    (isUserRecipeId(m.id, catalog.value?.userRecipeIds ?? new Set())
+      ? m.serving_count
+      : ui.defaultServings)
   try {
     const loaded = await getRecipe(m)
     // Race guard: navigating to another recipe while this fetch is in

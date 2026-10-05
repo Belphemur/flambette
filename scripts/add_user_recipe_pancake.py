@@ -146,18 +146,23 @@ def main() -> int:
 
     energy = nutrition["energy"]
     sodium = nutrition["sodium"]
-    # `macros` on the meta is the card's protein/carbs/fats line; it is
-    # PER SERVING too, so it comes straight from the same derived block.
+    # `macros` on the meta is the card's protein/carbs/fats line. In
+    # builder_data it is a set of CALORIE FRACTIONS (fats 0.54 = 54% of the
+    # serving's kcal from fat), NOT grams — verified against the frozen
+    # catalog (Grape Tomato Flatbread: fats 0.540, calories 759; a grams
+    # reading would be physically impossible). The card renders the fraction
+    # directly: writing grams made the pancake's card claim 1686% fat.
+    kcal = {"fat": 9.0, "carbs": 4.0, "protein": 4.0}
+    macro_grams = {"fats": nutrition["fat"], "carbs": nutrition["carbs"], "protein": nutrition["protein"]}
+    kcal_per_macro = {"fats": 9.0, "carbs": 4.0, "protein": 4.0}
+    kcal_from_macros = sum(grams * kcal_per_macro[key] for key, grams in macro_grams.items())
+    macros = {k: (grams * kcal_per_macro[k] / kcal_from_macros) for k, grams in macro_grams.items()}
     meta = {
         "id": VARIANT_ID,
         "name": NAME,
         "is_pro": False,
         "is_secret": False,
-        "macros": {
-            "fats": nutrition["fat"],
-            "carbs": nutrition["carbs"],
-            "protein": nutrition["protein"],
-        },
+        "macros": macros,
         # No invented stars: an unreviewed household recipe has no rating, and
         # `rating: 0` is what the catalog uses for an unrated variant.
         "rating": 0,
