@@ -38,24 +38,25 @@ DEFAULT_ARCHIVE = os.path.join(os.path.dirname(ROOT), "mealime-media", "raw_prof
 MM_LENGTH_RE = re.compile(r"(\d+(?:[.,]\d+)?)[ \t]*-[ \t]*mm(?![a-z])")
 
 # Floor for the ADR-0047 vs upstream agreement rate, measured over the FULL
-# corpus (2 759 docs, 187 unique differing pairs): 124/187 = 66.3%. The rate is
-# a REGRESSION floor, not an equality — display-time conversion is *allowed* to
+# corpus (2 759 docs, 187 unique differing pairs). ADR-0054's converter change
+# (the measured quantization grids + fraction glyphs + can-size table + the
+# keep-ml carve-out) raised the rate from 124/187 = 66.3% to 156/187 = 83.4%;
+# the pin below is the NEW measured figure (floor 0.83). The rate is a
+# REGRESSION floor, not an equality — display-time conversion is *allowed* to
 # differ from upstream's authored strings, because a package label (`398 ml`
 # -> `15 oz`) is a product fact no conversion can derive and noun inflection
-# (`pkg` -> `pkgs`) is upstream's pluralisation. Do NOT raise this toward 1.0
-# without also storing the imperial strings; the ADR names the three residue
-# classes that make the gap legitimate.
-#
-# The 0.73 quoted in ADR-0054 was measured on a 300-recipe SAMPLE and is
-# superseded by this full-corpus figure.
-MIN_AGREEMENT = 0.60
+# (`pkg` -> `pkgs`) is upstream's pluralisation. The remaining 31-pair residue
+# is upstream re-authoring noise (pkg/pkgs flips, berry pints, odd can
+# labels) — see ADR-0054's residue section.
+MIN_AGREEMENT = 0.83
 
-# The count of instruction steps whose N-mm length ADR-0047 leaves unconverted,
-# measured over the archived imperial profile: 166 of 166. A KNOWN-GAP PIN —
-# lower it to 0 when the converter learns millimetres (see ADR-0054's Open
-# item). Any other value means the prose pass moved and the number here is
-# stale, which is exactly what the assertion is for.
-KNOWN_MM_GAP = 166
+# The count of instruction steps whose N-mm length the converter leaves
+# unconverted, measured over the archived imperial profile. ADR-0047 shipped
+# with the gap OPEN (166 of 166 unconverted); ADR-0054's converter change
+# added `mm` to LENGTH_RE with fraction-aware output (`6-mm` -> `¼-inch`) and
+# the pin is now 0. Any nonzero value means the prose pass regressed, which is
+# exactly what the assertion is for.
+KNOWN_MM_GAP = 0
 
 
 def load_index(archive):
@@ -246,7 +247,7 @@ class ConversionParityTest(unittest.TestCase):
         return {m: got for m, got in json.loads(r.stdout.strip().splitlines()[-1])}
 
     def test_conversion_agreement_has_not_regressed(self):
-        """Floor at the measured full-corpus rate, 124/187 = 66.3%.
+        """Floor at the measured full-corpus rate, 156/187 = 83.4% (ADR-0054).
 
         The 0.73 in ADR-0054 came from a 300-recipe sample; the full corpus
         measures lower because the imperial render's own rounding is noisier
@@ -263,24 +264,18 @@ class ConversionParityTest(unittest.TestCase):
                                 "imperial conversion agreement fell below %.0f%%" % (MIN_AGREEMENT * 100))
 
     def test_millimetre_lengths_were_a_known_gap(self):
-        """The tracked converter gap: `N-mm` must not reach imperial untouched.
+        """The CLOSED converter gap: `N-mm` must never reach imperial untouched.
 
         Millimetres appear ONLY in instruction PROSE, never in a line-item
         quantity (corpus census: 166 hyphenated occurrences across 120 docs, 0
         bare `mm`, 0 in quantities), so this reads the instruction text of the
         archived imperial docs and checks the converter directly.
 
-        This is a KNOWN-GAP PIN, not a pass/fail gate: the suite must stay green
-        while the bug is open, and go RED THE MOMENT the gap is closed — which
-        is the signal to fix ADR-0054's Open item (add `mm` to the `LENGTH_RE`
-        alternation in `src/lib/units.ts`), update that record's census, and
-        lower `KNOWN_MM_GAP` to 0.
-
-        Upstream writes `¼-inch pieces` where ADR-0047 returns `6-mm pieces`.
-        Note the fix is not only the table: `formatAmount` renders 6 mm as
-        `0.2 inch`, while upstream's authored fraction is `¼ inch`, so closing
-        the gap properly also means fraction-aware formatting. That is why the
-        ADR defers it to a converter change rather than a one-line edit.
+        ADR-0047 shipped with the gap OPEN (166 unconverted) and this was a
+        known-gap pin. ADR-0054's converter change closed it — `mm` joined the
+        LENGTH_RE alternation and the output went fraction-aware (`6-mm` ->
+        `¼-inch`, the ⅛ ladder, separator preserved) — so the pin is now 0 and
+        the assertion is a REGRESSION gate: any unconverted N-mm step fails.
         """
         cases = self._mm_prose_cases()
         if not cases:
@@ -288,15 +283,15 @@ class ConversionParityTest(unittest.TestCase):
         converted = self._convert_texts(sorted({c for c, _ in cases}))
         unconverted = [c for c, _u in cases if converted.get(c) == c]
         sys.stderr.write(
-            "\n  known gap: %d/%d N-mm prose steps still unconverted "
+            "\n  N-mm prose: %d/%d still unconverted "
             "(upstream renders them as inches)\n"
             % (len(unconverted), len(cases)))
         self.assertEqual(
             len(unconverted), KNOWN_MM_GAP,
-            "the N-mm gap changed from %d to %d. If it is now 0, add 'mm' to "
-            "LENGTH_RE in src/lib/units.ts and update ADR-0054's Open item; if "
-            "it grew, a converter change regressed the prose pass."
-            % (KNOWN_MM_GAP, len(unconverted)))
+            "the N-mm gap is %d, expected %d. If it grew, a converter change "
+            "regressed the prose pass (LENGTH_RE or localizeLengths in "
+            "src/lib/units.ts)."
+            % (len(unconverted), KNOWN_MM_GAP))
 
     def _mm_prose_cases(self):
         """(metric_step, us_step) pairs where the metric step holds an N-mm."""
