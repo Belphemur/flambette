@@ -144,6 +144,36 @@ test('combobox semantics: aria-expanded tracks open state', async ({ page }) => 
   await expect(combo).toHaveAttribute('aria-expanded', 'false')
 })
 
+test('gluten-free and lactose-free substitutes are suggestible (ADR-0052)', async ({ page }) => {
+  // The catalog names ZERO gluten-free/lactose-free ingredients, so these
+  // rows come from the hand-authored SUPPLEMENTAL table. Asserted end to end
+  // because the whole point is that the household can NAME a substitute: the
+  // index must recognise the typed text, and the category it carries must be
+  // the one the user will shop in (a GF flour landing in Bakery is a defect).
+  //
+  // Both names are EXACT index matches, so they are folded into the typed +
+  // row (ADR-0014) rather than repeated below it — assert on row 0.
+  const first = page.locator('[data-test=add-suggestion-first]')
+
+  await input(page).fill('gluten-free bread flour')
+  await expect(first).toBeVisible()
+  await expect(first).toContainText('gluten-free bread flour')
+  await expect(first.locator('[data-test=suggestion-category]')).toHaveText('Baking & Spices')
+  // Exact match folds into row 0, so it must not also appear below.
+  await expect(matchRows(page).filter({ hasText: 'gluten-free bread flour' })).toHaveCount(0)
+
+  await input(page).fill('lactose-free butter')
+  await expect(first).toBeVisible()
+  await expect(first.locator('[data-test=suggestion-category]')).toHaveText('Dairy, Cheese & Eggs')
+
+  // Adding it commits an extra under that section — the catalog's own
+  // all-purpose flour keeps its category, so nothing else moved.
+  await first.click()
+  await expect(page.getByTestId('added-toast')).toContainText('Added to Dairy, Cheese & Eggs')
+  await expect(page.getByTestId('extra-section')).toContainText('lactose-free butter')
+  await expectZeroMealimeRequests(page)
+})
+
 test('the add flow also works from Shopping mode (ShopView)', async ({ page }) => {
   // Need a non-empty list to reach ShopView's add form content area; add a
   // custom item on Grocery first, then start shopping and add another one.

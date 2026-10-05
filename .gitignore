@@ -22,3 +22,10 @@ scrape_images.py
 
 # Python bytecode from the stdlib data scripts
 __pycache__/
+
+# ADR-0052: the CIQUAL reference table fetched by scripts/fetch_ciqual.py.
+# A development input for curating SUPPLEMENTAL, not a build or runtime
+# dependency — the app never reads it and the curated rows are committed in
+# scripts/extract_ingredients.py. Regenerate with
+#   uv run --with xlrd scripts/fetch_ciqual.py --report
+data/reference/

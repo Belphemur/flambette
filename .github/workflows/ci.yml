@@ -75,6 +75,27 @@ jobs:
       - name: Unit tests
         run: bun run test:unit
 
+      - name: Data-generator goldens
+        # The committed public/data artifacts are build-time derivations, so
+        # the invariants behind them (ADR-0012/ADR-0052 ingredient index,
+        # ADR-0043 recipe types, ADR-0041 timer hints) need a gate too — a
+        # hand-authored table that shadows the catalog is invisible to
+        # bun test. Also covers docs/design/index.md, the generated ADR index
+        # AGENTS.md links.
+        run: bun run test:data
+
+      - name: Committed ingredient index is not stale
+        # The goldens read the COMMITTED artifact (the build and the release
+        # both consume it), so a table edit that was never regenerated has to
+        # fail here. Script form of the same assertion the goldens make.
+        run: python3 scripts/extract_ingredients.py --check
+
+      - name: Committed ADR index is not stale
+        # An ADR landing without a regenerated index.md leaves AGENTS.md
+        # pointing at a table that omits the new record — the drift the
+        # generated index exists to remove.
+        run: python3 scripts/build_adr_index.py --check
+
   # The Cloudflare relay (ADR-0038): type-check the worker against the
   # generated runtime types, then drive the Room Durable Object in real
   # workerd. Without this job a worker type error or a failing DO spec
