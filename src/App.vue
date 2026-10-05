@@ -5,10 +5,8 @@ import { useDark, useToggle } from '@vueuse/core'
 import { CircleAlert, Moon, Sun } from 'lucide-vue-next'
 import { TABS, useUiStore } from './stores/ui'
 import { getCatalog } from './lib/catalog'
-import { decodePlan } from './lib/share'
 import { useShareRoomLink } from './composables/useShareRoomLink'
 import { usePlanStore } from './stores/plan'
-import { useGroceryStore } from './stores/grocery'
 import { useRoomStore, type RoomStatus } from './stores/room'
 import { initFavourites } from './stores/favourites'
 import { appVersion } from './lib/appVersion'
@@ -143,26 +141,22 @@ function goHome() {
   }
 }
 
-/** Import a shared plan from `?p=` (replaces the current plan). */
-async function importSharedPlan() {
+/**
+ * One-shot `?p=` link sharing is RETIRED (ADR-0051): rooms are the only way
+ * to share a plan. The decoder is gone with it, so an old link can no longer
+ * be honoured — but it must not fail silently either. Someone who has a
+ * `?p=` link in a chat, a bookmark or a screenshot opens it and would
+ * otherwise get a perfectly normal-looking app with no explanation for why
+ * their plan did not arrive. So the param is detected, explained, and
+ * stripped.
+ */
+function retireSharedPlanLink() {
   const p = route.query.p
   if (typeof p !== 'string' || p === '') return
-  const shared = await decodePlan(p)
-  if (shared) {
-  plan.replacePlan(shared.entries, shared.custom)
-  // A `?p=` link replaces `customItems` but carries NO checked state, so a
-  // locally checked `custom||<name>` for an extra the link does not list
-  // becomes orphan residue: it reads "already done", so re-adding that
-  // name lands in a sub-section the done-map calls COMPLETE and
-  // ADR-0050's auto-collapse hides the new row. Third ingress point for
-  // `reconcileExtras` (the others are a room snapshot and a backup
-  // archive) — see `src/lib/extraCheckedKeys.ts`.
-  useGroceryStore().reconcileExtras(shared.custom)
-  ui.showToast('Plan loaded from link')
-  } else {
-  ui.showToast("Couldn't load the shared plan")
-  }
-  // Strip the param so a reload doesn't re-import (the plan persists).
+  ui.showToast('One-time plan links were removed — share a live room link instead.', {
+    duration: 8000,
+  })
+  // Strip it so a reload does not repeat the toast.
   void router.replace({ query: {} })
 }
 
@@ -317,7 +311,7 @@ onMounted(async () => {
   await router.isReady()
   // Resume a room from a previous page load; a fresh ?room= link wins.
   if (!room.resume()) void joinRoomFromLink()
-  void importSharedPlan()
+  retireSharedPlanLink()
   try {
   await getCatalog()
   loading.value = false

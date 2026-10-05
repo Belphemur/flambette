@@ -5,8 +5,9 @@
  * (`custom||<lowercased name>`), so the key and the extra it describes are
  * two facts that must agree. Nothing enforces that: `plan.customItems` and
  * the checked map are separate pieces of state that arrive together from
- * room snapshots, backup imports and share links — and any peer running
- * any version can send them out of step.
+ * room snapshots and backup imports — and any peer running any version can
+ * send them out of step. (One-shot `?p=` share links were a THIRD such
+ * source; ADR-0051 retired them.)
  *
  * When they disagree, the residue is invisible but not harmless. A leftover
  * `custom||<name>` for an extra that no longer exists reads as "already

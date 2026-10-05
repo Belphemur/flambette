@@ -104,7 +104,7 @@ const meta = computed<VariantMeta | null>(
  * this browser describe the page identically.
  *
  * It is `computed` on purpose: navigating between two recipes (or a
- * `?p=` link) re-derives the head from the new `meta` alone, never
+ * `?room=` link) re-derives the head from the new `meta` alone, never
  * carrying the previous recipe's title or JSON-LD. While the async doc
  * fetch is in flight the payload degrades to the meta-derived fields and
  * upgrades itself the moment `doc` lands — see `recipeSeoHead(doc | null)`.

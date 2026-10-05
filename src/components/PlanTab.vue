@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useClipboard } from '@vueuse/core'
 import {
@@ -13,7 +13,6 @@ import {
 } from 'lucide-vue-next'
 import { catalog } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
-import { planShareUrl } from '../lib/share'
 import { MAX_SERVINGS } from '../lib/servings'
 import type { VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
@@ -33,34 +32,21 @@ const autoPlanDialog = ref<InstanceType<typeof AutoPlanDialog> | null>(null)
 /* ---------- Share sheet ---------- */
 
 const shareSheetOpen = ref(false)
-const shareUrl = ref<string | null>(null)
 // legacy: true falls back to document.execCommand('copy') on insecure
 // origins (plain-HTTP LAN IPs), where navigator.clipboard is undefined.
 const { copy: copyText, copied } = useClipboard({ legacy: true, copiedDuring: 2000 })
-const nativeShareSupported = typeof navigator.share === 'function'
 
-// Recompute the share link whenever the plan changes; null = too large.
-watch(
-  () => [plan.plan, plan.customItems] as const,
-  async () => {
-  shareUrl.value = await planShareUrl(plan.plan, plan.customItems)
-  },
-  { immediate: true, deep: true },
-)
-
-async function openShareSheet() {
-  shareUrl.value = await planShareUrl(plan.plan, plan.customItems)
+/**
+ * The sheet is ROOM-ONLY since ADR-0051 retired one-shot `?p=` links: the
+ * sheet no longer encodes a plan, so opening it is synchronous and cannot
+ * fail on a plan that is too large to encode.
+ */
+function openShareSheet() {
   shareSheetOpen.value = true
 }
 
 function closeShareSheet() {
   shareSheetOpen.value = false
-}
-
-function copyShareUrl() {
-  if (!shareUrl.value) return
-  // useClipboard resolves even via the legacy path; reject -> toast.
-  void copyText(shareUrl.value).catch(() => ui.showToast("Couldn't copy the link"))
 }
 
 function copyRoomLink() {
@@ -76,20 +62,6 @@ const roomLink = computed(() => room.roomLink())
 function startLiveRoom() {
   if (room.status === 'connecting') return
   room.create()
-}
-
-async function nativeShare() {
-  if (!shareUrl.value || !nativeShareSupported) return
-  try {
-  await navigator.share({
-  title: 'My Mealime meal plan',
-  text: 'Check out my meal plan!',
-  url: shareUrl.value,
-  })
-  shareSheetOpen.value = false
-  } catch {
-  // User dismissed the native sheet — nothing to do.
-  }
 }
 
 interface PlannedMeal {
@@ -308,38 +280,11 @@ function canMore(meal: PlannedMeal): boolean {
   </button>
   </div>
   <p class="text-xs">
-  Anyone with this link gets your current plan loaded into their app.
-  </p>
-  <input
-  class="h-11 w-full rounded-lg border border-border bg-surface px-3 text-xs text-text-muted outline-none focus:border-brand-text"
-  type="text"
-  readonly
-  :value="shareUrl ?? ''"
-  aria-label="Share link"
-  @focus="($event.target as HTMLInputElement).select()"
-  />
-  <div class="flex gap-2">
-  <button
-  class="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-surface-dark px-4 text-sm font-semibold text-warning-soft active:bg-surface-dark-sunken"
-  :disabled="shareUrl === null"
-  data-test="copy-share-link"
-  @click="copyShareUrl"
-  >
-  {{ copied ? 'Copied' : 'Copy one-time link' }}
-  </button>
-  <button
-  v-if="nativeShareSupported"
-  class="flex h-11 flex-1 items-center justify-center rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand active:bg-brand-strong"
-  @click="nativeShare"
-  >
-  Share…
-  </button>
-  </div>
-  <p v-if="shareUrl === null" class="text-xs text-warning">
-  Plan too large for a one-time link — share it live instead.
+  One-time plan links were removed (ADR-0051). A live room is the one way to
+  share now — and it syncs both ways, live, instead of a frozen snapshot.
   </p>
 
-  <!-- Live room -->
+  <!-- Live room: the ONLY share path since ADR-0051 retired `?p=`. -->
   <div class="space-y-2 rounded-xl bg-surface p-3">
   <div class="flex items-center gap-2">
   <span class="text-sm font-bold tracking-tight">Live room</span>

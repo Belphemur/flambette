@@ -46,7 +46,7 @@ export const useGroceryStore = defineStore(
      *
      * The guard is the point: `custom||<name>` keys are DERIVED from the
      * extras, so a key with no matching extra is residue from a room
-     * snapshot, a backup import or a share link — any of which can carry
+     * snapshot or a backup import — either of which can carry
      * `customItems` and `checked` out of step. Left alone it reads as
      * "already done", so re-adding that name lands in a sub-section the
      * done-map calls COMPLETE, and ADR-0050's auto-collapse hides the new
@@ -64,8 +64,8 @@ export const useGroceryStore = defineStore(
     /**
      * Migrate a PERSISTED map written by an older build, once, at hydrate.
      *
-     * The ingress points (`applyRemote`, a backup restore, a share link) only
-     * cover state arriving from OUTSIDE. A plain reload after the key-prefix
+     * The ingress points (`applyRemote`, a backup restore) only cover state
+     * arriving from OUTSIDE. A plain reload after the key-prefix
      * change is the case they miss: localStorage hydrates `custom||<name>`
      * keys while the renderers read `extraCheckedKey(name)` = `extra::<name>`,
      * so every already-checked extra would render UNCHECKED — the exact data
