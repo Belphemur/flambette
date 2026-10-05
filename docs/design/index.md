@@ -86,6 +86,7 @@ understand why the current shape is the shape.
 | [0047](ADR-0047-unit-system.md) | Unit system (dual/metric/imperial) with display-time conversion | proposed | 2026-10-02 |
 | [0048](ADR-0048-spa-prerender-seo.md) | SPA SEO: Unhead on the client, prerendered recipe heads at build | proposed | 2026-10-03 |
 | [0049](ADR-0049-household-join-ux-and-peer-count.md) | Household join UX, the live peer count, and the relay protocol | proposed | 2026-10-04 |
+| [0054](ADR-0054-catalog-profiles-units-and-servings.md) | catalog profiles: units × servings are ACCOUNT settings, not per-recipe variants | proposed | 2026-10-05 |
 
 ## Known numbering collisions
 
