@@ -14,7 +14,7 @@
 #     docker compose up -d --build
 services:
   web:
-    image: ghcr.io/belphemur/flambette:1.5.0
+    image: ghcr.io/belphemur/flambette:2.0.0
     # build: .
     ports:
       # host:container — nginx listens on 80 inside the image.
