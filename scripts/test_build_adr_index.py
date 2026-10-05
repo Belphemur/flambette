@@ -115,10 +115,18 @@ class TestIndexOutput(unittest.TestCase):
         # The end-to-end consequence of the direction bug: a record whose
         # Status says it SUPERSEDES another one still governs and must appear
         # under "In force", never in the "Not in force" table.
+        #
+        # Cell positions: | ADR | Decision | Status | Date | — so Status is the
+        # THIRD cell. An earlier version of this regex carried an extra
+        # `[^|]*\|`, which matched nothing and made the loop below vacuous: the
+        # test passed while checking nothing (caught in PR #48 review, second
+        # round). The self.assertTrue below is what stops that recurring — a
+        # mis-aligned pattern must fail loudly, not pass quietly.
         retired = re.findall(
-            r"^\| \[(\d{4})\]\([^)]+\) \|[^|]*\|[^|]*\|\s*"
+            r"^\| \[(\d{4})\]\([^)]+\) \|[^|]*\|\s*"
             r"(superseded|accepted \(superseded in part\))\s*\|",
             self.text, re.M)
+        self.assertTrue(retired, "no retired records matched — pattern mis-aligned")
         for num, bucket in retired:
             fname = [f for f in os.listdir(DESIGN)
                      if f.startswith("ADR-%s-" % num)]
