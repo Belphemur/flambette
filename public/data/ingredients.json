@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-10-05T14:21:49",
+ "generatedAt": "2026-10-05T15:17:14",
  "count": 871,
  "ingredients": [
   {
@@ -42,7 +42,7 @@
    "name": "all-purpose flour",
    "nameKey": "all-purpose flour",
    "category": "Baking & Spices",
-   "unit": null
+   "unit": "g"
   },
   {
    "name": "allspice",
@@ -234,7 +234,7 @@
    "name": "baking powder",
    "nameKey": "baking powder",
    "category": "Baking & Spices",
-   "unit": null
+   "unit": "g"
   },
   {
    "name": "baking soda",
@@ -588,7 +588,7 @@
    "name": "butter, unsalted",
    "nameKey": "butter, unsalted",
    "category": "Dairy, Cheese & Eggs",
-   "unit": null
+   "unit": "g"
   },
   {
    "name": "buttermilk",
@@ -1572,7 +1572,7 @@
    "name": "eggs",
    "nameKey": "egg",
    "category": "Dairy, Cheese & Eggs",
-   "unit": null
+   "unit": "large eggs"
   },
   {
    "name": "egg whites",
@@ -2220,7 +2220,7 @@
    "name": "granulated sugar",
    "nameKey": "granulated sugar",
    "category": "Baking & Spices",
-   "unit": null
+   "unit": "g"
   },
   {
    "name": "grapes",
@@ -4164,7 +4164,7 @@
    "name": "salt",
    "nameKey": "salt",
    "category": "Baking & Spices",
-   "unit": null
+   "unit": "g"
   },
   {
    "name": "salted butter",
@@ -4920,7 +4920,7 @@
    "name": "vanilla extract",
    "nameKey": "vanilla extract",
    "category": "Baking & Spices",
-   "unit": null
+   "unit": "ml"
   },
   {
    "name": "vanilla ice cream",

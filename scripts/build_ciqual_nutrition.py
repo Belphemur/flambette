@@ -172,6 +172,12 @@ NUTRIENT_CODES = {
     "selenium": 10340,  # µg
 }
 
+# SUGAR SUB-KEYS — the app's own sugar breakdown, which is what its
+# `sugars` headline is the sum of. Verified against the frozen catalog: a doc
+# with 2.31 g lactose reports `sugars` 20.94 against a sub-key sum of 20.09,
+# i.e. the app's total sugars INCLUDE lactose.
+SUGAR_PARTS = ("fructose", "galactose", "glucose", "lactose", "maltose", "sucrose")
+
 # SUMMED nutrients: app key -> const codes, same unit.
 SUMMED_CODES = {"vitamin_k": [54101, 54104]}
 
@@ -224,7 +230,22 @@ INGREDIENT_MAP = {
     },
     "granulated sugar": {
         "alim_code": "31016",
-        "choice": "Sucre blanc — granulated sugar. CIQUAL publishes no energy row, so it is Atwater-derived.",
+        "choice": (
+            "Sucre blanc — granulated sugar. CIQUAL publishes no energy row, so "
+            "it is Atwater-derived."
+        ),
+        # CIQUAL grades this food's `sucres` and `saccharose` rows D (its
+        # generic "estimated / from a similar food" grade) even though sucrose
+        # is the whole food and 99.8 g/100 g is not an estimate. Refusing the
+        # row would report 0 g sugar for a recipe with 50 g of it in it, which
+        # is a worse lie than the grade. The exception is per-food, explicit,
+        # and recorded in the artifact (`confidence` becomes "D"); the global
+        # D refusal is untouched.
+        "admit_confidence": ["D"],
+        "admit_reason": (
+            "CIQUAL grades sucrose's sugars rows D; sucrose is the food, so the "
+            "grade is a database label rather than an estimate."
+        ),
     },
     "egg": {
         "alim_code": "22000",
@@ -419,12 +440,36 @@ def derive_energy(per100):
     )
 
 
+def derive_sugars(per100):
+    """Total sugars on the APP's basis, or None when CIQUAL supports no value.
+
+    CIQUAL's `sucres` row (32000) EXCLUDES lactose and polyols — whole milk
+    publishes no 32000 row at all, only 3.2 g of lactose — while the app's
+    `sugars` is the sum of its six sugar sub-keys, lactose included (verified
+    against the frozen catalog). Taking 32000 verbatim would therefore report
+    sugar-free milk and understate the pancake's sugars by the lactose alone.
+
+    So: CIQUAL's total plus the lactose it omits, or, when CIQUAL publishes no
+    total (the milk case), the sum of whichever sub-keys it did publish. A food
+    with neither is reported WITHOUT a `sugars` key rather than as 0.0.
+    """
+    total = per100.get("sugars")
+    lactose = per100.get("lactose")
+    if total is not None:
+        return total + (lactose or 0.0)
+    parts = [per100[k] for k in SUGAR_PARTS if per100.get(k) is not None]
+    return sum(parts) if parts else None
+
+
 def round2(v):
     return round(v + 0.0, 2)
 
 
 def build_food(key, spec, names, comps, units):
     code = spec["alim_code"]
+    # Per-food, explicitly reviewed exception to the D refusal (see
+    # INGREDIENT_MAP's `admit_confidence`). Default: A/B/C only.
+    accepted = set(ACCEPTED_CONFIDENCE) | set(spec.get("admit_confidence") or [])
     if code not in names:
         raise SystemExit(f"CIQUAL food {code} ({key}) is not in {FILES['alim']}")
     rows = comps.get(code)
@@ -445,7 +490,7 @@ def build_food(key, spec, names, comps, units):
         value, flag, conf = row
         if value is None:
             continue
-        if conf and conf not in ACCEPTED_CONFIDENCE:
+        if conf and conf not in accepted:
             continue
         if conf:
             confs.append(conf)
@@ -463,7 +508,7 @@ def build_food(key, spec, names, comps, units):
                 ok = False
                 break
             value, flag, conf = row
-            if conf and conf not in ACCEPTED_CONFIDENCE:
+            if conf and conf not in accepted:
                 ok = False
                 break
             if conf:
@@ -486,6 +531,12 @@ def build_food(key, spec, names, comps, units):
         per100["energy"] = derived
         energy_source = "atwater"
 
+    sugars = derive_sugars(per100)
+    if sugars is None:
+        per100.pop("sugars", None)
+    else:
+        per100["sugars"] = sugars
+
     # The WORST grade among the rows that made it in, so a food whose macros
     # are calculated (C) never inherits the A of one analysed salt row.
     worst = max(confs, key=lambda c: CONFIDENCE_RANK.get(c, 9)) if confs else None
@@ -497,6 +548,7 @@ def build_food(key, spec, names, comps, units):
         "confidence": worst,
         "energy_source": energy_source,
         "choice": spec["choice"],
+        "confidence_note": spec.get("admit_reason"),
         "below_limit": sorted(set(limits)),
         "per100g": {k: round2(v) for k, v in sorted(per100.items())},
     }

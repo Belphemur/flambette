@@ -30,6 +30,10 @@ function unitKeyTs(unit: string): string {
 
 const index = JSON.parse(readFileSync(`${BASE}/pack_index.json`, 'utf8'))
 const builder = JSON.parse(readFileSync(`${BASE}/builder_data.json`, 'utf8'))
+// ADR-0052: the household's own recipes are Auto-Plan eligible (locked L2),
+// so they are parity-checked too — they travel through the same Python
+// nameKey/container/amount path as the frozen catalog.
+const userRecipes = JSON.parse(readFileSync(`${BASE}/user_recipes.json`, 'utf8')).recipes ?? []
 const keys: string[] = index.ingredientKeys
 const units: string[] = index.unitKeys
 
@@ -37,8 +41,12 @@ let containerMismatches = 0
 let amountMismatches = 0
 let examples: string[] = []
 
-for (const vid of builder.feasible_variants) {
-  const doc = JSON.parse(readFileSync(`${BASE}/recipes/${vid}.json`, 'utf8'))
+const userDocs = new Map<number, any>(userRecipes.map((r: any) => [r.meta.id, r.doc]))
+const docFor = (vid: number): any =>
+  userDocs.get(vid) ?? JSON.parse(readFileSync(`${BASE}/recipes/${vid}.json`, 'utf8'))
+
+for (const vid of [...builder.feasible_variants, ...userDocs.keys()]) {
+  const doc = docFor(vid)
   const rows = index.recipes[String(vid)]?.i
   if (!rows) {
     console.error(`missing index row for ${vid}`)
@@ -90,7 +98,9 @@ for (const vid of builder.feasible_variants) {
   }
 }
 
-console.log(`checked ${builder.feasible_variants.length} recipes x line items`)
+console.log(
+  `checked ${builder.feasible_variants.length} catalog recipes + ${userDocs.size} user recipes x line items`,
+)
 console.log('nameKey parity (pack index): implicit (a non-matching key exits above)')
 
 /**

@@ -50,7 +50,7 @@ Stdlib only; idempotent; no network. Re-run with:
 
 import glob
 
-from catalog_paths import recipe_doc_paths
+from catalog_paths import iter_recipe_docs, recipe_doc_paths, user_recipe_docs
 import gzip
 import json
 import os
@@ -201,12 +201,21 @@ def main() -> int:
     # Only the catalog docs: this directory ALSO holds ADR-0041's per-recipe
     # `<id>.timer.json` sidecars, and a bare `*.json` glob silently folds those
     # into the index (they parse as empty recipes and double the row count).
+    #
+    # ADR-0052: the household's own recipes live in user_recipes.json, not in
+    # the frozen directory, so the walk is `iter_recipe_docs` (both sources in
+    # one pass). Locked decision L2 makes them Auto-Plan eligible: a recipe the
+    # planner cannot see is scored as if it needed no ingredients at all.
     recipe_files = recipe_doc_paths()
+    user_docs = user_recipe_docs()
     with open(os.path.join("public", "data", "builder_data.json")) as f:
         builder = json.load(f)
 
     expected = len(builder["feasible_variants"])
     if len(recipe_files) != expected:
+        # A WARNING, not an error: the count check describes the frozen catalog
+        # and user recipes live outside it, so a household adding recipes must
+        # never be able to fail this build.
         print(f"warning: expected {expected} recipe docs, found {len(recipe_files)}", file=sys.stderr)
 
     recipes = {}
@@ -215,10 +224,8 @@ def main() -> int:
     unparsed_qty = 0
     dup_name_merges = 0
 
-    for path in recipe_files:
-        vid = os.path.basename(path)[:-5]
-        with open(path) as f:
-            doc = json.load(f)
+    for vid, doc in iter_recipe_docs():
+        vid = str(vid)
 
         # One row per nameKey, merged with the ADR-0017 rule so the index
         # matches what the grocery list would collapse.
@@ -324,7 +331,7 @@ def main() -> int:
     # ---- summary ----
     size = os.path.getsize(out_path)
     gz = len(gzip.compress(open(out_path, "rb").read(), 9))
-    print(f"read {len(recipe_files)} recipe docs -> {len(packed)} recipes")
+    print(f"read {len(recipe_files)} catalog docs + {len(user_docs)} user recipes -> {len(packed)} recipes")
     print(f"wrote {out_path} ({size/1e6:.2f} MB raw, {gz/1e3:.0f} KB gzip)")
     print(f"line items: {total_line_count} total, {container_line_count} container, "
           f"{unparsed_qty} unparsed-qty, {dup_name_merges} duplicate-name merges")

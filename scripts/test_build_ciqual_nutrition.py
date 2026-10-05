@@ -175,10 +175,39 @@ class NutrientMap(unittest.TestCase):
             self.assertTrue(food["alim_code"], key)
             self.assertTrue(food["choice"], "%s has no recorded choice" % key)
             self.assertIn(food["energy_source"], ("ciqual", "atwater"), key)
-            self.assertIn(food["confidence"], ("A", "B", "C"), key)
+            # D is refused globally; a food may only carry it when the mapping
+            # recorded WHY, and the artifact repeats that reason.
+            if food["confidence"] == "D":
+                self.assertTrue(
+                    food.get("confidence_note"),
+                    "%s admits a grade-D row with no recorded reason" % key,
+                )
+            else:
+                self.assertIn(food["confidence"], ("A", "B", "C"), key)
 
-    def test_confidence_d_is_refused(self):
+    def test_confidence_d_is_refused_by_default(self):
         self.assertNotIn("D", ciqual.ACCEPTED_CONFIDENCE)
+        # Only granulated sugar opts in, and only with a reason.
+        admitting = [k for k, f in load_table()["foods"].items() if f["confidence"] == "D"]
+        self.assertEqual(admitting, ["granulated sugar"])
+
+    def test_sugars_are_on_the_apps_basis(self):
+        # CIQUAL's `sucres` row excludes lactose (whole milk publishes none at
+        # all), while the app's `sugars` is the sum of its six sugar sub-keys,
+        # lactose included. Verified against the frozen catalog: a doc with
+        # 2.31 g lactose reports sugars 20.94 against a sub-key sum of 20.09.
+        foods = load_table()["foods"]
+        parts = ("fructose", "galactose", "glucose", "lactose", "maltose", "sucrose")
+        milk = foods["whole milk"]["per100g"]
+        self.assertEqual(milk["sugars"], round(sum(milk.get(k, 0.0) for k in parts), 2))
+        self.assertGreater(milk["sugars"], 3.0, "milk is not sugar-free")
+        # A food that publishes CIQUAL's `sucres` total: the app's number is
+        # that total PLUS the lactose CIQUAL excludes. Naively taking CIQUAL's
+        # row (1.5) would understate flour by its own 0.1 g of lactose.
+        flour = foods["all-purpose flour"]["per100g"]
+        self.assertEqual(flour["sugars"], round(flour["sugars"], 2))
+        self.assertGreater(flour["sugars"], 1.5)
+        self.assertLessEqual(flour["sugars"], flour["carbs"])
 
 
 class PancakeEnergy(unittest.TestCase):
@@ -248,6 +277,16 @@ class PancakeEnergy(unittest.TestCase):
         )
         self.assertAlmostEqual(got["sodium"], total / PANCAKE_SERVINGS, delta=1.0)
         self.assertGreater(got["sodium"], 800)
+
+    def test_granulated_sugar_is_not_reported_as_sugar_free(self):
+        # The regression this pins: CIQUAL grades sucrose's sugars row D, and
+        # the global D refusal used to drop it, which reported 0 g of sugar for
+        # a recipe with 50 g of it in the batter.
+        foods = self.table["foods"]
+        self.assertEqual(foods["granulated sugar"]["per100g"]["sugars"], 99.8)
+        got = ciqual.recipe_nutrition(self.doc, self.table)
+        # 50 g of sugar alone contributes 6.25 g per serving, before milk and flour.
+        self.assertGreater(got["sugars"], 6.0)
 
     def test_unconvertible_quantity_is_refused(self):
         doc = {

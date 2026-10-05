@@ -147,6 +147,7 @@
    "confidence": "C",
    "energy_source": "ciqual",
    "choice": "Farine de blé tendre ou froment T65 — the plain wheat flour a batter asks for. NOT 9437 (farine avec levure incorporée), which would fold the leavening's sodium into the flour.",
+   "confidence_note": null,
    "below_limit": [
     "copper",
     "fructose",
@@ -177,7 +178,7 @@
     "protein": 13.6,
     "sodium": 12.0,
     "sugar_alcohol": 0.0,
-    "sugars": 1.5,
+    "sugars": 1.6,
     "vitamin_e": 0.5,
     "water": 13.2,
     "zinc": 0.8
@@ -191,6 +192,7 @@
    "confidence": "C",
    "energy_source": "atwater",
    "choice": "Levure chimique / poudre à lever — the leavening itself, so its sodium is counted once.",
+   "confidence_note": null,
    "below_limit": [
     "glucose",
     "maltose",
@@ -249,6 +251,7 @@
    "confidence": "C",
    "energy_source": "ciqual",
    "choice": "Beurre à 82% MG, doux — UNSALTED butter, matching the recipe (a salted butter would double-count the salt line).",
+   "confidence_note": null,
    "below_limit": [
     "ash",
     "fructose",
@@ -295,7 +298,7 @@
     "sodium": 25.0,
     "sucrose": 0.1,
     "sugar_alcohol": 0.0,
-    "sugars": 0.83,
+    "sugars": 1.66,
     "vitamin_a": 675.0,
     "vitamin_c": 0.0,
     "vitamin_d": 1.12,
@@ -313,6 +316,7 @@
    "confidence": "C",
    "energy_source": "ciqual",
    "choice": "Oeuf, cru — whole raw egg. A recipe's count unit converts to grams (see UNIT_GRAMS).",
+   "confidence_note": null,
    "below_limit": [
     "fructose",
     "maltose",
@@ -352,6 +356,7 @@
     "selenium": 2.58,
     "sodium": 124.0,
     "sucrose": 0.15,
+    "sugars": 0.45,
     "vitamin_a": 182.0,
     "vitamin_c": 0.0,
     "vitamin_d": 1.88,
@@ -365,9 +370,10 @@
    "name_fr": "Sucre blanc",
    "name_en": "Sugar, white",
    "group_code": "07",
-   "confidence": "C",
+   "confidence": "D",
    "energy_source": "atwater",
    "choice": "Sucre blanc — granulated sugar. CIQUAL publishes no energy row, so it is Atwater-derived.",
+   "confidence_note": "CIQUAL grades sucrose's sugars rows D; sucrose is the food, so the grade is a database label rather than an estimate.",
    "below_limit": [
     "selenium"
    ],
@@ -404,6 +410,9 @@
     "saturated": 0.0,
     "selenium": 10.0,
     "sodium": 2.17,
+    "starch": 0.0,
+    "sucrose": 99.8,
+    "sugars": 99.8,
     "vitamin_a": 0.0,
     "vitamin_c": 0.0,
     "vitamin_d": 0.0,
@@ -420,6 +429,7 @@
    "confidence": "C",
    "energy_source": "ciqual",
    "choice": "Sel blanc alimentaire non iodé non fluoré — plain sodium chloride (0 kcal, a REAL zero, not an absent value).",
+   "confidence_note": null,
    "below_limit": [],
    "per100g": {
     "alcohol": 0.0,
@@ -467,6 +477,7 @@
    "confidence": "C",
    "energy_source": "ciqual",
    "choice": "Vanille, extrait alcoolique — the alcohol-based vanilla extract the recipe calls for.",
+   "confidence_note": null,
    "below_limit": [],
    "per100g": {
     "alcohol": 32.9,
@@ -507,6 +518,7 @@
    "confidence": "C",
    "energy_source": "ciqual",
    "choice": "Lait entier pasteurisé — whole milk. NOT 19023 (lait UHT): the figures are the same to CIQUAL's precision, and pasteurised is the default household carton.",
+   "confidence_note": null,
    "below_limit": [
     "copper",
     "fructose",
@@ -548,6 +560,7 @@
     "starch": 0.2,
     "sucrose": 0.2,
     "sugar_alcohol": 0.0,
+    "sugars": 4.0,
     "vitamin_a": 38.5,
     "vitamin_c": 1.2,
     "vitamin_d": 0.1,

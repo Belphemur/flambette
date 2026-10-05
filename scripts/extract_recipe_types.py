@@ -29,6 +29,9 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
 BUILDER = os.path.join(ROOT, "public/data/builder_data.json")
 OUT = os.path.join(ROOT, "public/data/recipe_types.json")
 
@@ -49,6 +52,16 @@ ALL_ROWS = TABLE + NON_OCCASION
 OFFERED_IDS = {row[0] for row in TABLE}
 
 
+def user_recipe_entries():
+    """(id, {meta, doc, addedAt, source}) for each household recipe."""
+    with open(os.path.join(ROOT, "public/data/user_recipes.json"), encoding="utf-8") as f:
+        payload = json.load(f)
+    out = []
+    for entry in payload.get("recipes") or []:
+        out.append(((entry.get("meta") or {}).get("id"), entry))
+    return [pair for pair in out if pair[0] is not None]
+
+
 def build():
     with open(BUILDER) as f:
         builder = json.load(f)
@@ -58,6 +71,14 @@ def build():
     by_ruleset = {row[3]: row[0] for row in ALL_ROWS}
     unmatched = 0
     seen_ids = set()
+
+    # ADR-0052: the household's own recipes are filterable exactly like the
+    # frozen catalog's (they are merged into `byId` at load), so their
+    # `ruleset` has to be counted here too — a Breakfast chip that says 151
+    # while the pancake is on screen and filterable would be a lie.
+    for _vid, entry in user_recipe_entries():
+        feasible.add(entry["meta"]["id"])
+        builder["variant_meta"].append(entry["meta"])
 
     for meta in builder["variant_meta"]:
         vid = meta["id"]

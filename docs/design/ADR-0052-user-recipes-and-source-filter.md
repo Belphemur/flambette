@@ -11,11 +11,11 @@
 * Companions: `public/data/user_recipes.json` (new artifact),
   `src/lib/catalog.ts`, `src/lib/userRecipes.ts` (new, pure),
   `src/lib/quickFilters.ts`, `src/components/RecipesTab.vue`,
-  `src/components/RecipeCard.vue`, `scripts/extract_nutrition.py` (new),
+  `src/components/RecipeCard.vue`, `scripts/build_ciqual_nutrition.py` (new),
   `scripts/catalog_paths.py`, `scripts/build_pack_index.py`,
   `scripts/extract_ingredients.py`, `scripts/extract_recipe_types.py`,
-  `public/data/nutrition_ingredients.json` (new artifact),
-  `scripts/test_extract_nutrition.py` (new)
+  `public/data/ciqual_foods.json` (new committed artifact),
+  `scripts/test_build_ciqual_nutrition.py` (new goldens)
 
 ## Context
 
@@ -66,12 +66,14 @@ provenance recorded.
 * **USDA FoodData Central** — considered and distrusted: it needs an API
   key, the terms read as "no redistribution of bulk data", and its
   values are US retail products. **Fineli (fineli.fi)** was the first
-  choice and is unreachable from Cloudflare's network (the official path
-  is dead as of this writing), so it is out on availability, not
-  quality. **CIQUAL 2020 (ANSES, France)** is the answer: one
-  unauthenticated 3.5 MB zip, 3,185 foods, 67 nutrient definitions with
-  a documented confidence code and source, and EU 1169/2011 energy values
-  so the energy figure is the one a European label would print.
+  choice and is unreachable from the build machine (Cloudflare blocks
+  every path, in curl AND in a real browser; a fetch that "sometimes
+  works" cannot back a committed artifact), so it is out on
+  availability, not quality. **CIQUAL 2020 (ANSES, France)** is the
+  answer: one unauthenticated 3.5 MB zip published as open data and
+  listed on data.gouv.fr, XML with a documented confidence code and
+  source, and EU 1169/2011 energy values so the energy figure is the one
+  a European label would print.
 
 ## Decision
 
@@ -99,13 +101,18 @@ never fails the catalog load. That is the "graceful degrade" the app
 already has to have, because the file is a build output that a partial
 deploy can be missing.
 
-**Ids come from a reserved high band: `USER_RECIPE_ID_BASE = 90_000_000`,
-first user recipe `90_000_001`.** The highest Mealime variant id is
-40,919, so the band is unreachable by a catalog sync, and the test is
-arithmetic — `id >= USER_RECIPE_ID_BASE` — which means a pure function
-(`isUserRecipeId`) can answer "is this ours?" with no catalog in hand.
-Every engine that only receives a `VariantMeta` (diet filter, meal-type
-filter, sort, search) therefore needs no lookup table.
+**Ids come from a reserved high band: `USER_RECIPE_ID_BASE = 900_000`,
+first user recipe `900_001`.** The highest Mealime variant id is 40,919,
+so the band is unreachable by a catalog sync. The band is a RESERVATION
+that keeps the two id spaces from ever colliding, not a membership test:
+"is this ours?" is answered by the loaded artifact's id set
+(`isUserRecipeId(id, ids)` in `src/lib/userRecipes.ts`), because a stale
+id left in the band by a deleted recipe would keep being documented /
+selectable there. `data/recipes/<id>.json` is not read for a user
+recipe — `getRecipe()` serves the embedded doc from memory, so no fetch
+ever touches the frozen directory on their behalf.
+Every engine that only receives a `VariantMeta` therefore works with no
+lookup beyond the already-merged `dataById`.
 
 **Why the doc rides in this file rather than a second
 `data/recipes/<id>.json`:** a doc-only design makes the meta's existence
@@ -144,28 +151,26 @@ counted in `breakfast` and in the `-5` ("all") total.
 
 `QuickFilters.proOnly: boolean` is gone. In its place:
 
-```ts
-type SourceFilter = 'all' | 'mealime' | 'user'
-```
-
-persisted under the existing `mealime-planner:v1:ui` slice, shared with
-the room like every other member (it is part of ADR-0028's household
-half), and coerced in exactly one place: `normalizeQuickFilters`, which
-is the single inbound gate for backup import and remote snapshots alike.
-An unknown value falls back to `'all'`, on the same "a stale peer must
-never park the tab on an empty grid" rule the diet ids and `mealType`
-already follow.
+`type SourceFilter = 'all' | 'pro' | 'new'` — the brief's locked
+spelling. `all` = everything, `pro` = `meta.is_pro`isters (the old chip,
+a rename not a reinterpretation), and `new` = the user-recipe id set
+(locked L1: permanent). persisted under the existing
+`mealime-planner:v1:ui` slice, shared with the room like every other
+member of ADR-0027's household half, and coerced in exactly one place:
+`normalizeQuickFilters`, which is the single inbound gate for backup
+import and remote snapshots alike. An unknown value falls back to
+`'all'`, on the same "a stale peer must never park the tab on an empty
+grid" rule the diet ids and `mealType` already follow.
 
 **Migration is inside `normalizeQuickFilters`, not a new function.** A
 payload carrying `source` wins. A payload carrying only the legacy
-`proOnly` maps `true → 'mealime'` and `false → 'all'`. That covers all
+`proOnly` maps `true → 'pro'` and `false → 'all'`. That covers all
 three inbound paths (persisted ui blob, backup JSON, an older peer's
-room snapshot) with one branch, and it means the type never has to carry
-both spellings — a second spelling in the persisted type is exactly the
-drift this repo's conventions forbid. The mapping is deliberately
-`true → 'mealime'`: a household that had pinned "PRO only" keeps a
-narrowed, non-empty grid, and the widened set is the honest reading of
-"not one of mine".
+room snapshot) with one branch, and it means the type never carries both
+spellings — a second spelling in the persisted type is exactly the drift
+this repo's conventions forbid. The mapping is deliberately
+`true → 'pro'`: a household that had pinned "PRO only" keeps exactly
+the narrowed grid they chose, not the one the old chip's label implied.
 
 ### 4. The source control is a dropdown, and the three buckets are permanent
 
@@ -173,7 +178,7 @@ Per the brief, the control is a **dropdown with an icon** rendered
 through the shared `FilterDropdown` (ADR-0045) — no hand-rolled popup,
 so the roving-tabindex listbox, the scrim/Escape handling and the
 Pixel 7 fit are the ones the other three dropdowns already have.
-Options: **All sources / Mealime / New**.
+Options: **All sources / PRO / New**.
 
 The **`New` bucket is permanent**: it selects every non-Mealime recipe
 for as long as it exists, forever (locked decision L1). What expires is
@@ -199,44 +204,77 @@ identities**, so they stay out of `ICON_ROLES` (ADR-0036) and are
 
 ### 5. Nutrition is DERIVED from CIQUAL 2020, at build time, from a committed table
 
-`scripts/extract_nutrition.py` reads the CIQUAL zip
-(`XML_2020_07_07.zip`, 3,185 foods, 67 nutrient definitions), maps a
-curated set of foods to the app's 66 `nutrition` keys and writes
-`public/data/nutrition_ingredients.json`:
+`scripts/build_ciqual_nutrition.py` reads the CIQUAL 2020 edition
+(`XML_2020_07_07.zip`), maps the ingredients a user recipe actually uses
+onto named CIQUAL foods and writes `public/data/ciqual_foods.json`:
 
-* one row per ingredient `nameKey`, holding the chosen CIQUAL `alim_code`,
-  its FR/EN name, the per-100 g values for every **mapped** nutrient, and
-  an optional `unitGrams` table for count units (`{"egg": 50}`), because
-  CIQUAL is per 100 g and a recipe says "3 large eggs";
-* a `provenance` block recording the zip URL, the `2020-07-07` edition
-  date, the per-nutrient `const_code` used, and the `unmapped` list —
-  CIQUAL has no caffeine, no trans fats, no amino acids and no choline,
-  and **an unmapped nutrient is omitted from the output, never written
-  as `0.0`**, because "0.0" would be a claim and an omitted row is an
-  absence;
-* a `coverage` list naming the foods behind each row, because a
-  nutrition table with no visible source is how fabricated numbers get
-  in.
+* one row per ingredient `nameKey`, keyed by the SAME key the grocery
+  list resolves line items by, holding the chosen CIQUAL `alim_code`, its
+  FR/EN name, the worst confidence grade among the rows that made it in,
+  an `energy_source` (`ciqual` | `atwater`), the RECORDED reason for the
+  choice, and the per-100 g values for every mapped nutrient;
+* an audited `INGREDIENT_MAP` table IN THE SCRIPT: every food names its
+  `alim_code` and records why it was chosen (flour is 9435 T65 wheat
+  flour and NOT the self-raising 9437, which would fold the leavening's
+  sodium into the flour and double-count it against the baking-powder
+  line; butter is the UNSALTED 16400 for the same double-count reason). A
+  documented choice is the deliverable; a silent fuzzy match is not.
+* a `unitGrams` table for count units (`{"egg": 50}`, "3 large eggs"),
+  because CIQUAL is per 100 g edible portion and a recipe counts eggs;
+* a `provenance` block recording the zip URL, the 2020-07-07 release,
+  every source XML's sha256, the per-nutrient `const_code`, the accepted
+  and refused confidence grades, and the omission rule — CIQUAL has no
+  caffeine, no trans fats, no amino acids and no choline, and **a
+  nutrient it does not publish is omitted, never written as `0.0`**,
+  because "0.0" is a claim and an omission is an absence.
 
-Note two CIQUAL conventions the mapping has to respect, both recorded in
-the script: protein is the **Jones factor** (`const_code` 25000, not
-25003), and energy is the **EU 1169/2011** value (`328`, kcal) — so the
-recipe's energy is the sum of what a European label would print, not an
-Atwater back-calculation. The XML is **windows-1252 and not
-well-formed** (a raw `<` inside `ALIM_NOM_INDEX_FR` for "Panaché
-préemballé (<1° alc.)"), so the parser is a tolerant block/tag scanner,
-not `ElementTree`.
+Three CIQUAL conventions the mapping respects, all recorded in the
+script: protein is the **Jones factor** (`const_code` 25000, not 25003);
+`sugars` (32000) EXCLUDES lactose, so the artifact derives the app's
+sugar total as CIQUAL's row plus its lactose, or as the sum of the six
+sugar sub-keys when the total row is absent (whole milk); and confidence
+grade D is refused globally — granulated sugar's `sucres` row is graded
+D despite sucrose being the whole food, so that one food opts in with a
+recorded reason rather than reporting 0 g of sugar for a recipe with
+50 g of it in the batter.
 
-`scripts/test_extract_nutrition.py` is the gate: pure-function goldens
-over a fixture (parsing, nutrient selection, count-unit conversion,
-per-serving division, nameKey parity) plus a check that the pancake's
-committed `nutrition` block equals a fresh computation from the committed
-table. It needs no network and no CIQUAL zip — the CIQUAL download is a
-deliberate, manual regeneration step, exactly like `sync_catalog.py`.
+CIQUAL publishes NO energy for granulated sugar or for baking powder.
+The generator derives those with the app's OWN Atwater factors
+(`KCAL_PER_G` / `KCAL_PER_G_FIBER_NET` in `src/lib/nutrition.ts`: 9 kcal/g
+fat + 4 kcal/g protein + 4 kcal/g digestible carbohydrate + 2 kcal/g net
+fibre) and records `energy_source: "atwater"` on the row, so a derived
+number is never dressed up as a published one. The generator refuses to
+write an energy it can neither read nor derive.
 
-The generator also exposes the aggregation as a reusable function, so
-the next user recipe is `python3 scripts/extract_nutrition.py --report
-<recipe-id>` and a copy of real numbers, not a re-derivation.
+The XML is **windows-1252 and not well-formed** (a raw `<` inside
+`ALIM_NOM_INDEX_FR` for "Panaché préemballé (<1° alc.)") and `compo` is
+57 MB, so the parser is a tolerant block/tag scanner, not `ElementTree`.
+The `teneur` grammar is handled explicitly: comma decimals (`56,5`),
+`< 0,1` limits (the published bound is substituted and the row is marked
+`below_limit`, so the emitted value is an upper bound), `-` and
+self-closing tags as ABSENT, and a real `0` kept as a real zero (salt is
+0 kcal, not "unknown").
+
+`--check` is the offline gate, run by `bun run data:verify`: it
+recomputes every user recipe's nutrition block from the COMMITTED table
+and fails the build on any drift — which is what makes "never
+fabricated" enforceable on every push, with no network. The download is
+a deliberate, separate step (`bun run data:nutrition:download`, owner
+only); a committed artifact must be reproducible offline.
+
+`scripts/test_build_ciqual_nutrition.py` is the golden suite: the parse
+grammar, the nutrient code map against the app's `NUTRITION_UNITS`
+(parsed out of the TS at test time), the sugar-basis rule, the
+per-food-attributed D exception, the pancake's kcal against a
+hand-computed total (3 052.22 kcal over the batter → 381.53 per
+serving), and the refusal paths.
+
+The pancake's own numbers are authored by
+`scripts/add_user_recipe_pancake.py`, which calls the generator's
+`recipe_nutrition()` — the doc's `nutrition` block, `meta.calories`,
+`meta.sodium_mg` and `meta.macros` are all the ONE derived per-serving
+computation (8 servings), so they cannot disagree with each other or
+with the table.
 
 ## Consequences
 
@@ -251,11 +289,17 @@ the next user recipe is `python3 scripts/extract_nutrition.py --report
   lines, and its rating is household state like any other (ADR-0031).
 * **Nutrition for a user recipe is a sum of per-100 g compositions**, so
   it inherits the table's uncertainty (CIQUAL publishes a confidence code
-  per value; the row keeps it). It is honest and reproducible, which is
-  the bar — not restaurant-grade.
-* **A `user_recipes.json` that is invalid is not fatal**, it is a build
+  per value; the row keeps it), and it will NOT match Mealime's numbers
+  exactly — different food definitions, different lab methods, and
+  ~±10% on kcal is the honest expectation. It is derived and
+  reproducible, which is the bar — not restaurant-grade.
+* **A user_recipes.json that is invalid is not fatal**, it is a build
   with no user recipes; the loader reports it once and the catalog still
   loads.
+* **Accuracy is stated, never claimed.** Wherever the numbers are shown
+  (the brief, the report, the skill), the honest statement is: derived
+  from CIQUAL 2020 by the app's published conventions, expect roughly
+  ±10% on kcal, do not claim Mealime parity.
 
 ## Alternatives considered (continued)
 
