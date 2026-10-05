@@ -19,6 +19,7 @@
     "data:pack": "python3 scripts/build_pack_index.py",
     "data:verify": "bun run scripts/verify_pack_index_parity.ts",
     "data:ingredients": "python3 scripts/extract_ingredients.py",
+    "data:ciqual": "uv run --with xlrd scripts/fetch_ciqual.py --report",
     "test:data": "python3 scripts/test_extract_ingredients.py && python3 scripts/test_extract_recipe_types.py && python3 scripts/test_extract_timer_hints.py"
   },
   "dependencies": {
