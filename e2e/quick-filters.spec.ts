@@ -175,7 +175,7 @@ test.describe('filter bar layout on a phone (WS1)', () => {
     // the assertion is identical in both projects.
     await page.setViewportSize({ width: 412, height: 915 })
     const controls = page.locator(
-      '[data-test=cook-time-filter], [data-test=favourites-filter], [data-test=pro-filter], [data-test=sort-button]',
+      '[data-test=cook-time-filter], [data-test=favourites-filter], [data-test=source-button], [data-test=sort-button]',
     )
     await expect(controls).toHaveCount(4)
 
@@ -308,7 +308,9 @@ test.describe('filter sync and join reconciliation (WS3 + WS4)', () => {
       maxTime: 20,
       sortBy: 'calories',
       favOnly: true,
-      proOnly: true,
+      // ADR-0052: the source facet is HOUSEHOLD state, so B seeds a
+      // divergent one and must still converge on A's.
+      source: 'new',
     })
     await b.goto(`/?room=${code}`)
     await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
