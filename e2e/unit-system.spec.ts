@@ -95,17 +95,17 @@ test('the settings card flips a grocery line and a recipe ingredient to imperial
   await expect(page.getByTestId('unit-system-imperial')).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByTestId('unit-system-metric')).toHaveAttribute('aria-pressed', 'false')
 
-  // The grocery line converts for display: 1 kg → 2.2 lb (the aggregated
-  // line is `formatAmount`-rounded, so it reads `1 kg` in metric).
+  // The grocery line converts for display: 1 kg → 2 ¼ lb (the ADR-0054
+  // quarter-pound grid — upstream authors `2 ¼ lb` for this exact recipe).
   await gotoTab(page, 'Grocery')
   const codRow = groceryRow(page, 'cod fillet')
   await expect(codRow).toBeVisible({ timeout: 10_000 })
-  await expect(codRow.getByText('2.2 lb')).toBeVisible()
+  await expect(codRow.getByText('2 ¼ lb')).toBeVisible()
   await expect(codRow.getByText('1 kg')).toHaveCount(0)
 
   // …and so does the recipe sheet.
   await openFixture(page)
-  await expect(sheet(page).getByText('2.2 lb').first()).toBeVisible()
+  await expect(sheet(page).getByText('2 ¼ lb').first()).toBeVisible()
   await expectZeroMealimeRequests(page)
 })
 
@@ -136,7 +136,7 @@ test('the choice survives a reload', async ({ page }) => {
 
   await gotoTab(page, 'Grocery')
   const codRow = groceryRow(page, 'cod fillet')
-  await expect(codRow.getByText('2.2 lb')).toBeVisible({ timeout: 10_000 })
+  await expect(codRow.getByText('2 ¼ lb')).toBeVisible({ timeout: 10_000 })
   await expectZeroMealimeRequests(page)
 })
 
@@ -149,7 +149,7 @@ test('a checked item stays checked across a unit-system toggle', async ({ page }
   await expect(progress).toBeVisible({ timeout: 10_000 })
   const total = (await progress.textContent())!.match(/(\d+) items/)![1]
 
-  // `new potatoes` is a CONVERTED line (1 kg → 2.2 lb) inside a section
+  // `new potatoes` is a CONVERTED line (1 kg → 2 ¼ lb) inside a section
   // with six other items, so checking it does not collapse the group away
   // (ADR-0008) and the checkbox stays observable.
   const potatoes = groceryRow(page, 'new potatoes')
@@ -163,7 +163,7 @@ test('a checked item stays checked across a unit-system toggle', async ({ page }
   await gotoTab(page, 'Grocery')
   await expect(progress).toHaveText(`1 / ${total} items`)
   const imperialPotatoes = groceryRow(page, 'new potatoes')
-  await expect(imperialPotatoes.getByText('2.2 lb')).toBeVisible()
+  await expect(imperialPotatoes.getByText('2 ¼ lb')).toBeVisible()
   await expect(imperialPotatoes.locator('input[type="checkbox"]')).toBeChecked()
   await expectZeroMealimeRequests(page)
 })
