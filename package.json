@@ -19,8 +19,9 @@
     "data:pack": "python3 scripts/build_pack_index.py",
     "data:verify": "bun run scripts/verify_pack_index_parity.ts",
     "data:ingredients": "python3 scripts/extract_ingredients.py",
-    "data:ciqual": "uv run --with xlrd scripts/fetch_ciqual.py --report",
-    "test:data": "python3 scripts/test_extract_ingredients.py && python3 scripts/test_extract_recipe_types.py && python3 scripts/test_extract_timer_hints.py"
+    "data:ciqual": "uv run --with xlrd scripts/fetch_ciquel.py --report",
+    "data:adr-index": "python3 scripts/build_adr_index.py",
+    "test:data": "python3 scripts/test_extract_ingredients.py && python3 scripts/test_extract_recipe_types.py && python3 scripts/test_extract_timer_hints.py && python3 scripts/test_build_adr_index.py"
   },
   "dependencies": {
     "@unhead/vue": "^3.4.2",
