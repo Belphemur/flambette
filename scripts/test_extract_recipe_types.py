@@ -18,6 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 OUT = os.path.join(ROOT, "public/data/recipe_types.json")
 BUILDER = os.path.join(ROOT, "public/data/builder_data.json")
+USER_RECIPES = os.path.join(ROOT, "public/data/user_recipes.json")
 
 _spec = importlib.util.spec_from_file_location(
     "extract_recipe_types", os.path.join(HERE, "extract_recipe_types.py")
@@ -29,6 +30,18 @@ _spec.loader.exec_module(mod)
 def builder():
     with open(BUILDER) as f:
         return json.load(f)
+
+
+def user_recipe_rulesets():
+    """The household's own recipes' `ruleset` values (ADR-0054).
+
+    Read from user_recipes.json, NOT from builder_data.json: the census
+    merges both, but only the artifact carries household recipes.
+    """
+    if not os.path.exists(USER_RECIPES):
+        return []
+    with open(USER_RECIPES) as f:
+        return [r.get("meta", {}).get("ruleset") for r in json.load(f).get("recipes") or []]
 
 
 class Table(unittest.TestCase):
@@ -61,9 +74,30 @@ class SourceField(unittest.TestCase):
         seen = {m["ruleset"] for m in builder()["variant_meta"]}
         self.assertEqual(seen - known, set(), "unmapped ruleset value(s): %s" % (seen - known))
 
-    def test_breakfast_count_matches_the_mealime_app(self):
-        # The owner's app reports 151 breakfast recipes; that IS this field.
-        self.assertEqual(mod.build()["byId"]["-1"]["count"], 151)
+    def test_breakfast_count_matches_the_mealime_app_plus_user_recipes(self):
+        # The owner's app reports 151 breakfast recipes for the FROZEN catalog;
+        # that IS this field. ADR-0054 adds the household's own recipes to the
+        # same census, so the total is the frozen count PLUS the user recipes
+        # carrying a `breakfast` ruleset (the pancake is one).
+        #
+        # The frozen 151 is pinned SEPARATELY from the user addition: an
+        # earlier version derived both sides from the artifact, so silently
+        # re-labelling the pancake `dinner` moved breakfast 152 -> 151 AND
+        # made the "151 + user breakfast" sum still balance — the assertion
+        # passed on a recipe that had changed category. The frozen literal
+        # must never be inferred from data the test also mutates.
+        with open(BUILDER) as f:
+            frozen = sum(
+                1 for m in json.load(f)["variant_meta"] if m["ruleset"] == "breakfast"
+            )
+        self.assertEqual(frozen, 151, "the FROZEN catalog's breakfast count moved")
+
+        user_breakfast = sum(1 for rs in user_recipe_rulesets() if rs == "breakfast")
+        self.assertGreater(user_breakfast, 0, "no user recipe is breakfast anymore")
+        self.assertEqual(
+            mod.build()["byId"]["-1"]["count"], 151 + user_breakfast,
+            "breakfast = frozen 151 + %d user recipe(s)" % user_breakfast,
+        )
 
 
 class Output(unittest.TestCase):
@@ -85,8 +119,12 @@ class Output(unittest.TestCase):
         self.assertEqual(offered, ["-1", "-2", "-3", "-4", "-5"])
 
     def test_buckets_partition_the_feasible_catalog(self):
+        # ADR-0054: the census covers the frozen catalog PLUS the
+        # household's own recipes, so the total is `feasible_variants` plus
+        # the user-recipe count. Comparing only the frozen total made a
+        # legitimate addition read as an unaccounted recipe.
         bd = builder()
-        total = len(bd["feasible_variants"])
+        total = len(bd["feasible_variants"]) + len(user_recipe_rulesets())
         s = sum(v["count"] for v in self.doc["byId"].values())
         self.assertEqual(s + self.doc["unmatched"], total, "%d + %d != %d" % (s, self.doc["unmatched"], total))
 
