@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Ingredient-index extractor for the offline ingredient autocomplete (ADR-0012).
+Ingredient-index extractor for the offline ingredient autocomplete (ADR-0012,
+widened by ADR-0052).
 
-Walks the frozen local catalog (public/data/recipes/*.json, 2,730 docs) and
+Walks the frozen local catalog (public/data/recipes/*.json, 2,759 docs) and
 produces public/data/ingredients.json — one row per distinct ingredient
 nameKey with its store category and the most common purchase unit.
 
@@ -21,6 +22,26 @@ Data properties:
 - nameKey must stay in lockstep with src/lib/grocery.ts nameKey() so index
   matches merge exactly like grocery lines. Verify after touching either
   side by re-running this script and comparing counts.
+
+ADR-0052 — SUPPLEMENTAL ENTRIES. A pure catalog walk can only ever suggest
+ingredients some Mealime recipe already buys, so the index was unusable for a
+household that swaps an item out: the catalog names 349 distinct ingredients
+and ZERO of them are gluten-free, lactose-free or dairy-free (censused over
+all 2,759 docs: no `gluten`, `lactose`, `dairy-free`, `oat milk`, `soy milk`,
+`xanthan`, `bouillon` or `stock` line item anywhere). SUPPLEMENTAL below is a
+curated, HAND-AUTHORED table of those purchaseable substitutes plus common
+pantry staples the recipes happen not to name. Each row states its category
+EXPLICITLY: bucketFor() is a first-match keyword lens tuned for authored
+recipe prose, and it misreads several of these ("gluten-free bread flour" ->
+Bakery on `bread`, "pea milk" -> Produce on `pea`, "potato starch" -> Produce
+on `potato"), so the table does not lean on it.
+
+Merge precedence, in order: snapshot override > catalog majority vote >
+SUPPLEMENTAL row. A supplemental row is therefore a FILLER — it only lands on
+a nameKey no recipe uses — so re-adding "oat milk" can never shadow a real
+recipe ingredient or its observed unit/category. Keeping the table a pure
+filler is what lets the catalog stay authoritative instead of introducing a
+second source of truth that could contradict it.
 
 Stdlib only; idempotent; no network. Re-run with:
     python3 scripts/extract_ingredients.py
@@ -239,6 +260,315 @@ def bucket_for(ingredient_name: str) -> str:
     return "Other"
 
 
+# ---------------------------------------------------------------------------
+# ADR-0052: SUPPLEMENTAL ENTRIES — hand-authored, catalog-independent
+# ---------------------------------------------------------------------------
+#
+# (display name, category). `unit` is intentionally None for every row: these
+# are never recipe line items, so there is no observed majority unit to report,
+# and inventing one ("(1 L) cartons") would print a purchase format the app
+# cannot honour — the unit is only a hint on the suggestion row, and an absent
+# one is honest.
+#
+# Categories are from STORE_SECTIONS (src/lib/sections.ts) and stated here
+# rather than inferred, because bucketFor()'s keyword lens reads authored recipe
+# prose, not a shopping list: it sends "gluten-free bread flour" to Bakery (on
+# `bread`) and "pea milk" to Produce (on `pea`). A wrong bucket is worse than no
+# heuristic here — the category is what files the item into the store section
+# the user then shops by.
+#
+# Merge precedence keeps every row a FILLER: a row whose nameKey already exists
+# in the catalog is skipped, so the catalog's observed category + unit always
+# win and this table can never contradict a real recipe ingredient.
+SUPPLEMENTAL: list[tuple[str, str]] = [
+    # ---- Gluten-free flours, starches & binders -------------------------
+    # Baking & Spices, matching the catalog's own all-purpose/almond flour.
+    ("gluten-free all-purpose flour", "Baking & Spices"),
+    ("gluten-free bread flour", "Baking & Spices"),
+    ("gluten-free cake flour", "Baking & Spices"),
+    ("gluten-free whole wheat flour", "Baking & Spices"),
+    ("gluten-free oat flour", "Baking & Spices"),
+    ("gluten-free rice flour", "Baking & Spices"),
+    ("gluten-free flour blend", "Baking & Spices"),
+    ("rice flour", "Baking & Spices"),
+    ("tapioca starch", "Baking & Spices"),
+    ("potato starch", "Baking & Spices"),
+    ("psyllium husk", "Baking & Spices"),
+    ("xanthan gum", "Baking & Spices"),
+    ("guar gum", "Baking & Spices"),
+    ("cream of tartar", "Baking & Spices"),
+    ("active dry yeast", "Baking & Spices"),
+    ("baker's yeast", "Baking & Spices"),
+    ("silica gel", "Baking & Spices"),
+    # ---- Gluten-free bakery ---------------------------------------------
+    ("gluten-free bread", "Bakery"),
+    ("gluten-free breadcrumbs", "Bakery"),
+    ("gluten-free panko breadcrumbs", "Bakery"),
+    ("gluten-free pita bread", "Bakery"),
+    ("gluten-free tortilla", "Bakery"),
+    ("gluten-free bagel", "Bakery"),
+    ("gluten-free bun", "Bakery"),
+    ("gluten-free english muffin", "Bakery"),
+    ("gluten-free naan", "Bakery"),
+    ("gluten-free pizza crust", "Bakery"),
+    ("gluten-free croutons", "Bakery"),
+    # ---- Gluten-free pasta, grains & condiments -------------------------
+    ("gluten-free pasta", "Pasta & Sauces"),
+    ("gluten-free spaghetti", "Pasta & Sauces"),
+    ("gluten-free penne", "Pasta & Sauces"),
+    ("gluten-free lasagna noodles", "Pasta & Sauces"),
+    ("gluten-free rice noodles", "Pasta & Sauces"),
+    ("gluten-free egg noodles", "Pasta & Sauces"),
+    ("gluten-free orzo", "Pasta & Sauces"),
+    ("gluten-free rolled oats", "Rice, Grains & Beans"),
+    ("gluten-free cereal", "Breakfast"),
+    ("gluten-free soy sauce", "Oils, Sauces & Condiments"),
+    ("gluten-free tamari", "Oils, Sauces & Condiments"),
+    # ---- Lactose-free (still dairy — belongs beside its milk/cheese) ----
+    ("lactose-free milk", "Dairy, Cheese & Eggs"),
+    ("lactose-free half-and-half", "Dairy, Cheese & Eggs"),
+    ("lactose-free butter", "Dairy, Cheese & Eggs"),
+    ("lactose-free cream", "Dairy, Cheese & Eggs"),
+    ("lactose-free sour cream", "Dairy, Cheese & Eggs"),
+    ("lactose-free cheese", "Dairy, Cheese & Eggs"),
+    ("lactose-free cheddar cheese", "Dairy, Cheese & Eggs"),
+    ("lactose-free mozzarella cheese", "Dairy, Cheese & Eggs"),
+    ("lactose-free yogurt", "Dairy, Cheese & Eggs"),
+    ("lactose-free greek yogurt", "Dairy, Cheese & Eggs"),
+    ("lactose-free cottage cheese", "Dairy, Cheese & Eggs"),
+    ("lactose-free cream cheese", "Dairy, Cheese & Eggs"),
+    ("lactose-free ice cream", "Dairy, Cheese & Eggs"),
+    # ---- Dairy-free substitutes ----------------------------------------
+    ("dairy-free milk", "Dairy, Cheese & Eggs"),
+    ("dairy-free butter", "Dairy, Cheese & Eggs"),
+    ("dairy-free cream", "Dairy, Cheese & Eggs"),
+    ("dairy-free sour cream", "Dairy, Cheese & Eggs"),
+    ("dairy-free cheese", "Dairy, Cheese & Eggs"),
+    ("dairy-free cheddar", "Dairy, Cheese & Eggs"),
+    ("dairy-free mozzarella", "Dairy, Cheese & Eggs"),
+    ("dairy-free parmesan", "Dairy, Cheese & Eggs"),
+    ("dairy-free cream cheese", "Dairy, Cheese & Eggs"),
+    ("dairy-free yogurt", "Dairy, Cheese & Eggs"),
+    ("dairy-free cottage cheese", "Dairy, Cheese & Eggs"),
+    ("dairy-free ice cream", "Dairy, Cheese & Eggs"),
+    ("dairy-free chocolate", "Baking & Spices"),
+    ("plant-based cream cheese", "Dairy, Cheese & Eggs"),
+    ("plant-based butter", "Dairy, Cheese & Eggs"),
+    # ---- Plant milks ----------------------------------------------------
+    # Not 'Beverages': these substitute a milk the recipe measures, so they
+    # file beside whole milk where the shopper will actually look for them.
+    ("oat milk", "Dairy, Cheese & Eggs"),
+    ("soy milk", "Dairy, Cheese & Eggs"),
+    ("almond milk", "Dairy, Cheese & Eggs"),
+    ("cashew milk", "Dairy, Cheese & Eggs"),
+    ("pea milk", "Dairy, Cheese & Eggs"),
+    ("coconut milk beverage", "Dairy, Cheese & Eggs"),
+    # ---- Vegan dairy equivalents ----------------------------------------
+    ("coconut yogurt", "Dairy, Cheese & Eggs"),
+    ("coconut cream", "Dairy, Cheese & Eggs"),
+    ("vegan butter", "Dairy, Cheese & Eggs"),
+    ("vegan cheese", "Dairy, Cheese & Eggs"),
+    ("vegan cream", "Dairy, Cheese & Eggs"),
+    ("vegan sour cream", "Dairy, Cheese & Eggs"),
+    ("vegan chocolate", "Baking & Spices"),
+    ("coconut aminos", "Oils, Sauces & Condiments"),
+    ("nutritional yeast", "Baking & Spices"),
+    # ---- Broths & stocks (recipes say "chicken or vegetable broth") ------
+    ("chicken stock", "Canned & Jarred Goods"),
+    ("vegetable stock", "Canned & Jarred Goods"),
+    ("beef stock", "Canned & Jarred Goods"),
+    ("fish stock", "Canned & Jarred Goods"),
+    ("lamb stock", "Canned & Jarred Goods"),
+    ("bone broth", "Canned & Jarred Goods"),
+    ("chicken bouillon", "Canned & Jarred Goods"),
+    ("vegetable bouillon", "Canned & Jarred Goods"),
+    ("beef bouillon", "Canned & Jarred Goods"),
+    # ---- Cooking fats & oils -------------------------------------------
+    ("coconut oil", "Oils, Sauces & Condiments"),
+    ("avocado oil", "Oils, Sauces & Condiments"),
+    ("neutral oil", "Oils, Sauces & Condiments"),
+    ("vegetable oil", "Oils, Sauces & Condiments"),
+    ("olive oil", "Oils, Sauces & Condiments"),
+    ("garlic-infused oil", "Oils, Sauces & Condiments"),
+    ("ghee", "Dairy, Cheese & Eggs"),
+    ("margarine", "Dairy, Cheese & Eggs"),
+    # ---- Sweeteners ------------------------------------------------------
+    ("agave nectar", "Nut Butters, Honey & Jams"),
+    ("date syrup", "Nut Butters, Honey & Jams"),
+    ("molasses", "Nut Butters, Honey & Jams"),
+    ("corn syrup", "Nut Butters, Honey & Jams"),
+    ("coconut sugar", "Baking & Spices"),
+    # ---- Chocolate & extracts ------------------------------------------
+    ("dark chocolate", "Baking & Spices"),
+    ("bittersweet chocolate", "Baking & Spices"),
+    ("white chocolate", "Baking & Spices"),
+    ("chocolate chips", "Baking & Spices"),
+    ("vanilla bean paste", "Baking & Spices"),
+    ("almond extract", "Baking & Spices"),
+    ("mint extract", "Baking & Spices"),
+    # ---- International condiments the catalog lacks ---------------------
+    ("ponzu", "International"),
+    ("harissa", "Oils, Sauces & Condiments"),
+    ("gochujang", "Oils, Sauces & Condiments"),
+    ("sriracha", "Oils, Sauces & Condiments"),
+    ("yuba", "International"),
+    ("miso paste", "International"),
+    ("seaweed", "International"),
+    ("chili crisp", "Oils, Sauces & Condiments"),
+    ("oyster sauce", "Oils, Sauces & Condiments"),
+    ("teriyaki sauce", "Oils, Sauces & Condiments"),
+    ("chili garlic sauce", "Oils, Sauces & Condiments"),
+    ("yellow mustard", "Oils, Sauces & Condiments"),
+    ("honey mustard", "Oils, Sauces & Condiments"),
+    ("balsamic glaze", "Oils, Sauces & Condiments"),
+    ("sherry vinegar", "Oils, Sauces & Condiments"),
+    # ---- Grains, seeds & nuts ------------------------------------------
+    ("amaranth", "Rice, Grains & Beans"),
+    ("buckwheat", "Rice, Grains & Beans"),
+    ("black rice", "Rice, Grains & Beans"),
+    ("brown rice", "Rice, Grains & Beans"),
+    ("white rice", "Rice, Grains & Beans"),
+    ("wild rice", "Rice, Grains & Beans"),
+    ("oat flour", "Rice, Grains & Beans"),
+    ("steel-cut oats", "Rice, Grains & Beans"),
+    ("rolled oats", "Rice, Grains & Beans"),
+    ("farro", "Rice, Grains & Beans"),
+    ("millet", "Rice, Grains & Beans"),
+    ("barley", "Rice, Grains & Beans"),
+    ("bulgur", "Rice, Grains & Beans"),
+    ("black lentils", "Rice, Grains & Beans"),
+    ("navy beans", "Rice, Grains & Beans"),
+    ("black-eyed peas", "Rice, Grains & Beans"),
+    ("hemp seeds", "Nuts, Seeds & Dried Fruit"),
+    ("flax seeds", "Nuts, Seeds & Dried Fruit"),
+    ("sunflower seeds", "Nuts, Seeds & Dried Fruit"),
+    ("hazelnuts", "Nuts, Seeds & Dried Fruit"),
+    ("macadamia nuts", "Nuts, Seeds & Dried Fruit"),
+    ("brazil nuts", "Nuts, Seeds & Dried Fruit"),
+    ("peanuts", "Nuts, Seeds & Dried Fruit"),
+    ("peanut butter", "Nut Butters, Honey & Jams"),
+    ("almond butter", "Nut Butters, Honey & Jams"),
+    ("cashew butter", "Nut Butters, Honey & Jams"),
+    ("sunflower seed butter", "Nut Butters, Honey & Jams"),
+    ("figs", "Nuts, Seeds & Dried Fruit"),
+    ("dates", "Nuts, Seeds & Dried Fruit"),
+    # ---- Produce the recipes never name --------------------------------
+    ("arugula", "Produce"),
+    ("watercress", "Produce"),
+    ("mixed greens", "Produce"),
+    ("chard", "Produce"),
+    ("cabbage", "Produce"),
+    ("cucumber", "Produce"),
+    ("beets", "Produce"),
+    ("fennel", "Produce"),
+    ("zucchini", "Produce"),
+    ("mushrooms", "Produce"),
+    ("snap peas", "Produce"),
+    ("cherries", "Produce"),
+    ("grapes", "Produce"),
+    ("kiwi", "Produce"),
+    ("watermelon", "Produce"),
+    ("cantaloupe", "Produce"),
+    ("berries", "Produce"),
+    ("plantain", "Produce"),
+    # ---- Eggs & dairy basics -------------------------------------------
+    ("egg whites", "Dairy, Cheese & Eggs"),
+    ("egg yolks", "Dairy, Cheese & Eggs"),
+    ("butter", "Dairy, Cheese & Eggs"),
+    ("buttermilk", "Dairy, Cheese & Eggs"),
+    ("parmesan", "Dairy, Cheese & Eggs"),
+    ("pecorino", "Dairy, Cheese & Eggs"),
+    ("mozzarella", "Dairy, Cheese & Eggs"),
+    ("cheddar", "Dairy, Cheese & Eggs"),
+    ("feta", "Dairy, Cheese & Eggs"),
+    ("ricotta", "Dairy, Cheese & Eggs"),
+    ("halloumi", "Dairy, Cheese & Eggs"),
+    ("greek yogurt", "Dairy, Cheese & Eggs"),
+    ("plain yogurt", "Dairy, Cheese & Eggs"),
+    ("sour cream", "Dairy, Cheese & Eggs"),
+    ("whipping cream", "Dairy, Cheese & Eggs"),
+    ("heavy cream", "Dairy, Cheese & Eggs"),
+    ("milk", "Dairy, Cheese & Eggs"),
+    # ---- Meat, poultry & seafood ---------------------------------------
+    ("chicken breast", "Meat & Seafood"),
+    ("chicken thighs", "Meat & Seafood"),
+    ("chicken wings", "Meat & Seafood"),
+    ("turkey breast", "Meat & Seafood"),
+    ("ground beef", "Meat & Seafood"),
+    ("ground pork", "Meat & Seafood"),
+    ("beef chuck", "Meat & Seafood"),
+    ("beef sirloin", "Meat & Seafood"),
+    ("pork tenderloin", "Meat & Seafood"),
+    ("pork shoulder", "Meat & Seafood"),
+    ("sausage", "Meat & Seafood"),
+    ("ham", "Meat & Seafood"),
+    ("pancetta", "Meat & Seafood"),
+    ("salmon", "Meat & Seafood"),
+    ("tuna", "Meat & Seafood"),
+    ("cod", "Meat & Seafood"),
+    ("shrimp", "Meat & Seafood"),
+    ("tilapia", "Meat & Seafood"),
+    ("halibut", "Meat & Seafood"),
+    ("mackerel", "Meat & Seafood"),
+    ("sardines", "Meat & Seafood"),
+    ("anchovies", "Meat & Seafood"),
+    ("scallops", "Meat & Seafood"),
+    ("crab", "Meat & Seafood"),
+    ("lobster", "Meat & Seafood"),
+    ("mussels", "Meat & Seafood"),
+    ("clams", "Meat & Seafood"),
+    ("oysters", "Meat & Seafood"),
+    # ---- Spices, salt & pantry basics ----------------------------------
+    ("bay leaf", "Baking & Spices"),
+    ("oregano", "Baking & Spices"),
+    ("thyme", "Baking & Spices"),
+    ("rosemary", "Baking & Spices"),
+    ("sage", "Baking & Spices"),
+    ("dill", "Baking & Spices"),
+    ("basil", "Produce"),
+    ("parsley", "Produce"),
+    ("cinnamon", "Baking & Spices"),
+    ("nutmeg", "Baking & Spices"),
+    ("cloves", "Baking & Spices"),
+    ("cardamom", "Baking & Spices"),
+    ("allspice", "Baking & Spices"),
+    ("turmeric", "Baking & Spices"),
+    ("coriander", "Baking & Spices"),
+    ("cumin", "Baking & Spices"),
+    ("white pepper", "Baking & Spices"),
+    ("pink peppercorns", "Baking & Spices"),
+    ("flaky salt", "Baking & Spices"),
+    ("kosher salt", "Baking & Spices"),
+    ("sea salt", "Baking & Spices"),
+    ("smoked salt", "Baking & Spices"),
+    ("garlic salt", "Baking & Spices"),
+    ("onion salt", "Baking & Spices"),
+    ("chili flakes", "Baking & Spices"),
+    # ---- Drinks ---------------------------------------------------------
+    ("coffee", "Coffee & Tea"),
+    ("espresso", "Coffee & Tea"),
+    ("tea", "Coffee & Tea"),
+    ("green tea", "Coffee & Tea"),
+    ("black tea", "Coffee & Tea"),
+    ("herbal tea", "Coffee & Tea"),
+    ("matcha", "Coffee & Tea"),
+    ("chai concentrate", "Coffee & Tea"),
+    ("orange juice", "Beverages"),
+    ("apple juice", "Beverages"),
+    ("lemonade", "Beverages"),
+    ("coconut water", "Beverages"),
+    ("sparkling water", "Beverages"),
+    ("ginger ale", "Beverages"),
+    ("white wine", "Wine, Beer & Spirits"),
+    ("red wine", "Wine, Beer & Spirits"),
+    ("rosé", "Wine, Beer & Spirits"),
+    ("beer", "Wine, Beer & Spirits"),
+    ("gluten-free beer", "Wine, Beer & Spirits"),
+    ("prosecco", "Wine, Beer & Spirits"),
+    ("champagne", "Wine, Beer & Spirits"),
+]
+
+
 def snapshot_section_map() -> dict:
     """Real Mealime sections (section_id -> name) for the 17 named
     ingredients of the bundled user_data.json snapshot, keyed by nameKey."""
@@ -304,6 +634,30 @@ def main() -> int:
             "unit": unit,
         })
 
+    # ADR-0052: merge the hand-authored SUPPLEMENTAL rows as FILLERS. Skipping
+    # any nameKey the catalog already produced is what keeps the catalog
+    # authoritative — a supplemental row can never overwrite a recipe's
+    # observed category or unit, it only fills a gap the catalog has.
+    catalog_keys = {i["nameKey"] for i in ingredients}
+    added, shadowed = 0, []
+    for name, cat in SUPPLEMENTAL:
+        key = name_key(name)
+        if not key:
+            continue
+        if key in catalog_keys:
+            shadowed.append(name)
+            continue
+        ingredients.append({
+            "name": name,
+            "nameKey": key,
+            "category": cat,
+            # No observed unit: these are never recipe line items.
+            "unit": None,
+        })
+        catalog_keys.add(key)
+        added += 1
+    ingredients.sort(key=lambda i: i["nameKey"])
+
     payload = {
         "generatedAt": datetime.now().isoformat(timespec="seconds"),
         "count": len(ingredients),
@@ -317,6 +671,8 @@ def main() -> int:
     # ---- summary ----
     coverage = collections.Counter(i["category"] for i in ingredients)
     print(f"read {len(recipe_files)} recipe docs -> {len(ingredients)} ingredients")
+    print(f"ADR-0052 supplemental rows added: {added} "
+          f"(skipped {len(shadowed)} already in the catalog: {', '.join(sorted(shadowed))})")
     print(f"snapshot section overrides applied: {len(matched_overrides)} "
           f"({', '.join(sorted(overrides[k] for k in matched_overrides))})")
     print("category coverage:")
