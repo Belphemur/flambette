@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
-import { scaleQuantity } from '../lib/quantity'
+import { measuredQuantity } from '../lib/measuredAmounts'
 import {
   localizeQuantity,
   localizeSteps,
@@ -33,9 +33,11 @@ import {
   Clock,
   Heart,
   Minus,
+  NotebookPen,
   Plus,
   Utensils,
 } from 'lucide-vue-next'
+import { isUserRecipeId } from '../lib/userRecipes'
 
 const plan = usePlanStore()
 const favourites = useFavouritesStore()
@@ -99,6 +101,15 @@ const meta = computed<VariantMeta | null>(
 )
 
 /**
+ * True when THIS recipe is household-authored (ADR-0054): the artifact's
+ * id set is the only answer, and the marker below is its only face on the
+ * detail sheet — permanent authorship, unlike the card's 30-day NEW badge.
+ */
+const isHouseholdRecipe = computed(() =>
+  isUserRecipeId(props.id, catalog.value?.userRecipeIds ?? new Set()),
+)
+
+/**
  * This recipe's SEO head (ADR-0048) — the SAME payload the build-time
  * prerenderer baked into `dist/recipe/<id>/index.html`, so a crawler and
  * this browser describe the page identically.
@@ -155,12 +166,13 @@ function setUnitSystem(system: UnitSystem) {
 }
 
 const scaledIngredients = computed(() => {
-  if (!doc.value) return []
-  return doc.value.line_items.map((item) => ({
+  const current = doc.value
+  if (!current) return []
+  return current.line_items.map((item) => ({
   ...item,
   // Scale first, then convert: the authored quantity is metric, so this is
   // the only place the number in front of the user ever changes system.
-  quantity: localizeQuantity(scaleQuantity(item.quantity, factor.value), unitSystem.value),
+  quantity: localizeQuantity(measuredQuantity(item, factor.value, current.serving_count) ?? item.quantity, unitSystem.value),
   }))
 })
 
@@ -223,6 +235,10 @@ async function loadDoc() {
   // load so a recipe opened after the user changed the default elsewhere
   // starts at the current one.
   const entry = plan.plan.find((e) => e.variantId === m.id)
+  // ONE seeding rule for every recipe, household-authored or not: the
+  // owner's saved default defines the servings (a settings decision, not a
+  // per-recipe one). The fractional-noise problem that scaling creates is
+  // handled where it belongs - the DISPLAY rounding (humanizeScaledQuantity).
   servings.value = entry?.servings ?? ui.defaultServings
   try {
     const loaded = await getRecipe(m)
@@ -329,7 +345,7 @@ function startCooking() {
 
   <div class="space-y-4">
   <header class="space-y-3">
-  <div class="flex items-center gap-2 text-label-md text-text-muted">
+  <div class="flex flex-wrap items-center gap-2 text-label-md text-text-muted">
   <span
   v-if="meta.is_pro"
   class="rounded bg-surface-dark px-1.5 py-0.5 font-bold text-warning-soft"
@@ -338,16 +354,18 @@ function startCooking() {
   <!-- Type icon only: no redundant category word beside an
   already informative icon (DESIGN.md Components). The
   icon is role="img" with the category as its name, and
-  the text survives only for a category we have no hue
-  for, so an unrecognised type is never silently
-  dropped. -->
+  the text survives only when NEITHER icon applies, so
+  an unrecognised type is never silently dropped — and a
+  household recipe (no ingredient-TYPE category, ADR-0054)
+  keeps the SAME icon-only design as an imported one
+  instead of growing a text label the catalog never shows. -->
   <HueIcon
   v-if="typeRole"
   :role="typeRole"
   :size="18"
   :label="ICON_ROLES[typeRole].label"
   />
-  <span v-else class="capitalize">{{
+  <span v-else-if="!mealTypeRole" class="capitalize">{{
   catalog?.dataById.get(meta.id)?.category_name ?? meta.ruleset
   }}</span>
   <!-- The occasion wears its OWN hue (ADR-0043): never a protein hue,
@@ -357,6 +375,21 @@ function startCooking() {
   :role="mealTypeRole"
   :size="18"
   :label="ICON_ROLES[mealTypeRole].label"
+  />
+  <!-- ADR-0054: the PERMANENT authorship marker, styled like the two
+  icons above — an icon in the SAME row, carrying its meaning in the
+  tooltip + accessible name (the grocery provenance pill's pattern:
+  cursor-help + title). The card's NEW badge is the 30-day recency
+  face; this one never expires. Household status colour (DESIGN.md);
+  a label, never an IconRole — a recipe is not "the plum one". -->
+  <NotebookPen
+  v-if="isHouseholdRecipe"
+  :size="18"
+  role="img"
+  class="cursor-help text-household"
+  data-test="user-recipe-badge"
+  :aria-label="'Household recipe: authored by this household, not part of the imported catalog'"
+  title="Household recipe — authored by this household, not part of the imported catalog"
   />
   </div>
   <h2 class="text-headline-md sm:text-headline-lg" data-test="detail-title">

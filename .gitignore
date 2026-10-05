@@ -23,9 +23,20 @@ scrape_images.py
 # Python bytecode from the stdlib data scripts
 __pycache__/
 
+# TypeScript incremental-build caches. They were tracked by mistake and
+# showed as modified after every `bun run build`, which is how an
+# untracked-but-committed artifact keeps getting re-added. Regenerated on
+# demand; never committed (owner directive).
+*.tsbuildinfo
+
 # ADR-0052: the CIQUAL reference table fetched by scripts/fetch_ciqual.py.
 # A development input for curating SUPPLEMENTAL, not a build or runtime
 # dependency — the app never reads it and the curated rows are committed in
 # scripts/extract_ingredients.py. Regenerate with
 #   uv run --with xlrd scripts/fetch_ciqual.py --report
 data/reference/
+
+# CIQUAL upstream archive cache (ADR-0054). 3.5 MB of raw French source
+# truth, re-fetchable with `bun run data:nutrition:download`; the DERIVED
+# public/data/ciqual_foods.json is what the app ships and is committed.
+scripts/.ciqual/

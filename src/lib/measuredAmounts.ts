@@ -18,7 +18,7 @@
 
 import { containerContribution, formatContainerQuantity, parseContainerQuantity } from './containers'
 import { nameKey } from './grocery'
-import { formatAmount, parseQuantity } from './quantity'
+import { formatAmount, humanizeScaledQuantity, parseQuantity } from './quantity'
 import { isSeasoning, scaleQuantity } from './recipe'
 import { localizeQuantity, type UnitSystem } from './units'
 import type { LineItem, RecipeDoc } from './types'
@@ -112,6 +112,11 @@ export function measuredQuantity(item: LineItem, factor: number, base: number): 
   const parsed = parseQuantity(item.quantity)
   if (!parsed) return null
   if (factor === 1) return item.quantity.trim()
+  // ONE scaling implementation for every display surface (the ingredient
+  // list and the step details call the same function): recipe.ts's
+  // seasoning-aware scaler, the exact one grocery.ts aggregates with.
+  // Container units keep ADR-0017's whole-container rule above and are
+  // NEVER humanized — a half package is not a cook-measurable rounding.
   const scaled = scaleQuantity(
     parsed.amount,
     base,
@@ -119,7 +124,8 @@ export function measuredQuantity(item: LineItem, factor: number, base: number): 
     isSeasoning(item.ingredient_name),
     item.ingredient_name,
   )
-  return parsed.unit ? `${formatAmount(scaled)} ${parsed.unit}` : formatAmount(scaled)
+  const rendered = parsed.unit ? `${formatAmount(scaled)} ${parsed.unit}` : formatAmount(scaled)
+  return humanizeScaledQuantity(rendered)
 }
 
 /**

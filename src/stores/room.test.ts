@@ -524,7 +524,16 @@ describe('room store — quick filters are household state (ADR-0028)', () => {
         plan: [],
         customItems: [],
         checked: {},
-        filters: { diets: ['vegan', 'keto'], protein: 'fish', sortBy: 'time', favOnly: true },
+        filters: {
+          diets: ['vegan', 'keto'],
+          protein: 'fish',
+          sortBy: 'time',
+          favOnly: true,
+          source: 'new',
+          // A peer still on the pre-ADR-0054 code sends the retired
+          // boolean; it must map to 'pro' rather than being dropped.
+          proOnly: true,
+        },
       },
     })
     const ui = useUiStore()
@@ -532,10 +541,30 @@ describe('room store — quick filters are household state (ADR-0028)', () => {
     expect(ui.quickFilters.diets).toEqual(['vegan'])
     expect(ui.quickFilters.protein).toBe('fish')
     expect(ui.quickFilters.sortBy).toBe('time')
+    // `source` is HOUSEHOLD state (ADR-0054 §3), so the explicit value
+    // wins over the legacy key a mid-migration peer also sent.
+    expect(ui.quickFilters.source).toBe('new')
     // …but `favOnly` is PERSONAL: a peer's switch must not be adopted
     // (it would blank a device whose favourites differ).
     expect(ui.quickFilters.favOnly).toBe(false)
-    expect(ui.quickFilters.proOnly).toBe(false)
+  })
+
+  test('a peer still sending proOnly gets the migrated source (ADR-0054 §3)', async () => {
+    // An older phone in the household runs the pre-ADR-0054 build and
+    // sends `{ proOnly: true }` with no `source` key. Without the
+    // migration in normalizeQuickFilters the source would default to
+    // 'all' and the household would silently stop seeing the narrowing
+    // the other phone asked for.
+    const { socket } = await startRoom()
+    socket.receive({
+      type: 'state',
+      rev: 98,
+      state: { plan: [], customItems: [], checked: {}, filters: { diets: [], proOnly: true } },
+    })
+    const ui = useUiStore()
+    // One spelling survives: the legacy key is not carried into the state.
+    expect('proOnly' in ui.quickFilters).toBe(false)
+    expect(ui.quickFilters.source).toBe('pro')
   })
 
   test('favOnly stays local even when it is already on here', async () => {
@@ -706,7 +735,7 @@ describe('room store — quick filters are household state (ADR-0028)', () => {
       mealType: ui.quickFilters.mealType,
       maxTime: ui.quickFilters.maxTime,
       sortBy: ui.quickFilters.sortBy,
-      proOnly: ui.quickFilters.proOnly,
+      source: ui.quickFilters.source,
     })
 
     ui.quickFilters = { ...ui.quickFilters, sortBy: 'latest' }

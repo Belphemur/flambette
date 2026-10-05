@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { ArrowUpDown, Clock, Heart, SearchX, Sparkles } from 'lucide-vue-next'
+import { ArrowUpDown, Clock, Crown, Heart, Layers, SearchX, Sparkles, UserRound } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { catalog } from '../lib/catalog'
 import {
@@ -15,12 +15,15 @@ import {
 import {
   PROTEIN_OPTIONS,
   SORT_OPTIONS,
+  SOURCE_OPTIONS,
   TIME_OPTIONS,
   defaultQuickFilters,
   hasActiveFilters,
+  matchesSource,
   type ProteinFilter,
   type QuickFilters,
   type SortBy,
+  type SourceFilter,
 } from '../lib/quickFilters'
 import { popularityScore } from '../lib/quantity'
 import {
@@ -66,7 +69,7 @@ function patchFilters(part: Partial<QuickFilters>) {
 /** Whole-catalog verdicts + chip counts, classified once at load time. */
 const dietIndex = computed(() => {
   const c = catalog.value
-  return c ? dietIndexFor(c.data.variant_meta) : null
+  return c ? dietIndexFor(c.variantMeta) : null
 })
 
 /** Active diet rules, ANDed together. */
@@ -131,6 +134,62 @@ const sortSelectedIndex = computed(() => {
 
 function setSort(value: string) {
   patchFilters({ sortBy: value as SortBy })
+}
+
+/* ---------- Source (ADR-0054) ---------- */
+
+/**
+ * All / PRO / New, with a per-bucket count beside each option.
+ *
+ * The counts are WHOLE-CATALOG counts (they ignore the other filters),
+ * for the same reason ADR-0043's meal-type counts do: a count that moved
+ * as you toggled the diet chips would answer "how many of these?" and be
+ * read as "how many in total?", and the number next to "New" that
+ * shrank every time you picked "New" would look like a bug.
+ *
+ * `pro` is counted by scanning `variant_meta` once per catalog load, not
+ * at build time: it is a facet on a FROZEN field (`is_pro`) of a catalog
+ * that the user recipes now share, so a committed table beside
+ * recipe_types.json would be a second source of truth for a boolean.
+ */
+const SOURCE_ICONS: Record<SourceFilter, Component> = {
+  all: Layers,
+  pro: Crown,
+  new: UserRound,
+}
+
+const sourceCounts = computed(() => {
+  const c = catalog.value
+  if (!c) return { all: 0, pro: 0, new: 0 }
+  let pro = 0
+  for (const meta of c.byId.values()) if (meta.is_pro) pro++
+  return { all: c.byId.size, pro, new: c.userRecipeIds.size }
+})
+
+const sourceOptions = computed<FilterDropdownOption[]>(() =>
+  SOURCE_OPTIONS.map((o) => ({
+    value: o.value,
+    label: o.label,
+    // The bucket says what it selects, not what it is called: "New" is
+    // every recipe the household authored, forever, and the aria-label is
+    // where that is spelled out (locked decision L1).
+    ariaLabel:
+      o.value === 'new' ? 'Your own recipes (all of them)' : `Filter by source: ${o.label}`,
+    count: sourceCounts.value[o.value],
+    icon: SOURCE_ICONS[o.value],
+  })),
+)
+
+const sourceSelectedIndex = computed(() => {
+  const at = SOURCE_OPTIONS.findIndex((o) => o.value === filters.value.source)
+  return Math.max(0, at)
+})
+
+/** The trigger's glyph mirrors the SELECTED option, like the meal menu. */
+const sourceIcon = computed(() => SOURCE_ICONS[filters.value.source] ?? Layers)
+
+function setSource(value: string) {
+  patchFilters({ source: value as SourceFilter })
 }
 
 /* ---------- Meal type (ADR-0043) ---------- */
@@ -221,7 +280,9 @@ const results = computed<VariantMeta[]>(() => {
 
   const facets = (meta: VariantMeta): boolean => {
   if (f.favOnly && !favourites.ids.has(meta.id)) return false
-  if (f.proOnly && !meta.is_pro) return false
+  // ADR-0054: 'pro' is the retired proOnly chip, 'new' is the household's
+  // own recipes (permanent — only the card's NEW badge expires).
+  if (!matchesSource(f.source, meta, c.userRecipeIds)) return false
   if (f.protein !== '' && c.dataById.get(meta.id)?.category_name !== f.protein)
   return false
   // ADR-0043: an exact compare against the catalog's own `ruleset`, so
@@ -240,9 +301,9 @@ const results = computed<VariantMeta[]>(() => {
   // Indexed fuzzy/prefix search over name + ingredients, intersected with
   // the active facet filters.
   const matched = new Set(searchVariantIds(q))
-  list = c.data.variant_meta.filter((meta) => matched.has(meta.id) && facets(meta))
+  list = c.variantMeta.filter((meta) => matched.has(meta.id) && facets(meta))
   } else {
-  list = c.data.variant_meta.filter(facets)
+  list = c.variantMeta.filter(facets)
   }
 
   list = [...list]
@@ -356,16 +417,22 @@ onUnmounted(() => observer?.disconnect())
   <span class="truncate">Favourites</span>
   </button>
 
-  <button
-  class="h-11 rounded-lg border px-3 text-sm font-bold tracking-wide transition-colors"
-  :class="filters.proOnly ? 'border-border-strong bg-surface-sunken text-warning' : ''"
-  :aria-pressed="filters.proOnly"
-  aria-label="PRO recipes only"
-  data-test="pro-filter"
-  @click="patchFilters({ proOnly: !filters.proOnly })"
+  <!-- Source (ADR-0054): a DROPDOWN, replacing the PRO chip. Rendered
+  through the shared FilterDropdown (ADR-0045) so the listbox semantics,
+  the roving tabindex and the Pixel 7 fit are the ones the other three
+  dropdowns already have — never a fourth hand-rolled popup. -->
+  <FilterDropdown
+  :options="sourceOptions"
+  :selected-index="sourceSelectedIndex"
+  label="Filter by recipe source"
+  trigger-test="source-button"
+  menu-test="source-menu"
+  :option-test="(o) => `source-option-${o.value}`"
+  :active="filters.source !== 'all'"
+  @select="setSource"
   >
-  PRO
-  </button>
+  <template #icon><component :is="sourceIcon" :size="16" aria-hidden="true" /></template>
+  </FilterDropdown>
 
   <!-- Compact sort affordance: icon + current label, never a wide
   native select with "Sort: …" options. -->

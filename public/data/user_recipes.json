@@ -1,0 +1,195 @@
+{
+ "version": 1,
+ "recipes": [
+  {
+   "addedAt": 1790812800000,
+   "source": "user",
+   "meta": {
+    "id": 900001,
+    "name": "Fluffy Pancakes",
+    "is_pro": false,
+    "is_secret": false,
+    "macros": {
+     "fats": 0.406221555924399,
+     "carbs": 0.4710606628473524,
+     "protein": 0.12271778122824865
+    },
+    "rating": 0,
+    "rating_count": 0,
+    "popularity": {},
+    "calories": 382.19,
+    "sodium_mg": 850.57,
+    "cooking_minutes": 25,
+    "serving_count": 8,
+    "ingredient_names": [
+     "all-purpose flour",
+     "baking powder",
+     "salt",
+     "granulated sugar",
+     "egg",
+     "whole milk",
+     "butter, unsalted",
+     "lemon juice",
+     "vanilla extract"
+    ],
+    "variety_tag_ids": [],
+    "price_per_serving": null,
+    "thumbnail_image_url": "https://cdn-uploads.mealime.com/uploads/recipe/thumbnail/900/thumbnail_user_recipe_fluffy-pancake_fc1f294f.jpeg",
+    "presentation_image_url": "https://cdn-uploads.mealime.com/uploads/recipe/thumbnail/900/presentation_user_recipe_fluffy-pancake_fc1f294f.jpeg",
+    "published_recipe_uuid": "",
+    "recipe_id": 900001,
+    "first_published_at": 1790812800000,
+    "ruleset": "breakfast"
+   },
+   "data": {
+    "category_name": "Breakfast",
+    "boost": 0,
+    "variety_tags": [],
+    "perishable_amounts": {},
+    "month_seasonalities": [],
+    "recipe_id": 900001
+   },
+   "doc": {
+    "id": 900001,
+    "recipe_id": 900001,
+    "serving_count": 8,
+    "cooking_minutes": 25,
+    "name": "Fluffy Pancakes",
+    "slug": "fluffy-pancakes",
+    "units": "Metric",
+    "thumbnail_image_url": "https://cdn-uploads.mealime.com/uploads/recipe/thumbnail/900/thumbnail_user_recipe_fluffy-pancake_fc1f294f.jpeg",
+    "presentation_image_url": "https://cdn-uploads.mealime.com/uploads/recipe/thumbnail/900/presentation_user_recipe_fluffy-pancake_fc1f294f.jpeg",
+    "cookwares": [
+     {
+      "id": 8,
+      "name": "whisk",
+      "slug": "whisk"
+     },
+     {
+      "id": 2,
+      "name": "chef's knife",
+      "slug": "chefs-knife"
+     },
+     {
+      "id": 6,
+      "name": "frying pan",
+      "slug": "frying-pan"
+     },
+     {
+      "id": 10,
+      "name": "baking sheet",
+      "slug": "baking-sheet"
+     }
+    ],
+    "instructions": [
+     {
+      "id": 90000101,
+      "primary_message": "Prepare the buttermilk substitute, if using: combine the milk and the lemon juice or vinegar, then stand for 5 minutes to curdle slightly.",
+      "secondary_message": "500 ml whole milk\n40 ml lemon juice"
+     },
+     {
+      "id": 90000102,
+      "primary_message": "Mix the dry ingredients: whisk together the flour, baking powder, salt and sugar.",
+      "secondary_message": "400 g all-purpose flour\n35 g baking powder\n3 g salt\n50 g granulated sugar"
+     },
+     {
+      "id": 90000103,
+      "primary_message": "Combine the wet ingredients: whisk the eggs, then whisk in the milk (or the buttermilk substitute), the cooled melted butter and the vanilla.",
+      "secondary_message": "3 large eggs\n500 ml whole milk\n120 g butter, unsalted\n10 ml vanilla extract"
+     },
+     {
+      "id": 90000104,
+      "primary_message": "Make the batter: pour the wet into the dry and fold gently until JUST combined. Lumpy is correct — overmixing makes tough pancakes.",
+      "secondary_message": null
+     },
+     {
+      "id": 90000105,
+      "primary_message": "Rest the batter for 5-10 minutes for maximum fluffiness.",
+      "secondary_message": null
+     },
+     {
+      "id": 90000106,
+      "primary_message": "Cook on medium-low heat on a lightly greased pan, about 60 ml of batter per pancake, about 2 minutes until bubbles appear and the edges set, then flip and cook 1-2 minutes more until golden.",
+      "secondary_message": "60 ml batter"
+     },
+     {
+      "id": 90000107,
+      "primary_message": "Keep the cooked pancakes warm on a baking sheet in a 90°C (194°F) oven, and serve them straight away with butter, maple syrup and fresh fruit.",
+      "secondary_message": null
+     }
+    ],
+    "line_items": [
+     {
+      "id": 900001001,
+      "quantity": "400 g",
+      "ingredient_name": "all-purpose flour"
+     },
+     {
+      "id": 900001002,
+      "quantity": "35 g",
+      "ingredient_name": "baking powder"
+     },
+     {
+      "id": 900001003,
+      "quantity": "3 g",
+      "ingredient_name": "salt"
+     },
+     {
+      "id": 900001004,
+      "quantity": "50 g",
+      "ingredient_name": "granulated sugar"
+     },
+     {
+      "id": 900001005,
+      "quantity": "3 large eggs",
+      "ingredient_name": "egg"
+     },
+     {
+      "id": 900001006,
+      "quantity": "500 ml",
+      "ingredient_name": "whole milk"
+     },
+     {
+      "id": 900001007,
+      "quantity": "120 g",
+      "ingredient_name": "butter, unsalted"
+     },
+     {
+      "id": 900001008,
+      "quantity": "40 ml",
+      "ingredient_name": "lemon juice"
+     },
+     {
+      "id": 900001009,
+      "quantity": "10 ml",
+      "ingredient_name": "vanilla extract"
+     }
+    ],
+    "nutrition": {
+     "alcohol": 0.41,
+     "ash": 4.07,
+     "b1_thiamine": 0.13,
+     "b2_riboflavin": 0.22,
+     "b3_niacin": 0.82,
+     "b5_pantothenic_acid": 0.78,
+     "b6_pyridoxine": 0.1,
+     "carbs": 43.99,
+     "copper": 0.31,
+     "energy": 382.19,
+     "fat": 16.86,
+     "fiber": 1.85,
+     "folate": 23.52,
+     "iron": 1.54,
+     "magnesium": 25.78,
+     "manganese": 0.41,
+     "phosphorus": 479.75,
+     "potassium": 214.9,
+     "protein": 11.46,
+     "sodium": 850.57,
+     "water": 84.53,
+     "zinc": 0.84
+    }
+   }
+  }
+ ]
+}

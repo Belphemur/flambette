@@ -71,6 +71,17 @@ export function formatAmount(amount: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
 }
 
+/**
+ * The string-typed twin of {@link humanizeAmount} for already-composed
+ * quantity strings ("2.25 large eggs").
+ */
+export function humanizeScaledQuantity(raw: string): string {
+  const parsed = parseQuantity(raw)
+  if (!parsed) return raw
+  const rounded = humanizeAmount(parsed.amount, parsed.unit)
+  return parsed.unit ? `${rounded} ${parsed.unit}` : rounded
+}
+
 /** Denominators tried when rendering a fractional amount (ADR-0017). */
 const FRACTION_DENOMINATORS = [2, 3, 4, 6, 8] as const
 
@@ -101,18 +112,34 @@ export function formatFraction(amount: number): string {
   return formatAmount(amount)
 }
 
-/**
- * Scale a display quantity by a factor. Non-parseable quantities pass
- * through verbatim.
- */
-export function scaleQuantity(raw: string, factor: number): string {
-  const parsed = parseQuantity(raw)
-  if (!parsed || factor === 1) return raw
-  const scaled = formatAmount(parsed.amount * factor)
-  return parsed.unit ? `${scaled} ${parsed.unit}` : scaled
-}
-
 /** Total "popularity" score (sum over weekdays) for sorting. */
 export function popularityScore(popularity: Record<string, number>): number {
   return Object.values(popularity).reduce((a, b) => a + b, 0)
+}
+
+/**
+ * The NUMBER-side twin of {@link humanizeScaledQuantity}: round an already
+ * scaled amount + unit pair for display. Count-like units round half-down
+ * to whole pieces (2.25 eggs -> "2"); everything else keeps formatAmount.
+ * Used by the step-detail scaler (recipe.ts), which owns a parsed amount
+ * already and shouldn't stringify-then-reparse through the string form.
+ */
+export function humanizeAmount(amount: number, unit: string): string {
+  const u = unit.trim().toLowerCase()
+  const isCountLike =
+    !u || /^(large |medium |small )?(egg|eggs|clove|cloves|sprig|sprigs|leaf|leaves|slice|slices)\b/.test(u)
+  if (isCountLike) {
+    const down = amount % 1 === 0.5 ? amount - 0.5 : amount
+    return String(Math.round(down))
+  }
+  // Mass/volume: from ~5 units up the fraction is noise a kitchen scale can't
+  // resolve, so round half-down to the integer (26.25 g -> 26 g, 2.3 g keeps
+  // its decimal because a small baking-powder amount can genuinely matter).
+  // Spoon units keep the decimal (¾ tsp is real).
+  const isSpoon = /\b(tsp|tbsp|tablespoon|teaspoon|cup|cups)\b/.test(u)
+  if (!isSpoon && Math.abs(amount) >= 5 && amount % 1 !== 0) {
+    const down = amount % 1 === 0.5 ? amount - 0.5 : amount
+    return String(Math.round(down))
+  }
+  return formatAmount(amount)
 }

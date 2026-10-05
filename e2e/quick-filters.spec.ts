@@ -39,7 +39,13 @@ function resultCount(page: Page) {
 async function catalogSize(page: Page): Promise<number> {
   return page.evaluate(async () => {
     const data = await fetch('/data/builder_data.json').then((r) => r.json())
-    return (data.feasible_variants as number[]).length
+    // ADR-0054: user recipes are merged into the served catalog at load, so
+    // the live total is the builder's own PLUS the household's.
+    const users = await fetch('/data/user_recipes.json')
+      .then((r) => r.json())
+      .then((p) => (p.recipes as unknown[]).length)
+      .catch(() => 0)
+    return (data.feasible_variants as number[]).length + users
   })
 }
 
@@ -175,7 +181,7 @@ test.describe('filter bar layout on a phone (WS1)', () => {
     // the assertion is identical in both projects.
     await page.setViewportSize({ width: 412, height: 915 })
     const controls = page.locator(
-      '[data-test=cook-time-filter], [data-test=favourites-filter], [data-test=pro-filter], [data-test=sort-button]',
+      '[data-test=cook-time-filter], [data-test=favourites-filter], [data-test=source-button], [data-test=sort-button]',
     )
     await expect(controls).toHaveCount(4)
 
@@ -308,7 +314,9 @@ test.describe('filter sync and join reconciliation (WS3 + WS4)', () => {
       maxTime: 20,
       sortBy: 'calories',
       favOnly: true,
-      proOnly: true,
+      // ADR-0054: the source facet is HOUSEHOLD state, so B seeds a
+      // divergent one and must still converge on A's.
+      source: 'new',
     })
     await b.goto(`/?room=${code}`)
     await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })

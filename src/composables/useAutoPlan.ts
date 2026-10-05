@@ -127,7 +127,7 @@ export async function runAutoPlan(options: AutoPlanOptions): Promise<AutoPlanRes
   const [catalog, index] = await Promise.all([getCatalog(), getPackIndex()])
   const planStore = usePlanStore()
   const ui = useUiStore()
-  const dietIndex = dietIndexFor(catalog.data.variant_meta)
+  const dietIndex = dietIndexFor(catalog.variantMeta)
   const diets = ui.quickFilters.diets
   const ruleset = options.ruleset ?? ui.autoPlanRuleset
   const mode = options.mode ?? ui.autoPlanMode
@@ -154,7 +154,7 @@ export async function runAutoPlan(options: AutoPlanOptions): Promise<AutoPlanRes
 
   // Bayesian-smoothed ratings over the ELIGIBLE slice (ADR-0027): the
   // prior mean comes from the eligible candidates only.
-  const metas = catalog.data.variant_meta
+  const metas = catalog.variantMeta
   const eligibleMetas = metas.filter((m) => eligible.has(m.id))
   const mean =
     eligibleMetas.length > 0

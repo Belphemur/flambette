@@ -61,6 +61,8 @@ colors:
   danger-soft: "#FCA5A5"
   favourite: "#E11D48"
   favourite-soft: "#FB7185"
+  household: "#86198F"
+  household-soft: "#E879F9"
 typography:
   headline-lg:
     fontFamily: system-ui
@@ -117,6 +119,10 @@ spacing:
   gutter-desktop: 24px
   touch-target: 44px
 components:
+  user-recipe-badge:
+    textColor: "{colors.household}"
+  user-recipe-badge-dark:
+    textColor: "{colors.household-soft}"
   app-surface:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.text}"
@@ -485,6 +491,16 @@ cannot leak into the food-hue registry; it measures **6.66:1** light and
 on the light dark-mode green, where white would be ~1.9:1. These foregrounds use raised surfaces; do not assume every status tint works on every
 coloured panel. Keep labels or shapes as a second signal. No raw colour literals
 in components, ad-hoc Tailwind palette substitutions or undocumented gradients.
+
+A marker may need a family of its own the same way: the **household recipe**
+marker uses `household` / `household-soft` (deep plum light, orchid dark). It
+is a LABEL, not a food identity: it never joins the `IconRole` registry, and it
+is the one non-food family allowed beside the nutrition modal's macro tokens
+only because the modal never shows it. Measured **7.40-8.24:1** light and
+**5.96-7.51:1** dark across the four surface pairs, and >= 21 deltaE from every
+existing family (the nearest, `nutrition-protein`, is modal-only and never on
+the same screen). Used by the user-recipe badge on the recipe detail sheet:
+`NotebookPen` glyph + the label, `cursor-help` with a title tooltip.
 
 ## Typography
 

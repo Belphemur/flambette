@@ -37,6 +37,23 @@ describe('settings import (ADR-0013 registry)', () => {
     return slice
   }
 
+  test('a pre-ADR-0054 backup migrates proOnly to source (backup import path)', () => {
+    // The backup archive is the third inbound path for the filters (the
+    // other two being the persisted ui blob and a peer's room snapshot),
+    // and it goes through the same normalizeQuickFilters branch. A backup
+    // written before the rename must not reset the household to All.
+    settingsSlice().write({
+      quickFilters: { diets: ['vegan'], sortBy: 'latest', proOnly: true },
+    })
+    const ui = useUiStore()
+    expect(ui.quickFilters.source).toBe('pro')
+    expect('proOnly' in ui.quickFilters).toBe(false)
+    expect(ui.quickFilters.diets).toEqual(['vegan'])
+
+    settingsSlice().write({ quickFilters: { proOnly: false } })
+    expect(useUiStore().quickFilters.source).toBe('all')
+  })
+
   test('a legacy backup without the new keys resets quickFilters, householdRoom and stepTimers', () => {
     // A store CURRENT value is set by calling write() with a FULL modern
     // backup first.
@@ -58,7 +75,10 @@ describe('settings import (ADR-0013 registry)', () => {
       maxTime: null,
       sortBy: 'rating',
       favOnly: false,
-      proOnly: false,
+      // A pre-ADR-0054 blob's `proOnly: false` maps to 'all' — the same
+      // default the reset produces. Asserted so the legacy key is
+      // visibly accounted for rather than silently ignored.
+      source: 'all',
     })
     expect(ui.householdRoom).toBe('')
     expect(ui.stepTimers).toEqual({})
@@ -151,7 +171,7 @@ describe('settings import (ADR-0013 registry)', () => {
         maxTime: 45,
         sortBy: 'calories',
         favOnly: false,
-        proOnly: true,
+        source: 'new',
       },
       householdRoom: 'amber-falcon-lantern',
       stepTimers: { 7: { 3: { id: 3, label: 'Rice', remaining: 60, running: true, startedAt: 123 } } },
@@ -164,7 +184,7 @@ describe('settings import (ADR-0013 registry)', () => {
       maxTime: 45,
       sortBy: 'calories',
       favOnly: false,
-      proOnly: true,
+      source: 'new',
     })
     expect(ui.householdRoom).toBe('amber-falcon-lantern')
     expect(ui.stepTimers[7][3]).toEqual({

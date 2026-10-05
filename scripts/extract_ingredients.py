@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Ingredient-index extractor for the offline ingredient autocomplete (ADR-0012,
-widened by ADR-0052).
+widened by ADR-0052 (supplemental) and ADR-0054 (user recipes)).
 
 Walks the frozen local catalog (public/data/recipes/*.json, 2,759 docs) and
 produces public/data/ingredients.json — one row per distinct ingredient
@@ -50,7 +50,7 @@ Stdlib only; idempotent; no network. Re-run with:
 import collections
 import glob
 
-from catalog_paths import recipe_doc_paths
+from catalog_paths import iter_recipe_docs, recipe_doc_paths, user_recipe_docs
 import json
 import os
 import re
@@ -875,7 +875,8 @@ SUPPLEMENTAL: list[tuple[str, str]] = [
     ("fruit juice", "Beverages"),
     ("grape juice", "Beverages"),
     ("grapefruit juice", "Beverages"),
-    ("lemon juice", "Beverages"),
+    # ("lemon juice", …) REMOVED: ADR-0054's first user recipe line-items it,
+    # so the census observes it (unit ml) and the row stopped being a filler.
     ("lime juice", "Beverages"),
     ("pineapple juice", "Beverages"),
     ("prune juice", "Beverages"),
@@ -912,9 +913,16 @@ def build() -> dict:
     Split out from main() so `--check` can compare a fresh build against the
     committed file WITHOUT writing (see main). The `generatedAt` stamp is the
     only deliberately unstable field, so the comparison strips it.
+
+    ADR-0054: the census walks BOTH sources via `iter_recipe_docs()` — the
+    frozen catalog docs and the household's own recipes from
+    user_recipes.json. An ingredient a user's recipe uses must be offerable
+    when they type it, or the recipe cannot be re-created by hand.
     """
     recipe_files = recipe_doc_paths(ROOT)
     if len(recipe_files) != 2759:
+        # A WARNING: it describes the FROZEN catalog, which user recipes do
+        # not change, so a household addition must never fail a build over it.
         print(f"warning: expected 2,759 recipe docs, found {len(recipe_files)}", file=sys.stderr)
 
     counts = collections.Counter()
@@ -923,9 +931,7 @@ def build() -> dict:
     unit_votes = collections.defaultdict(collections.Counter)
     first_seen = {}
 
-    for path in recipe_files:
-        with open(path) as f:
-            doc = json.load(f)
+    for _vid, doc in iter_recipe_docs(ROOT):
         for li in doc.get("line_items") or []:
             name = li["ingredient_name"]
             key = name_key(name)
@@ -994,6 +1000,8 @@ def build() -> dict:
         # so main() can report it without build() printing during --check.
         "_summary": {
             "docs": len(recipe_files),
+            # ADR-0054: the census also walked the household's own recipes.
+            "userRecipes": len(user_recipe_docs()),
             "added": added,
             "shadowed": sorted(shadowed),
             "overrides": len(matched_overrides),
@@ -1038,7 +1046,8 @@ def main() -> int:
 
     # ---- summary ----
     coverage = collections.Counter(i["category"] for i in ingredients)
-    print(f"read {summary['docs']} recipe docs -> {len(ingredients)} ingredients")
+    print(f"read {summary['docs']} recipe docs "
+          f"(+ {summary['userRecipes']} user recipes) -> {len(ingredients)} ingredients")
     print(f"ADR-0052 supplemental rows added: {summary['added']} "
           f"(skipped {len(summary['shadowed'])} already in the catalog: "
           f"{', '.join(summary['shadowed'])})")

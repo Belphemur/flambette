@@ -75,19 +75,31 @@ function main(): number {
   const builder = JSON.parse(
     readFileSync(join(DATA, 'builder_data.json'), 'utf8'),
   ) as BuilderData
+  // ADR-0054: the household's own recipes are served by /recipe/:id like any
+  // other variant (they are merged into byId at load), so they are
+  // prerendered too — from the doc embedded in user_recipes.json, not from
+  // the frozen recipes/ directory.
+  const userRecipesPath = join(DATA, 'user_recipes.json')
+  const userRecipes: { meta: VariantMeta; doc: RecipeDoc }[] = existsSync(userRecipesPath)
+    ? ((JSON.parse(readFileSync(userRecipesPath, 'utf8')).recipes ?? []) as never)
+    : []
+  const userDocById = new Map<number, RecipeDoc>(
+    userRecipes.map((r) => [r.meta.id, r.doc]),
+  )
   // Read once, then RESET: this script rewrites dist/index.html in place,
   // so on a second run the file on disk already carries a prerendered
   // head. Feeding that back in would stack a second head on the first.
   const baseHtml = resetPrerenderHead(readFileSync(join(DIST, 'index.html'), 'utf8'))
 
-  const metaById = new Map<number, VariantMeta>(
-    builder.variant_meta.map((m) => [m.id, m]),
-  )
+  const metaById = new Map<number, VariantMeta>([
+    ...builder.variant_meta.map((m) => [m.id, m] as const),
+    ...userRecipes.map((r) => [r.meta.id, r.meta] as const),
+  ])
   // The prerendered pages must exist ONLY for recipes the catalog serves,
   // and `/recipe/:id` is open to any catalog id (router comment) — which is
   // exactly `feasible_variants`, the same gate the planner and the filter
   // tables use. A variant without a doc file is skipped loudly.
-  const ids = builder.feasible_variants
+  const ids = [...builder.feasible_variants, ...userDocById.keys()]
     .filter((id) => metaById.has(id))
     .sort((a, b) => a - b)
 
@@ -102,12 +114,15 @@ function main(): number {
   const sitemap: SitemapUrl[] = [{ loc: `${siteUrl}/` }]
   for (const id of ids) {
     const meta = metaById.get(id)!
-    const docPath = join(DATA, 'recipes', `${id}.json`)
-    if (!existsSync(docPath)) {
-      docMissing.push(id)
-      continue
+    let doc: RecipeDoc | undefined = userDocById.get(id)
+    if (!doc) {
+      const docPath = join(DATA, 'recipes', `${id}.json`)
+      if (!existsSync(docPath)) {
+        docMissing.push(id)
+        continue
+      }
+      doc = JSON.parse(readFileSync(docPath, 'utf8')) as RecipeDoc
     }
-    const doc = JSON.parse(readFileSync(docPath, 'utf8')) as RecipeDoc
     const head = recipeSeoHead(doc, meta, siteUrl)
 
     const html = injectHead(baseHtml, renderHeadBlock(head)).replace(

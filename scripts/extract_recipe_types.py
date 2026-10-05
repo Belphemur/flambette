@@ -29,6 +29,11 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+import catalog_paths  # noqa: E402
+
 BUILDER = os.path.join(ROOT, "public/data/builder_data.json")
 OUT = os.path.join(ROOT, "public/data/recipe_types.json")
 
@@ -49,6 +54,17 @@ ALL_ROWS = TABLE + NON_OCCASION
 OFFERED_IDS = {row[0] for row in TABLE}
 
 
+def user_recipe_entries():
+    """(id, {meta, doc, addedAt, source}) for each household recipe.
+
+    Delegates to catalog_paths.user_recipe_docs so the tolerance contract
+    lives in ONE place: absent or unparseable artifact degrades this census
+    to the frozen catalog instead of failing the build (its runtime catalog
+    counterpart treats the same artifact as optional).
+    """
+    return catalog_paths.user_recipe_entries(ROOT)
+
+
 def build():
     with open(BUILDER) as f:
         builder = json.load(f)
@@ -58,6 +74,14 @@ def build():
     by_ruleset = {row[3]: row[0] for row in ALL_ROWS}
     unmatched = 0
     seen_ids = set()
+
+    # ADR-0054: the household's own recipes are filterable exactly like the
+    # frozen catalog's (they are merged into `byId` at load), so their
+    # `ruleset` has to be counted here too — a Breakfast chip that says 151
+    # while the pancake is on screen and filterable would be a lie.
+    for _vid, entry in user_recipe_entries():
+        feasible.add(entry["meta"]["id"])
+        builder["variant_meta"].append(entry["meta"])
 
     for meta in builder["variant_meta"]:
         vid = meta["id"]

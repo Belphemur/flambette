@@ -1,4 +1,4 @@
-import { formatAmount, parseQuantity } from './quantity'
+import { humanizeAmount, parseQuantity } from './quantity'
 import type { RecipeDoc } from './types'
 
 /** One instruction step, scaled to the target servings. */
@@ -139,7 +139,12 @@ function scaleStepLine(line: string, base: number, target: number, factor: numbe
   const parsed = parseQuantity(line)
   if (!parsed || factor === 1) return line
   const amount = scaleQuantity(parsed.amount, base, target, isSeasoning(line), line)
-  return parsed.unit ? `${formatAmount(amount)} ${parsed.unit}` : formatAmount(amount)
+  // The scaled line goes to a HUMAN: counts round half-down to whole pieces
+  // (2.25 eggs -> "2"), everything else keeps formatAmount's grain. The
+  // rounding must not crawl back into the math: scaleQuantity stays exact
+  // because measured-amount chips and the grocery merge read its numbers.
+  const rendered = humanizeAmount(amount, parsed.unit)
+  return parsed.unit ? `${rendered} ${parsed.unit}` : rendered
 }
 
 /**
