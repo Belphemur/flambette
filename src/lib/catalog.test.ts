@@ -171,4 +171,51 @@ describe('parseUserRecipes degrades instead of throwing', () => {
     const c = buildCatalog(builder, [{ ...entry, meta: meta(17452) }])
     expect(c.byId.get(17452)?.name).not.toBe('Fluffy Pancake')
   })
+
+  test('an entry without an ingredient_names string array is skipped', () => {
+    // The search index calls `meta.ingredient_names.join(' ')` UNGUARDED on
+    // every entry of the merged list: a hand-edited artifact missing the
+    // field must not be able to crash the first search keystroke. Same
+    // LOUD-skip contract as the other unusable-shape rejections.
+    const stripped = meta(USER_RECIPE_ID_BASE + 2)
+    delete (stripped as Partial<VariantMeta>).ingredient_names
+    expect(parseUserRecipes({ version: 1, recipes: [{ ...entry, meta: stripped }] })).toEqual([])
+    const wrongType = { ...meta(USER_RECIPE_ID_BASE + 2), ingredient_names: 'flour' }
+    expect(parseUserRecipes({ version: 1, recipes: [{ ...entry, meta: wrongType }] })).toEqual([])
+    const wrongMember = { ...meta(USER_RECIPE_ID_BASE + 2), ingredient_names: ['flour', 7] }
+    expect(parseUserRecipes({ version: 1, recipes: [{ ...entry, meta: wrongMember }] })).toEqual([])
+  })
+
+  test('a duplicate id merges ONCE, and `variantMeta` never carries it twice', () => {
+    // byId/dataById/userRecipeIds dedupe by design, but `variantMeta` is a
+    // LIST: pushing the same meta twice renders the recipe as two grid
+    // cards while every count and lookup resolves one — the grid would
+    // disagree with its own source count.
+    const dup = meta(USER_RECIPE_ID_BASE + 3)
+    const c = buildCatalog(builder, [
+      { ...entry, meta: dup, addedAt: 1 },
+      { ...entry, meta: dup, addedAt: 2 },
+    ])
+    const id = USER_RECIPE_ID_BASE + 3
+    expect(c.variantMeta.filter((m) => m.id === id)).toHaveLength(1)
+    expect(c.userRecipeIds.size).toBe(1)
+    expect(c.byId.get(id)?.name).toBe('Fluffy Pancake')
+  })
+
+  test('addedAt is mirrored into an ABSENT first_published_at, never over an author’s own', () => {
+    // The doc comment promises the mirror so a card holding nothing but a
+    // VariantMeta can still be dated. Missing field -> filled from addedAt;
+    // a hand-set mirror (different value) -> kept exactly as written.
+    const noMirror = meta(USER_RECIPE_ID_BASE + 4)
+    delete (noMirror as Partial<VariantMeta>).first_published_at
+    const authored = { ...meta(USER_RECIPE_ID_BASE + 5), first_published_at: 111 }
+    const c = buildCatalog(builder, [
+      { ...entry, meta: noMirror, addedAt: 222 },
+      { ...entry, meta: authored, addedAt: 333 },
+    ])
+    expect(c.byId.get(USER_RECIPE_ID_BASE + 4)?.first_published_at).toBe(222)
+    expect(c.byId.get(USER_RECIPE_ID_BASE + 5)?.first_published_at).toBe(111)
+    // The merged LIST carries the mirror too — that is what cards read.
+    expect(c.variantMeta.find((m) => m.id === USER_RECIPE_ID_BASE + 4)?.first_published_at).toBe(222)
+  })
 })

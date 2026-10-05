@@ -59,6 +59,7 @@ LINE_ITEMS = [
     ("3 large eggs", "egg"),
     ("500 ml", "whole milk"),
     ("120 g", "butter, unsalted"),
+    ("40 ml", "lemon juice"),
     ("10 ml", "vanilla extract"),
 ]
 
@@ -218,8 +219,8 @@ def main() -> int:
     print("  %s (id %d, %d servings)" % (NAME, VARIANT_ID, doc["serving_count"]))
     print("  derived per serving: %.1f kcal, %.1f g protein, %.1f g carbs, %.1f g fat"
           % (energy, nutrition["protein"], nutrition["carbs"], nutrition["fat"]))
-    print("  derived per serving: %.1f mg sodium, fibre %.1f g, sugars %.1f g"
-          % (sodium, nutrition["fiber"], nutrition["sugars"]))
+    print("  derived per serving: %.1f mg sodium, fibre %.1f g"
+          % (sodium, nutrition["fiber"]))
     return 0
 
 

@@ -128,7 +128,7 @@ class NutrientMap(unittest.TestCase):
     def test_every_code_exists_in_this_release(self):
         # Only verifiable with the XML present; skipped otherwise so the suite
         # stays runnable offline (the committed artifact is the offline truth).
-        source = "/tmp/ciqual"
+        source = ciqual.XML_SOURCE_DIR  # env CIQUAL_XML_DIR, default the cache dir
         if not os.path.exists(os.path.join(source, ciqual.FILES["const"])):
             self.skipTest("CIQUAL XML not available offline")
         labels = ciqual.nutrient_labels(ciqual.read_xml(os.path.join(source, ciqual.FILES["const"])))
@@ -281,12 +281,20 @@ class PancakeEnergy(unittest.TestCase):
     def test_granulated_sugar_is_not_reported_as_sugar_free(self):
         # The regression this pins: CIQUAL grades sucrose's sugars row D, and
         # the global D refusal used to drop it, which reported 0 g of sugar for
-        # a recipe with 50 g of it in the batter.
+        # a recipe with 50 g of it in the batter. The FOOD row must still carry
+        # sugars (the D admission is per-food, recorded), and the RECIPE block
+        # now follows the coverage rule: vanilla extract dashes CIQUAL's
+        # sugars row, so the recipe's sugars key is OMITTED rather than
+        # summed from the foods that do publish it — and an omitted key is
+        # what "unknown" looks like; a tiny partial sum would look like data.
         foods = self.table["foods"]
         self.assertEqual(foods["granulated sugar"]["per100g"]["sugars"], 99.8)
         got = ciqual.recipe_nutrition(self.doc, self.table)
-        # 50 g of sugar alone contributes 6.25 g per serving, before milk and flour.
-        self.assertGreater(got["sugars"], 6.0)
+        self.assertNotIn("sugars", got, "partial sugars total published as complete")
+        # The same honesty pinned from the covered side: a key EVERY food
+        # publishes still totals, and 50 g of sugar alone would dominate it.
+        self.assertIn("carbs", got)
+        self.assertGreater(got["carbs"], 40.0)
 
     def test_unconvertible_quantity_is_refused(self):
         doc = {

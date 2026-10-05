@@ -875,7 +875,8 @@ SUPPLEMENTAL: list[tuple[str, str]] = [
     ("fruit juice", "Beverages"),
     ("grape juice", "Beverages"),
     ("grapefruit juice", "Beverages"),
-    ("lemon juice", "Beverages"),
+    # ("lemon juice", …) REMOVED: ADR-0054's first user recipe line-items it,
+    # so the census observes it (unit ml) and the row stopped being a filler.
     ("lime juice", "Beverages"),
     ("pineapple juice", "Beverages"),
     ("prune juice", "Beverages"),
@@ -930,7 +931,7 @@ def build() -> dict:
     unit_votes = collections.defaultdict(collections.Counter)
     first_seen = {}
 
-    for _vid, doc in iter_recipe_docs():
+    for _vid, doc in iter_recipe_docs(ROOT):
         for li in doc.get("line_items") or []:
             name = li["ingredient_name"]
             key = name_key(name)

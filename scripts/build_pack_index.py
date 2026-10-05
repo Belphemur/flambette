@@ -54,6 +54,10 @@ from catalog_paths import iter_recipe_docs, recipe_doc_paths, user_recipe_docs
 import gzip
 import json
 import os
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)  # repo root; the script may be run from anywhere
 import re
 import sys
 from datetime import datetime
@@ -206,9 +210,9 @@ def main() -> int:
     # the frozen directory, so the walk is `iter_recipe_docs` (both sources in
     # one pass). Locked decision L2 makes them Auto-Plan eligible: a recipe the
     # planner cannot see is scored as if it needed no ingredients at all.
-    recipe_files = recipe_doc_paths()
-    user_docs = user_recipe_docs()
-    with open(os.path.join("public", "data", "builder_data.json")) as f:
+    recipe_files = recipe_doc_paths(ROOT)
+    user_docs = user_recipe_docs(ROOT)
+    with open(os.path.join(ROOT, "public", "data", "builder_data.json")) as f:
         builder = json.load(f)
 
     expected = len(builder["feasible_variants"])
@@ -323,7 +327,7 @@ def main() -> int:
         "unitKeys": list(unit_ids),
         "recipes": packed,
     }
-    out_path = os.path.join("public", "data", "pack_index.json")
+    out_path = os.path.join(ROOT, "public", "data", "pack_index.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
         f.write("\n")

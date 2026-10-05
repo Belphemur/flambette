@@ -22,6 +22,7 @@ import glob
 import json
 import os
 import re
+import sys
 
 DOC_NAME = re.compile(r"^\d+\.json$")
 
@@ -44,8 +45,15 @@ def user_recipe_docs(root=None):
     path = os.path.join(root, "public", "data", "user_recipes.json")
     if not os.path.exists(path):
         return []
-    with open(path, encoding="utf-8") as fh:
-        payload = json.load(fh)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except (OSError, json.JSONDecodeError) as err:
+        # The documented contract (and the runtime catalog's behaviour):
+        # a broken artifact degrades the generators to the frozen catalog
+        # instead of failing every `data:*` build at once.
+        print(f"warning: user_recipes.json unreadable ({err}); continuing without it", file=sys.stderr)
+        return []
     entries = []
     for entry in payload.get("recipes") or []:
         doc = entry.get("doc") or {}
@@ -69,3 +77,30 @@ def iter_recipe_docs(root=None):
             yield vid, json.load(fh)
     for vid, doc in user_recipe_docs(root):
         yield vid, doc
+
+
+def user_recipe_entries(root=None):
+    """(id, entry) pairs retaining the WHOLE artifact entry (meta included).
+
+    Generators that need more than the doc (the recipe-type census appends
+    `meta` to builder_data's variant_meta) use this; `user_recipe_docs`
+    remains the doc-only view. Same tolerance contract: absent/unparseable
+    artifact yields [].
+    """
+    path = os.path.join(root or os.getcwd(), "public", "data", "user_recipes.json")
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except (OSError, json.JSONDecodeError) as err:
+        print(f"warning: user_recipes.json unreadable ({err}); continuing without it", file=sys.stderr)
+        return []
+    out = []
+    for entry in payload.get("recipes") or []:
+        meta = entry.get("meta") or {}
+        vid = meta.get("id", (entry.get("doc") or {}).get("id"))
+        if vid is None:
+            continue
+        out.append((int(vid), entry))
+    return sorted(out, key=lambda pair: pair[0])

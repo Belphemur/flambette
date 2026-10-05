@@ -32,6 +32,8 @@ ROOT = os.path.dirname(HERE)
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import catalog_paths  # noqa: E402
+
 BUILDER = os.path.join(ROOT, "public/data/builder_data.json")
 OUT = os.path.join(ROOT, "public/data/recipe_types.json")
 
@@ -53,13 +55,14 @@ OFFERED_IDS = {row[0] for row in TABLE}
 
 
 def user_recipe_entries():
-    """(id, {meta, doc, addedAt, source}) for each household recipe."""
-    with open(os.path.join(ROOT, "public/data/user_recipes.json"), encoding="utf-8") as f:
-        payload = json.load(f)
-    out = []
-    for entry in payload.get("recipes") or []:
-        out.append(((entry.get("meta") or {}).get("id"), entry))
-    return [pair for pair in out if pair[0] is not None]
+    """(id, {meta, doc, addedAt, source}) for each household recipe.
+
+    Delegates to catalog_paths.user_recipe_docs so the tolerance contract
+    lives in ONE place: absent or unparseable artifact degrades this census
+    to the frozen catalog instead of failing the build (its runtime catalog
+    counterpart treats the same artifact as optional).
+    """
+    return catalog_paths.user_recipe_entries(ROOT)
 
 
 def build():

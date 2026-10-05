@@ -145,12 +145,33 @@ export function buildCatalog(data: BuilderData, users: UserRecipeEntry[]): Catal
       )
       continue
     }
-    byId.set(id, entry.meta)
+    // The artifact is hand-editable, so a duplicated id surfaces HERE,
+    // not as two cards over one entry: byId/dataById and the id Set all
+    // dedupe by design, but `variantMeta` is a list — pushing twice would
+    // render the grid card twice while every lookup resolves only the
+    // last. One merged record per id, loudly (the same LOUD-drop rule
+    // `parseUserRecipes` applies to unusable entries).
+    if (userRecipeIds.has(id)) {
+      console.warn(
+        `[catalog] refusing duplicate user recipe id ${id}: the artifact carries ` +
+          `the same meta.id twice; keeping the FIRST entry`,
+      )
+      continue
+    }
+    // The doc comment promises `addedAt` mirrored into `first_published_at`
+    // so a card holding nothing but a VariantMeta can be dated — keep the
+    // promise for an author who left the mirror out of their hand-edited
+    // entry. The artifact file keeps the honest `addedAt` name; the copy
+    // here fills only an ABSENT field and never overrides an author's own.
+    const meta: VariantMeta = entry.meta.first_published_at === undefined
+      ? { ...entry.meta, first_published_at: entry.addedAt }
+      : entry.meta
+    byId.set(id, meta)
     dataById.set(id, entry.data)
     userRecipeIds.add(id)
     userRecipeDocs.set(id, entry.doc)
     userRecipeAddedAt.set(id, entry.addedAt)
-    userMetas.push(entry.meta)
+    userMetas.push(meta)
   }
   userDocsById.clear()
   for (const [id, doc] of userRecipeDocs) userDocsById.set(id, doc)
@@ -223,6 +244,22 @@ export function parseUserRecipes(payload: unknown): UserRecipeEntry[] {
     const addedAt = (item as { addedAt?: unknown }).addedAt
     if (typeof addedAt !== 'number' || !Number.isFinite(addedAt)) {
       console.warn(`[catalog] user_recipes.json entry ${index} (id ${id}) has no addedAt; skipped`)
+      return
+    }
+    // `meta` is cast to VariantMeta only AFTER the fields downstream code
+    // indexes unguarded are verified: the search index calls
+    // `ingredient_names.join(' ')` and the diet heuristic iterates the same
+    // array, so a hand-edited entry without a real string array would crash
+    // the first search keystroke — not just this one recipe.
+    const ingredientNames = (item.meta as { ingredient_names?: unknown }).ingredient_names
+    if (
+      !Array.isArray(ingredientNames) ||
+      ingredientNames.some((n) => typeof n !== 'string')
+    ) {
+      console.warn(
+        `[catalog] user_recipes.json entry ${index} (id ${id}) has no ingredient_names ` +
+          `string array; skipped`,
+      )
       return
     }
     out.push(item as unknown as UserRecipeEntry)

@@ -255,6 +255,25 @@ The `teneur` grammar is handled explicitly: comma decimals (`56,5`),
 self-closing tags as ABSENT, and a real `0` kept as a real zero (salt is
 0 kcal, not "unknown").
 
+**Recipe totals require FULL ingredient coverage.** CIQUAL marks an
+unmeasured nutrient `—` even where one would expect a value (wheat flour
+T65 has no measured starch row; whole milk has no measured saturated-fat
+row). Summing only the foods that DO publish a nutrient therefore emits a
+PARTIAL total dressed up as complete — the pancake's first draft showed
+0.12 g of starch next to 43.87 g of carbohydrates, where flour alone
+contributes ~31 g of unmeasured starch. The rule is the recipe-level
+mirror of the artifact's own omission rule: `recipe_nutrition` publishes
+a nutrition key ONLY when every contributing ingredient publishes it, and
+a partial total becomes an omitted key — never a small wrong number. Each
+food records its `not_measured` keys (a `-` row exists but carries no
+value, distinct from both a value and no row at all) so the gate can
+distinguish the three states. For any recipe built on the CIQUAL frame —
+which carries all 67 constituents per food — the headline numbers
+(energy, protein, carbs, fat, sodium) still publish; the pancake's block
+went from 45 keys of mixed provenance to 22 keys of complete provenance.
+**Never claim Mealime nutrition parity:** CIQUAL is an estimate, roughly
+±10% on energy.
+
 `--check` is the offline gate, run by `bun run data:verify`: it
 recomputes every user recipe's nutrition block from the COMMITTED table
 and fails the build on any drift — which is what makes "never

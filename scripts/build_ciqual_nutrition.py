@@ -67,6 +67,9 @@ USER_RECIPES = os.path.join(REPO, "public", "data", "user_recipes.json")
 # raw truth, reproducible from DATA_URL, and the DERIVED artifact is what the
 # app ships. The committed table is reproducible offline from a cached copy.
 CACHE_DIR = os.path.join(REPO, "scripts", ".ciqual")
+# Where the extracted XMLs live when NOT using --download's cache: an env
+# override for CI runners or a local checkout, defaulting to the cache dir.
+XML_SOURCE_DIR = os.environ.get("CIQUAL_XML_DIR", CACHE_DIR)
 
 # --------------------------------------------------------------------------
 # nameKey — mirrored from src/lib/grocery.ts. `bun run data:verify` compares
@@ -218,6 +221,14 @@ INGREDIENT_MAP = {
             "Farine de blé tendre ou froment T65 — the plain wheat flour a "
             "batter asks for. NOT 9437 (farine avec levure incorporée), which "
             "would fold the leavening's sodium into the flour."
+        ),
+    },
+    "lemon juice": {
+        "alim_code": "2007",
+        "choice": (
+            "Jus de citron, maison — the acid in the buttermilk substitute. "
+            "Home-made juice, not 2028 (pressed/pur jus) and not the pulp; "
+            "40 ml of it is ~1 kcal per serving, honest noise."
         ),
     },
     "baking powder": {
@@ -415,11 +426,16 @@ def compositions(compo_text, codes):
             continue
         value, flag = parse_teneur(field(b, "teneur"))
         conf = (field(b, "code_confiance") or "").strip() or None
-        # Multiple rows per (food, nutrient) are measurement replicates; the
-        # recipe needs one number, so take the first published row and keep its
-        # confidence. Deterministic: the file order is stable.
+        # Multiple rows per (food, nutrient) COULD occur as measurement
+        # replicates (verified: the 2020 release has exactly one row per
+        # (food, const) across all 211,898 — this is defensively future-proof,
+        # not dead code today). Keep the FIRST row that carries a VALUE; a
+        # later replicate must never overwrite a real number, and an earlier
+        # trace/absent row must not hide one.
         out.setdefault(code, {})
-        out[code].setdefault(const, (value, flag, conf))
+        existing = out[code].get(const)
+        if existing is None or (existing[0] is None and value is not None):
+            out[code][const] = (value, flag, conf)
     return out
 
 
@@ -481,14 +497,16 @@ def build_food(key, spec, names, comps, units):
     flags = {}
     confs = []
     limits = []
-
+    # '-' rows, by app key: the CONSTITUTION of the food, used by
+    # `not_measured` below (a value ≠ an absence; both ≠ no row).
+    dash_rows = set()
     for key_name, const in NUTRIENT_CODES.items():
-        # const_code is a STRING in the XML; the map writes ints for legibility.
         row = rows.get(str(const))
         if row is None:
             continue
         value, flag, conf = row
         if value is None:
+            dash_rows.add(key_name)
             continue
         if conf and conf not in accepted:
             continue
@@ -550,6 +568,16 @@ def build_food(key, spec, names, comps, units):
         "choice": spec["choice"],
         "confidence_note": spec.get("admit_reason"),
         "below_limit": sorted(set(limits)),
+        # A `-` row ("attempted, not measured") stays OUT of `per100g` — a
+        # value it is not — but is recorded here so `recipe_nutrition` can
+        # tell "CIQUAL tried and found nothing" (a real zero contribution)
+        # apart from "no row at all" (the nutrient is UNKNOWN for this food,
+        # so a total over it would be a partial sum published as complete).
+        # The keys are the app's names, not const codes.
+        "not_measured": [
+            k for k, v in sorted(NUTRIENT_CODES.items())
+            if str(v) in {str(c) for c in rows} and str(v) in dash_rows
+        ],
         "per100g": {k: round2(v) for k, v in sorted(per100.items())},
     }
 
@@ -700,11 +728,22 @@ def recipe_nutrition(doc, table):
     Raises SystemExit naming the offending line item when a quantity cannot be
     converted to grams: an incomplete nutrition block is not an acceptable
     fallback (locked L5).
+
+    COVERAGE RULE: a nutrition key is published only when EVERY contributing
+    food publishes it (`per100g`). CIQUAL marks an unmeasured nutrient `-`
+    (flour T65 has no measured starch row), and summing only the foods that
+    DO publish would emit a partial total — a 0.12 g starch next to 43.87 g
+    of carbs — as if it were complete. A key any contributor fails to
+    publish is OMITTED from the block, the same honesty the artifact's own
+    `omitted` provenance rule already applies to never-measured nutrients.
+    The headline numbers (energy, protein, carbs, fat, sodium) survive the
+    rule for any recipe whose foods carry the CIQUAL frame, derived energy
+    and derived sugars included.
     """
     foods = table["foods"]
     unit_grams = table.get("unitGrams", {})
     liquid_density = table.get("liquidDensity", {})
-    totals = {}
+    contributions = []  # (ingredient key, grams, per100g block)
     for line in doc.get("line_items") or []:
         grams = line_item_grams(line, unit_grams, liquid_density)
         if grams is None:
@@ -720,8 +759,17 @@ def recipe_nutrition(doc, table):
                 "no CIQUAL row for ingredient `%s` — add it to INGREDIENT_MAP "
                 "and re-run the generator" % key
             )
-        for nutrient, per100 in food["per100g"].items():
-            totals[nutrient] = totals.get(nutrient, 0.0) + per100 * grams / 100.0
+        contributions.append((key, grams, food["per100g"]))
+
+    # The keys with FULL coverage; everything else is unknown, never assumed.
+    coverage = set(contributions[0][2])
+    for _key, _grams, per100 in contributions[1:]:
+        coverage &= set(per100)
+
+    totals = {}
+    for _key, grams, per100 in contributions:
+        for nutrient in coverage:
+            totals[nutrient] = totals.get(nutrient, 0.0) + per100[nutrient] * grams / 100.0
 
     servings = doc["serving_count"]
     if not servings:
@@ -759,6 +807,19 @@ def check():
             head.append(
                 "meta.sodium_mg %s != derived sodium %s" % (meta.get("sodium_mg"), expected.get("sodium"))
             )
+        # The card's macros line comes from the SAME derived block, so the
+        # offline gate must pin it too: a changed line item passing with
+        # stale fats/carbs/protein on the recipe card is exactly the drift
+        # this gate exists to catch. (qodo finding #6, PR #49.)
+        macro_drift = []
+        macros = meta.get("macros") or {}
+        for app_key, derived_key in (("fats", "fat"), ("carbs", "carbs"), ("protein", "protein")):
+            got, want = macros.get(app_key), expected.get(derived_key)
+            if got is None or want is None or abs(got - want) > 0.01:
+                macro_drift.append(
+                    "meta.macros.%s %s != derived %s %s" % (app_key, got, derived_key, want)
+                )
+        head.extend(macro_drift)
         if drift or head:
             problems += 1
             print("DRIFT %s (%s)" % (doc.get("name"), doc.get("id")))
@@ -800,7 +861,7 @@ def main(argv=None):
     if args.check:
         return check()
 
-    source = args.source
+    source = args.source or XML_SOURCE_DIR
     if args.download:
         zip_path = download(CACHE_DIR)
         source = source or CACHE_DIR
