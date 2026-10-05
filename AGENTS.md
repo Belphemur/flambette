@@ -303,10 +303,15 @@ spoken by a Durable Object instead of a Bun process.
   BOTH modes.
 - **Nutrition**: `meta.calories`/`sodium_mg` are PER-SERVING — never scale
   them by servings; only totals scale.
-- **Share/rooms**: `?p=` is the one-time gzip+base64url export (v1 bare
-  arrays still decode). Room sync is whole-state last-write-wins keyed by
-  `rev`; shared state = `{plan, customItems, checked, cleared, customs,
-  favorites, ratings}` —
+- **Share/rooms**: **rooms are the ONLY way to share a plan** (ADR-0051
+  retired the one-time `?p=` gzip+base64url link; `src/lib/share.ts` and its
+  spec are deleted, and an old `?p=` link now toasts "One-time plan links were
+  removed" and has its param stripped — the decoder is GONE, do not
+  reintroduce it). The Plan tab keeps a room-only Share sheet (room link,
+  copy, cooked-history toggle, leave); there is no size ceiling, because a
+  room link is the same length for any plan. Room sync is whole-state
+  last-write-wins keyed by `rev`; shared state = `{plan, customItems,
+  checked, cleared, customs, favorites, ratings}` —
   `cleared` is `clearedIngredients` (household state: clearing hides
   ingredients for everyone until re-planned/cooked) and `customs` is the
   remembered custom-ingredient memory (household since 2026-09-27,
@@ -409,8 +414,9 @@ spoken by a Durable Object instead of a Bun process.
   and harmful: it reads "already done", so re-adding that name lands in a
   sub-section the done-map calls COMPLETE and auto-collapse HIDES the new
   row. `reconcileCheckedExtras` (pure, returns `changed`) is called at its
-  THREE ingress points — `room.applyRemote`, backup's `checked.json`
-  writer, and `App.vue`'s `importSharedPlan` — never as a watcher on
+  TWO ingress points — `room.applyRemote` and backup's `checked.json`
+  writer (a `?p=` share link was a third; ADR-0051 retired it) — never as
+  a watcher on
   `customItems` (that would put the grocery store inside the room-synced
   plan store). It never touches recipe-derived line keys, and it MIGRATES
   live legacy `custom||` keys to the current prefix in
