@@ -18,7 +18,7 @@
 
 import { containerContribution, formatContainerQuantity, parseContainerQuantity } from './containers'
 import { nameKey } from './grocery'
-import { formatMetricAmount, parseQuantity } from './quantity'
+import { formatMetricAmount, parseQuantity, scaleMetricAmount } from './quantity'
 import { isSeasoning, scaleQuantity } from './recipe'
 import { localizeQuantity, type UnitSystem } from './units'
 import type { LineItem, RecipeDoc } from './types'
@@ -112,13 +112,13 @@ export function measuredQuantity(item: LineItem, factor: number, base: number): 
   const parsed = parseQuantity(item.quantity)
   if (!parsed) return null
   if (factor === 1) return item.quantity.trim()
-  const scaled = scaleQuantity(
-    parsed.amount,
-    base,
-    base * factor,
-    isSeasoning(item.ingredient_name),
-    item.ingredient_name,
-  )
+  // ADR-0057: the SAME vocabulary as the grocery sum and the detail sheet —
+  // seasonings keep `recipe.scaleQuantity`'s sub-linear rule, everything
+  // else scales through `scaleMetricAmount`'s quantized grammar. One model,
+  // so the chip can never disagree with either surface.
+  const scaled = isSeasoning(item.ingredient_name)
+    ? scaleQuantity(parsed.amount, base, base * factor, true, item.ingredient_name)
+    : scaleMetricAmount(parsed.amount, factor, parsed.unit)
   // ADR-0057: unit-aware rendering — integer ml/g, fraction glyphs.
   const rendered = formatMetricAmount(scaled, parsed.unit)
   return parsed.unit ? `${rendered} ${parsed.unit}` : rendered

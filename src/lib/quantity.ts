@@ -189,8 +189,9 @@ export function scaleMetricAmount(amount: number, factor: number, unit: string):
       if (Math.abs(p - Math.round(p)) < 1e-6) return Math.round(p)
       // Upstream keeps ½-oz-multiple amounts and NEVER renders below ½ oz
       // (us-2 census: smallest authored oz = ½; `14 g → ½ oz`, 55/55 exact),
-      // so a conversion that lands under the grid floors there — never 0.
-      return Math.max(0.5, Math.round(qzTo(amount / OZ_GRAMS, 0.5) * factor * OZ_GRAMS))
+      // so an oz-quantized product under ½ oz renders AT the floor, in
+      // GRAMS — never 0, never a stray half-gram.
+      return Math.max(OZ_GRAMS / 2, Math.round(qzTo(amount / OZ_GRAMS, 0.5) * factor * OZ_GRAMS))
     }
     case 'ml':
       return scaleMl(amount, factor)

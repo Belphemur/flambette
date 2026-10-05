@@ -423,7 +423,9 @@ const CAN_SIZE_OZ: ReadonlyMap<number, string> = new Map([
  */
 function flOzQuantized(amount: number): number {
   const fl = amount / MILLILITRES_PER_FLUID_OUNCE
-  return fl >= 6 ? Math.round(fl) : qzTo(fl, 0.25)
+  // A ¼-fl-oz floor like every sibling converter: upstream's smallest
+  // fl-oz rendering is ¾ (us-2 census), zero is never authored.
+  return fl >= 6 ? Math.round(fl) : Math.max(0.25, qzTo(fl, 0.25))
 }
 
 /**
