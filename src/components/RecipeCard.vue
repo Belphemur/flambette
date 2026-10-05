@@ -5,6 +5,7 @@ import RatingStars from './RatingStars.vue'
 import HueIcon from './HueIcon.vue'
 import type { VariantMeta } from '../lib/types'
 import { catalog } from '../lib/catalog'
+import { isUserRecipeId, showNewBadge } from '../lib/userRecipes'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
 import { useFavouritesStore } from '../stores/favourites'
 import { Clock, Heart } from 'lucide-vue-next'
@@ -29,6 +30,30 @@ const typeRole = computed(() =>
 const mealTypeRole = computed(() => mealRole(props.meta.ruleset))
 
 const isFavourite = computed(() => favourites.isFavourite(props.meta.id))
+
+/**
+ * ADR-0052: the NEW badge — this card's recipe was authored by the
+ * household, and was added less than `NEW_BADGE_DAYS` ago.
+ *
+ * Two things it deliberately does NOT say. It does not say "Mealime"
+ * (the source filter already owns that question, and a card is not where
+ * a catalog's provenance gets explained) and it does not borrow the PRO
+ * badge's warning colour, which would read as "something is wrong with
+ * this recipe". It reuses the PRO badge's SHAPE — same slot, same chip,
+ * same type scale — so the two read as one family of corner marks, and
+ * it takes the brand hue because "yours" is the brand's own claim, not a
+ * caveat.
+ *
+ * `addedAt` comes from the artifact, not from `first_published_at` read
+ * here: the catalog exposes the household's own timestamp, so the card
+ * does not have to know which VariantMeta field was the honest one.
+ */
+const showNew = computed(() => {
+  const c = catalog.value
+  if (!c) return false
+  if (!isUserRecipeId(props.meta.id, c.userRecipeIds)) return false
+  return showNewBadge(c.userRecipeAddedAt.get(props.meta.id))
+})
 </script>
 
 <template>
@@ -49,7 +74,14 @@ const isFavourite = computed(() => favourites.isFavourite(props.meta.id))
   class="aspect-[4/3] w-full bg-surface-sunken object-cover"
   />
   <span
-  v-if="meta.is_pro"
+  v-if="showNew"
+  class="absolute top-2 left-2 rounded bg-surface-dark px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-brand-soft"
+  data-test="new-badge"
+  >
+  NEW
+  </span>
+  <span
+  v-else-if="meta.is_pro"
   class="absolute top-2 left-2 rounded bg-surface-dark px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-warning-soft"
   >
   PRO
