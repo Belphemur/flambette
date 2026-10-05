@@ -7,6 +7,7 @@
  * src/lib/containers.ts + src/lib/quantity.ts drift.
  */
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { parseContainerQuantity, containerKey } from '../src/lib/containers'
 import { parseQuantity } from '../src/lib/quantity'
 
@@ -90,7 +91,59 @@ for (const vid of builder.feasible_variants) {
 }
 
 console.log(`checked ${builder.feasible_variants.length} recipes x line items`)
-console.log('nameKey parity:          implicit (a non-matching key exits above)')
+console.log('nameKey parity (pack index): implicit (a non-matching key exits above)')
+
+/**
+ * nameKey parity for the CIQUAL nutrition mirror (ADR-0052).
+ *
+ * `scripts/build_ciqual_nutrition.py` keys its audited food table by the SAME
+ * `nameKey` the grocery list uses, so a recipe's `line_items` resolve a CIQUAL
+ * row without a per-recipe mapping. That mirror is only safe while both
+ * implementations agree, and the pack-index check above cannot see it: it
+ * exercises the pack builder's nameKey, not the nutrition generator's.
+ *
+ * So this compares the two implementations directly, over every ingredient
+ * name in the whole catalog plus the committed table's own keys.
+ */
+function checkNutritionNameKeyParity(): boolean {
+  const names = new Set<string>([...builder.variant_meta.flatMap((m: any) => m.ingredient_names as string[])])
+  for (const key of Object.keys(
+    JSON.parse(readFileSync('public/data/ciqual_foods.json', 'utf8')).foods,
+  )) {
+    names.add(key)
+  }
+  const list = JSON.stringify([...names].sort())
+  let pyKeys: string[]
+  try {
+    pyKeys = JSON.parse(
+      execFileSync(
+        'python3',
+        [
+          '-c',
+          'import json,sys;sys.path.insert(0,"scripts");import build_ciqual_nutrition as b;' +
+            'print(json.dumps([b.name_key(n) for n in json.load(sys.stdin)]))',
+        ],
+        { input: list, encoding: 'utf8' },
+      ),
+    ) as string[]
+  } catch (err) {
+    console.error(`nameKey parity (nutrition): could not run the Python mirror — ${err}`)
+    return false
+  }
+  const sorted = [...names].sort()
+  const bad: string[] = []
+  for (let i = 0; i < sorted.length; i++) {
+    if (nameKeyTs(sorted[i]) !== pyKeys[i]) {
+      bad.push(`${sorted[i]}: ts="${nameKeyTs(sorted[i])}" py="${pyKeys[i]}"`)
+    }
+  }
+  console.log(`nameKey parity (nutrition): ${bad.length ? `${bad.length} MISMATCH` : `ok (${sorted.length} names)`}`)
+  for (const b of bad.slice(0, 5)) console.log('  ' + b)
+  return bad.length === 0
+}
+
+const nutritionNameKeyOk = checkNutritionNameKeyParity()
+
 console.log(`container mismatches:    ${containerMismatches}`)
 console.log(`amount mismatches:       ${amountMismatches}`)
 if (examples.length) {
@@ -99,6 +152,10 @@ if (examples.length) {
 }
 if (containerMismatches || amountMismatches) {
   console.log('\nPARITY FAILED — Python builder has drifted from src/lib/containers.ts')
+  process.exit(1)
+}
+if (!nutritionNameKeyOk) {
+  console.log('\nPARITY FAILED — build_ciqual_nutrition.py name_key has drifted from src/lib/grocery.ts')
   process.exit(1)
 }
 console.log('\nPARITY OK')

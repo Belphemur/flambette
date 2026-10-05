@@ -29,3 +29,8 @@ __pycache__/
 # scripts/extract_ingredients.py. Regenerate with
 #   uv run --with xlrd scripts/fetch_ciqual.py --report
 data/reference/
+
+# CIQUAL upstream archive cache (ADR-0054). 3.5 MB of raw French source
+# truth, re-fetchable with `bun run data:nutrition:download`; the DERIVED
+# public/data/ciqual_foods.json is what the app ships and is committed.
+scripts/.ciqual/
