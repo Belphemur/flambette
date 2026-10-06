@@ -344,6 +344,9 @@ def main():
         log("wrote removed/%s.json (%d removed)" % (slug, len(per_restriction[rid_str]["removed"])))
 
     # 4. pairs/<a>-<b>.json: ONLY composition extras (extras beyond singles' union)
+    # The filename uses the RUNTIME's canonical order (slug string comparison —
+    # `restrictions.ts`'s pairKey). The numeric-id order used to mismatch 25 of
+    # 66 files, so ensurePair 404'd silently into the empty-extras degrade.
     total_extras = 0
     for a in sorted(A.RESTRICTIONS):
         for b in sorted(A.RESTRICTIONS):
@@ -351,13 +354,14 @@ def main():
                 continue
             slug_a = A.RESTRICTIONS[a][0]
             slug_b = A.RESTRICTIONS[b][0]
+            first, second = sorted((slug_a, slug_b))
             extras = pair_extra_removals(a, b)
-            pair_file = os.path.join(RESTRICTIONS_DIR, "pairs", "%s-%s.json" % (slug_a, slug_b))
+            pair_file = os.path.join(RESTRICTIONS_DIR, "pairs", "%s-%s.json" % (first, second))
             with open(pair_file, "w") as f:
                 json.dump({"extras": extras}, f, indent=1)
                 f.write("\n")
             total_extras += len(extras)
-            log("wrote pairs/%s-%s.json (%d extras)" % (slug_a, slug_b, len(extras)))
+            log("wrote pairs/%s-%s.json (%d extras)" % (first, second, len(extras)))
     log("TOTAL pair extras across 66 pairs: %d" % total_extras)
     return 0
 
