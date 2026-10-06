@@ -126,12 +126,23 @@ interface ContainerSum {
 
 interface Group {
   name: string
+  /**
+   * Every contributing display name. When they DIVERGE (different
+   * substitutes for one base ingredient), the item's label names them all
+   * instead of whichever arrived first.
+   */
+  names: Set<string>
   /** normalized unit -> summed amount */
   byUnit: Map<string, UnitSum>
   /** container merge key -> ceil-merged container total (ADR-0017) */
   containers: Map<string, ContainerSum>
-  /** verbatim quantities that didn't parse (deduped) */
-  raw: Set<string>
+  /**
+   * Verbatim quantities that didn't parse, deduped by DISPLAY spelling —
+   * each entry carries its own KEY spelling (the base doc's quantity when
+   * the restriction seam re-authored it), which is what the checkbox key
+   * is built from, never the display spelling.
+   */
+  raw: Map<string, string>
   /** planned meal names using this ingredient */
   recipes: Set<string>
 }
@@ -175,6 +186,14 @@ export interface RestrictedDisplayLine {
   name: string
   quantity: string
   keyQuantity?: string
+  /**
+   * The paired BASE line's ingredient name, present whenever the row HAS a
+   * base counterpart. The key side's seasoning classification (the
+   * sub-linear rule) runs on THIS, never the display name: the base render
+   * classifies by the base ingredient, and a substitute that crosses the
+   * seasoning verdict must not re-classify the base spelling.
+   */
+  keyIngredient?: string
 }
 
 /**
@@ -219,14 +238,20 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       if (!group) {
         group = {
           name: row.name.trim(),
+          names: new Set([row.name.trim()]),
           byUnit: new Map(),
           containers: new Map(),
-          raw: new Set(),
+          raw: new Map(),
           recipes: new Set(),
         }
         groups.set(normalized, group)
       }
       group.recipes.add(recipeName)
+      // Every contributing display name is kept: two planned meals whose
+      // base ingredient is the same but whose SUBSTITUTES differ (or one
+      // restricted meal plus one unrestricted one) would otherwise label
+      // the whole merged group with whichever name arrived first.
+      group.names.add(row.name.trim())
       // The KEY spelling's own parse: the paired BASE quantity when the
       // restriction seam re-authored the display amount, else the same
       // string — so absent keyQuantity the two accumulations are identical
@@ -292,13 +317,17 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
               parsed.unit,
             )
           : scaleMetricAmount(parsed.amount, factor, parsed.unit)
-        // The key side runs the SAME scale rule on the key source's amount.
-        // A key source that parses to a DIFFERENT unit follows the display
-        // unit (the parallel sums live under the display line's unit key).
+        // The key side runs the SAME scale rule on the key source's amount,
+        // classified by the KEY ingredient (the base doc's name — a
+        // substitute that crosses the seasoning verdict must not
+        // re-classify the base spelling). A key source that parses to a
+        // DIFFERENT unit follows the display unit (the parallel sums live
+        // under the display line's unit key).
+        const keyIngredient = row.keyIngredient ?? row.name
         const keyScaled = keyParsed && unitKey(keyParsed.unit) === key
-          ? isSeasoning(row.name)
+          ? isSeasoning(keyIngredient)
             ? quantizeSpoons(
-                scaleQuantity(keyParsed.amount, base, target, true, row.name),
+                scaleQuantity(keyParsed.amount, base, target, true, keyIngredient),
                 keyParsed.unit,
               )
             : scaleMetricAmount(keyParsed.amount, factor, keyParsed.unit)
@@ -309,8 +338,26 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
           current.keyAmount += keyScaled
         } else group.byUnit.set(key, { unit: parsed.unit, amount: scaled, keyAmount: keyScaled })
       } else {
-        // Unparseable or empty quantity — pass through verbatim (may be '').
-        group.raw.add(row.quantity.trim())
+        // Unparseable or empty quantity — verbatim DISPLAY. The KEY
+        // spelling follows the key source (the base doc's quantity when
+        // the seam re-authored it), never the display spelling: when the
+        // key source PARSES, the base render keyed this line under the
+        // parsed grammar — so this spells the scaled parsed basis — and
+        // only a key source that cannot parse either falls back to the
+        // `raw||` namespace.
+        const display = row.quantity.trim()
+        if (!group.raw.has(display)) {
+          const kp = keyContainer ? null : parseQuantity(keySource)
+          if (kp) {
+            const keyIngredient = row.keyIngredient ?? row.name
+            const keyScaled = isSeasoning(keyIngredient)
+              ? quantizeSpoons(scaleQuantity(kp.amount, base, target, true, keyIngredient), kp.unit)
+              : scaleMetricAmount(kp.amount, factor, kp.unit)
+            group.raw.set(display, lineKeyBasis(keyScaled, kp.unit))
+          } else {
+            group.raw.set(display, `raw||${(row.keyQuantity ?? row.quantity).trim()}`)
+          }
+        }
       }
     }
   }
@@ -351,12 +398,19 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       const nb = parseQuantity(b.display)?.amount ?? 0
       return na - nb
     })
-    for (const raw of group.raw) {
-      lines.push({ key: `${normalized}||raw||${raw}`, display: raw })
+    for (const [raw, keyBasis] of group.raw) {
+      lines.push({ key: `${normalized}||${keyBasis}`, display: raw })
     }
+    // When the group's display names DIVERGE (different substitutes for the
+    // same base ingredient, or a restricted meal plus an unrestricted one),
+    // the label names them ALL — a first-seen-only label would silently
+    // claim the whole summed quantity for one substitute. The quantity sums
+    // stay merged (splitting by name would re-key checked state on
+    // toggle); the section still buckets on the first-seen name.
+    const name = group.names.size > 1 ? [...group.names].join(' / ') : group.name
     items.push({
       normalized,
-      name: group.name,
+      name,
       section: bucketFor(group.name),
       recipes: [...group.recipes],
       lines,

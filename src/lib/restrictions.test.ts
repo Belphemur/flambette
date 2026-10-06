@@ -172,9 +172,9 @@ describe('groceryDisplayLines (key/display split)', () => {
   }
   test('the safe positional case: the overlay name on the base line, base quantity', () => {
     expect(groceryDisplayLines(baseDoc, overlay)).toEqual([
-      { keyName: 'rotini pasta', name: 'gluten-free rotini pasta', quantity: '15 oz' },
-      { keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '2 tbsp' },
-      { keyName: 'broccoli', name: 'broccoli', quantity: '300 g' },
+      { keyName: 'rotini pasta', name: 'gluten-free rotini pasta', quantity: '15 oz', keyIngredient: 'rotini pasta' },
+      { keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '2 tbsp', keyIngredient: 'soy sauce' },
+      { keyName: 'broccoli', name: 'broccoli', quantity: '300 g', keyIngredient: 'broccoli' },
     ])
   })
   test('an unchanged doc yields null (no override)', () => {
@@ -214,7 +214,10 @@ describe('groceryDisplayLines (key/display split)', () => {
   })
   test('a count-changing rework displays the overlay list; keys stay base where a counterpart exists', () => {
     // Collapse: two base lines merged into one overlay line (GF rid 863's
-    // class). The unpaired base line is appended verbatim.
+    // class). The unpaired base line is NOT appended — the restricted doc
+    // is the display truth, and an ingredient upstream removed from the
+    // restricted render must not reappear in the grocery (measured live:
+    // GF rid 863's base soy sauce used to survive its own restriction).
     const collapsed = {
       line_items: [
         { quantity: '15 oz', ingredient_name: 'gluten-free rotini pasta' },
@@ -224,15 +227,46 @@ describe('groceryDisplayLines (key/display split)', () => {
     }
     const rows = groceryDisplayLines(baseDoc, collapsed)!
     expect(rows).toEqual([
-      // rotini pairs the leftover base line positionally (its substituted
-      // name never matches a base nameKey)…
-      { keyName: 'rotini pasta', name: 'gluten-free rotini pasta', quantity: '15 oz' },
+      // rotini pairs the leftover base line via nameKey containment (its
+      // substituted name embeds the original)…
+      { keyName: 'rotini pasta', name: 'gluten-free rotini pasta', quantity: '15 oz', keyIngredient: 'rotini pasta' },
       // …so does the tamari line (keyName from the base 'soy sauce' line,
       // and the re-authored amount keys the base spelling)…
-      { keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '3 tbsp', keyQuantity: '2 tbsp' },
-      // …and broccoli has no overlay counterpart: base text verbatim.
-      { keyName: 'broccoli', name: 'broccoli', quantity: '300 g' },
+      { keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '3 tbsp', keyQuantity: '2 tbsp', keyIngredient: 'soy sauce' },
+      // …and broccoli has no overlay counterpart: dropped, exactly as the
+      // restricted doc displays the recipe.
     ])
+  })
+  test('a rename on a DUPLICATED quantity never pairs positionally (kody: dup-qty reorder)', () => {
+    // Two base lines share the empty quantity; a rename on one of them
+    // must fall to the nameKey-first pairing instead of trusting position.
+    const dupQtyBase: RecipeDoc = {
+      ...baseDoc,
+      line_items: [
+        baseDoc.line_items[0],
+        baseDoc.line_items[1],
+        baseDoc.line_items[2],
+        { id: 14, quantity: '', ingredient_name: 'black pepper' },
+        { id: 15, quantity: '', ingredient_name: 'salt' },
+      ],
+    }
+    const renamedDup = {
+      line_items: [
+        { quantity: '15 oz', ingredient_name: 'gluten-free rotini pasta' },
+        { quantity: '2 tbsp', ingredient_name: 'tamari soy sauce' },
+        { quantity: '300 g', ingredient_name: 'broccoli' },
+        { quantity: '', ingredient_name: 'salt' },
+        { quantity: '', ingredient_name: 'black pepper' },
+      ],
+      instructions: [],
+    }
+    const rows = groceryDisplayLines(dupQtyBase, renamedDup)!
+    // The two swapped empty-quantity seasonings pair by NAME (pass 1),
+    // never by position: position is exactly what upstream moved.
+    const pepper = rows.find((r) => r.name === 'black pepper')!
+    const salt = rows.find((r) => r.name === 'salt')!
+    expect(pepper.keyName).toBe('black pepper')
+    expect(salt.keyName).toBe('salt')
   })
   test('a split (overlay longer than base): the extra overlay row keys to itself', () => {
     const split = {
@@ -311,6 +345,60 @@ describe('groceryDisplayLines against the committed GF overlay (the fettuccine r
     expect(pasta.keyName).toBe(nameKey('fettuccine pasta'))
     const garlic = rows.find((r) => r.name === 'garlic')!
     expect(garlic.keyName).toBe(nameKey('garlic'))
+  })
+})
+
+describe('groceryDisplayLines against the committed GF overlay (rid 863: addition + collapse)', () => {
+  // GF rid 863: upstream's gluten-free rework REMOVES the shrimp and fish
+  // sauce lines, RENAMES soy sauce to tamari, and ADDS a `12 eggs` line —
+  // the pairing regression shipped `1.02 kg` (the shrimp's quantity) as the
+  // eggs row's keyQuantity and re-displayed the base `soy sauce` verbatim.
+  const rid863 = (gfOverlay as { docs: Record<string, { line_items: { quantity: string; ingredient_name: string }[] }> }).docs['863']
+  const base863: RecipeDoc = {
+    ...baseDoc,
+    line_items: [
+      { id: 1, quantity: '1 ½ small bunches', ingredient_name: 'cilantro' },
+      { id: 2, quantity: '9 cloves', ingredient_name: 'garlic' },
+      { id: 3, quantity: '1 ½ small bunches', ingredient_name: 'green onions (scallions)' },
+      { id: 4, quantity: '3', ingredient_name: 'limes' },
+      { id: 5, quantity: '0.375 cup', ingredient_name: 'peanuts, roasted unsalted' },
+      { id: 6, quantity: '1.02 kg', ingredient_name: 'raw peeled shrimp, fresh or frozen' },
+      { id: 7, quantity: '3', ingredient_name: 'shallots' },
+      { id: 8, quantity: '3 medium', ingredient_name: 'spaghetti squash' },
+      { id: 9, quantity: '', ingredient_name: 'black pepper' },
+      { id: 10, quantity: '', ingredient_name: 'cayenne pepper' },
+      { id: 11, quantity: '', ingredient_name: 'extra virgin olive oil' },
+      { id: 12, quantity: '', ingredient_name: 'fish sauce' },
+      { id: 13, quantity: '', ingredient_name: 'pure maple syrup' },
+      { id: 14, quantity: '', ingredient_name: 'rice vinegar' },
+      { id: 15, quantity: '', ingredient_name: 'salt' },
+      { id: 16, quantity: '', ingredient_name: 'soy sauce' },
+    ],
+  }
+
+  test('the ADDED eggs row keys to itself, never onto a base row', () => {
+    const rows = groceryDisplayLines(base863, rid863)!
+    const eggs = rows.find((r) => r.name === 'eggs')!
+    expect(eggs.keyName).toBe(nameKey('eggs'))
+    expect(eggs.keyQuantity).toBeUndefined()
+  })
+
+  test('the renamed soy line keeps the base soy-sauce key (containment pairing)', () => {
+    const rows = groceryDisplayLines(base863, rid863)!
+    const tamari = rows.find((r) => r.name === 'tamari soy sauce')!
+    expect(tamari.keyName).toBe(nameKey('soy sauce'))
+    // Quantities are both empty — the base spelling IS the display's.
+    expect(tamari.keyQuantity).toBeUndefined()
+  })
+
+  test('ingredients upstream removed never re-display (the restricted doc is the truth)', () => {
+    const rows = groceryDisplayLines(base863, rid863)!
+    const names = rows.map((r) => r.name)
+    // Exactly the overlay's own 15 lines — no appended base lines.
+    expect(rows).toHaveLength(rid863.line_items.length)
+    for (const gone of ['raw peeled shrimp, fresh or frozen', 'fish sauce', 'soy sauce']) {
+      expect(names).not.toContain(gone)
+    }
   })
 })
 

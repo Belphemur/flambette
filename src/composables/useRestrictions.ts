@@ -37,6 +37,12 @@ const index = shallowRef<RestrictionIndex>(buildRestrictionIndex(null))
 const overlays = shallowRef<OverlaysBySlug>({})
 const overlaysLoaded = ref(false)
 
+// ONE shared overlay loader at module scope: its per-slug cache must
+// dedupe across ALL callers (RecipesTab/RecipeDetail onMounted, the
+// grocery watch, SettingsTab's toggle each fire ensureLoaded; a per-call
+// loader re-fetched the same multi-megabyte overlay payload per caller).
+const loadOverlay = createOverlayLoader(fetch, import.meta.env.BASE_URL)
+
 async function loadSets(baseUrl: string): Promise<RestrictionSetsFile | null> {
   try {
     const res = await fetch(`${baseUrl}data/restriction_sets.json`)
@@ -74,15 +80,19 @@ export function useRestrictions() {
     if (loaded) {
       sets.value = loaded
       index.value = buildRestrictionIndex(loaded)
+    } else {
+      // A failed load is NOT memoized: the next ensureLoaded() retries, as
+      // the documented contract says. Concurrent callers awaited the same
+      // attempt; whoever observes the failure clears the memo.
+      setsPromise = null
     }
     if (missingSlugs.value.length === 0) {
       overlaysLoaded.value = true
       return
     }
-    const load = createOverlayLoader(fetch, import.meta.env.BASE_URL)
     await Promise.all(
       missingSlugs.value.map(async (slug) => {
-        const overlay = await load(slug)
+        const overlay = await loadOverlay(slug)
         if (overlay) overlays.value = { ...overlays.value, [slug]: overlay }
       }),
     )

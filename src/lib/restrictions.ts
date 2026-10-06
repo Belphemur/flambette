@@ -169,33 +169,107 @@ export function overlayDocFor(
 
 /* ---------- The restricted doc view (display truth) ---------- */
 
+/** One pairing input: the ingredient's nameKey plus its quantity string. */
+interface PairItem {
+  key: string
+  quantity: string
+}
+
 /**
- * Pair overlay rows to base rows by INDEX: pass 1 matches the SAME nameKey
- * (the same ingredient wherever upstream moved it), pass 2 pairs the
- * leftover overlay rows positionally with the leftover base rows in order.
- * The return is per-overlay-row: the paired base row's index, or -1 when the
- * overlay row has no base counterpart (a split's extra line).
+ * Pair overlay rows to base rows:
+ *
+ * - pass 1 — the SAME nameKey (the same ingredient wherever upstream moved
+ *   it);
+ * - pass 1b — nameKey CONTAINMENT: upstream's substitutions embed the
+ *   original name (`soy sauce` → `tamari soy sauce`, `fettuccine pasta` →
+ *   `gluten-free fettuccine pasta`), so a leftover overlay row pairs a
+ *   leftover base row when one nameKey contains the other — but only when
+ *   the candidate is UNIQUE on both sides (an ambiguous containment is no
+ *   evidence);
+ * - pass 2 — the remaining leftovers pair IN ORDER, one constraint per
+ *   pair: BOTH quantities must be unique among their own leftovers.
+ *   Duplicate quantities (two `354 ml` lines, the many empty seasoning
+ *   rows) cannot prove identity, and an ingredient upstream ADDED (GF rid
+ *   863's `12 eggs`) must never steal a base row's key by blind order —
+ *   measured live 2026-10-06: blind order pairing keyed the eggs row onto
+ *   the shrimp line and the tamari row onto fish sauce.
+ *
+ * The return is per-overlay-row: the paired base row's index, or -1 when
+ * the overlay row has no base counterpart (a split's extra line, a refused
+ * ambiguous pair). An unpaired base row is absent from the restricted
+ * render and the display truth never includes it.
  */
-function pairOverlayToBase(baseKeys: readonly string[], ovKeys: readonly string[]): number[] {
+function pairOverlayToBase(base: readonly PairItem[], ov: readonly PairItem[]): number[] {
   const usedBase = new Set<number>()
-  const pairOf = new Array<number>(ovKeys.length).fill(-1)
-  for (let i = 0; i < ovKeys.length; i++) {
-    if (!ovKeys[i]) continue
-    const j = baseKeys.findIndex((k, idx) => !usedBase.has(idx) && k === ovKeys[i])
+  const pairOf = new Array<number>(ov.length).fill(-1)
+  for (let i = 0; i < ov.length; i++) {
+    if (!ov[i].key) continue
+    const j = base.findIndex((b, idx) => !usedBase.has(idx) && b.key === ov[i].key)
     if (j !== -1) {
       pairOf[i] = j
       usedBase.add(j)
     }
   }
-  const leftover = baseKeys.map((_, j) => j).filter((j) => !usedBase.has(j))
-  let next = 0
-  for (let i = 0; i < ovKeys.length; i++) {
-    if (pairOf[i] !== -1 || next >= leftover.length) continue
-    pairOf[i] = leftover[next]
-    usedBase.add(leftover[next])
-    next += 1
+  const openOv: number[] = []
+  for (let i = 0; i < ov.length; i++) if (pairOf[i] === -1 && ov[i].key) openOv.push(i)
+  const openBase: number[] = []
+  for (let j = 0; j < base.length; j++) if (!usedBase.has(j)) openBase.push(j)
+  for (const i of openOv) {
+    const candidates = openBase.filter(
+      (j) => !usedBase.has(j) && (base[j].key.includes(ov[i].key) || ov[i].key.includes(base[j].key)),
+    )
+    if (candidates.length === 1) {
+      pairOf[i] = candidates[0]
+      usedBase.add(candidates[0])
+    }
+  }
+  const leftOv: number[] = []
+  for (let i = 0; i < ov.length; i++) if (pairOf[i] === -1 && ov[i].key) leftOv.push(i)
+  const leftBase: number[] = []
+  for (let j = 0; j < base.length; j++) if (!usedBase.has(j)) leftBase.push(j)
+  const ovQty = new Map<string, number>()
+  for (const i of leftOv) {
+    const q = ov[i].quantity.trim()
+    ovQty.set(q, (ovQty.get(q) ?? 0) + 1)
+  }
+  const baseQty = new Map<string, number>()
+  for (const j of leftBase) {
+    const q = base[j].quantity.trim()
+    baseQty.set(q, (baseQty.get(q) ?? 0) + 1)
+  }
+  for (let n = 0; n < leftOv.length && n < leftBase.length; n++) {
+    const i = leftOv[n]
+    const j = leftBase[n]
+    const qo = ov[i].quantity.trim()
+    const qb = base[j].quantity.trim()
+    if (qo === qb && (ovQty.get(qo) ?? 0) === 1 && (baseQty.get(qb) ?? 0) === 1) {
+      pairOf[i] = j
+      usedBase.add(j)
+    }
   }
   return pairOf
+}
+
+/**
+ * The safe-positional test shared by the doc view and the grocery seam:
+ * equal counts AND pairwise-equal quantities — AND every RENAMED index's
+ * quantity unique within the base doc. Duplicate quantities (GF rid 224
+ * carries two `354 ml` lines; many docs repeat empty seasoning rows) mean
+ * an upstream REORDER of equal-quantity lines cannot be ruled out, so a
+ * rename on such an index falls to the nameKey-first pairing below.
+ */
+function positionalSafe(base: readonly PairItem[], ov: readonly PairItem[]): boolean {
+  if (ov.length !== base.length) return false
+  if (!ov.every((li, i) => li.quantity.trim() === base[i].quantity.trim())) return false
+  const qtyCounts = new Map<string, number>()
+  for (const b of base) {
+    const q = b.quantity.trim()
+    qtyCounts.set(q, (qtyCounts.get(q) ?? 0) + 1)
+  }
+  return ov.every(
+    (row, i) =>
+      row.key === base[i].key || (qtyCounts.get(base[i].quantity.trim()) ?? 0) === 1,
+  )
 }
 
 /**
@@ -222,16 +296,14 @@ export function restrictedDocView(doc: RecipeDoc, overlay: OverlayDoc | null): R
   // match first, positional among the leftovers), so a measured chip and the
   // line naming it stay the same ingredient — never base quantity with an
   // overlay name.
-  const positional =
-    overlay.line_items.length === baseIds.length &&
-    overlay.line_items.every(
-      (li, i) => li.quantity.trim() === doc.line_items[i].quantity.trim(),
-    )
-  const pairOf = positional
+  const pairOf = positionalSafe(
+    doc.line_items.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
+    overlay.line_items.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
+  )
     ? overlay.line_items.map((_, i) => (i < baseIds.length ? i : -1))
     : pairOverlayToBase(
-        doc.line_items.map((li) => nameKey(li.ingredient_name)),
-        overlay.line_items.map((li) => nameKey(li.ingredient_name)),
+        doc.line_items.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
+        overlay.line_items.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
       )
   const line_items: LineItem[] = overlay.line_items.map((li, i) => ({
     id: pairOf[i] === -1 ? -(i + 1) : baseIds[pairOf[i]],
@@ -248,7 +320,8 @@ export function restrictedDocView(doc: RecipeDoc, overlay: OverlayDoc | null): R
  * should render as-is.
  *
  * THE SAFE POSITIONAL CASE — overlay line count == base line count AND every
- * index's quantity string is equal (or both empty): base line i and overlay
+ * index's quantity string is equal (or both empty), with no rename sitting
+ * on a duplicated quantity (see `positionalSafe`): base line i and overlay
  * line i are the same ingredient, so the row keys on the BASE nameKey,
  * displays the overlay's name and the (identical) quantity. Unchanged names
  * return null — no override, byte-identical to the base render.
@@ -257,11 +330,15 @@ export function restrictedDocView(doc: RecipeDoc, overlay: OverlayDoc | null): R
  * collapsed two lines into one, a split): names are NOT overridden
  * positionally. The overlay's OWN line list is displayed instead — the
  * overlay is metric, so its quantities are correct — while each row's key
- * stays a BASE doc nameKey: pass 1 pairs overlay rows to base rows with the
- * SAME nameKey (the same ingredient wherever it moved), pass 2 pairs the
- * leftovers positionally in order, and an overlay row with no base
- * counterpart (a split's extra line) keys to itself. A base line with no
- * overlay counterpart (a collapse) is appended verbatim.
+ * stays a BASE doc nameKey wherever the pairing found the row's base
+ * counterpart (exact nameKey, containment, or an unambiguous in-order
+ * leftover pair — see `pairOverlayToBase`); an overlay row with no base
+ * counterpart (a split's extra line, an upstream addition) keys to itself.
+ * A base line with no overlay counterpart is NOT appended: it is absent
+ * from the restricted render, and the restricted doc is the display truth
+ * (measured live: GF rid 863's base soy sauce and fish sauce used to
+ * survive their own restriction in the grocery while the recipe detail
+ * showed only tamari).
  *
  * The invariant this preserves: a grocery row's (name, quantity) pair always
  * co-occurs in ONE authoritative doc — never `6 cloves gluten-free fettuccine
@@ -275,38 +352,43 @@ export function groceryDisplayLines(
   const base = doc.line_items
   const ov = overlay.line_items
   if (
-    ov.length === base.length &&
-    ov.every((li, i) => li.quantity.trim() === base[i].quantity.trim())
+    positionalSafe(
+      base.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
+      ov.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
+    )
   ) {
     let changed = false
     const rows = ov.map((li, i) => {
       if (li.ingredient_name !== base[i].ingredient_name) changed = true
-      return { keyName: nameKey(base[i].ingredient_name), name: li.ingredient_name, quantity: base[i].quantity }
+      return {
+        keyName: nameKey(base[i].ingredient_name),
+        name: li.ingredient_name,
+        quantity: base[i].quantity,
+        keyIngredient: base[i].ingredient_name,
+      }
     })
     return changed ? rows : null
   }
 
-  const baseKeys = base.map((li) => nameKey(li.ingredient_name))
-  const ovKeys = ov.map((li) => nameKey(li.ingredient_name))
-  const pairOf = pairOverlayToBase(baseKeys, ovKeys)
-  const rows = ov.map((li, i) => {
+  const pairOf = pairOverlayToBase(
+    base.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
+    ov.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
+  )
+  return ov.map((li, i) => {
     const j = pairOf[i]
     if (j === -1) {
       // An overlay row with no base counterpart keys to itself.
-      return { keyName: ovKeys[i], name: li.ingredient_name, quantity: li.quantity }
+      return { keyName: nameKey(li.ingredient_name), name: li.ingredient_name, quantity: li.quantity }
     }
-    const keyQuantity =
-      base[j].quantity.trim() === li.quantity.trim() ? undefined : base[j].quantity
-    return { keyName: baseKeys[j], name: li.ingredient_name, quantity: li.quantity, keyQuantity }
+    const row: RestrictedDisplayLine = {
+      keyName: nameKey(base[j].ingredient_name),
+      name: li.ingredient_name,
+      quantity: li.quantity,
+      keyIngredient: base[j].ingredient_name,
+    }
+    if (base[j].quantity.trim() !== li.quantity.trim()) row.keyQuantity = base[j].quantity
+    return row
   })
-  // Base lines with no overlay counterpart keep the base text verbatim.
-  const usedBase = new Set(pairOf.filter((j) => j !== -1))
-  for (let j = 0; j < base.length; j++) {
-    if (!usedBase.has(j)) {
-      rows.push({ keyName: baseKeys[j], name: base[j].ingredient_name, quantity: base[j].quantity })
-    }
-  }
-  return rows
 }
 
 /* ---------- Overlay loading (lazy, per active slug) ---------- */

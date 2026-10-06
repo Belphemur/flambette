@@ -173,7 +173,9 @@ WORKERS = 8
 # after the POST returned renders for the WRONG setting (a Paleo render and a
 # shellfish render landed where soy/nightshade were asked for) — 6 s has held
 # across every id. The builder validates the result anyway (subset check).
-PROFILE_APPLY_SETTLE_SECONDS = 6
+# Override for slower/faster environments without editing the script
+# (same convention as MEALIME_TOKEN_FILE).
+PROFILE_APPLY_SETTLE_SECONDS = float(os.getenv("MEALIME_PROFILE_SETTLE_SECONDS", "6"))
 
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -411,9 +413,17 @@ def run_restrictions(token, force=False, only=None, family="metric"):
     if only:
         # 'none' still ships with a filtered run: the subset math joins
         # every restriction payload against the unrestricted baseline.
-        targets = [t for t in targets if t[0] == "none-" + suffix or t[1] and t[1][0] in only]
+        # The id SET must be a subset of the requested ids — matching the
+        # first id alone selected all-free (whose id list starts with 5)
+        # for `--restriction 5`.
+        targets = [
+            t
+            for t in targets
+            if t[0] == "none-" + suffix or (t[1] and set(t[1]) <= set(only))
+        ]
 
     results = []
+    seen: dict = {}
     try:
         for label, ids in targets:
             path = os.path.join(RESTRICTION_ROOT, label + ".json")
@@ -426,6 +436,22 @@ def run_restrictions(token, force=False, only=None, family="metric"):
             set_profile(token, unit_family, 6, ids)
             time.sleep(PROFILE_APPLY_SETTLE_SECONDS)
             builder = fetch_builder(token)
+            # A profile apply that has not settled yet serves the PREVIOUS
+            # render. The downstream subset check cannot catch that (a
+            # stale restricted render is still a subset of none), so the
+            # stale payload would be saved — and published — under THIS
+            # label. Two targets whose recipe-id sets are identical in one
+            # run are that failure: refuse to save, ask for a rerun.
+            fp = tuple(sorted({m["recipe_id"] for m in builder["variant_meta"]}))
+            if fp in seen:
+                log(
+                    "ERROR: restriction %s: fetched render is identical to %s — "
+                    "the profile apply did not settle; NOT saved (rerun this id)"
+                    % (label, seen[fp])
+                )
+                results.append((label, False))
+                continue
+            seen[fp] = label
             os.makedirs(RESTRICTION_ROOT, exist_ok=True)
             with open(path, "w") as f:
                 json.dump(builder, f)

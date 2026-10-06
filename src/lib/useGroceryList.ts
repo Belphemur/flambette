@@ -157,10 +157,17 @@ export function useGroceryList() {
    */
   registerClearSnapshotProvider(() => {
     const byVariant: Record<number, string[]> = {}
-    for (const { doc } of aggregateInputs.value) {
-      byVariant[doc.id] = doc.line_items
-        .map((item) => nameKey(item.ingredient_name))
-        .filter((key) => key.length > 0)
+    for (const { doc, displayLines } of aggregateInputs.value) {
+      // The snapshot keys are the SAME keys the aggregation groups on —
+      // the display rows' keyNames when the restriction seam is active.
+      // A substituted-extra row (an overlay line with no base counterpart,
+      // e.g. GF rid 1292's butter lettuce) keys to itself and would never
+      // appear in a base-doc-derived snapshot, so Clear would leave it
+      // visible while the rest of the meal hides.
+      const keys = displayLines
+        ? displayLines.map((row) => row.keyName)
+        : doc.line_items.map((item) => nameKey(item.ingredient_name))
+      byVariant[doc.id] = keys.filter((key) => key.length > 0)
     }
     return byVariant
   })

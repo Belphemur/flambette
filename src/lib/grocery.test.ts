@@ -253,4 +253,65 @@ describe('aggregateGroceries displayLines (the restriction ADR)', () => {
     const baseKey = aggregateGroceries(baseInputs).find((i) => i.normalized === 'mozzarella cheese')!.lines[0].key
     expect(agg.find((i) => i.normalized === 'mozzarella cheese')?.lines[0].key).toBe(baseKey)
   })
+
+  test('an unparseable display quantity keys on the base spelling (the raw branch)', () => {
+    // The raw branch (display quantity unparseable, e.g. an overlay line
+    // with an empty quantity) must still spell its key the way the BASE
+    // render would — the base `6` eggs line PARSES, so a `raw||` key here
+    // would orphan the checked line on toggle.
+    const eggsDoc = doc('Quiche', 6, [['6', 'eggs']])
+    const baseKey = aggregateGroceries([input(eggsDoc, 1)]).find((i) => i.normalized === 'egg')!.lines[0].key
+    const agg = aggregateGroceries([
+      {
+        ...input(eggsDoc, 1),
+        displayLines: [
+          { keyName: 'egg', name: 'egg', quantity: '', keyQuantity: '6', keyIngredient: 'eggs' },
+        ],
+      },
+    ])
+    const line = agg.find((i) => i.normalized === 'egg')!.lines[0]
+    expect(line.display).toBe('')
+    expect(line.key).toBe(baseKey)
+  })
+
+  test('the KEY side classifies by the BASE ingredient, not the substitute', () => {
+    // The base `6 g paprika` line is a seasoning (sub-linear rule); the
+    // substitute's name carries no seasoning keyword. Classifying the key
+    // side by the DISPLAY name would scale it linearly and re-spell the
+    // key away from what the base render spells.
+    const spiced = doc('Spiced', 6, [['6 g', 'paprika']])
+    const factor = 2 / 6
+    const baseKey = aggregateGroceries([input(spiced, factor)]).find((i) => i.normalized === 'paprika')!.lines[0].key
+    const agg = aggregateGroceries([
+      {
+        ...input(spiced, factor),
+        displayLines: [
+          { keyName: 'paprika', name: 'spice blend', quantity: '5 g', keyQuantity: '6 g', keyIngredient: 'paprika' },
+        ],
+      },
+    ])
+    expect(agg.find((i) => i.normalized === 'paprika')!.lines[0].key).toBe(baseKey)
+  })
+
+  test('divergent substitutes label the merged group with EVERY name', () => {
+    // Two planned meals, the same BASE ingredient, different substitutes —
+    // a first-seen-only label would claim the whole summed quantity for one
+    // substitute. The quantity still merges (splitting by name would
+    // re-key checked state on toggle); the label names them all.
+    const a = doc('Tamari Stir Fry', 6, [['2 tbsp', 'soy sauce']])
+    const b = doc('Aminos Bowl', 6, [['2 tbsp', 'soy sauce']])
+    const agg = aggregateGroceries([
+      {
+        ...input(a, 1),
+        displayLines: [{ keyName: 'soy sauce', name: 'tamari', quantity: '2 tbsp', keyIngredient: 'soy sauce' }],
+      },
+      {
+        ...input(b, 1),
+        displayLines: [{ keyName: 'soy sauce', name: 'coconut aminos', quantity: '2 tbsp', keyIngredient: 'soy sauce' }],
+      },
+    ])
+    const soy = agg.find((i) => i.normalized === 'soy sauce')!
+    expect(soy.name).toBe('tamari / coconut aminos')
+    expect(soy.lines.map((l) => l.display)).toEqual(['4 tbsp'])
+  })
 })
