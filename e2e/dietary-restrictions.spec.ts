@@ -357,14 +357,33 @@ test('activating ONE chip fires index + swaps + one removed file', async ({ page
   await page.goto('/settings')
   await page.getByTestId('restriction-chip-gluten-free').click()
   await expect(page.getByTestId('restriction-chip-gluten-free')).toHaveAttribute('aria-pressed', 'true')
+  // The ladder fetches fire ASYNCHRONOUSLY after the (synchronous) aria flip —
+  // wait for them instead of reading the interception log at once (raced CI).
+  await expect
+    .poll(() =>
+      requests.filter(
+        (r) =>
+          r.startsWith('index.json') ||
+          r.startsWith('swaps.json') ||
+          r.startsWith('removed/') ||
+          r.startsWith('pairs/'),
+      ),
+    )
+    .toContain('removed/gluten-free.json')
   const fired = requests.filter(
-    (r) => r.startsWith('index.json') || r.startsWith('swaps.json') || r.startsWith('removed/') || r.startsWith('pairs/'),
+    (r) =>
+      r.startsWith('index.json') ||
+      r.startsWith('swaps.json') ||
+      r.startsWith('removed/') ||
+      r.startsWith('pairs/'),
   )
   // Exactly: swaps.json + removed/gluten-free.json
   // index.json is in the bundle (cold start) — not fetched at activation time.
   expect(fired).toContain('swaps.json')
-  expect(fired).toContain('removed/gluten-free.json')
-  expect(fired).not.toContain('pairs/')
+  // Settle before the negative assertion: the expected fetches have all
+  // arrived, so a wrongly-fired pair request would be in the log by now.
+  await page.waitForTimeout(250)
+  expect(requests.filter((r) => r.startsWith('pairs/'))).toHaveLength(0)
 })
 
 test('activating a SECOND chip fires the pair file (and the first removed stays)', async ({ page }) => {
@@ -373,8 +392,24 @@ test('activating a SECOND chip fires the pair file (and the first removed stays)
   await page.getByTestId('restriction-chip-gluten-free').click()
   await page.getByTestId('restriction-chip-dairy-free').click()
   await expect(page.getByTestId('restriction-chip-dairy-free')).toHaveAttribute('aria-pressed', 'true')
+  // Wait for the async ladder fetches (see the ONE-chip test).
+  await expect
+    .poll(() =>
+      requests.filter(
+        (r) =>
+          r.startsWith('index.json') ||
+          r.startsWith('swaps.json') ||
+          r.startsWith('removed/') ||
+          r.startsWith('pairs/'),
+      ),
+    )
+    .toContain('pairs/dairy-free-gluten-free.json')
   const fired = requests.filter(
-    (r) => r.startsWith('index.json') || r.startsWith('swaps.json') || r.startsWith('removed/') || r.startsWith('pairs/'),
+    (r) =>
+      r.startsWith('index.json') ||
+      r.startsWith('swaps.json') ||
+      r.startsWith('removed/') ||
+      r.startsWith('pairs/'),
   )
   // Now pairs/gluten-free-dairy-free.json also fires (on-demand pair extras).
   expect(fired).toContain('swaps.json')
