@@ -16,6 +16,8 @@ import {
 import { usePlanStore } from '../stores/plan'
 import { useGroceryStore } from '../stores/grocery'
 import { useUiStore } from '../stores/ui'
+import { groceryDisplayLines } from './restrictions'
+import { useRestrictions } from '../composables/useRestrictions'
 
 /**
  * Shared grocery-list engine for the Grocery tab and Shopping mode:
@@ -26,6 +28,15 @@ export function useGroceryList() {
   const plan = usePlanStore()
   const checked = useGroceryStore()
   const ui = useUiStore()
+  // Dietary restrictions (the restriction ADR): the grocery list shows the
+  // substituted ingredient names AND quantities from the same source doc
+  // (the metric overlay), while every key stays the base doc's (the
+  // key/display split).
+  const restrictionPrefs = useRestrictions()
+  watch(
+    () => restrictionPrefs.activeIds.value,
+    () => void restrictionPrefs.ensureLoaded(),
+  )
 
   const docs = ref(new Map<number, RecipeDoc>())
   const loading = ref(false)
@@ -52,6 +63,8 @@ export function useGroceryList() {
           factor: entryServings(meta.id) / doc.serving_count,
           recipeName: meta.name,
           cleared: cleared?.length ? new Set(cleared) : undefined,
+          displayLines: groceryDisplayLines(doc, restrictionPrefs.overlayFor(doc.recipe_id))
+            ?? undefined,
         },
       ]
     }),
@@ -124,6 +137,9 @@ export function useGroceryList() {
       for (const doc of loaded) {
         docs.value.set(doc.id, doc)
       }
+      // Warm the restriction artifacts for whatever is active — no-op when
+      // none is; the overlay fetch is lazy and retries on failure.
+      void restrictionPrefs.ensureLoaded()
     } catch (e) {
       loadError.value = e instanceof Error ? e.message : String(e)
     } finally {
@@ -141,10 +157,17 @@ export function useGroceryList() {
    */
   registerClearSnapshotProvider(() => {
     const byVariant: Record<number, string[]> = {}
-    for (const { doc } of aggregateInputs.value) {
-      byVariant[doc.id] = doc.line_items
-        .map((item) => nameKey(item.ingredient_name))
-        .filter((key) => key.length > 0)
+    for (const { doc, displayLines } of aggregateInputs.value) {
+      // The snapshot keys are the SAME keys the aggregation groups on —
+      // the display rows' keyNames when the restriction seam is active.
+      // A substituted-extra row (an overlay line with no base counterpart,
+      // e.g. GF rid 1292's butter lettuce) keys to itself and would never
+      // appear in a base-doc-derived snapshot, so Clear would leave it
+      // visible while the rest of the meal hides.
+      const keys = displayLines
+        ? displayLines.map((row) => row.keyName)
+        : doc.line_items.map((item) => nameKey(item.ingredient_name))
+      byVariant[doc.id] = keys.filter((key) => key.length > 0)
     }
     return byVariant
   })

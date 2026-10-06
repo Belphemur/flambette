@@ -1,6 +1,10 @@
 # ADR-0018: Diet rules are a keyword classifier over ingredient names
 
-**Status:** Accepted (2026-09-28)
+**Status:** Accepted (2026-09-28). For RESTRICTION-TYPE filtering —
+gluten-free, dairy-free, peanut-free and the nine other allergen
+restrictions — this record is **superseded by ADR-0056**, which applies
+upstream's own restriction verdicts and reworks instead of a keyword
+lens. The diet chips themselves stay in force as a suggestion lens.
 **Extends:** ADR-0012 (ingredient-name normalization is already the
 merge key) and nothing else — no other subsystem is touched.
 

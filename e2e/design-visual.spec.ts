@@ -792,11 +792,9 @@ test.describe('icon tooltips (pointer)', () => {
     await page.locator('[data-test="recipe-card-link"]').first().click()
     await expect(page.getByTestId('detail-title')).toBeVisible()
 
-    // The header's type icon: the first hue-icon under the detail header
-    // that carries a role="img" accessible name.
-    const host = page
-      .locator('header [data-test="hue-icon"]', { has: page.locator('svg[role="img"]') })
-      .first()
+    // The header's type icon: an explicit test id, not DOM position —
+    // the header also carries the meal-occasion icon (ADR-0043).
+    const host = page.getByTestId('detail-type-icon')
     await expect(host).toBeVisible()
     const name = await host.locator('svg[role="img"]').getAttribute('aria-label')
     expect(name).toBeTruthy()

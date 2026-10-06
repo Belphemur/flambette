@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ArrowUpDown, Clock, Crown, Heart, Layers, SearchX, Sparkles, UserRound } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { catalog } from '../lib/catalog'
+import { useRestrictions } from '../composables/useRestrictions'
 import {
   DIET_DESCRIPTIONS,
   DIET_IDS,
@@ -54,6 +55,10 @@ const query = ref('')
 
 const favourites = useFavouritesStore()
 const ui = useUiStore()
+// Dietary restrictions (the restriction ADR): removal is a DISCOVERY filter,
+// applied here where the search pipeline runs — a recipe already in the plan
+// stays planned regardless.
+const restrictions = useRestrictions()
 
 /** The ONE filter object (ADR-0027): persisted, and synced in the room. */
 const filters = computed<QuickFilters>(() => ui.quickFilters)
@@ -279,6 +284,9 @@ const results = computed<VariantMeta[]>(() => {
   const index = dietIndex.value
 
   const facets = (meta: VariantMeta): boolean => {
+  // The restriction verdict is upstream's own (removed = a strict subset);
+  // user recipes are never in it (no upstream rework exists for them).
+  if (restrictions.isRemoved(meta.recipe_id)) return false
   if (f.favOnly && !favourites.ids.has(meta.id)) return false
   // ADR-0054: 'pro' is the retired proOnly chip, 'new' is the household's
   // own recipes (permanent — only the card's NEW badge expires).
@@ -354,6 +362,10 @@ const sentinel = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
 
 onMounted(() => {
+  // Warm the restriction artifacts (control plane + overlays) so the
+  // removal filter and any swapped names are ready when needed. No-op when
+  // no restriction is active.
+  void restrictions.ensureLoaded()
   observer = new IntersectionObserver(
   (entries) => {
   if (entries.some((e) => e.isIntersecting) && hasMore.value) {

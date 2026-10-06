@@ -10,6 +10,7 @@ import { usePlanStore } from '../stores/plan'
 import { useFavouritesStore } from '../stores/favourites'
 import { useRatingStore } from '../stores/rating'
 import { useUiStore } from '../stores/ui'
+import { useRestrictions } from './useRestrictions'
 // Type-only: the ruleset FILTER is the taxonomy's own ruleset values, so
 // the union is DERIVED from the one source (ADR-0046 §2.3) — a second
 // hand-written copy is exactly what already drifted (Lunch/Snack missing
@@ -132,6 +133,11 @@ export async function runAutoPlan(options: AutoPlanOptions): Promise<AutoPlanRes
   const ruleset = options.ruleset ?? ui.autoPlanRuleset
   const mode = options.mode ?? ui.autoPlanMode
   const plannedIds = new Set(planStore.plan.map((e) => e.variantId))
+  // Dietary restrictions (the restriction ADR): a removed recipe is not a
+  // candidate. The artifacts load BEFORE the eligibility pass so the pack
+  // can never include a recipe the device's restrictions rule out.
+  const restrictions = useRestrictions()
+  await restrictions.ensureLoaded()
 
   // Eligible = catalog minus (wrong category, failing ruleset, diet-failing,
   // and in replace mode: already planned).
@@ -147,6 +153,9 @@ export async function runAutoPlan(options: AutoPlanOptions): Promise<AutoPlanRes
       continue
     }
     if (mode === 'replace' && plannedIds.has(id)) continue
+    // Upstream's own verdict (removed = a strict subset); resolved OUTSIDE
+    // the pure planner, like every other eligibility rule.
+    if (restrictions.isRemoved(catalog.byId.get(id)?.recipe_id ?? -1)) continue
     const verdict = dietIndex.verdictById.get(id)
     if (!verdict || !matchesAllDiets(verdict, diets)) continue
     eligible.add(id)

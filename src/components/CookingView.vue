@@ -15,6 +15,8 @@ import {
   X,
 } from 'lucide-vue-next'
 import { catalog, getRecipe } from '../lib/catalog'
+import { restrictedDocView } from '../lib/restrictions'
+import { useRestrictions } from '../composables/useRestrictions'
 import { measuredChipsForLines, type MeasuredChip } from '../lib/measuredAmounts'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
 import { localizeSteps } from '../lib/units'
@@ -40,7 +42,16 @@ const router = useRouter()
 /** Recipe variant id, passed as a route prop from /cooking/:id. */
 const props = defineProps<{ id: number }>()
 
-const doc = ref<RecipeDoc | null>(null)
+const loadedDoc = ref<RecipeDoc | null>(null)
+// The restricted doc view (the restriction ADR): upstream's own substituted
+// line items and step prose display when a dietary restriction is active.
+// Display only — keys never come from this view.
+const restrictionPrefs = useRestrictions()
+const doc = computed<RecipeDoc | null>(() => {
+  const base = loadedDoc.value
+  if (!base) return null
+  return restrictedDocView(base, restrictionPrefs.overlayFor(base.recipe_id))
+})
 
 const meta = computed(() => catalog.value?.byId.get(props.id) ?? null)
 
@@ -584,11 +595,11 @@ function onVisibility() {
 
 async function loadDoc() {
   if (!meta.value) return
-  doc.value = null
+  loadedDoc.value = null
   try {
-  doc.value = await getRecipe(meta.value)
+  loadedDoc.value = await getRecipe(meta.value)
   } catch {
-  doc.value = null
+  loadedDoc.value = null
   }
 }
 
@@ -610,6 +621,9 @@ watch(
 onMounted(() => {
   void loadDoc()
   void acquireWakeLock()
+  // Warm the restriction artifacts so substituted steps are ready (no-op
+  // when no restriction is active).
+  void restrictionPrefs.ensureLoaded()
   tickHandle = setInterval(() => {
   now.value = Date.now()
   }, 500)

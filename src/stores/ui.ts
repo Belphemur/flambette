@@ -10,6 +10,7 @@ import {
   type QuickFilters,
 } from '../lib/quickFilters'
 import { isRoomCode, normalizeRoomCode } from '../lib/roomWords'
+import { normalizeRestrictionIds } from '../lib/restrictions'
 import { DEFAULT_UNIT_SYSTEM, isUnitSystem, type UnitSystem } from '../lib/units'
 import { clampServings, FALLBACK_SERVINGS, isServings, MIN_SERVINGS } from '../lib/servings'
 import {
@@ -180,6 +181,14 @@ export const useUiStore = defineStore(
     /** Persistent household room code the app auto-joins on start (ADR-0019). */
     const householdRoom = ref('')
     /**
+     * The device's dietary restrictions (the restriction ADR): upstream
+     * restriction ids whose reworks are applied to the catalog — removed
+     * recipes disappear from discovery, surviving ones display upstream's
+     * own substituted ingredients. Device-local (NOT in the room payload —
+     * household sync is deliberately deferred), normalized on every write.
+     */
+    const dietaryRestrictionIds = ref<number[]>([])
+    /**
      * Cooking-view step timers (ADR-0020): variant id -> step-VIEW leader
      * index -> timer. Keyed by view (not raw step) because a "Meanwhile"
      * pair is one view and shares one timer. Persisted so a reload
@@ -311,6 +320,7 @@ export const useUiStore = defineStore(
       autoPlanGeneration?: unknown
       defaultServings?: unknown
       unitSystem?: unknown
+      dietaryRestrictionIds?: unknown
     }): void {
       if (typeof prefs.shareCookedHistory === 'boolean') {
         shareCookedHistory.value = prefs.shareCookedHistory
@@ -359,6 +369,13 @@ export const useUiStore = defineStore(
       // here, so an unknown string simply leaves the current value in
       // place rather than disabling the display transform entirely.
       if (isUnitSystem(prefs.unitSystem)) unitSystem.value = prefs.unitSystem
+      // A backup without the key means "don't touch" (the standing import
+      // rule) — the device keeps its own restrictions. A present value is
+      // normalized by the sole writer, dropping ids the artifacts do not
+      // cover rather than failing the whole archive over one stale id.
+      if (prefs.dietaryRestrictionIds !== undefined) {
+        setDietaryRestrictionIds(prefs.dietaryRestrictionIds)
+      }
     }
 
     /**
@@ -477,6 +494,16 @@ export const useUiStore = defineStore(
     }
 
     /**
+     * Repair hydrated dietary restrictions: hydration is a raw `$patch`, so
+     * a hand-edited blob lands verbatim; unknown ids would silently widen
+     * the filter path beyond what the committed artifacts cover. Normalizing
+     * is a no-op for an honest value.
+     */
+    function repairDietaryRestrictionIds(): void {
+      dietaryRestrictionIds.value = normalizeRestrictionIds(dietaryRestrictionIds.value)
+    }
+
+    /**
      * Keep only well-formed timers out of an imported/loaded map
      * (validation-first import: unknown shapes are dropped, not trusted).
      *
@@ -542,6 +569,16 @@ export const useUiStore = defineStore(
     }
 
     /**
+     * Choose the dietary restrictions (the restriction ADR). The ONLY
+     * writer: every write is normalized — unknown ids dropped, dupes
+     * collapsed, ascending — so a hand-edited or legacy blob can never
+     * smuggle an id the artifacts do not cover into the filter path.
+     */
+    function setDietaryRestrictionIds(ids: unknown): void {
+      dietaryRestrictionIds.value = normalizeRestrictionIds(ids)
+    }
+
+    /**
      * Choose the display unit system (ADR-0047). The ONLY writer, from both
      * affordances (Settings card + the recipe-detail toggle), so the two
      * surfaces are one setting by construction. The write is validated,
@@ -591,6 +628,8 @@ export const useUiStore = defineStore(
       autoPlanGeneration,
       defaultServings,
       unitSystem,
+      dietaryRestrictionIds,
+      setDietaryRestrictionIds,
       setUnitSystem,
       nextAutoPlanGeneration,
       advanceAutoPlanGeneration,
@@ -611,6 +650,7 @@ export const useUiStore = defineStore(
       setDefaultServings,
       repairDefaultServings,
       repairUnitSystem,
+      repairDietaryRestrictionIds,
       setHouseholdRoom,
       showToast,
       dismissToast,
@@ -644,6 +684,9 @@ export const useUiStore = defineStore(
         // The display unit system (ADR-0047): device-local, like the
         // default servings — the shared plan is unit-independent.
         'unitSystem',
+        // The device's dietary restrictions: device-local (household sync
+        // deliberately deferred), restored on the next launch.
+        'dietaryRestrictionIds',
       ],
       // Hydration has already run when this fires, so a v0.12 blob (which
       // has no `quickFilters` and therefore patched nothing) can still be
@@ -655,11 +698,13 @@ export const useUiStore = defineStore(
           adoptHistoryShareDefault: () => void
           repairDefaultServings: () => void
           repairUnitSystem: () => void
+          repairDietaryRestrictionIds: () => void
         }
         store.migrateLegacyFilters()
         store.adoptHistoryShareDefault()
         store.repairDefaultServings()
         store.repairUnitSystem()
+        store.repairDietaryRestrictionIds()
       },
     },
   },

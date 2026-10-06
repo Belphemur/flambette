@@ -396,3 +396,43 @@ describe('the global timer list (ADR-0041)', () => {
     expect(ui.stepTimers[7]).toBeUndefined()
   })
 })
+
+/* ---------- Dietary restrictions (the restriction ADR) ---------- */
+
+describe('dietary restrictions (the restriction ADR)', () => {
+  test('a fresh install has NO active restriction', () => {
+    setActivePinia(createPinia())
+    expect(useUiStore().dietaryRestrictionIds).toEqual([])
+  })
+
+  test('the sole writer normalizes: unknown ids dropped, dupes collapsed, ascending', () => {
+    setActivePinia(createPinia())
+    const ui = useUiStore()
+    ui.setDietaryRestrictionIds([10, 1, 99, 1, 7, '3'])
+    expect(ui.dietaryRestrictionIds).toEqual([1, 3, 10])
+    ui.setDietaryRestrictionIds('nonsense')
+    expect(ui.dietaryRestrictionIds).toEqual([])
+    ui.setDietaryRestrictionIds(undefined)
+    expect(ui.dietaryRestrictionIds).toEqual([])
+  })
+
+  test('applySettings: present ids apply, ABSENT ids are "don\'t touch"', () => {
+    setActivePinia(createPinia())
+    const ui = useUiStore()
+    ui.setDietaryRestrictionIds([2])
+    // A pre-restriction backup has no key: restoring it must not clear the
+    // device's restrictions.
+    ui.applySettings({ householdRoom: '' })
+    expect(ui.dietaryRestrictionIds).toEqual([2])
+    ui.applySettings({ dietaryRestrictionIds: [4] })
+    expect(ui.dietaryRestrictionIds).toEqual([4])
+  })
+
+  test('repairDietaryRestrictionIds normalizes a hand-edited hydrated blob', () => {
+    setActivePinia(createPinia())
+    const ui = useUiStore()
+    ;(ui as unknown as Record<string, unknown>).dietaryRestrictionIds = [14, 8, 1, 1, 'x']
+    ui.repairDietaryRestrictionIds()
+    expect(ui.dietaryRestrictionIds).toEqual([1, 14])
+  })
+})

@@ -1,10 +1,34 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Download, Link, Dices, Minus, Plus, Scale, Upload, Utensils } from 'lucide-vue-next'
+import {
+  Bean,
+  CircleDot,
+  Download,
+  Dices,
+  Egg,
+  Fish,
+  FlaskConical,
+  Link,
+  Milk,
+  Minus,
+  Nut,
+  Plus,
+  Scale,
+  Shrimp,
+  Sprout,
+  TestTubeDiagonal,
+  Upload,
+  Utensils,
+  Wheat,
+  Cherry,
+  type LucideIcon,
+} from 'lucide-vue-next'
 import { applyBackup, backupFileName, buildBackupZip } from '../lib/backup'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { MAX_SERVINGS, MIN_SERVINGS } from '../lib/servings'
 import { UNIT_SYSTEMS, UNIT_SYSTEM_LABEL, type UnitSystem } from '../lib/units'
+import { RESTRICTIONS } from '../lib/restrictions'
+import { useRestrictions } from '../composables/useRestrictions'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
 import { getCatalog } from '../lib/catalog'
 import { USER_RECIPE_ID_BASE } from '../lib/userRecipes'
@@ -49,6 +73,55 @@ function bumpDefaultServings(delta: number) {
   if (next < MIN_SERVINGS || next > MAX_SERVINGS) return
   ui.setDefaultServings(next)
 }
+
+/* ---------- Dietary restrictions (the restriction ADR) ---------- */
+
+/** One decorative glyph per restriction (ADR-0029: lucide-vue-next, bundled).
+ *  The label carries the meaning, so the icons are neutral — no new hue
+ *  tokens (ADR-0036: a food-type role that does not exist in the registry
+ *  is not invented for a control); selected chips tint through the chip's
+ *  own class. Glyphs are distinct so the row reads apart in monochrome. */
+const RESTRICTION_ICONS: Record<string, LucideIcon> = {
+  'shellfish-free': Shrimp,
+  'fish-free': Fish,
+  'gluten-free': Wheat,
+  'dairy-free': Milk,
+  'peanut-free': Bean,
+  'tree-nut-free': Nut,
+  'soy-free': Sprout,
+  'egg-free': Egg,
+  'sesame-free': CircleDot,
+  'mustard-free': FlaskConical,
+  'sulfite-free': TestTubeDiagonal,
+  'nightshade-free': Cherry,
+}
+
+const restrictionPrefs = useRestrictions()
+
+const activeRestrictionIds = computed(() => restrictionPrefs.activeIds.value)
+
+function isActiveRestriction(id: number): boolean {
+  return activeRestrictionIds.value.includes(id)
+}
+
+/**
+ * Toggle one restriction and warm the artifacts (control plane + overlay)
+ * for whatever is now active — fire-and-forget; a failed load degrades to
+ * the base catalog and retries on the next toggle.
+ */
+function toggleRestriction(id: number): void {
+  const active = new Set(activeRestrictionIds.value)
+  if (active.has(id)) active.delete(id)
+  else active.add(id)
+  ui.setDietaryRestrictionIds([...active])
+  void restrictionPrefs.ensureLoaded()
+}
+
+const restrictionNote = computed(() =>
+  activeRestrictionIds.value.length === 0
+    ? 'No restrictions are active — the full catalog shows.'
+    : `${activeRestrictionIds.value.length} restriction${activeRestrictionIds.value.length === 1 ? '' : 's'} active.`,
+)
 
 const canFewerDefault = computed(() => ui.defaultServings > MIN_SERVINGS)
 const canMoreDefault = computed(() => ui.defaultServings < MAX_SERVINGS)
@@ -521,6 +594,49 @@ async function importMealimeFavourites(): Promise<void> {
   </div>
   <p class="text-xs text-text-muted" data-test="default-servings-note">
   Recipes already in your plan keep the servings they were added with.
+  </p>
+  </div>
+
+  <!-- Dietary restrictions (the restriction ADR): upstream's own verdicts.
+  A restricted recipe is REMOVED from discovery (recipes, search,
+  Auto-Plan) and every surviving recipe displays upstream's own substituted
+  ingredients. Recipes already in the plan stay. Not synced to the
+  household room (deliberately deferred). -->
+  <div class="space-y-2 rounded-xl bg-surface p-3" data-test="dietary-restrictions">
+  <span class="text-sm font-bold tracking-tight">Dietary restrictions</span>
+  <p class="text-xs">
+  Recipes containing these are hidden from Recipes, search and Auto-Plan, and ingredients are swapped to restriction-safe substitutes the way Mealime itself does it. Recipes already in your plan stay.
+  </p>
+  <div
+  class="flex flex-wrap gap-2"
+  role="group"
+  aria-label="Dietary restrictions"
+  data-test="restriction-chips"
+  >
+  <button
+  v-for="restriction in RESTRICTIONS"
+  :key="restriction.id"
+  class="flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm font-semibold"
+  :class="
+  isActiveRestriction(restriction.id)
+    ? 'border-primary-tint bg-primary-tint text-primary-strong'
+    : 'border-border bg-surface-raised text-text-muted'
+  "
+  :aria-pressed="isActiveRestriction(restriction.id)"
+  :aria-label="`${restriction.label} restriction`"
+  :data-test="`restriction-chip-${restriction.slug}`"
+  @click="toggleRestriction(restriction.id)"
+  >
+  <component
+  :is="RESTRICTION_ICONS[restriction.slug]"
+  :size="16"
+  aria-hidden="true"
+  />
+  {{ restriction.label }}
+  </button>
+  </div>
+  <p class="text-xs text-text-muted" data-test="dietary-restrictions-note">
+  {{ restrictionNote }}
   </p>
   </div>
 

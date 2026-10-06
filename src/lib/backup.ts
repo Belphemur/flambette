@@ -266,7 +266,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
      importing an old backup is not re-flipped on the next launch). */
   {
     file: 'settings.json',
-    label: 'settings (cooked-history room sharing + quick filters + household room + step timers + theme + default servings + unit system)',
+    label: 'settings (cooked-history room sharing + quick filters + household room + step timers + theme + default servings + unit system + dietary restrictions)',
     persistKeys: ['mealime-planner:v1:ui'],
     read: () => {
       const ui = useUiStore()
@@ -288,6 +288,9 @@ export const STORE_SLICES: SliceDef<any>[] = [
         // like every other ui preference (the registry rule), so a restored
         // device keeps reading recipes in the system it read them in.
         unitSystem: ui.unitSystem,
+        // The dietary restrictions travel too (the restriction ADR): the
+        // ids are normalized on import by the store's sole writer.
+        dietaryRestrictionIds: [...ui.dietaryRestrictionIds],
       }
     },
     validate(value) {
@@ -365,6 +368,17 @@ export const STORE_SLICES: SliceDef<any>[] = [
       if (v.unitSystem !== undefined && !isUnitSystem(v.unitSystem)) {
         return `settings.json unitSystem must be one of ${UNIT_SYSTEMS.join('/')}`
       }
+      // The restriction ADR: absent is a valid "don't touch" (a pre-
+      // restriction backup); present must be an array of integer ids —
+      // import is validation-first, and unknown ids are DROPPED at write
+      // time by the store's sole writer rather than failing the archive.
+      if (
+        v.dietaryRestrictionIds !== undefined &&
+        (!Array.isArray(v.dietaryRestrictionIds) ||
+          v.dietaryRestrictionIds.some((x) => typeof x !== 'number' || !Number.isInteger(x)))
+      ) {
+        return 'settings.json dietaryRestrictionIds must be an array of integer restriction ids'
+      }
       return null
     },
     write(value) {
@@ -380,6 +394,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
         autoPlanGeneration?: unknown
         defaultServings?: unknown
         unitSystem?: unknown
+        dietaryRestrictionIds?: unknown
       }
       useUiStore().applySettings({
         shareCookedHistory: v.shareCookedHistory,
@@ -402,6 +417,10 @@ export const STORE_SLICES: SliceDef<any>[] = [
         // device's — "absent = don't touch" keeps a restore from silently
         // flipping a metric device to imperial (or the reverse).
         unitSystem: v.unitSystem,
+        // Deliberately NOT defaulted (the ADR-0047 rule): a backup that
+        // predates restrictions says nothing about the device's — absent
+        // means "don't touch", never a wipe.
+        dietaryRestrictionIds: v.dietaryRestrictionIds,
       })
       if (v.theme) writeTheme(v.theme.theme ?? '')
     },
