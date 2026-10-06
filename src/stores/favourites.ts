@@ -147,6 +147,30 @@ export const useFavouritesStore = defineStore(
       if (changed) records.value = next
     }
 
+    /**
+     * Migration import (ADR-0058): star the given variant ids. ADDS only
+     * — an import never un-favourites and never clears. A recipe already
+     * starred is left untouched (its record keeps its own stamp); a
+     * recipe this device un-starred IS re-starred, at a fresh stamp, per
+     * the ordinary last-writer-wins rules — the user explicitly asked to
+     * import their Mealime favourites. Returns how many favourites were
+     * actually NEW (already-starred ids do not count), so the report can
+     * say "nothing new" honestly.
+     */
+    function importFavourites(variantIds: Iterable<number>, now: number = Date.now()): number {
+      const next = { ...records.value }
+      let added = 0
+      for (const id of variantIds) {
+        if (!Number.isFinite(id)) continue
+        const key = String(id)
+        if (next[key]?.favorited) continue
+        next[key] = { favorited: true, updatedAt: now }
+        added++
+      }
+      if (added) records.value = next
+      return added
+    }
+
     /** Replace the set wholesale (backup import) — fresh local truth. */
     function replaceAll(newIds: number[]): void {
       records.value = fromIds(
@@ -155,7 +179,17 @@ export const useFavouritesStore = defineStore(
       )
     }
 
-    return { ids, records, replaceAll, seedFrom, seeded, isFavourite, toggleFavourite, mergeRemote }
+    return {
+      ids,
+      records,
+      replaceAll,
+      seedFrom,
+      seeded,
+      isFavourite,
+      toggleFavourite,
+      mergeRemote,
+      importFavourites,
+    }
   },
   {
     persist: {

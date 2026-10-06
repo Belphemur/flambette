@@ -127,3 +127,46 @@ describe('useFavouritesStore (ADR-0031 tombstones)', () => {
     expect(store.records['1'].updatedAt).toBe(9_000)
   })
 })
+
+describe('importFavourites (ADR-0058 migration import)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  test('stars the ids at a fresh stamp and reports only NEW additions', () => {
+    const store = useFavouritesStore()
+    store.toggleFavourite(5, 1_000)
+    const added = store.importFavourites([5, 6, 7], 9_000)
+    expect(added).toBe(2) // 5 was already starred
+    expect(store.isFavourite(6)).toBe(true)
+    expect(store.records['6']).toEqual({ favorited: true, updatedAt: 9_000 })
+    // Already-starred recipe keeps its own record untouched.
+    expect(store.records['5']).toEqual({ favorited: true, updatedAt: 1_000 })
+  })
+
+  test('re-stars a locally un-starred recipe (the import is an explicit ask)', () => {
+    const store = useFavouritesStore()
+    store.toggleFavourite(5, 1_000)
+    store.toggleFavourite(5, 2_000) // tombstone
+    expect(store.isFavourite(5)).toBe(false)
+    store.importFavourites([5], 9_000)
+    expect(store.isFavourite(5)).toBe(true)
+    expect(store.records['5']).toEqual({ favorited: true, updatedAt: 9_000 })
+  })
+
+  test('an import lands in the household sync as an ordinary opinion', () => {
+    const a = useFavouritesStore()
+    a.importFavourites([3], 4_000)
+    setActivePinia(createPinia())
+    const b = useFavouritesStore()
+    b.mergeRemote(a.records)
+    expect(b.isFavourite(3)).toBe(true)
+  })
+
+  test('adds nothing when every id is already starred (honest zero)', () => {
+    const store = useFavouritesStore()
+    store.importFavourites([1, 2], 1_000)
+    expect(store.importFavourites([1, 2], 9_000)).toBe(0)
+    expect(store.records['1']).toEqual({ favorited: true, updatedAt: 1_000 })
+  })
+})

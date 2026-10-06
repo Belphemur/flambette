@@ -6,6 +6,14 @@ import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { MAX_SERVINGS, MIN_SERVINGS } from '../lib/servings'
 import { UNIT_SYSTEMS, UNIT_SYSTEM_LABEL, type UnitSystem } from '../lib/units'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
+import { getCatalog } from '../lib/catalog'
+import {
+  matchMealimeFavourites,
+  parseMealimePayload,
+  type MealimeMatchResult,
+} from '../lib/mealimeImport'
+import { mealimeBookmarkletHref } from '../lib/mealimeBookmarklet'
+import { useFavouritesStore } from '../stores/favourites'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 
@@ -311,6 +319,47 @@ function onBackupInputChange(e: Event): void {
 function cancelBackupImport(): void {
   pendingBackup.value = null
 }
+
+/* ---------- Import from Mealime (ADR-0058) ---------- */
+
+/** One-shot migration: Mealime shuts down 2026-10-21. The bookmarklet on
+ *  the user's bookmarks bar reads their Mealime favourites and copies a
+ *  small JSON payload; the paste box below is the only ingress — the app
+ *  itself NEVER contacts mealime.com (e2e-enforced). Matching is
+ *  validate-first and applied atomically through the favourites store's
+ *  record path (adds only, ADR-0031 semantics intact). */
+const bookmarkletHref = mealimeBookmarkletHref()
+const mealimeInput = ref('')
+/** Non-null while the result report is on screen (success or empty run). */
+const mealimeReport = ref<MealimeMatchResult & { added: number } | null>(null)
+
+function clearMealimeReport() {
+  mealimeReport.value = null
+}
+
+/** Dragging is the affordance; clicking on THIS page would run the
+ *  bookmarklet against the wrong origin and dead-end, so say so instead. */
+function onBookmarkletClick() {
+  ui.showToast('Drag this button to your bookmarks bar, then click it on my.mealime.com', {
+    duration: 6000,
+  })
+}
+
+async function importMealimeFavourites(): Promise<void> {
+  const text = mealimeInput.value
+  const parsed = parseMealimePayload(text)
+  if (!parsed.ok) {
+    // Nothing applied; the paste stays in the box so it can be fixed.
+    ui.showToast(`Couldn't import — ${parsed.error}`, { kind: 'error', duration: 6000 })
+    return
+  }
+  const catalog = await getCatalog()
+  const result = matchMealimeFavourites(parsed.favourites, catalog.variantMeta)
+  const favourites = useFavouritesStore()
+  const added = favourites.importFavourites(result.matched.map((m) => m.variantId))
+  mealimeInput.value = ''
+  mealimeReport.value = { ...result, added }
+}
 </script>
 
 <template>
@@ -546,6 +595,71 @@ function cancelBackupImport(): void {
   data-test="import-settings-input"
   @change="onBackupInputChange"
   />
+  </div>
+
+  <!-- Import from Mealime (ADR-0058): a one-shot migration before
+  Mealime shuts down (2026-10-21). The bookmarklet link is dragged to the
+  user's bookmarks bar and clicked on my.mealime.com, where it copies the
+  favourites payload to the clipboard; the paste box here is the only
+  ingress — this app never contacts mealime.com. -->
+  <div class="space-y-2 rounded-xl bg-surface p-3" data-test="mealime-import-section">
+  <span class="text-sm font-bold tracking-tight">Import from Mealime</span>
+  <p class="text-xs font-semibold" data-test="mealime-import-notice">
+  Mealime closes on 21 October 2026 — import your favourites before then. They sync to your
+  household like any favourites you star here.
+  </p>
+  <ol class="list-decimal space-y-1 pl-4 text-xs" aria-label="How to import your Mealime favourites">
+  <li>Open <span class="font-medium">my.mealime.com</span> and log in.</li>
+  <li>Drag this button to your browser's bookmarks bar:</li>
+  </ol>
+  <a
+  :href="bookmarkletHref"
+  class="inline-flex items-center gap-1 rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs font-semibold text-primary-strong"
+  data-test="mealime-bookmarklet-link"
+  aria-label="Flambette: copy my favourites — drag this to your bookmarks bar, then click it on my.mealime.com"
+  @click.prevent="onBookmarkletClick"
+  >Flambette: copy my favourites</a>
+  <p class="text-xs">
+  On the Mealime site, click the bookmark — it copies your favourites. Come back here and paste:
+  </p>
+  <textarea
+  v-model="mealimeInput"
+  class="h-24 w-full rounded-xl border bg-surface-raised px-3 py-2 text-xs outline-none focus:border-brand-text"
+  placeholder='Paste here — the text the bookmark copied (starts with {"source":…}).'
+  aria-label="Paste your copied Mealime favourites here"
+  data-test="mealime-import-input"
+  @input="clearMealimeReport"
+  ></textarea>
+  <button
+  class="h-11 w-full rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand active:bg-brand-strong"
+  data-test="mealime-import-button"
+  aria-label="Import the pasted Mealime favourites"
+  @click="importMealimeFavourites"
+  >
+  Import favourites
+  </button>
+  <p
+  v-if="mealimeReport"
+  class="text-xs"
+  data-test="mealime-import-report"
+  aria-live="polite"
+  >
+  <template v-if="mealimeReport.matched.length">
+  {{ mealimeReport.matched.length }} favourite{{ mealimeReport.matched.length === 1 ? '' : 's' }}
+  imported ({{ mealimeReport.matched.filter((m) => m.by === 'id').length }} by id,
+  {{ mealimeReport.matched.filter((m) => m.by === 'name').length }} by name).
+  <template v-if="mealimeReport.added === 0">They were already in your favourites — nothing new to add.</template>
+  <template v-else-if="mealimeReport.added < mealimeReport.matched.length">{{ mealimeReport.added }} new.</template>
+  </template>
+  <template v-else>Nothing could be matched to recipes in this app.</template>
+  <template v-if="mealimeReport.missing.length">
+  {{ mealimeReport.missing.length }} could not be matched:
+  {{ mealimeReport.missing.map((m) => m.name || `recipe #${m.recipe_id}`).join(', ') }}.
+  </template>
+  <template v-if="mealimeReport.duplicatesDropped">
+  {{ mealimeReport.duplicatesDropped }} duplicate entr{{ mealimeReport.duplicatesDropped === 1 ? 'y was' : 'ies were' }} skipped.
+  </template>
+  </p>
   </div>
 
   <p class="px-1 text-xs text-text-muted">
