@@ -42,6 +42,10 @@ test('section shows the shutdown notice, steps and the draggable bookmarklet lin
   const link = page.getByTestId('mealime-bookmarklet-link')
   await expect(link).toContainText('Flambette: copy my favourites')
   await expect(link).toHaveAttribute('href', /^javascript:/)
+  // Step 3 is a real clickable link to the Mealime login page.
+  const login = page.getByTestId('mealime-login-link')
+  await expect(login).toHaveAttribute('href', 'https://my.mealime.com')
+  await expect(login).toHaveAttribute('target', '_blank')
   // A click on THIS page is the wrong origin — it must not navigate or run.
   await link.click()
   await expect(page).toHaveURL(/\/settings/)

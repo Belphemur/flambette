@@ -629,19 +629,35 @@ async function importMealimeFavourites(): Promise<void> {
   household like any favourites you star here.
   </p>
   <ol class="list-decimal space-y-1 pl-4 text-xs" aria-label="How to import your Mealime favourites">
-  <li>Open <span class="font-medium">my.mealime.com</span> and log in.</li>
-  <li>Drag this button to your browser's bookmarks bar:</li>
-  </ol>
+  <li>
+  Show your browser's bookmarks bar
+  <span class="opacity-80">(Ctrl + Shift + B, or Command + Shift + B on Mac)</span>.
+  </li>
+  <li>
+  Drag this button to the bookmarks bar:
   <a
   :href="bookmarkletHref"
-  class="inline-flex items-center gap-1 rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs font-semibold text-primary-strong"
+  class="mt-1 inline-flex items-center gap-1 rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs font-semibold text-primary-strong"
   data-test="mealime-bookmarklet-link"
   aria-label="Flambette: copy my favourites — drag this to your bookmarks bar, then click it on my.mealime.com"
   @click.prevent="onBookmarkletClick"
   >Flambette: copy my favourites</a>
-  <p class="text-xs">
+  </li>
+  <li>
+  Log in at
+  <a
+  href="https://my.mealime.com"
+  target="_blank"
+  rel="noopener noreferrer"
+  class="font-medium underline underline-offset-2"
+  aria-label="Open my.mealime.com in a new tab to log in"
+  data-test="mealime-login-link"
+  >my.mealime.com</a>.
+  </li>
+  <li>
   On the Mealime site, click the bookmark — it copies your favourites. Come back here and paste:
-  </p>
+  </li>
+  </ol>
   <textarea
   v-model="mealimeInput"
   class="h-24 w-full rounded-xl border bg-surface-raised px-3 py-2 text-xs outline-none focus:border-brand-text"
