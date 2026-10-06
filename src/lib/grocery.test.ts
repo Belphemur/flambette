@@ -106,3 +106,22 @@ describe('aggregateGroceries container units (ADR-0017)', () => {
     expect(lines.map((l) => l.key)).toEqual(['cabbage||1 head', 'cabbage||1 large head'])
   })
 })
+
+describe('grocery key basis — ADR-0055 glyphs never re-key a checked line', () => {
+  test('a fractional by-unit line keys on the decimal spelling, renders glyphs', () => {
+    const d = doc('Scones', 1, [['1.5 cups', 'milk']])
+    const [line] = aggregateGroceries([input(d, 1)])[0].lines
+    // The key keeps formatAmount's decimal spelling — the spelling every
+    // persisted `checked` key used before ADR-0055's glyph rendering — so
+    // the render change cannot silently uncheck a fractional line.
+    expect(line.key).toBe('milk||1.5 cups')
+    expect(line.display).toBe('1 ½ cups')
+  })
+
+  test('an integer by-unit line keeps key and display identical', () => {
+    const d = doc('Soup', 1, [['2 cups', 'stock']])
+    const [line] = aggregateGroceries([input(d, 1)])[0].lines
+    expect(line.key).toBe('stock||2 cups')
+    expect(line.display).toBe('2 cups')
+  })
+})

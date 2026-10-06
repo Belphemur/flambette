@@ -171,14 +171,22 @@ function scaleStepLine(line: string, base: number, target: number, factor: numbe
   // scales through `scaleMetricAmount`'s quantized grammar — and the render
   // is `formatMetricAmount` (unicode fraction glyphs, integer g/ml), so
   // `2129 ml ×⅔` reads `1420 ml` here too, never `1419 ml`.
+  // The unit DISPATCH matches on the leading unit token: a parsed step line
+  // carries the whole line rest as its unit (`'kg ground turkey'`,
+  // `'ml chicken or vegetable broth'`), and `scaleMetricAmount` dispatches
+  // on EXACT unit keys — the full rest would fall through to the count
+  // branch and round a weight to a whole count (`1.02 kg ×⅔ → '1'`).
+  const unitToken = parsed.unit.split(/\s+/)[0] ?? ''
   const amount = isSeasoning(line)
     ? quantizeSpoons(scaleQuantity(parsed.amount, base, target, true, line), parsed.unit)
-    : scaleMetricAmount(parsed.amount, factor, parsed.unit)
+    : scaleMetricAmount(parsed.amount, factor, unitToken)
   // The seasoning result joins the SAME spoon vocabulary: upstream never
   // authors a decimal spoon, so `2.523 tsp` reads `2 ½ tsp` — the ⅛-grid
   // glyph the grocery sum and the measured chip render for the same
   // ingredient (ADR-0055, one vocabulary on every surface).
-  const rendered = formatMetricAmount(amount, parsed.unit)
+  // The render dispatches on the token too (formatMetricAmount branches the
+  // same way) but still prints the FULL line rest after the amount.
+  const rendered = formatMetricAmount(amount, unitToken)
   return parsed.unit ? `${rendered} ${parsed.unit}` : rendered
 }
 

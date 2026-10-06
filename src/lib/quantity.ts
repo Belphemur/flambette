@@ -234,7 +234,9 @@ export function scaleMetricAmount(amount: number, factor: number, unit: string):
  * (`¾ tsp ×⅓ → ¼`), everything else quantizes to the nearest ⅛ and the
  * result snaps to the nearest value upstream ever AUTHORS (`⅝` and `⅞`
  * never appear as tsp targets — `2 tsp ×⅓ → ¾`, not `⅝`) — floored at ⅛,
- * never 0 (`¼ tsp ×⅓ → ⅛`).
+ * never 0 (`¼ tsp ×⅓ → ⅛`). The snap only applies WITHIN the corpus's
+ * range: above the 4 tsp ceiling nothing is authored, so an off-grid
+ * value stays on the ⅛ grid instead of snapping DOWN to 4.
  */
 function tspGrammar(p: number): number {
   for (const d of [1, 2, 4]) {
@@ -245,6 +247,10 @@ function tspGrammar(p: number): number {
   }
   const q = Math.round(p * 8) / 8
   const authored = [0.125, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 4]
+  // Above the corpus's ceiling (4) the authored list says nothing: the
+  // snap must never SHRINK an amount past it (`5.3 tsp → 4` would silently
+  // under-render a large seasoning by ~25%), so the ⅛ grid holds there.
+  if (q > 4) return q
   if (authored.includes(q)) return q
   return Math.max(0.125, nearestOf(authored, p))
 }

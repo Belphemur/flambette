@@ -196,6 +196,17 @@ describe('quantizeSpoons — the seasoning branch joins the spoon vocabulary', (
     // the 24-servings cap: 3 tsp is exact and stays exact
     expect(quantizeSpoons(3, 'tsp')).toBe(3)
   })
+
+
+  test('above the authored ceiling the 8-grid holds — no snap DOWN to 4', () => {
+    // Scaling UP can exceed the corpus's 4 tsp ceiling; snapping 5.3 → 4
+    // would silently under-render a large seasoning by ~25%.
+    expect(quantizeSpoons(5.3, 'tsp')).toBe(5.25)
+    // An exact quarter above the ceiling stays exact (the exact branch
+    // already returned it — pinned here so a regression is loud).
+    expect(quantizeSpoons(5.25, 'tsp')).toBe(5.25)
+    expect(quantizeSpoons(6.7, 'tbsp salt')).toBe(6.75)
+  })
 })
 
 describe('formatMetricAmount — unit-aware display rendering', () => {

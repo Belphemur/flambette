@@ -4,28 +4,38 @@ import {
   formatContainerQuantity,
   parseContainerQuantity,
 } from './containers'
-import { parseQuantity, formatMetricAmount, quantizeSpoons, scaleMetricAmount } from './quantity'
+import { parseQuantity, formatAmount, formatMetricAmount, quantizeSpoons, scaleMetricAmount } from './quantity'
 import { isSeasoning, scaleQuantity } from './recipe'
 import { bucketFor, type StoreSection } from './sections'
 import type { RecipeDoc } from './types'
 
 export interface GroceryLine {
-  /** Stable key for the checkbox state: `<normalized name>||<display>` */
+  /** Stable key for the checkbox state: `<normalized name>||<key basis>` */
   key: string
   /**
    * Formatted amount + unit, or the verbatim unparseable quantity.
    *
-   * CANONICAL: this is the key basis and stays metric forever (ADR-0047).
-   * Never localize it — the localized rendering is `text` on
-   * `GroceryLineView`, so flipping the unit system cannot orphan a checked
-   * item.
+   * CANONICAL: stays metric forever (ADR-0047). Never localize it — the
+   * localized rendering is `text` on `GroceryLineView`, so flipping the
+   * unit system cannot orphan a checked item.
    */
   display: string
 }
 
 /**
+ * The checkbox key's amount spelling: `formatAmount`'s decimal form — the
+ * exact spelling every persisted `checked` key used before ADR-0055's
+ * glyph rendering (`67.5 ml`, never `67 ½ ml`). The key basis and the
+ * display are TWO spellings of the same amount on purpose: re-spelling
+ * the key would silently uncheck every fractional line on upgrade.
+ */
+function lineKeyBasis(amount: number, unit: string): string {
+  return unit ? `${formatAmount(amount)} ${unit}` : formatAmount(amount)
+}
+
+/**
  * A line plus its display text for THIS device's unit system (ADR-0047).
- * Two fields on purpose: `display` is the identity and the key basis,
+ * Two fields on purpose: `display` is the canonical metric rendering,
  * `text` is what the screen shows.
  */
 export interface GroceryLineView extends GroceryLine {
@@ -226,7 +236,10 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       const display = unit
         ? `${formatMetricAmount(amount, unit)} ${unit}`
         : formatMetricAmount(amount, '')
-      lines.push({ key: `${normalized}||${display}`, display })
+      // The KEY stays on formatAmount's decimal spelling — the spelling
+      // every persisted `checked` key already uses — so the glyph render
+      // never re-keys a fractional line (`67.5 ml` vs `67 ½ ml`).
+      lines.push({ key: `${normalized}||${lineKeyBasis(amount, unit)}`, display })
     }
     for (const { container, annotation, amount, verbatim } of group.containers.values()) {
       // A single meal at its authored servings keeps the recipe's own text
