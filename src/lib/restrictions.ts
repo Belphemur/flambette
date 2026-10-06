@@ -56,7 +56,7 @@ export const RESTRICTIONS: RestrictionEntry[] = [
 ]
 
 const KNOWN_IDS = new Set(RESTRICTIONS.map((r) => r.id))
-const SLUG_BY_ID = new Map(RESTRICTIONS.map((r) => [r.id, r.slug]))
+export const SLUG_BY_ID = new Map(RESTRICTIONS.map((r) => [r.id, r.slug]))
 
 /** `data/restriction_sets.json` (scripts/build_restriction_sets.py). */
 export interface RestrictionSetInfo {
