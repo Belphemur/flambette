@@ -1,6 +1,6 @@
 # ADR-0056 — dietary restrictions: upstream's own reworks, committed offline; filter is discovery-only
 
-* Extends: ADR-0018 (diet chips — superseded for restriction-type filtering), ADR-0055 (profile-archive machinery), ADR-0013 (backup registry), ADR-0003 (derived grocery), ADR-0024 (Auto-Plan eligibility outside the pure lib)
+* Extends: ADR-0018 (diet chips — superseded for restriction-type filtering), ADR-0057 (profile-archive machinery), ADR-0013 (backup registry), ADR-0003 (derived grocery), ADR-0024 (Auto-Plan eligibility outside the pure lib)
 * Status: **Accepted**
 * Companions: `scripts/archive_catalog_profiles.py --restrictions`, `scripts/build_restriction_sets.py`, `public/data/restriction_sets.json`, `public/data/restriction_overlays/`, `src/lib/restrictions.ts`, `src/composables/useRestrictions.ts`
 
@@ -12,7 +12,7 @@ because the frozen catalog carries no diet metadata. That lens is a
 account-level `recipe_restriction_ids`, and the render that follows is the
 authoritative answer to "what can a gluten-free household cook?"
 
-The restriction archive (ADR-0055's machinery, extended by
+The restriction archive (ADR-0057's machinery, extended by
 `--restrictions`) captured all twelve single-restriction renders live on
 2026-10-06 (`../mealime-media/raw_profiles/restrictions/`, US units /
 6 servings — the account's setting at archive time), plus `none` and
@@ -49,7 +49,7 @@ raced payload fails the build loudly instead of shipping a wrong
    Tree Nut 62 · Soy 47 · Shellfish 42 · Nightshade 22 · Peanut 19 ·
    Sulfite 38 · Mustard 3 · Sesame 0).
 
-2. **Everything keys by the stable `recipe_id`** (ADR-0055: variant ids and
+2. **Everything keys by the stable `recipe_id`** (ADR-0057: variant ids and
    `published_recipe_uuid` are re-issued per render). Only docs present in
    the committed catalog get overlays.
 
@@ -95,7 +95,7 @@ raced payload fails the build loudly instead of shipping a wrong
    `removed` sets and overlays cover upstream `recipe_id`s only; a
    household recipe stays visible under EVERY restriction because no
    upstream re-authoring exists to display instead of its authentic text
-   (ADR-0054's authored-prose rule). `.agents/skills/mealime-add-recipe/`
+   (ADR-0057's authored-prose rule). `.agents/skills/mealime-add-recipe/`
    documents the workflow for authors who want a restricted variant: add
    it as a SEPARATE household recipe using the catalog's substitution
    vocabulary.

@@ -122,7 +122,7 @@ sets and `restriction_overlays/`) are keyed by upstream `recipe_id` and
 sourced from upstream's own restricted renderings, so the mechanism can
 never produce a variant for a household recipe. A user recipe therefore
 stays visible under EVERY active restriction, and its ingredient text stays
-authentic — the same rule as ADR-0054's authored-prose rule.
+authentic — the same rule as ADR-0057's authored-prose rule.
 
 If the author WANTS a restricted variant (say, a gluten-free version of the
 pancake), add it as a SEPARATE household recipe — upstream's own model:

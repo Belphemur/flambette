@@ -27,7 +27,7 @@ mealime.com):
   public/data/restriction_sets.json            the control plane
   public/data/restriction_overlays/<slug>.json the reworked docs themselves
 
-KEYING: everything joins on the STABLE `recipe_id` (ADR-0055: variant ids and
+KEYING: everything joins on the STABLE `recipe_id` (ADR-0057: variant ids and
 `published_recipe_uuid` are re-issued on every render; the recipe_id is the
 only identity that survives a profile change). The overlay for a recipe is
 keyed by the recipe_id the committed catalog already carries.
@@ -86,7 +86,7 @@ DATA = os.path.join(ROOT, "public", "data")
 SETS_OUT = os.path.join(DATA, "restriction_sets.json")
 OVERLAY_DIR = os.path.join(DATA, "restriction_overlays")
 
-# The ADR-0055 archive built by `archive_catalog_profiles.py --restrictions`.
+# The ADR-0057 archive built by `archive_catalog_profiles.py --restrictions`.
 # The committed overlays consume the METRIC family (`-m6`); the docs cached
 # here are the restricted renders upstream served under that profile.
 MEDIA = os.path.join(os.path.dirname(ROOT), "mealime-media")
