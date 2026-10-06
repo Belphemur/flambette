@@ -358,8 +358,10 @@ async function importMealimeFavourites(): Promise<void> {
   try {
     catalog = await getCatalog()
   } catch {
-    // The catalog failed to load — say so; an import is not possible yet.
-    ui.showToast("Couldn't import — the recipe catalog failed to load. Try again once you're online.", {
+    // The catalog failed to load — say so. getCatalog() memoizes the
+    // rejection for this page load, so a reload (which has it back by
+    // first paint anyway) is the recovery, not a retry here.
+    ui.showToast("Couldn't import — the recipe catalog failed to load. Reload the page and try again.", {
       kind: 'error',
       duration: 6000,
     })
