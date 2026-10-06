@@ -55,10 +55,15 @@ const sampleSwaps = [
   { from: 'mayonnaise', to: 'avocado oil mayonnaise', quantityRule: 'verbatim', count: 3 },
 ]
 
-const sampleDrops = [
-  { from: 'crumbled feta cheese', count: 41 },
-  { from: 'butter, unsalted', count: 63 },
-]
+// Drops are PER RESTRICTION (ADR-0059): keyed by restriction id. The sample
+// puts feta under Dairy-Free only — garlic under GF must NOT be hidden (the
+// flat-array regression the CI e2e caught).
+const sampleDrops = {
+  [String(DF_ID)]: [
+    { from: 'crumbled feta cheese', count: 41 },
+    { from: 'butter, unsalted', count: 63 },
+  ],
+}
 
 const sampleRemovedGF = [50, 60, 195, 224, 863] // GF removes these recipe ids
 const sampleRemovedDF = []
@@ -120,7 +125,7 @@ describe('ensureSwaps (ladder)', () => {
       })
     await ensureSwaps(idx, fetchImpl, '/base/')
     expect(idx.swaps).toHaveLength(5)
-    expect(idx.drops).toHaveLength(2)
+    expect(Object.keys(idx.drops ?? {})).toHaveLength(1)
     expect(idx.swaps![0].from).toBe('soy sauce')
   })
   test('is cached (no second fetch on re-call)', async () => {
@@ -141,7 +146,7 @@ describe('ensureSwaps (ladder)', () => {
     expect(idx.swaps).toBeNull()
     expect(idx.drops).toBeNull()
   })
-  test('failed fetch is retried on next call', async () => {
+  test('a failed fetch is retried IN the call and populates on success', async () => {
     const idx = buildLadderIndex()
     let calls = 0
     const fetchImpl = async () => {
@@ -150,8 +155,7 @@ describe('ensureSwaps (ladder)', () => {
       return new Response(JSON.stringify({ swaps: sampleSwaps, drops: sampleDrops }), { status: 200 })
     }
     await ensureSwaps(idx, fetchImpl, '/')
-    expect(idx.swaps).toBeNull() // first call failed
-    await ensureSwaps(idx, fetchImpl, '/') // second call succeeds
+    expect(calls).toBe(2)
     expect(idx.swaps).not.toBeNull()
     expect(idx.swaps!.length).toBe(5)
   })
@@ -178,11 +182,31 @@ describe('ensureRemoved (ladder)', () => {
     await ensureRemoved('gluten-free', idx, fetchImpl, '/base/')
     expect(calls).toBe(1)
   })
-  test('failed fetch leaves empty list (identity display)', async () => {
+  test('a failed fetch is retried IN the call and populates on success', async () => {
     const idx = buildLadderIndex()
-    const fetchImpl = async () => new Response('nope', { status: 404 })
+    let calls = 0
+    const fetchImpl = async () => {
+      calls++
+      if (calls < 2) return new Response('nope', { status: 404 })
+      return new Response(JSON.stringify({ removed: sampleRemovedGF }), { status: 200 })
+    }
     await ensureRemoved('gluten-free', idx, fetchImpl, '/')
-    expect(idx.removed.get('gluten-free')).toEqual([])
+    expect(calls).toBe(2)
+    expect(idx.removed.get('gluten-free')).toEqual(sampleRemovedGF)
+  })
+  test('a permanently failed fetch stays UNSET (a later call retries)', async () => {
+    const idx = buildLadderIndex()
+    let calls = 0
+    const fetchImpl = async () => {
+      calls++
+      return new Response('nope', { status: 404 })
+    }
+    await ensureRemoved('gluten-free', idx, fetchImpl, '/')
+    // NOT cached as empty: a cached empty set would keep the chip's removed
+    // recipes discoverable for the whole session with no retry path.
+    expect(idx.removed.has('gluten-free')).toBe(false)
+    await ensureRemoved('gluten-free', idx, fetchImpl, '/')
+    expect(calls).toBe(4) // 2 attempts per call
   })
 })
 
@@ -216,11 +240,17 @@ describe('ensurePair (ladder)', () => {
     await ensurePair('gluten-free', 'dairy-free', idx, fetchImpl, '/base/')
     expect(calls).toBe(1)
   })
-  test('failed fetch leaves empty list', async () => {
+  test('a permanently failed fetch stays UNSET (a later call retries)', async () => {
     const idx = buildLadderIndex()
-    const fetchImpl = async () => new Response('nope', { status: 404 })
+    let calls = 0
+    const fetchImpl = async () => {
+      calls++
+      return new Response('nope', { status: 404 })
+    }
     await ensurePair('dairy-free', 'gluten-free', idx, fetchImpl, '/')
-    expect(idx.pairs.get(PAIR_KEY)).toEqual([])
+    expect(idx.pairs.has(PAIR_KEY)).toBe(false)
+    await ensurePair('dairy-free', 'gluten-free', idx, fetchImpl, '/')
+    expect(calls).toBe(4) // 2 attempts per call
   })
 })
 

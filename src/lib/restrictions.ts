@@ -136,6 +136,31 @@ export async function loadIndex(
 }
 
 /**
+ * One ladder fetch with a bounded retry: these are local static files, so a
+ * second attempt after a short backoff recovers a transient failure under
+ * load (the parallel-worker e2e runs caught real ones). Returns null when
+ * EVERY attempt fails — callers must leave their slot UNSET. Never cache a
+ * failure: a cached empty map/list pins the degraded fallback (identity
+ * display, dictionary swaps) for the whole session with no retry path.
+ */
+async function fetchLadderJson<T>(
+  fetchImpl: typeof fetch,
+  url: string,
+  attempts = 2,
+): Promise<T | null> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 150))
+    try {
+      const res = await fetchImpl(url)
+      if (res.ok) return (await res.json()) as T
+    } catch {
+      // fall through to the next attempt
+    }
+  }
+  return null
+}
+
+/**
  * Ensure swaps.json is loaded into the index. Cached (no-op if already loaded).
  * A failed fetch leaves swaps as null (identity display) + is retried on the
  * next call.
@@ -146,9 +171,11 @@ export async function ensureSwaps(
   baseUrl: string,
 ): Promise<void> {
   if (index.swaps !== null || index.drops !== null) return
-  const res = await fetchImpl(`${baseUrl}data/restrictions/swaps.json`).catch(() => null)
-  if (!res || !res.ok) return
-  const doc = (await res.json()) as { swaps: SwapEntry[]; drops: Record<string, DropEntry[]> }
+  const doc = await fetchLadderJson<{ swaps: SwapEntry[]; drops: Record<string, DropEntry[]> }>(
+    fetchImpl,
+    `${baseUrl}data/restrictions/swaps.json`,
+  )
+  if (!doc) return
   index.swaps = doc.swaps
   index.drops = doc.drops
 }
@@ -165,12 +192,14 @@ export async function ensureRemoved(
   baseUrl: string,
 ): Promise<void> {
   if (index.removed.has(slug)) return
-  const res = await fetchImpl(`${baseUrl}data/restrictions/removed/${slug}.json`).catch(() => null)
-  if (!res || !res.ok) {
-    index.removed.set(slug, [])
-    return
-  }
-  const doc = (await res.json()) as { removed: number[] }
+  const doc = await fetchLadderJson<{ removed: number[] }>(
+    fetchImpl,
+    `${baseUrl}data/restrictions/removed/${slug}.json`,
+  )
+  // A failed fetch stays UNSET so a later ladder call retries — caching an
+  // empty set here would silently keep that chip's recipes discoverable for
+  // the whole session.
+  if (!doc) return
   index.removed.set(slug, doc.removed ?? [])
 }
 
@@ -188,21 +217,21 @@ export async function ensurePair(
 ): Promise<void> {
   const pairKey = a < b ? `${a}-${b}` : `${b}-${a}`
   if (index.pairs.has(pairKey)) return
-  const res = await fetchImpl(`${baseUrl}data/restrictions/pairs/${pairKey}.json`).catch(() => null)
-  if (!res || !res.ok) {
-    index.pairs.set(pairKey, [])
-    return
-  }
-  const doc = (await res.json()) as { extras: number[] }
+  const doc = await fetchLadderJson<{ extras: number[] }>(
+    fetchImpl,
+    `${baseUrl}data/restrictions/pairs/${pairKey}.json`,
+  )
+  // A failed fetch stays UNSET so a later ladder call retries (never cache a
+  // failure — an empty extras list would pin a wrong composition forever).
+  if (!doc) return
   index.pairs.set(pairKey, doc.extras ?? [])
 }
 
 /**
  * Ensure events/<slug>.json is loaded into the index. Cached (no-op if already
- * loaded). A failed fetch leaves this slug's events map EMPTY (the dictionary
- * swap/drop fallback keeps working for that chip) + is retried on the next call.
- * The events files exist ONLY for restrictions that rework at least one recipe,
- * so a 404 is normal for the smallest sets — cached as an empty map, not an error.
+ * loaded). A failed fetch leaves the slug UNSET (retried on the next ladder
+ * call — all twelve event files ship in the bundle, so a failure here is
+ * transient, never a legitimate 404).
  */
 export async function ensureEvents(
   slug: string,
@@ -211,12 +240,15 @@ export async function ensureEvents(
   baseUrl: string,
 ): Promise<void> {
   if (index.events.has(slug)) return
-  const res = await fetchImpl(`${baseUrl}data/restrictions/events/${slug}.json`).catch(() => null)
-  if (!res || !res.ok) {
-    index.events.set(slug, {})
-    return
-  }
-  const doc = (await res.json()) as Record<string, RecipeEvents>
+  const doc = await fetchLadderJson<Record<string, RecipeEvents>>(
+    fetchImpl,
+    `${baseUrl}data/restrictions/events/${slug}.json`,
+  )
+  // A failed fetch stays UNSET so a later ladder call retries. Caching an
+  // empty map here would pin the dictionary's global swap/drop fallback for
+  // the session — and the global DROPS union hides ingredients a recipe's own
+  // exact rework keeps (measured: garlic under GF, the CI e2e caught it).
+  if (!doc) return
   index.events.set(slug, doc)
 }
 
