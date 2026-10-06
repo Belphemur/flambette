@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   matchMealimeFavourites,
+  mealimeReportLines,
   normalizeMealimeName,
   parseMealimePayload,
 } from './mealimeImport'
@@ -134,5 +135,80 @@ describe('matchMealimeFavourites', () => {
     expect(normalizeMealimeName("Panko-Crusted Tilapia (w/ Lemon)")).toBe(
       'pankocrustedtilapiawlemon',
     )
+  })
+})
+
+describe('mealimeReportLines', () => {
+  test('a mixed import reads the counts, the removed line and the misses', () => {
+    const lines = mealimeReportLines({
+      matched: [
+        { variantId: 4914, by: 'id' },
+        { variantId: 5377, by: 'name' },
+      ],
+      missing: [{ name: 'Gone From The Catalog' }],
+      duplicatesDropped: 1,
+      added: 2,
+      removed: 56,
+    })
+    expect(lines).toEqual([
+      '2 favourites imported (1 by id, 1 by name).',
+      '56 previously favourited recipes were removed — the import replaces your favourites with this Mealime set.',
+      '1 could not be matched: Gone From The Catalog.',
+      '1 duplicate entry was skipped.',
+    ])
+  })
+
+  test('the honest zero says the favourites already match', () => {
+    const lines = mealimeReportLines({
+      matched: [{ variantId: 36222, by: 'id' }],
+      missing: [],
+      duplicatesDropped: 0,
+      added: 0,
+      removed: 0,
+    })
+    expect(lines).toEqual([
+      '1 favourite imported (1 by id, 0 by name).',
+      'They were already in your favourites — nothing new to add.',
+    ])
+  })
+
+  test('a partial-new import calls out the new count', () => {
+    const lines = mealimeReportLines({
+      matched: [
+        { variantId: 4914, by: 'id' },
+        { variantId: 36222, by: 'id' },
+      ],
+      missing: [],
+      duplicatesDropped: 0,
+      added: 1,
+      removed: 55,
+    })
+    expect(lines[0]).toBe('2 favourites imported (2 by id, 0 by name).')
+    expect(lines[1]).toBe('1 new.')
+  })
+
+  test('an all-miss run is a match-layer failure line', () => {
+    const lines = mealimeReportLines({
+      matched: [],
+      missing: [{ recipe_id: 999_999, name: 'Gone From The Catalog' }],
+      duplicatesDropped: 0,
+      added: 0,
+      removed: 0,
+    })
+    expect(lines).toEqual([
+      'Nothing could be matched to recipes in this app.',
+      '1 could not be matched: Gone From The Catalog.',
+    ])
+  })
+
+  test('singular forms read naturally for one recipe removed', () => {
+    const lines = mealimeReportLines({
+      matched: [{ variantId: 4914, by: 'id' }],
+      missing: [],
+      duplicatesDropped: 0,
+      added: 1,
+      removed: 1,
+    })
+    expect(lines).toContain('1 previously favourited recipe was removed — the import replaces your favourites with this Mealime set.')
   })
 })

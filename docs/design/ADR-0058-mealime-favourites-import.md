@@ -2,6 +2,17 @@
 
 Status: accepted (2026-10-06)
 
+> **Change note (2026-10-08):** an applied import now also opens a SUCCESS
+> MODAL in Settings — the preview tiles (image + title, resolved through
+> the same `imageSrc`/`onImgError` pair every other tile uses), the
+> headline counts ("52 favourites imported — 48 by id, 4 by name"; the
+> honest zero reads "Your favourites already match — N recipes"), and the
+> same missing/duplicates/removed sentences the inline report renders
+> (one shared `mealimeReportLines` helper, so the two surfaces cannot
+> drift). The failure paths — malformed paste, all-miss, catalog-load
+> failure — never open it. This is presentation only: decision §4's
+> apply semantics are untouched.
+
 ## Context
 
 Mealime announced it will discontinue the service on **2026-10-21**; personal

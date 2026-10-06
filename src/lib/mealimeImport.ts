@@ -171,3 +171,49 @@ export function matchMealimeFavourites(
   }
   return { matched, missing, duplicatesDropped }
 }
+
+/**
+ * The report's sentences, in the order they are read. The inline report
+ * and the success modal (ADR-0058's modal amendment) both render from
+ * this one function so the two surfaces cannot drift apart in wording —
+ * the modal repeats the counts, so it repeats THIS text.
+ */
+export function mealimeReportLines(
+  result: MealimeMatchResult & { added: number; removed: number },
+): string[] {
+  const lines: string[] = []
+  const matchedCount = result.matched.length
+  if (matchedCount > 0) {
+    const byId = result.matched.filter((m) => m.by === 'id').length
+    lines.push(
+      `${matchedCount} favourite${matchedCount === 1 ? '' : 's'} imported (${byId} by id, ${matchedCount - byId} by name).`,
+    )
+    // Override import (ADR-0058 amended): only the imported set remains.
+    // Say so plainly whenever the import removed anything.
+    if (result.added === 0 && result.removed === 0) {
+      lines.push('They were already in your favourites — nothing new to add.')
+    } else if (result.added > 0 && result.added < matchedCount) {
+      lines.push(`${result.added} new.`)
+    }
+  } else {
+    lines.push('Nothing could be matched to recipes in this app.')
+  }
+  if (result.removed > 0) {
+    lines.push(
+      `${result.removed} previously favourited recipe${result.removed === 1 ? ' was' : 's were'} removed — the import replaces your favourites with this Mealime set.`,
+    )
+  }
+  if (result.missing.length > 0) {
+    lines.push(
+      `${result.missing.length} could not be matched: ${result.missing
+        .map((m) => m.name || `recipe #${m.recipe_id}`)
+        .join(', ')}.`,
+    )
+  }
+  if (result.duplicatesDropped > 0) {
+    lines.push(
+      `${result.duplicatesDropped} duplicate entr${result.duplicatesDropped === 1 ? 'y was' : 'ies were'} skipped.`,
+    )
+  }
+  return lines
+}

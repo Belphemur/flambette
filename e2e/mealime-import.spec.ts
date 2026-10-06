@@ -142,12 +142,76 @@ test('an all-miss payload is reported, not applied — favourites survive the ov
   await expect(report).toContainText('Nothing could be matched to recipes in this app.')
   await expect(report).toContainText('1 could not be matched: Gone From The Catalog')
   await expect(report).not.toContainText('removed')
+  // A match-layer failure is NOT a success — no modal.
+  await expect(page.getByTestId('mealime-import-modal')).toHaveCount(0)
 
   // The seed is intact — no tombstone storm wiped it.
   await page.goto('/recipe/36222')
   await expect(
     page.getByRole('button', { name: 'Remove from favourites' }),
   ).toBeVisible()
+
+  await expectZeroMealimeRequests(page)
+})
+
+test('a successful paste opens the success modal with counts and the imported tiles', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await openSettings(page)
+  await page.getByTestId('mealime-import-input').fill(PAYLOAD)
+  await page.getByTestId('mealime-import-button').click()
+
+  // The SUCCESS modal (not the inline report alone): headline with the
+  // counts, then the preview tiles (image + title per recipe).
+  const modal = page.getByTestId('mealime-import-modal')
+  await expect(modal).toBeVisible()
+  await expect(page.getByTestId('mealime-import-modal-headline')).toHaveText(
+    '2 favourites imported — 1 by id, 1 by name',
+  )
+  const preview = page.getByTestId('mealime-import-preview')
+  await expect(preview.getByTestId('mealime-import-preview-tile')).toHaveCount(2)
+  const firstTile = preview.getByTestId('mealime-import-preview-tile').first()
+  await expect(firstTile.getByRole('img')).toHaveAttribute(
+    'alt',
+    /Grape Tomato, Basil & Ricotta Flatbread Pizza/i,
+  )
+  await expect(firstTile).toContainText('Grape Tomato, Basil & Ricotta Flatbread Pizza')
+
+  // Done closes the modal; focus returns to the Import button; the
+  // inline report is still on screen underneath.
+  await page.getByTestId('mealime-import-modal-done').click()
+  await expect(modal).toHaveCount(0)
+  await expect(page.getByTestId('mealime-import-button')).toBeFocused()
+  await expect(page.getByTestId('mealime-import-report')).toContainText(
+    '2 favourites imported (1 by id, 1 by name)',
+  )
+
+  // The star is real (existing assertion path, repeated under the modal).
+  await page.goto('/recipe/4914')
+  await expect(page.getByRole('button', { name: 'Remove from favourites' })).toBeVisible()
+
+  await expectZeroMealimeRequests(page)
+})
+
+test('a second identical paste reports "already match" in the modal (the honest zero)', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await openSettings(page)
+  await page.getByTestId('mealime-import-input').fill(PAYLOAD)
+  await page.getByTestId('mealime-import-button').click()
+  await page.getByTestId('mealime-import-modal-done').click()
+
+  // Same payload again: added === 0 && removed === 0. The user still asked
+  // to SEE the success — the modal opens and says what happened.
+  await page.getByTestId('mealime-import-input').fill(PAYLOAD)
+  await page.getByTestId('mealime-import-button').click()
+  await expect(page.getByTestId('mealime-import-modal')).toBeVisible()
+  await expect(page.getByTestId('mealime-import-modal-headline')).toHaveText(
+    'Your favourites already match — 2 recipes',
+  )
+  await expect(page.getByTestId('mealime-import-preview')).toBeVisible()
 
   await expectZeroMealimeRequests(page)
 })
@@ -159,6 +223,7 @@ test('a malformed paste errors and applies nothing', async ({ page }) => {
   await page.getByTestId('mealime-import-button').click()
   await expect(page.getByText(/Couldn't import — the pasted text is not valid JSON/)).toBeVisible()
   await expect(page.getByTestId('mealime-import-report')).toHaveCount(0)
+  await expect(page.getByTestId('mealime-import-modal')).toHaveCount(0)
 
   // No partial state: the fixture recipe is NOT favourited.
   await page.goto('/recipe/4914')

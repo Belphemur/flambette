@@ -10,6 +10,7 @@ import { getCatalog } from '../lib/catalog'
 import { USER_RECIPE_ID_BASE } from '../lib/userRecipes'
 import {
   matchMealimeFavourites,
+  mealimeReportLines,
   parseMealimePayload,
   type MealimeMatchResult,
 } from '../lib/mealimeImport'
@@ -17,6 +18,7 @@ import { mealimeBookmarkletHref } from '../lib/mealimeBookmarklet'
 import { useFavouritesStore } from '../stores/favourites'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
+import MealimeImportModal from './MealimeImportModal.vue'
 
 /**
  * Settings (ADR-0016): the app's data surface. Backup & restore MOVED here
@@ -333,6 +335,32 @@ const bookmarkletHref = mealimeBookmarkletHref()
 const mealimeInput = ref('')
 /** Non-null while the result report is on screen (success or empty run). */
 const mealimeReport = ref<MealimeMatchResult & { added: number; removed: number } | null>(null)
+/** Non-null while the SUCCESS modal is open: the report plus the catalog
+ *  tiles (name + image) for the matched variant ids. The failure paths —
+ *  malformed paste, all-miss, catalog-load failure — never open it. */
+const mealimeModal = ref<
+  (MealimeMatchResult & { added: number; removed: number }) & {
+    catalogById: Map<number, { name: string; image: string }>
+  }
+| null>(null)
+
+/** Resolve the matched variant ids against the SAME catalog slice the
+ *  matcher ran on — the parent already awaits getCatalog(), so this is
+ *  synchronous and cannot race; a failed load returns before any of it. */
+function resolveImportCatalog(
+  result: MealimeMatchResult,
+  meta: ReadonlyArray<{ id: number; name: string; thumbnail_image_url: string }>,
+): Map<number, { name: string; image: string }> {
+  const byId = new Map(meta.map((m) => [m.id, m]))
+  const tiles = new Map<number, { name: string; image: string }>()
+  for (const match of result.matched) {
+    const entry = byId.get(match.variantId)
+    if (entry) {
+      tiles.set(match.variantId, { name: entry.name, image: entry.thumbnail_image_url })
+    }
+  }
+  return tiles
+}
 
 function clearMealimeReport() {
   mealimeReport.value = null
@@ -385,6 +413,15 @@ async function importMealimeFavourites(): Promise<void> {
     const { added, removed } = favourites.importFavourites(result.matched.map((m) => m.variantId))
     mealimeInput.value = ''
     mealimeReport.value = { ...result, added, removed }
+    // Success modal (ADR-0058 amendment): the applied import gets the
+    // preview — including the honest zero, where the headline says the
+    // favourites already match. All-miss never reaches this branch.
+    mealimeModal.value = {
+      ...result,
+      added,
+      removed,
+      catalogById: resolveImportCatalog(result, catalog.variantMeta),
+    }
   } else {
     mealimeReport.value = { ...result, added: 0, removed: 0 }
   }
@@ -683,31 +720,16 @@ async function importMealimeFavourites(): Promise<void> {
   >
   Import favourites
   </button>
+  <!-- The wording lives in `mealimeReportLines` — the success modal
+  (ADR-0058 amendment) repeats it, so both surfaces render ONE source. -->
   <p
   v-if="mealimeReport"
   class="text-xs"
   data-test="mealime-import-report"
   aria-live="polite"
   >
-  <template v-if="mealimeReport.matched.length">
-  {{ mealimeReport.matched.length }} favourite{{ mealimeReport.matched.length === 1 ? '' : 's' }}
-  imported ({{ mealimeReport.matched.filter((m) => m.by === 'id').length }} by id,
-  {{ mealimeReport.matched.filter((m) => m.by === 'name').length }} by name).
-  <!-- Override import (ADR-0058 amended): only the imported set remains.
-  Say so plainly whenever the import removed anything. -->
-  <template v-if="mealimeReport.added === 0 && mealimeReport.removed === 0">They were already in your favourites — nothing new to add.</template>
-  <template v-else-if="mealimeReport.added > 0 && mealimeReport.added < mealimeReport.matched.length">{{ mealimeReport.added }} new.</template>
-  </template>
-  <template v-else>Nothing could be matched to recipes in this app.</template>
-  <template v-if="mealimeReport.removed > 0">
-  {{ mealimeReport.removed }} previously favourited recipe{{ mealimeReport.removed === 1 ? ' was' : 's were' }} removed — the import replaces your favourites with this Mealime set.
-  </template>
-  <template v-if="mealimeReport.missing.length">
-  {{ mealimeReport.missing.length }} could not be matched:
-  {{ mealimeReport.missing.map((m) => m.name || `recipe #${m.recipe_id}`).join(', ') }}.
-  </template>
-  <template v-if="mealimeReport.duplicatesDropped">
-  {{ mealimeReport.duplicatesDropped }} duplicate entr{{ mealimeReport.duplicatesDropped === 1 ? 'y was' : 'ies were' }} skipped.
+  <template v-for="(line, i) in mealimeReportLines(mealimeReport)" :key="i">
+  {{ line }}<br v-if="i < mealimeReportLines(mealimeReport).length - 1" />
   </template>
   </p>
   </div>
@@ -755,5 +777,15 @@ async function importMealimeFavourites(): Promise<void> {
   </div>
   </div>
   </div>
+
+  <!-- Import-from-Mealime SUCCESS modal (ADR-0058 amendment): the
+  applied import gets the preview. v-if-gated MOUNT, so one mount == one
+  open and the focus restore runs on unmount (NutritionModal's pattern). -->
+  <MealimeImportModal
+  v-if="mealimeModal"
+  :result="mealimeModal"
+  :catalog-by-id="mealimeModal.catalogById"
+  @close="mealimeModal = null"
+  />
   </section>
 </template>
