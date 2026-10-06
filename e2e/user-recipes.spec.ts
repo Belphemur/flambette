@@ -133,13 +133,13 @@ test.describe('user recipes and the source filter (ADR-0054)', () => {
     // The PERMANENT authorship marker: visible on the detail sheet (the
     // card's NEW badge is the 30-day recency face; this one never
     // expires). ADR-0055: the native `title` became the one bubble —
-    // aria-hidden (the aria-label stays the meaning-carrier), revealed on
-    // hover and, being the detail view, by tap-reveal.
+    // aria-hidden, revealed on hover and, being the detail view, by
+    // tap-reveal. Owner refinement (2026-10-06): the BUBBLE text is just
+    // "New"; the full meaning stays in the aria-label (the carrier).
     const badge = page.getByTestId('user-recipe-badge')
     await expect(badge).toBeVisible()
-    await expect(badge.getByText(/authored by this household/)).toContainText(
-      'authored by this household',
-    )
+    await expect(badge.locator('span[aria-hidden="true"]').last()).toHaveText('New')
+    await expect(badge.locator('svg')).toHaveAttribute('aria-label', /authored by this household/)
     // Icon-only marker, same row as the type/occasion icons: no text pill;
     // the household hue lives on the glyph inside the wrapper.
     await expect(badge.locator('svg')).toHaveClass(/text-household/)

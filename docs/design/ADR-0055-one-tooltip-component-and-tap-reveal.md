@@ -65,32 +65,48 @@ constant TOOLTIP_TAP_REVEAL_MS = 3_000   // internal, not exported
 `data-test` and other attributes fall through to the bubble's root span,
 so existing selectors keep working (Decision 8).
 
-### Decision 2 — three reveal modes, one state funnel
+### Decision 2 — three reveal modes, one state funnel, one FADE
 
-The reveal STATE lives once, inside the component. The bubble's base class
-is `hidden` (never `invisible` — the load-bearing lesson of ADR-0049's
-Pixel 7 regression) plus one chrome, and exactly one of three reveal
-mechanisms turns it on:
+The reveal STATE lives once, inside the component. The bubble's base
+state is `opacity-0 invisible` — NEVER a `display` swap: every bubble
+enters and leaves through an opacity+visibility transition (owner
+refinement, 2026-10-06), so a closed bubble is transparent rather than
+absent. This deliberately REVERSES the old `hidden`-not-`invisible`
+rule, and the reason that rule existed is still honoured: the ADR-0049
+Pixel 7 failure was an UNCLAMPED bubble widening the document until the
+fixed bottom nav stopped receiving taps. A visibility-hidden bubble
+occupies layout, so the same refinement mandates the in-viewport clamp
+(Decision 3a): a bubble is never outside the viewport, never wider than
+its `max-w`, and `pointer-events-none` — the document can never grow
+because of one. Exactly one of three reveal mechanisms turns the
+opacity/visibility on:
 
 1. **Controlled** (the `active` prop is given): the caller owns detection
    and passes the verdict. Used by `HueIcon`, whose host is
    `pointer-events-none` (ADR-0044) and therefore invisible to `:hover` —
    `active` is `pointerInside || focusWithin` from `useIconHoverTarget`
-   and `@focusin`. Reveal class: `hovercap:block` — the ADR-0044 gate is
-   preserved verbatim.
+   and `@focusin`. Reveal classes: `hovercap:opacity-100 hovercap:visible`
+   — the ADR-0044 gate is preserved verbatim.
 2. **CSS** (no `active` prop): the bubble carries
-   `group-hover:block group-focus-within:block` statically and fires on
-   the nearest `.group` ancestor — the ordinary pointer-active element
-   case. Used by the room chip (its host span is already `group relative`)
-   and by the migrated `title` hosts, which each gain `group relative`.
-   No JS listener is spent on elements CSS can already cover.
+   `group-hover:opacity-100 group-hover:visible group-focus-within:…`
+   statically and fires on the nearest `.group` ancestor — the ordinary
+   pointer-active element case. Used by the room chip (its host span is
+   already `group relative`) and by the migrated `title` hosts, which
+   each gain `group relative`. No JS listener is spent on elements CSS
+   can already cover.
 3. **Tap-reveal** (the `tapReveal` prop): an internal `tapOpen` state with
-   a 3 s timer; the reveal class is a plain `block`, deliberately UNGATED
-   by `hovercap:` — this is the one place the touch silence is lifted, and
-   only because the surface opted in (Decision 4).
+   a 3 s timer; the open state is an INLINE `opacity:1; visibility:visible`
+   style, deliberately UNGATED by `hovercap:` — this is the one place the
+   touch silence is lifted, and only because the surface opted in
+   (Decision 4).
 
 The modes compose: `shown = active || tapOpen`, so a tap-reveal surface
-keeps its hover/focus behaviour untouched on desktop.
+keeps its hover/focus behaviour untouched on desktop. On a tap-reveal
+surface in CSS mode the HOVER half of the reveal is additionally gated
+by `hovercap:` — `hovercap:group-hover:…` — because a touch browser
+can retain `:hover` after a tap, and an ungated group-hover would
+re-open the bubble after the second tap hid it or the timer fired
+(focus-within stays ungated: focus is not a touch artefact here).
 
 ### Decision 3 — two placement variants, both existing pinned shapes
 
@@ -104,14 +120,32 @@ differ between the two bubbles that exist today:
   load-bearing per ADR-0049): `top-full right-0 mt-1.5 w-max max-w-56
   rounded-lg text-xs leading-snug shadow-md`.
 
-Shared chrome: `pointer-events-none absolute z-20 hidden w-max
-bg-surface-dark px-2 py-1 font-normal leading-snug text-text-dark`. The
-icon bubble's `text-on-brand` unifies to `text-text-dark` (`#ffffff` →
-`#fff8f0` on `#171310` — imperceptible, and both tokens already exist in
-DESIGN.md). The room chip's `role="tooltip"` is retired:
-`aria-hidden="true"` already removes the bubble from the a11y tree, so the
-role carried no information and differed between the two bubbles for no
-reason. No new colour token was needed.
+### Decision 3a — the in-viewport clamp and flip (owner refinement, 2026-10-06)
+
+Long tooltips must not clip outside the viewport. `TooltipBubble`
+positions itself with its placement classes relative to the host (its
+containing block), then applies a `transform` nudge computed from the
+HOST's rect plus the bubble's own size: the preferred side (the
+`placement` prop) is FLIPPED to the other side when the viewport has no
+room for it, the horizontal position is clamped to an 8px viewport
+margin, and the vertical position is clamped the same way. The
+transform is applied even while the bubble is hidden, so the layout box
+itself can never widen the document (the ADR-0049 failure mode).
+Recomputation runs on mount, on text change, on resize and on any
+scroll (rAF-throttled, passive, capture-phase) — never on the reveal
+path itself, so a reveal is never delayed by measurement.
+
+Shared chrome: `pointer-events-none absolute z-20 opacity-0 invisible
+transition-[opacity,visibility] duration-150 w-max bg-surface-dark px-2
+py-1 font-normal leading-snug text-text-dark` (the fade is Decision 2's;
+`hidden` is gone — see there for why the ADR-0049 layout-occupancy
+hazard is prevented by THIS clamp instead). The icon bubble's
+`text-on-brand` unifies to `text-text-dark` (`#ffffff` → `#fff8f0` on
+`#171310` — imperceptible, and both tokens already exist in DESIGN.md).
+The room chip's `role="tooltip"` is retired: `aria-hidden="true"`
+already removes the bubble from the a11y tree, so the role carried no
+information and differed between the two bubbles for no reason. No new
+colour token was needed.
 
 Per-surface placement: icon bubbles keep `above-center`; migrated `title`
 hosts use `below-right`, except sites where below would clip against the
@@ -148,12 +182,12 @@ Tap-reveal rules, pinned:
 - Duration: 3 000 ms, ONE constant (`TOOLTIP_TAP_REVEAL_MS`) in
   `TooltipBubble.vue`.
 - Auto-dismiss on timeout.
-- The open state is an INLINE `display: block`, not a class. The base
-  chrome carries `hidden`, and Tailwind sorts `.hidden` AFTER `.block`
-  inside the same layer, so a plain `block` class can never open the
-  bubble — the hover modes win only because `hovercap:block` /
-  `group-hover:block` are VARIANTS, which sort after base utilities. An
-  inline style is order-independent.
+- The open state is an INLINE `opacity:1; visibility:visible` style, not
+  a class. The base chrome is `opacity-0 invisible`, and Tailwind sorts
+  `.invisible` AFTER `.visible` inside the same layer, so a plain
+  `visible` class can never open the bubble — the hover modes win only
+  because `hovercap:visible` / `group-hover:visible` are VARIANTS, which
+  sort after base utilities. An inline style is order-independent.
 - A second tap while open hides IMMEDIATELY (toggle semantics — chosen
   over restart-timer: a user who taps again is dismissing, and the
   immediate hide makes that observable).
@@ -183,7 +217,7 @@ the component's reveal — none becomes a new visible affordance:
 | `HistoryView.vue` row `p` | absolute last-cooked date | below-right | hover |
 | `RecipeDetail.vue` household badge | household-recipe meaning | above-center | hover + TAP-REVEAL (detail-view scope) |
 | `RecipeDetail.vue` cook-line `p` | absolute last-cooked date | below-right | hover |
-| `HueIcon.vue` glyph `:title` | the icon's label | **dropped, not migrated** — the bubble is already the visual dual of the label; this closes ADR-0040's recorded follow-up ("drop title on bubble-bearing icons") |
+| `HueIcon.vue` glyph `:title` | the icon's label | none | **dropped, not migrated** — the bubble is already the visual dual of the label; this closes ADR-0040's recorded follow-up ("drop title on bubble-bearing icons") |
 
 Non-focusable hosts (`p`, `h2`, spans) reveal on hover only. That is the
 information-parity the native `title` had (also unreachable by keyboard);
@@ -288,3 +322,13 @@ are kept through the component — attribute fallthrough makes the names
   (toggle), over restarting the timer.
 - 2026-10-06 — `icon-tooltip` / `room-chip-tooltip` selector names kept
   via attribute fallthrough.
+- 2026-10-06 — OWNER REFINEMENT: the detail-view household badge's
+  bubble text is just "New" (not the full authorship sentence) — the
+  aria-label stays the meaning-carrier; the bubble is its short visual
+  dual.
+- 2026-10-06 — OWNER REFINEMENT: every bubble fades in/out via an
+  opacity+visibility transition (no display swap), and placement must
+  not clip: TooltipBubble flips the vertical side when the preferred one
+  does not fit and nudges at the screen edges (Decision 3a). The 3 s
+  tap-dismiss timer and the browse-card hover-only rule are explicitly
+  UNCHANGED by this refinement.

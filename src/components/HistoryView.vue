@@ -8,6 +8,7 @@ import { imageSrc, onImgError } from '../lib/images'
 import type { VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
+import TooltipBubble from './TooltipBubble.vue'
 
 const router = useRouter()
 const plan = usePlanStore()

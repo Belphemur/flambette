@@ -406,9 +406,13 @@ function startCooking() {
   class="text-household"
   :aria-label="'Household recipe: authored by this household, not part of the imported catalog'"
   />
+  <!-- ADR-0055 decision log (owner refinement, 2026-10-06): the
+  detail-view badge's bubble text is just "New" — the full meaning stays
+  in the aria-label, which is the single carrier (ADR-0049's rule
+  inherited); the bubble is its short visual dual. -->
   <TooltipBubble
   ref="badgeBubble"
-  text="Household recipe — authored by this household, not part of the imported catalog"
+  text="New"
   placement="above-center"
   tap-reveal
   />
