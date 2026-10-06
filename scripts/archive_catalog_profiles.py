@@ -64,9 +64,35 @@ webp for zero new pixels.
     python3 scripts/archive_catalog_profiles.py --builder-json A.json --label us-6
     python3 scripts/archive_catalog_profiles.py --token-file PATH --label metric-4
     python3 scripts/archive_catalog_profiles.py --index        # print the index
+    python3 scripts/archive_catalog_profiles.py --restrictions # dietary profiles
 
 Stdlib only. The token is read from a FILE, never a command line (so it never
 lands in a shell history or a process listing).
+
+RESTRICTION PROFILES (--restrictions)
+=====================================
+
+`set_profile` also accepts `recipe_restriction_ids` (account-wide). Measured on
+2026-10-06: flipping a restriction re-renders the whole builder payload, and
+the restricted render is a strict SUBSET of the unrestricted one (added=0) —
+recipes are dropped, and shared recipes keep their line-item COUNTS and
+quantities while ingredient NAMES (and occasionally one step's prose) are
+swapped to a restriction-safe substitute. A restricted render is upstream's own
+re-authoring of the recipe, so it is archive-worthy raw truth, not derivable.
+
+LAYOUT (under ../mealime-media/raw_profiles/restrictions, gitignored):
+
+  restrictions/<slug>-us6.json   the verbatim builder payload for that
+                                 restriction set (US units / 6 servings —
+                                 the account setting at archive time)
+  restrictions/index.json        label -> {pulled_at, recipe_count,
+                                 restriction_ids}
+
+`none` (no restrictions) and `all-free` (every restriction id) are archived
+alongside the twelve single-restriction profiles. Idempotent: a payload already
+on disk is indexed without refetching, so reruns only fill gaps. The account's
+CURRENT restriction profile is gluten-free ([1]) — it is restored in a
+`finally` no matter how the loop ends.
 """
 
 import argparse
@@ -104,9 +130,39 @@ PROFILE_LABELS = {
 MEDIA = os.path.join(os.path.dirname(ROOT), "mealime-media")
 PROFILE_ROOT = os.path.join(MEDIA, "raw_profiles")
 INDEX_PATH = os.path.join(PROFILE_ROOT, "index.json")
+RESTRICTION_ROOT = os.path.join(PROFILE_ROOT, "restrictions")
+RESTRICTION_INDEX_PATH = os.path.join(RESTRICTION_ROOT, "index.json")
+
+# The dietary restriction ids and their slug/label (live-verified 2026-10-06:
+# 7 and 8 exist upstream but are unused). The display order lives in the app's
+# src/lib/restrictions.ts; here the map is keyed numerically for the API.
+RESTRICTIONS = {
+    1: ("gluten-free", "Gluten-Free"),
+    2: ("dairy-free", "Dairy-Free"),
+    3: ("fish-free", "Fish-Free"),
+    4: ("shellfish-free", "Shellfish-Free"),
+    5: ("peanut-free", "Peanut-Free"),
+    6: ("tree-nut-free", "Tree Nut-Free"),
+    9: ("soy-free", "Soy-Free"),
+    10: ("nightshade-free", "Nightshade-Free"),
+    11: ("egg-free", "Egg-Free"),
+    12: ("sesame-free", "Sesame-Free"),
+    13: ("mustard-free", "Mustard-Free"),
+    14: ("sulfite-free", "Sulfite-Free"),
+}
+# Upstream's own "everything restricted" profile uses this order.
+ALL_RESTRICTION_IDS = [5, 10, 14, 13, 12, 11, 9, 6, 2, 1, 3, 4]
+# The account's standing profile — restored after any fetch loop.
+ACCOUNT_DEFAULT_RESTRICTIONS = [1]
 
 UA = "Mozilla/5.0 (X11; Linux x86_64; rv:156.0) Gecko/20100101 Firefox/156.0"
 WORKERS = 8
+
+# Measured 2026-10-06: set_profile's effect is ASYNC server-side. A fetch 2 s
+# after the POST returned renders for the WRONG setting (a Paleo render and a
+# shellfish render landed where soy/nightshade were asked for) — 6 s has held
+# across every id. The builder validates the result anyway (subset check).
+PROFILE_APPLY_SETTLE_SECONDS = 6
 
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -259,14 +315,14 @@ def archive(label, builder, skip_existing=True):
     return index["profiles"][label]
 
 
-def set_profile(token, unit_family, serving_count):
+def set_profile(token, unit_family, serving_count, restriction_ids=None):
     """Switch the account's render profile. Effect lands on the NEXT
     `get_builder_data` call (ADR-0057 §5)."""
     body = {
         "profile": {
             "recipe_type_id": 1,
             "unit_family_id": unit_family,
-            "recipe_restriction_ids": [],
+            "recipe_restriction_ids": list(restriction_ids or []),
             "dislike_ids": [1],
             "serving_count": serving_count,
         },
@@ -287,10 +343,95 @@ def set_profile(token, unit_family, serving_count):
         return json.loads(r.read().decode())
 
 
+def load_restriction_index():
+    if os.path.exists(RESTRICTION_INDEX_PATH):
+        with open(RESTRICTION_INDEX_PATH) as f:
+            return json.load(f)
+    return {}
+
+
+def save_restriction_index(index):
+    os.makedirs(RESTRICTION_ROOT, exist_ok=True)
+    with open(RESTRICTION_INDEX_PATH, "w") as f:
+        json.dump(index, f, indent=1, sort_keys=True)
+        f.write("\n")
+
+
+def index_restriction_payload(label, restriction_ids, pulled_at=None):
+    """Index a restriction payload that already sits on disk (no refetch)."""
+    path = os.path.join(RESTRICTION_ROOT, label + ".json")
+    with open(path) as f:
+        builder = json.load(f)
+    rids = {m["recipe_id"] for m in builder["variant_meta"]}
+    index = load_restriction_index()
+    prior = index.get(label, {})
+    index[label] = {
+        "pulled_at": prior.get("pulled_at") or pulled_at
+        or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "recipe_count": len(rids),
+        "variant_count": len(builder["variant_meta"]),
+        "restriction_ids": list(restriction_ids),
+    }
+    save_restriction_index(index)
+    log("restriction %s: indexed (%d recipes, ids=%s)"
+        % (label, len(rids), restriction_ids))
+    return index[label]
+
+
+def run_restrictions(token, force=False, only=None):
+    """Archive every dietary-restriction builder payload. Idempotent: existing
+    payloads are indexed without refetching. The account's gluten-free [1]
+    profile is restored in a `finally` whatever happens."""
+    targets = [("none", [])]
+    for rid in sorted(RESTRICTIONS):
+        slug = RESTRICTIONS[rid][0]
+        targets.append((slug, [rid]))
+    targets.append(("all-free", ALL_RESTRICTION_IDS))
+    # File names carry the render profile: US units / 6 servings.
+    targets = [(slug + "-us6", ids) for slug, ids in targets]
+    if only:
+        # 'none' still ships with a filtered run: the subset math joins
+        # every restriction payload against the unrestricted baseline.
+        targets = [t for t in targets if t[0] == "none-us6" or t[1] and t[1][0] in only]
+
+    results = []
+    try:
+        for label, ids in targets:
+            path = os.path.join(RESTRICTION_ROOT, label + ".json")
+            if os.path.exists(path) and not force:
+                log("restriction %s: present, indexing only" % label)
+                index_restriction_payload(label, ids)
+                results.append((label, True))
+                continue
+            log("restriction %s: fetching (ids=%s)" % (label, ids))
+            set_profile(token, UNIT_FAMILY["us"], 6, ids)
+            time.sleep(PROFILE_APPLY_SETTLE_SECONDS)
+            builder = fetch_builder(token)
+            os.makedirs(RESTRICTION_ROOT, exist_ok=True)
+            with open(path, "w") as f:
+                json.dump(builder, f)
+            index_restriction_payload(label, ids)
+            results.append((label, True))
+    finally:
+        log("restoring account profile to gluten-free %s" % ACCOUNT_DEFAULT_RESTRICTIONS)
+        try:
+            set_profile(token, UNIT_FAMILY["us"], 6, ACCOUNT_DEFAULT_RESTRICTIONS)
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as e:
+            log("ERROR: could not restore the account profile: %s" % e)
+            results.append(("restore", False))
+    failed = [lab for lab, ok in results if not ok]
+    return 0 if not failed else 1
+
+
 def main():
     global PROFILE_ROOT
     global INDEX_PATH
     ap = argparse.ArgumentParser()
+    ap.add_argument("--restrictions", action="store_true",
+                    help="archive dietary-restriction profiles into "
+                         "raw_profiles/restrictions (idempotent)")
+    ap.add_argument("--restriction", action="append", type=int, choices=sorted(RESTRICTIONS),
+                    help="archive ONE restriction profile (repeatable); implies --restrictions")
     ap.add_argument("--label", help="profile name, e.g. us-6 / metric-4")
     ap.add_argument(
         "--token-file",
@@ -304,6 +445,9 @@ def main():
         help="archive ALL profiles reachable via set_profile (2 unit systems x 3 serving counts)")
     args = ap.parse_args()
 
+    if args.restriction:
+        args.restrictions = True
+
     if args.index:
         index = load_index()
         if not index["profiles"]:
@@ -315,6 +459,15 @@ def main():
         return 0
 
     token = read_token(args.token_file) if not args.builder_json else None
+    if args.restrictions:
+        if not token:
+            log("ERROR: --restrictions needs a live token at %s" % args.token_file)
+            return 1
+        if args.restriction:
+            ids = set(args.restriction)
+            return run_restrictions(token, force=args.force, only=sorted(ids))
+        return run_restrictions(token, force=args.force)
+
     if args.all:
         if not token:
             log("ERROR: --all needs a live token at %s" % args.token_file)
@@ -323,7 +476,7 @@ def main():
         for (uf, sv), label in sorted(PROFILE_LABELS.items()):
             log("\n=== profile %s (unit_family=%d serving=%d) ===" % (label, uf, sv))
             set_profile(token, uf, sv)
-            time.sleep(2)
+            time.sleep(PROFILE_APPLY_SETTLE_SECONDS)
             fresh = fetch_builder(token)
             result = archive(label, fresh, skip_existing=not args.force)
             results.append((label, result))
