@@ -242,6 +242,7 @@ def pair_lines(base, ov):
         if ov_only_empty and base_only_empty and len(empty_ov) == len(empty_base):
             for n, (j, i) in enumerate(zip(empty_ov, empty_base)):
                 pairs[j] = i
+                used_b.add(i)
     # Exclude the newly-paired leftovers from the returned leftover lists —
     # events_for_doc treats `base_left` as drops and `ov_left` as additions,
     # so an unfiltered list would double-report a paired line as BOTH a swap

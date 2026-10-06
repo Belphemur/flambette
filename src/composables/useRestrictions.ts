@@ -69,43 +69,56 @@ export function useRestrictions() {
    * its data arrives) and is retried on the next activation.
    */
   async function ensureLoaded(): Promise<void> {
-    // Dedup: if a load is already in progress, await it instead of starting a duplicate.
-    if (ensureLoadedPromise) return ensureLoadedPromise
-    const ids = activeIds.value
-    if (ids.length === 0) return
-    const baseUrl = import.meta.env.BASE_URL
-    ensureLoadedPromise = (async () => {
-      // swaps.json covers swaps AND drops (loaded when ANY chip is active).
-      await ensureSwaps(index.value, fetch, baseUrl)
-      // events/<slug>.json — the PER-RECIPE exact rework (loaded per chip;
-      // takes precedence over the dictionary's global swap/drop union).
-      const eventPromises = ids.map((id) => {
-        const slug = RESTRICTIONS.find((r) => r.id === id)?.slug
-        return slug ? ensureEvents(slug, index.value, fetch, baseUrl) : Promise.resolve()
-      })
-      await Promise.all(eventPromises)
-      // removed/<slug>.json for each active restriction.
-      const slugPromises = ids.map((id) => {
-        const slug = RESTRICTIONS.find((r) => r.id === id)?.slug
-        return slug ? ensureRemoved(slug, index.value, fetch, baseUrl) : Promise.resolve()
-      })
-      await Promise.all(slugPromises)
-      // pairs/<a>-<b>.json for every active pair (3+ chip composition extras).
-      const pairPromises: Promise<void>[] = []
-      for (let i = 0; i < ids.length; i++) {
-        for (let j = i + 1; j < ids.length; j++) {
-          const a = RESTRICTIONS.find((r) => r.id === ids[i])?.slug
-          const b = RESTRICTIONS.find((r) => r.id === ids[j])?.slug
-          if (a && b) pairPromises.push(ensurePair(a, b, index.value, fetch, baseUrl))
+    // Dedup: if a load is already in progress, await it instead of starting a
+    // duplicate — then re-check: the active set may have GROWN while the load
+    // ran (a chip toggled mid-load), and the memoized run captured a smaller
+    // id list. The ladder steps are cached, so the second pass only fetches
+    // what the first missed (the new slug's removed/events + the new pairs).
+    while (true) {
+      if (ensureLoadedPromise) await ensureLoadedPromise
+      const ids = activeIds.value
+      if (ids.length === 0) return
+      const baseUrl = import.meta.env.BASE_URL
+      const run = (async () => {
+        // swaps.json covers swaps AND drops (loaded when ANY chip is active).
+        await ensureSwaps(index.value, fetch, baseUrl)
+        // events/<slug>.json — the PER-RECIPE exact rework (loaded per chip;
+        // takes precedence over the dictionary's global swap/drop union).
+        const eventPromises = ids.map((id) => {
+          const slug = RESTRICTIONS.find((r) => r.id === id)?.slug
+          return slug ? ensureEvents(slug, index.value, fetch, baseUrl) : Promise.resolve()
+        })
+        await Promise.all(eventPromises)
+        // removed/<slug>.json for each active restriction.
+        const slugPromises = ids.map((id) => {
+          const slug = RESTRICTIONS.find((r) => r.id === id)?.slug
+          return slug ? ensureRemoved(slug, index.value, fetch, baseUrl) : Promise.resolve()
+        })
+        await Promise.all(slugPromises)
+        // pairs/<a>-<b>.json for every active pair (3+ chip composition extras).
+        const pairPromises: Promise<void>[] = []
+        for (let i = 0; i < ids.length; i++) {
+          for (let j = i + 1; j < ids.length; j++) {
+            const a = RESTRICTIONS.find((r) => r.id === ids[i])?.slug
+            const b = RESTRICTIONS.find((r) => r.id === ids[j])?.slug
+            if (a && b) pairPromises.push(ensurePair(a, b, index.value, fetch, baseUrl))
+          }
         }
-      }
-      await Promise.all(pairPromises)
-      // Nested mutations of index (swaps, drops, removed, pairs) don't trigger
-      // shallowRef reactivity. triggerRef notifies Vue so dependents (grocery
-      // displayLines, recipe detail views) recompute with the fresh data.
-      triggerRef(index)
-    })().finally(() => { ensureLoadedPromise = null })
-    return ensureLoadedPromise
+        await Promise.all(pairPromises)
+        // Nested mutations of index (swaps, drops, removed, pairs) don't trigger
+        // shallowRef reactivity. triggerRef notifies Vue so dependents (grocery
+        // displayLines, recipe detail views) recompute with the fresh data.
+        triggerRef(index)
+      })()
+      ensureLoadedPromise = run
+      await run.finally(() => { ensureLoadedPromise = null })
+      // Loop again when the active set grew during the load (the second pass
+      // is near-free: cached steps no-op). Exit when a full pass saw the
+      // CURRENT active set — or another caller chained a newer load, which
+      // the next `if (ensureLoadedPromise)` handles.
+      const after = activeIds.value
+      if (after.length === ids.length && after.every((id) => ids.includes(id))) return
+    }
   }
 
   return {

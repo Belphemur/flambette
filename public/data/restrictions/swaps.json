@@ -376,16 +376,8 @@
  "drops": {
   "1": [
    {
-    "from": "panko bread crumbs",
-    "count": 22
-   },
-   {
     "from": "whole grain buns or rolls",
     "count": 20
-   },
-   {
-    "from": "all-purpose flour",
-    "count": 17
    },
    {
     "from": "whole grain bread",
@@ -397,6 +389,10 @@
    },
    {
     "from": "brown sugar",
+    "count": 7
+   },
+   {
+    "from": "panko bread crumbs",
     "count": 7
    },
    {
@@ -433,6 +429,10 @@
    },
    {
     "from": "Italian seasoning",
+    "count": 2
+   },
+   {
+    "from": "all-purpose flour",
     "count": 2
    },
    {
@@ -793,7 +793,7 @@
   "3": [
    {
     "from": "fish sauce",
-    "count": 34
+    "count": 33
    },
    {
     "from": "Worcestershire sauce",
@@ -821,7 +821,7 @@
    },
    {
     "from": "honey",
-    "count": 11
+    "count": 10
    },
    {
     "from": "ground turkey",
@@ -1036,10 +1036,6 @@
     "count": 7
    },
    {
-    "from": "natural peanut butter",
-    "count": 2
-   },
-   {
     "from": "brown sugar",
     "count": 1
    },
@@ -1048,11 +1044,11 @@
     "count": 1
    },
    {
-    "from": "soy sauce",
+    "from": "natural peanut butter",
     "count": 1
    },
    {
-    "from": "vanilla extract",
+    "from": "soy sauce",
     "count": 1
    }
   ],
@@ -1105,7 +1101,7 @@
   "9": [
    {
     "from": "soy sauce",
-    "count": 11
+    "count": 10
    },
    {
     "from": "brown sugar",
@@ -1129,10 +1125,6 @@
    },
    {
     "from": "chili-garlic sauce",
-    "count": 1
-   },
-   {
-    "from": "cornstarch",
     "count": 1
    },
    {

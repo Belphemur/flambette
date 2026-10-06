@@ -272,29 +272,65 @@ export function isRemovedByRestriction(
   index: LadderIndex,
 ): boolean {
   if (activeIds.length === 0) return false
-  // Check removed sets from loaded removed/<slug>.json files
+  // The id → slug lookup is hoisted out of the per-recipe hot path (the
+  // Recipes tab calls this once per rendered card per keystroke). removed/
+  // pairs arrays stay arrays (they arrive as JSON arrays), but membership
+  // scans run against Sets built ONCE per (index, slug) and memoized on the
+  // index object — a ~2,000-id list scanned linearly per card was the
+  // review's measured hot spot.
   for (const id of activeIds) {
-    const entry = index.restrictions.find((r) => r.id === id)
-    if (!entry) continue
-    const removed = index.removed.get(entry.slug)
-    if (removed && removed.includes(recipeId)) return true
+    const removed = removedSet(id, index)
+    if (removed?.has(recipeId)) return true
   }
   // Check pair extras from loaded pairs/<a>-<b>.json files
   // (only pairs where BOTH members are active)
   for (let i = 0; i < activeIds.length; i++) {
-    const aEntry = index.restrictions.find((r) => r.id === activeIds[i])
-    if (!aEntry) continue
     for (let j = i + 1; j < activeIds.length; j++) {
-      const bEntry = index.restrictions.find((r) => r.id === activeIds[j])
-      if (!bEntry) continue
-      const pairKey = aEntry.slug < bEntry.slug
-        ? `${aEntry.slug}-${bEntry.slug}`
-        : `${bEntry.slug}-${aEntry.slug}`
-      const extras = index.pairs.get(pairKey)
-      if (extras && extras.includes(recipeId)) return true
+      const extras = pairExtrasSet(activeIds[i]!, activeIds[j]!, index)
+      if (extras?.has(recipeId)) return true
     }
   }
   return false
+}
+
+// Memoized Set views over the index's removed/pairs arrays. The index object
+// is the memo key's owner: the Maps live alongside the arrays they shadow and
+// rebuild only when the underlying array is (re)loaded (identity change).
+const removedSetMemos = new WeakMap<LadderIndex, Map<string, Set<number>>>()
+const pairExtrasMemos = new WeakMap<LadderIndex, Map<string, Set<number>>>()
+
+function removedSet(id: number, index: LadderIndex): Set<number> | undefined {
+  const entry = index.restrictions.find((r) => r.id === id)
+  if (!entry) return undefined
+  const removed = index.removed.get(entry.slug)
+  if (!removed) return undefined
+  let bySlug = removedSetMemos.get(index)
+  if (!bySlug) { bySlug = new Map(); removedSetMemos.set(index, bySlug) }
+  let set = bySlug.get(entry.slug)
+  if (!set || set.size !== removed.length) {
+    set = new Set(removed)
+    bySlug.set(entry.slug, set)
+  }
+  return set
+}
+
+function pairExtrasSet(idA: number, idB: number, index: LadderIndex): Set<number> | undefined {
+  const aEntry = index.restrictions.find((r) => r.id === idA)
+  const bEntry = index.restrictions.find((r) => r.id === idB)
+  if (!aEntry || !bEntry) return undefined
+  const pairKey = aEntry.slug < bEntry.slug
+    ? `${aEntry.slug}-${bEntry.slug}`
+    : `${bEntry.slug}-${aEntry.slug}`
+  const extras = index.pairs.get(pairKey)
+  if (!extras) return undefined
+  let byKey = pairExtrasMemos.get(index)
+  if (!byKey) { byKey = new Map(); pairExtrasMemos.set(index, byKey) }
+  let set = byKey.get(pairKey)
+  if (!set || set.size !== extras.length) {
+    set = new Set(extras)
+    byKey.set(pairKey, set)
+  }
+  return set
 }
 
 /* ---------- Dictionary application (display truth) ---------- */
