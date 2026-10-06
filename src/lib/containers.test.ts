@@ -70,20 +70,20 @@ describe('formatContainerQuantity', () => {
   })
 
   test('fractional remainders from multi-recipe sums', () => {
-    expect(formatContainerQuantity(1.5, 'small bunches', '')).toBe('1 1/2 small bunches')
-    expect(formatContainerQuantity(0.5, 'block', '(227 g)')).toBe('1/2 (227 g) blocks')
+    expect(formatContainerQuantity(1.5, 'small bunches', '')).toBe('1 ½ small bunches')
+    expect(formatContainerQuantity(0.5, 'block', '(227 g)')).toBe('½ (227 g) blocks')
   })
 })
 
 describe('formatFraction', () => {
   test('whole, mixed and simple fractions', () => {
     expect(formatFraction(1)).toBe('1')
-    expect(formatFraction(0.5)).toBe('1/2')
-    expect(formatFraction(1.5)).toBe('1 1/2')
-    expect(formatFraction(0.75)).toBe('3/4')
-    expect(formatFraction(0.375)).toBe('3/8')
-    expect(formatFraction(2 / 3)).toBe('2/3')
-    expect(formatFraction(7.25)).toBe('7 1/4')
+    expect(formatFraction(0.5)).toBe('½')
+    expect(formatFraction(1.5)).toBe('1 ½')
+    expect(formatFraction(0.75)).toBe('¾')
+    expect(formatFraction(0.375)).toBe('⅜')
+    expect(formatFraction(2 / 3)).toBe('⅔')
+    expect(formatFraction(7.25)).toBe('7 ¼')
   })
 
   test('falls back to 1 decimal for non-repeating fractions', () => {

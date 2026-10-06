@@ -1,4 +1,9 @@
-import { humanizeAmount, parseQuantity } from './quantity'
+import {
+  formatMetricAmount,
+  parseQuantity,
+  quantizeSpoons,
+  scaleMetricAmount,
+} from './quantity'
 import type { RecipeDoc } from './types'
 
 /** One instruction step, scaled to the target servings. */
@@ -52,17 +57,39 @@ export const seasoningNames: ReadonlySet<string> = new Set([
   'onion powder',
 ])
 
-/** Substrings that veto a seasoning match ("red bell pepper" etc.). */
-const SEASONING_EXCLUSIONS = ['bell']
+/**
+ * Substrings that veto a seasoning match — a season DESCRIBES, it never
+ * IS, when embedded in a longer name (ADR-0009, ADR-0057):
+ *
+ * - `bell` — "red bell pepper" is a vegetable.
+ * - `ginger root` — the fresh root scales LINEARLY upstream (302/306
+ *   archived metric-6 → metric-2 pairs scale exactly ×⅓; measured
+ *   2026-10-05). It is the root, not the spice.
+ * - `sesame ginger dressing` — a measured dressing scales linearly
+ *   (¾ cup → ½ → ¼ in the archive), however much ginger it name-drops.
+ */
+const SEASONING_EXCLUSIONS = ['bell', 'ginger root', 'sesame ginger dressing']
+
+/**
+ * The keyword list compiled to WORD-BOUNDARY regexes (plural-tolerant).
+ * Substring matching matched `unsalted` for `salt` (460 line items wrong:
+ * butter and roasted nuts are not seasonings) — the boundary is what makes
+ * `\bsalt\b` fail inside `unsalted`. The census over all 2,759 docs shows
+ * the ONLY verdicts that change are the four unsalted names; every
+ * legitimate match ("sea salt", "chilies", "red pepper flakes") still
+ * matches, so the sub-linear rule's coverage is unchanged.
+ */
+const KEYWORD_RES: ReadonlyArray<RegExp> = [...seasoningNames].map((kw) => {
+  if (kw === 'bay leaf') return /\bbay (?:leaves|leafs?)\b/
+  const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+')
+  return new RegExp(`\\b${escaped}(?:e?s)?\\b`)
+})
 
 /** True when `text` (an ingredient name or a step-detail line) is a seasoning. */
 export function isSeasoning(text: string): boolean {
   const s = text.toLowerCase()
   if (SEASONING_EXCLUSIONS.some((x) => s.includes(x))) return false
-  for (const kw of seasoningNames) {
-    if (s.includes(kw)) return true
-  }
-  return false
+  return KEYWORD_RES.some((re) => re.test(s))
 }
 
 /**
@@ -138,12 +165,28 @@ export function scaleQuantity(
 function scaleStepLine(line: string, base: number, target: number, factor: number): string {
   const parsed = parseQuantity(line)
   if (!parsed || factor === 1) return line
-  const amount = scaleQuantity(parsed.amount, base, target, isSeasoning(line), line)
-  // The scaled line goes to a HUMAN: counts round half-down to whole pieces
-  // (2.25 eggs -> "2"), everything else keeps formatAmount's grain. The
-  // rounding must not crawl back into the math: scaleQuantity stays exact
-  // because measured-amount chips and the grocery merge read its numbers.
-  const rendered = humanizeAmount(amount, parsed.unit)
+  // ADR-0055: ONE scaling vocabulary on every surface. The line, the chip
+  // under it (measuredAmounts) and the grocery sum all use the same model —
+  // seasonings keep `scaleQuantity`'s sub-linear rule, everything else
+  // scales through `scaleMetricAmount`'s quantized grammar — and the render
+  // is `formatMetricAmount` (unicode fraction glyphs, integer g/ml), so
+  // `2129 ml ×⅔` reads `1420 ml` here too, never `1419 ml`.
+  // The unit DISPATCH matches on the leading unit token: a parsed step line
+  // carries the whole line rest as its unit (`'kg ground turkey'`,
+  // `'ml chicken or vegetable broth'`), and `scaleMetricAmount` dispatches
+  // on EXACT unit keys — the full rest would fall through to the count
+  // branch and round a weight to a whole count (`1.02 kg ×⅔ → '1'`).
+  const unitToken = parsed.unit.split(/\s+/)[0] ?? ''
+  const amount = isSeasoning(line)
+    ? quantizeSpoons(scaleQuantity(parsed.amount, base, target, true, line), parsed.unit)
+    : scaleMetricAmount(parsed.amount, factor, unitToken)
+  // The seasoning result joins the SAME spoon vocabulary: upstream never
+  // authors a decimal spoon, so `2.523 tsp` reads `2 ½ tsp` — the ⅛-grid
+  // glyph the grocery sum and the measured chip render for the same
+  // ingredient (ADR-0055, one vocabulary on every surface).
+  // The render dispatches on the token too (formatMetricAmount branches the
+  // same way) but still prints the FULL line rest after the amount.
+  const rendered = formatMetricAmount(amount, unitToken)
   return parsed.unit ? `${rendered} ${parsed.unit}` : rendered
 }
 

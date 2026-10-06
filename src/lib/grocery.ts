@@ -4,28 +4,38 @@ import {
   formatContainerQuantity,
   parseContainerQuantity,
 } from './containers'
-import { parseQuantity, formatAmount } from './quantity'
+import { parseQuantity, formatAmount, formatMetricAmount, quantizeSpoons, scaleMetricAmount } from './quantity'
 import { isSeasoning, scaleQuantity } from './recipe'
 import { bucketFor, type StoreSection } from './sections'
 import type { RecipeDoc } from './types'
 
 export interface GroceryLine {
-  /** Stable key for the checkbox state: `<normalized name>||<display>` */
+  /** Stable key for the checkbox state: `<normalized name>||<key basis>` */
   key: string
   /**
    * Formatted amount + unit, or the verbatim unparseable quantity.
    *
-   * CANONICAL: this is the key basis and stays metric forever (ADR-0047).
-   * Never localize it — the localized rendering is `text` on
-   * `GroceryLineView`, so flipping the unit system cannot orphan a checked
-   * item.
+   * CANONICAL: stays metric forever (ADR-0047). Never localize it — the
+   * localized rendering is `text` on `GroceryLineView`, so flipping the
+   * unit system cannot orphan a checked item.
    */
   display: string
 }
 
 /**
+ * The checkbox key's amount spelling: `formatAmount`'s decimal form — the
+ * exact spelling every persisted `checked` key used before ADR-0055's
+ * glyph rendering (`67.5 ml`, never `67 ½ ml`). The key basis and the
+ * display are TWO spellings of the same amount on purpose: re-spelling
+ * the key would silently uncheck every fractional line on upgrade.
+ */
+function lineKeyBasis(amount: number, unit: string): string {
+  return unit ? `${formatAmount(amount)} ${unit}` : formatAmount(amount)
+}
+
+/**
  * A line plus its display text for THIS device's unit system (ADR-0047).
- * Two fields on purpose: `display` is the identity and the key basis,
+ * Two fields on purpose: `display` is the canonical metric rendering,
  * `text` is what the screen shows.
  */
 export interface GroceryLineView extends GroceryLine {
@@ -193,13 +203,21 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       const parsed = parseQuantity(item.quantity)
       if (parsed) {
         const key = unitKey(parsed.unit)
-        const scaled = scaleQuantity(
-          parsed.amount,
-          base,
-          target,
-          isSeasoning(item.ingredient_name),
-          item.ingredient_name,
-        )
+        // ADR-0054: non-seasonings scale through the QUANTIZED grammar
+        // (`scaleMetricAmount` — the same vocabulary recipe detail uses), so
+        // the grocery sum and the recipe-detail chip can never disagree:
+        // `2129 ml ×⅔` renders `1420 ml` on BOTH surfaces. Summing two
+        // ½-quanta yields integers, so the aggregate keeps the vocabulary;
+        // seasonings keep `recipe.scaleQuantity`'s sub-linear rule.
+        const scaled = isSeasoning(item.ingredient_name)
+          ? // ADR-0055: the sub-linear intermediate joins the same spoon
+            // vocabulary as everywhere else — upstream never authors a
+            // decimal spoon (`2.523 tsp` reads `2 ½ tsp`).
+            quantizeSpoons(
+              scaleQuantity(parsed.amount, base, target, true, item.ingredient_name),
+              parsed.unit,
+            )
+          : scaleMetricAmount(parsed.amount, factor, parsed.unit)
         const current = group.byUnit.get(key)
         if (current) current.amount += scaled
         else group.byUnit.set(key, { unit: parsed.unit, amount: scaled })
@@ -214,8 +232,14 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   for (const [normalized, group] of groups) {
     const lines: GroceryLine[] = []
     for (const { unit, amount } of group.byUnit.values()) {
-      const display = unit ? `${formatAmount(amount)} ${unit}` : formatAmount(amount)
-      lines.push({ key: `${normalized}||${display}`, display })
+      // ADR-0057: unit-aware rendering — integer ml/g, fraction glyphs.
+      const display = unit
+        ? `${formatMetricAmount(amount, unit)} ${unit}`
+        : formatMetricAmount(amount, '')
+      // The KEY stays on formatAmount's decimal spelling — the spelling
+      // every persisted `checked` key already uses — so the glyph render
+      // never re-keys a fractional line (`67.5 ml` vs `67 ½ ml`).
+      lines.push({ key: `${normalized}||${lineKeyBasis(amount, unit)}`, display })
     }
     for (const { container, annotation, amount, verbatim } of group.containers.values()) {
       // A single meal at its authored servings keeps the recipe's own text

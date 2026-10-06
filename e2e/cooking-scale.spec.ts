@@ -62,17 +62,23 @@ test('seasonings scale sub-linearly while linear ingredients double at 12 servin
   for (let i = 0; i < 8; i++) await cooking.getByRole('button', { name: /Next/ }).click()
   await expect(cooking.getByText('12 cloves garlic')).toBeVisible()
 
-  // Step 10: "¾ tsp crushed red pepper" → 0.75 × 2^0.75 ≈ 1.26 → "1.3 tsp"
-  // (linear would be 1.5).
+  // Step 10: "¾ tsp crushed red pepper" → 0.75 × 2^0.75 ≈ 1.26 → ⅛ grid →
+  // "1 ¼ tsp" (ADR-0055 spoon vocabulary; linear would render "1 ½ tsp").
   await cooking.getByRole('button', { name: /Next/ }).click()
   await expect(cooking.getByTestId('step-text')).toContainText(
     'Add the minced garlic and crushed red pepper',
   )
-  await expect(cooking.getByText('1.3 tsp crushed red pepper')).toBeVisible()
+  await expect(cooking.getByText('1 ¼ tsp crushed red pepper')).toBeVisible()
 
-  // Step 11: "1 ½ tsp salt" → 1.5 × 2^0.75 ≈ 2.52 → "2.5 tsp" (not 3).
+  // Step 11: "1 ½ tsp salt" → 1.5 × 2^0.75 ≈ 2.52 → ⅛ grid → "2 ½ tsp"
+  // (linear would be 3 tsp).
   await cooking.getByRole('button', { name: /Next/ }).click()
-  await expect(cooking.getByText('2.5 tsp salt')).toBeVisible()
+  await expect(cooking.getByText('2 ½ tsp salt')).toBeVisible()
+
+  // The LINEAR renders — exactly what factor-2 scaling would produce —
+  // must be invisible: the negatives pin sub-linearity, not just text.
+  await expect(cooking.getByText('1 ½ tsp')).not.toBeVisible()
+  await expect(cooking.getByText('3 tsp salt')).not.toBeVisible()
 
   // (c) Linear ingredient in the grocery list: exactly 2× the authored amount.
   await cooking.getByRole('button', { name: 'Close cooking mode' }).click()

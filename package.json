@@ -23,7 +23,8 @@
     "data:nutrition": "python3 scripts/build_ciqual_nutrition.py",
     "data:nutrition:download": "python3 scripts/build_ciqual_nutrition.py --download",
     "data:adr-index": "python3 scripts/build_adr_index.py",
-    "test:data": "python3 scripts/test_extract_ingredients.py && python3 scripts/test_extract_recipe_types.py && python3 scripts/test_extract_timer_hints.py && python3 scripts/test_build_adr_index.py && python3 scripts/test_build_ciqual_nutrition.py"
+    "data:profiles": "python3 scripts/archive_catalog_profiles.py",
+    "test:data": "python3 scripts/test_extract_ingredients.py && python3 scripts/test_extract_recipe_types.py && python3 scripts/test_extract_timer_hints.py && python3 scripts/test_build_adr_index.py && python3 scripts/test_build_ciqual_nutrition.py && python3 scripts/test_catalog_profiles.py"
   },
   "dependencies": {
     "@unhead/vue": "^3.4.2",

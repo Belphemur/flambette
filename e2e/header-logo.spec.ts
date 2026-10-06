@@ -56,5 +56,9 @@ test('the logo is absent in fullscreen modes', async ({ page }) => {
   // Cooking view hides the header; the logo must not be a dead click target.
   await page.goto('/cooking/10003')
   await expect(page.getByTestId('home-link')).toHaveCount(0)
-  await expect(page.locator('header')).toHaveCount(0)
+  // The APP SHELL's header — a direct child of the shell. CookingView
+  // renders its OWN `<header>` (name + progress) once the recipe metadata
+  // resolves, so an unscoped `locator('header')` races the cooking view's
+  // mount and counts 1 (CI shard failure at 37395779304).
+  await expect(page.locator('[data-test="app-shell"] > header')).toHaveCount(0)
 })
