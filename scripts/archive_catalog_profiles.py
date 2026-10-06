@@ -85,14 +85,25 @@ LAYOUT (under ../mealime-media/raw_profiles/restrictions, gitignored):
   restrictions/<slug>-us6.json   the verbatim builder payload for that
                                  restriction set (US units / 6 servings —
                                  the account setting at archive time)
+  restrictions/<slug>-m6.json    the SAME pull in METRIC units / 6 servings
   restrictions/index.json        label -> {pulled_at, recipe_count,
                                  restriction_ids}
 
 `none` (no restrictions) and `all-free` (every restriction id) are archived
 alongside the twelve single-restriction profiles. Idempotent: a payload already
 on disk is indexed without refetching, so reruns only fill gaps. The account's
-CURRENT restriction profile is gluten-free ([1]) — it is restored in a
-`finally` no matter how the loop ends.
+CURRENT profile is gluten-free ([1]) US units — BOTH the restriction and the
+unit family are restored in a `finally` no matter how the loop ends.
+
+WHY THE METRIC FAMILY (2026-10-07): the first archive pulled US/6 payloads,
+and the committed overlays carried upstream's US spellings (`18 oz`, `24 fl
+oz`) VERBATIM — the runtime swapped whole `line_items` in, bypassing the base
+catalog's metric docs and `localizeQuantity`'s system handling, so a metric/dual
+device displayed a restricted recipe stuck in imperial. The build now consumes
+the METRIC family (`-m6`), whose quantities are the base catalog's native units
+and flow through `localizeQuantity` exactly like base lines. The `-us6`
+payloads stay on disk: they are the swap-feasibility cross-check (a unit family
+cannot change which recipes a restriction removes).
 """
 
 import argparse
@@ -378,21 +389,29 @@ def index_restriction_payload(label, restriction_ids, pulled_at=None):
     return index[label]
 
 
-def run_restrictions(token, force=False, only=None):
-    """Archive every dietary-restriction builder payload. Idempotent: existing
-    payloads are indexed without refetching. The account's gluten-free [1]
-    profile is restored in a `finally` whatever happens."""
+# Restriction pulls are per UNIT FAMILY: `-us6` was the first archive; the
+# committed overlays consume `-m6` (metric — see the module docstring).
+RESTRICTION_SUFFIX = {"metric": "m6", "us": "us6"}
+
+
+def run_restrictions(token, force=False, only=None, family="metric"):
+    """Archive every dietary-restriction builder payload in ONE unit family.
+    Idempotent: existing payloads are indexed without refetching. The
+    account's standing profile — gluten-free [1], US units — is restored in a
+    `finally` whatever happens."""
+    suffix = RESTRICTION_SUFFIX[family]
+    unit_family = UNIT_FAMILY[family]
     targets = [("none", [])]
     for rid in sorted(RESTRICTIONS):
         slug = RESTRICTIONS[rid][0]
         targets.append((slug, [rid]))
     targets.append(("all-free", ALL_RESTRICTION_IDS))
-    # File names carry the render profile: US units / 6 servings.
-    targets = [(slug + "-us6", ids) for slug, ids in targets]
+    # File names carry the render profile: <family> units / 6 servings.
+    targets = [(slug + "-" + suffix, ids) for slug, ids in targets]
     if only:
         # 'none' still ships with a filtered run: the subset math joins
         # every restriction payload against the unrestricted baseline.
-        targets = [t for t in targets if t[0] == "none-us6" or t[1] and t[1][0] in only]
+        targets = [t for t in targets if t[0] == "none-" + suffix or t[1] and t[1][0] in only]
 
     results = []
     try:
@@ -404,7 +423,7 @@ def run_restrictions(token, force=False, only=None):
                 results.append((label, True))
                 continue
             log("restriction %s: fetching (ids=%s)" % (label, ids))
-            set_profile(token, UNIT_FAMILY["us"], 6, ids)
+            set_profile(token, unit_family, 6, ids)
             time.sleep(PROFILE_APPLY_SETTLE_SECONDS)
             builder = fetch_builder(token)
             os.makedirs(RESTRICTION_ROOT, exist_ok=True)
@@ -413,7 +432,7 @@ def run_restrictions(token, force=False, only=None):
             index_restriction_payload(label, ids)
             results.append((label, True))
     finally:
-        log("restoring account profile to gluten-free %s" % ACCOUNT_DEFAULT_RESTRICTIONS)
+        log("restoring account profile to gluten-free %s / US units" % ACCOUNT_DEFAULT_RESTRICTIONS)
         try:
             set_profile(token, UNIT_FAMILY["us"], 6, ACCOUNT_DEFAULT_RESTRICTIONS)
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as e:
@@ -432,6 +451,9 @@ def main():
                          "raw_profiles/restrictions (idempotent)")
     ap.add_argument("--restriction", action="append", type=int, choices=sorted(RESTRICTIONS),
                     help="archive ONE restriction profile (repeatable); implies --restrictions")
+    ap.add_argument("--unit-family", choices=sorted(RESTRICTION_SUFFIX), default="metric",
+                    help="unit family for --restrictions pulls (metric = the committed "
+                         "overlays' family; us = the first archive, kept on disk)")
     ap.add_argument("--label", help="profile name, e.g. us-6 / metric-4")
     ap.add_argument(
         "--token-file",
@@ -465,8 +487,9 @@ def main():
             return 1
         if args.restriction:
             ids = set(args.restriction)
-            return run_restrictions(token, force=args.force, only=sorted(ids))
-        return run_restrictions(token, force=args.force)
+            return run_restrictions(token, force=args.force, only=sorted(ids),
+                                    family=args.unit_family)
+        return run_restrictions(token, force=args.force, family=args.unit_family)
 
     if args.all:
         if not token:

@@ -11,14 +11,21 @@ Two tiers, mirroring the builder's --check:
 
 The goldens the brief pins: GF's removed set contains rid 50 and NOT rid
 2195, and the GF overlay carries rid 2195's `gluten-free rotini pasta` with
-the quantity `15 oz` verbatim (upstream's own US rendering, carried verbatim
-by design). The brief also asked for "every overlay doc's line_items count
-equals the base doc's count" — measured FALSE on the real archive (upstream's
-rework can drop a substituted-away line: GF rid 863's shrimp -> eggs collapsed
-16 -> 15; and can split one line into two: GF rid 1292's flour tortilla ->
-avocados + butter lettuce, 15 -> 16). The gate that survives is the reverse:
-join correctness (doc.recipe_id) and the payload census, enforced at build
-time, asserted here as line counts being POSITIVE, not equal.
+the quantity `425 g` — upstream's own METRIC rendering (the base catalog's
+native units; the first archive's US `15 oz` was the shipped bug — a US
+overlay bypassed `localizeQuantity`'s system handling and stuck a metric/dual
+device in imperial). A second brief golden: NO imperial measurement token
+survives in any overlay QUANTITY (the parenthesised container annotation is
+exempt — upstream authors physical package sizes there even in metric renders,
+and the base metric doc says `1 ½ (3 oz) pkgs` alfalfa sprouts verbatim).
+The brief also asked for "every overlay doc's line_items count equals the base
+doc's count" — measured FALSE on the real archive (upstream's rework can drop
+a substituted-away line: GF rid 863's shrimp -> eggs collapsed 16 -> 15; and
+can split one line into two: GF rid 1292's flour tortilla -> avocados +
+butter lettuce, 15 -> 16; and can REORDER lines: GF rid 224 swaps its pasta
+and garlic lines). The gate that survives is the reverse: join correctness
+(doc.recipe_id) and the payload census, enforced at build time, asserted here
+as line counts being POSITIVE, not equal.
 
     python3 scripts/test_build_restriction_sets.py
 """
@@ -26,6 +33,7 @@ time, asserted here as line counts being POSITIVE, not equal.
 import importlib.util
 import json
 import os
+import re
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -128,7 +136,31 @@ class Overlays(unittest.TestCase):
         doc = overlay("gluten-free")["docs"].get("2195")
         self.assertIsNotNone(doc, "GF overlay must carry rid 2195")
         rotini = [li for li in doc["line_items"] if "rotini" in li["ingredient_name"]]
-        self.assertEqual(rotini, [{"quantity": "15 oz", "ingredient_name": "gluten-free rotini pasta"}])
+        self.assertEqual(rotini, [{"quantity": "425 g", "ingredient_name": "gluten-free rotini pasta"}])
+
+    def test_the_gf_golden_fettuccine_reorder_is_metric(self):
+        # GF rid 224's rework REORDERS lines (pasta <-> garlic) — the shipped
+        # mis-pairing bug's recipe. Its overlay quantity is the metric
+        # rendering, and the (name, quantity) pair co-occurs in the overlay.
+        doc = overlay("gluten-free")["docs"].get("224")
+        self.assertIsNotNone(doc, "GF overlay must carry rid 224")
+        pasta = [li for li in doc["line_items"] if "fettuccine" in li["ingredient_name"]]
+        self.assertEqual(pasta, [{"quantity": "510 g", "ingredient_name": "gluten-free fettuccine pasta"}])
+        garlic = [li for li in doc["line_items"] if li["ingredient_name"] == "garlic"]
+        self.assertEqual(garlic, [{"quantity": "6 cloves", "ingredient_name": "garlic"}])
+
+    def test_every_overlay_quantity_is_metric(self):
+        # Brief golden: no imperial measurement token survives in any overlay
+        # quantity. The parenthesised container annotation is exempt: upstream
+        # authors physical package sizes there even in metric renders, and the
+        # base metric doc carries the same `(3 oz)` alfalfa-sprouts pkg.
+        imperial = re.compile(r"\b(?:fl oz|oz|lbs?|pounds?)\b")
+        annotation = re.compile(r"\([^)]*\)")
+        for slug in EXPECTED.values():
+            for rid, doc in overlay(slug)["docs"].items():
+                for li in doc["line_items"]:
+                    q = annotation.sub(" ", li["quantity"])
+                    self.assertIsNone(imperial.search(q), "%s %s: %r" % (slug, rid, li["quantity"]))
 
     def test_check_mode_is_fresh(self):
         self.assertEqual(mod.check(), [], "committed restriction artifacts are stale")
@@ -145,13 +177,29 @@ class ArchiveFaithfulness(unittest.TestCase):
         import sys
         sys.path.insert(0, HERE)
         import archive_catalog_profiles as A
-        none_meta = {m["recipe_id"]: m for m in json.load(open(os.path.join(ARCHIVE, "none-us6.json")))["variant_meta"]}
+        for suffix in ("m6", "us6"):
+            none_meta = {m["recipe_id"]: m for m in json.load(open(os.path.join(ARCHIVE, "none-" + suffix + ".json")))["variant_meta"]}
+            for rid, (slug, _label) in A.RESTRICTIONS.items():
+                payload = json.load(open(os.path.join(ARCHIVE, slug + "-" + suffix + ".json")))
+                meta = {m["recipe_id"]: m for m in payload["variant_meta"]}
+                removed = sorted(set(none_meta) - set(meta))
+                self.assertEqual(removed, sets_doc()["restrictions"][str(rid)]["removed"],
+                                 "%s (%s)" % (slug, suffix))
+                self.assertEqual(set(meta) - set(none_meta), set(), "%s added recipes" % slug)
+
+    def test_removed_is_unit_family_invariant(self):
+        # Brief golden: units don't change feasibility — the METRIC payloads'
+        # removed sets must be identical to the US payloads'.
+        import sys
+        sys.path.insert(0, HERE)
+        import archive_catalog_profiles as A
+        none_us = {m["recipe_id"] for m in json.load(open(os.path.join(ARCHIVE, "none-us6.json")))["variant_meta"]}
+        none_m = {m["recipe_id"] for m in json.load(open(os.path.join(ARCHIVE, "none-m6.json")))["variant_meta"]}
+        self.assertEqual(none_us, none_m)
         for rid, (slug, _label) in A.RESTRICTIONS.items():
-            payload = json.load(open(os.path.join(ARCHIVE, slug + "-us6.json")))
-            meta = {m["recipe_id"]: m for m in payload["variant_meta"]}
-            removed = sorted(set(none_meta) - set(meta))
-            self.assertEqual(removed, sets_doc()["restrictions"][str(rid)]["removed"], slug)
-            self.assertEqual(set(meta) - set(none_meta), set(), "%s added recipes" % slug)
+            us = {m["recipe_id"] for m in json.load(open(os.path.join(ARCHIVE, slug + "-us6.json")))["variant_meta"]}
+            m = {m["recipe_id"] for m in json.load(open(os.path.join(ARCHIVE, slug + "-m6.json")))["variant_meta"]}
+            self.assertEqual(none_us - us, none_m - m, slug)
 
 
 if __name__ == "__main__":

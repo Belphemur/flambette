@@ -40,12 +40,20 @@ from the CDN (UA header, no token — the sync_catalog precedent) and cached
 under ../mealime-media/raw_profiles/restrictions/docs/<slug>/; the unchanged
 majority needs no fetch.
 
-UNITS (deliberate): the archive is the account's US/6 render, so overlay
-quantities are upstream's US spellings ("15 oz") carried VERBATIM. Re-
-authoring them into the committed catalog's metric spelling would be exactly
-the re-authoring this pipeline refuses to do. The overlay replaces the whole
-`line_items`/`instructions` of a changed doc, so a restricted doc displays
-upstream's own restricted rendering end to end.
+UNITS (deliberate, corrected 2026-10-07): the archive consumed by the build is
+the account's METRIC/6 render (`-m6` payloads), so overlay quantities are
+upstream's own METRIC spellings — the base catalog's native units — carried
+VERBATIM. Re-authoring them would be exactly the re-authoring this pipeline
+refuses to do, and carrying US spellings was the shipped bug: the runtime
+swaps whole `line_items` in, so a US overlay bypassed the base doc's metric
+quantities and `localizeQuantity`'s system handling, leaving a metric/dual
+device displaying a restricted recipe stuck in imperial. With metric overlays
+a restricted line flows through `localizeQuantity` exactly like a base line.
+The first archive's US/6 payloads (`-us6`) stay on disk for the swap
+feasibility cross-check (goldens: removed-metric == removed-us).
+
+The overlay replaces the whole `line_items`/`instructions` of a changed doc,
+so a restricted doc displays upstream's own restricted rendering end to end.
 
 KEY STABILITY (the display/key split): the overlay is DISPLAY truth only.
 Every persisted or derived key (grocery line keys, checked-state keys,
@@ -69,6 +77,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -78,9 +87,12 @@ SETS_OUT = os.path.join(DATA, "restriction_sets.json")
 OVERLAY_DIR = os.path.join(DATA, "restriction_overlays")
 
 # The ADR-0055 archive built by `archive_catalog_profiles.py --restrictions`.
+# The committed overlays consume the METRIC family (`-m6`); the docs cached
+# here are the restricted renders upstream served under that profile.
 MEDIA = os.path.join(os.path.dirname(ROOT), "mealime-media")
 ARCHIVE = os.path.join(MEDIA, "raw_profiles", "restrictions")
-DOC_CACHE = os.path.join(ARCHIVE, "docs")
+PAYLOAD_SUFFIX = "m6"
+DOC_CACHE = os.path.join(ARCHIVE, "docs-metric")
 
 # The repo's committed catalog docs (base truth for keys and for the recipes
 # the app can actually display).
@@ -114,12 +126,12 @@ def load_payloads():
         index = json.load(f)
     payloads = {}
     for rid, (slug, _label) in RESTRICTIONS.items():
-        path = os.path.join(ARCHIVE, slug + "-us6.json")
+        path = os.path.join(ARCHIVE, slug + "-%s.json" % PAYLOAD_SUFFIX)
         if not os.path.exists(path):
             return None, index
         with open(path) as f:
             payloads[slug] = json.load(f)
-    none_path = os.path.join(ARCHIVE, "none-us6.json")
+    none_path = os.path.join(ARCHIVE, "none-%s.json" % PAYLOAD_SUFFIX)
     if not os.path.exists(none_path):
         return None, index
     with open(none_path) as f:
@@ -240,7 +252,7 @@ def plan_build(fetch=True):
         stats.append((slug, label, len(removed), len(docs), dropped_not_in_catalog))
 
     newest = max(
-        os.path.getmtime(os.path.join(ARCHIVE, slug + "-us6.json"))
+        os.path.getmtime(os.path.join(ARCHIVE, slug + "-%s.json" % PAYLOAD_SUFFIX))
         for (slug, _l) in RESTRICTIONS.values()
     )
     sets_obj = {
@@ -336,9 +348,31 @@ def check():
             problems.append("GF golden: overlay must carry rid 2195")
         else:
             rotini = [li for li in doc["line_items"] if "rotini" in li["ingredient_name"]]
+            # The METRIC rendering (the base catalog's native units — the
+            # US/6 archive's `15 oz` was the shipped bug).
             if not rotini or rotini[0]["ingredient_name"] != "gluten-free rotini pasta" \
-                    or rotini[0]["quantity"] != "15 oz":
+                    or rotini[0]["quantity"] != "425 g":
                 problems.append("GF golden: rid 2195 rotini swap wrong: %s" % rotini)
+
+    # METRIC golden: no imperial MEASUREMENT token survives in any overlay
+    # quantity (the -m6 payloads are the base catalog's native units). The
+    # parenthesised container annotation is exempt: upstream authors physical
+    # package sizes there even in metric renders (`1 ½ (3 oz) pkgs` alfalfa
+    # sprouts — the base metric doc says exactly the same).
+    imperial_re = re.compile(r"\b(?:fl oz|oz|lbs?|pounds?)\b")
+    annotation_re = re.compile(r"\([^)]*\)")
+    for slug in [s for s, _l in RESTRICTIONS.values()]:
+        opath = os.path.join(DATA, "restriction_overlays", slug + ".json")
+        if not os.path.exists(opath):
+            continue
+        with open(opath) as f:
+            overlay = json.load(f)
+        for r, doc in sorted(overlay.get("docs", {}).items(), key=lambda kv: int(kv[0])):
+            for li in doc.get("line_items", []):
+                q = annotation_re.sub(" ", li.get("quantity") or "")
+                if imperial_re.search(q):
+                    problems.append("%s overlay %s: imperial quantity %r (metric overlays only)"
+                                    % (slug, r, li.get("quantity")))
 
     # Tier B: byte-identical cache-only rebuild.
     try:
