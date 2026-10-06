@@ -37,12 +37,22 @@ export function parseQuantity(raw: string): ParsedQuantity | null {
   let amount = 0
   let matched = false
 
-  // Integer/decimal part
-  const numMatch = s.match(/^\d+(?:[.,]\d+)?/)
-  if (numMatch) {
-    amount = Number(numMatch[0].replace(',', '.'))
-    s = s.slice(numMatch[0].length)
+  // Attached ASCII fraction first: "3/4 cup" is three quarters, not
+  // three of something per four. A space-separated one ("2 1/2 cups")
+  // falls through to the integer + attached-fraction path below.
+  const attachedAscii = s.match(/^(\d+)\s*\/\s*(\d+)/)
+  if (attachedAscii) {
+    amount = Number(attachedAscii[1]) / Number(attachedAscii[2])
+    s = s.slice(attachedAscii[0].length)
     matched = true
+  } else {
+    // Integer/decimal part
+    const numMatch = s.match(/^\d+(?:[.,]\d+)?/)
+    if (numMatch) {
+      amount = Number(numMatch[0].replace(',', '.'))
+      s = s.slice(numMatch[0].length)
+      matched = true
+    }
   }
 
   // Optional attached fraction: "2 ½ cm" or "1/2 cup"
@@ -71,16 +81,20 @@ export function formatAmount(amount: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
 }
 
-/**
- * The string-typed twin of {@link humanizeAmount} for already-composed
- * quantity strings ("2.25 large eggs").
- */
-export function humanizeScaledQuantity(raw: string): string {
-  const parsed = parseQuantity(raw)
-  if (!parsed) return raw
-  const rounded = humanizeAmount(parsed.amount, parsed.unit)
-  return parsed.unit ? `${rounded} ${parsed.unit}` : rounded
-}
+/** Glyph for `num/den`, for the denominators FRACTION_DENOMINATORS covers. */
+const FRACTION_GLYPHS: ReadonlyMap<string, string> = new Map([
+  ['1/2', '½'],
+  ['1/3', '⅓'],
+  ['2/3', '⅔'],
+  ['1/4', '¼'],
+  ['3/4', '¾'],
+  ['1/6', '⅙'],
+  ['5/6', '⅚'],
+  ['1/8', '⅛'],
+  ['3/8', '⅜'],
+  ['5/8', '⅝'],
+  ['7/8', '⅞'],
+])
 
 /** Denominators tried when rendering a fractional amount (ADR-0017). */
 const FRACTION_DENOMINATORS = [2, 3, 4, 6, 8] as const
@@ -89,10 +103,14 @@ const FRACTION_DENOMINATORS = [2, 3, 4, 6, 8] as const
 const FRACTION_TOLERANCE = 0.02
 
 /**
- * Format a count as a mixed fraction: `1`, `3/2`, `2 1/4`, `7/8`.
+ * Format a count as a mixed fraction: `1`, `3/2`, `2 ¼`, `⅞`.
  * Grocery container sums keep their exact fraction (`½ (142 g) pkg` twice
- * is a whole package, but a 3-recipe sum may be `3/2 small bunch`), so this
+ * is a whole package, but a 3-recipe sum may be `1 ½ small bunch`), so this
  * complements `formatAmount`, which flattens everything to 1 decimal.
+ *
+ * ADR-0057: rendered with the catalog's own UNICODE fraction glyphs — the
+ * upstream profiles author `1 ⅓ cups`, `½ (142 g) pkg`, `4 ½ oz`, and the
+ * ASCII `a/b` spelling appeared nowhere in any profile.
  */
 export function formatFraction(amount: number): string {
   if (!Number.isFinite(amount)) return formatAmount(amount)
@@ -106,16 +124,355 @@ export function formatFraction(amount: number): string {
     if (num <= 0 || num >= d) continue
     if (Math.abs(num / d - frac) < FRACTION_TOLERANCE) {
       const sign = negative ? '-' : ''
-      return `${sign}${whole > 0 ? `${whole} ` : ''}${num}/${d}`
+      const glyph = FRACTION_GLYPHS.get(`${num}/${d}`)
+      const fracText = glyph ?? `${num}/${d}`
+      return `${sign}${whole > 0 ? `${whole} ` : ''}${fracText}`
     }
   }
   return formatAmount(amount)
+}
+
+/* ---------- ADR-0057: the upstream profile scaling model ---------- */
+
+/** International avoirdupois ounce, grams (mirrors units.ts). */
+const OZ_GRAMS = 28.3495
+/** US fluid ounce, millilitres (mirrors units.ts). */
+const FL_OZ_ML = 29.5735
+/** The cup the upstream profiles quantize volumes to: the US cup proper
+ * (236.5882 ml), NOT the 240 ml legal cup — 354 ml is 3 ml off 1 ½ cups
+ * and must stay on the fl-oz grid, while 1420 ml sits exactly on 6 cups. */
+const CUP_ML = 236.5882
+
+function isMultiple(v: number, step: number): boolean {
+  const q = v / step
+  return Math.abs(q - Math.round(q)) < 1e-6
+}
+
+/** Quantize to a fraction grid: `qzTo(0.984, 0.25)` → `1`. */
+function qzTo(v: number, step: number): number {
+  return Math.round(v / step) * step
+}
+
+/** Same naive singularization containers.ts/grocery.ts use. */
+function collapseUnitKey(unit: string): string {
+  const u = unit.trim().toLowerCase()
+  if (u.length > 3 && u.endsWith('es')) return u.slice(0, -2)
+  if (u.length > 2 && u.endsWith('s')) return u.slice(0, -1)
+  return u
+}
+
+/**
+ * Scale an authored metric amount the way the upstream profiles do
+ * (ADR-0057, measured from metric-6 → metric-4/metric-2 pairs):
+ *
+ * - **g** — the source amount sits on the ½-oz grid (the catalog authors
+ *   ounce-derived grams), so re-quantize the source, scale, round to
+ *   integer grams (94–99% exact match upstream).
+ * - **ml** — a hybrid: ½-tbsp-multiple values divide exactly (the
+ *   `67.5 → 22.5` family), values within 0.5 ml of a ¼-cup quantum
+ *   quantize through the cup grid, everything else round-trips the fl-oz
+ *   grid (97–99% exact).
+ * - **kg** — exact gram products stay exact (≤3 dp), everything else
+ *   rounds to 2 decimals (97.8% exact).
+ * - **tbsp / counts** — exact products stay (halves included), inexact
+ *   round to the nearest integer.
+ * - **cup** — returned unquantized (the string layer decides whether the
+ *   result renders as cups or swaps to ml).
+ */
+export function scaleMetricAmount(amount: number, factor: number, unit: string): number {
+  const key = collapseUnitKey(unit)
+  const p = amount * factor
+  switch (key) {
+    case 'g': {
+      // An exact product stays exact (84 g ×⅔ = 56 g, 426 ×⅔ = 284) —
+      // the oz round-trip below would bump 56.0 to 57.
+      if (Math.abs(p - Math.round(p)) < 1e-6) return Math.round(p)
+      // Upstream keeps ½-oz-multiple amounts and NEVER renders below ½ oz
+      // (us-2 census: smallest authored oz = ½; `14 g → ½ oz`, 55/55 exact),
+      // so an oz-quantized product under ½ oz renders AT the floor, in
+      // GRAMS — never 0, never a stray half-gram.
+      return Math.max(OZ_GRAMS / 2, Math.round(qzTo(amount / OZ_GRAMS, 0.5) * factor * OZ_GRAMS))
+    }
+    case 'ml':
+      return scaleMl(amount, factor)
+    case 'kg': {
+      const grams = p * 1000
+      if (Math.abs(grams - Math.round(grams)) < 1e-6) return Math.round(grams) / 1000
+      // Upstream preserves the source's precision class: a 2-decimal kg
+      // (0.68 kg) scales to 2 decimals, a 3-decimal one (0.341 kg, the
+      // ounce-derived stragglers) floors to 3 (0.341 ×⅓ → 0.113 kg).
+      const sourceDp = (String(amount).split('.')[1] ?? '').length
+      if (sourceDp >= 3) return Math.floor(grams) / 1000
+      return Math.round(p * 100) / 100
+    }
+    case 'cup':
+      return p
+    case 'tbsp': {
+      const q = tspGrammar(p)
+      return q
+    }
+    case 'tsp':
+      return tspGrammar(p)
+    default: {
+      // Count nouns (medium, small, cloves…): ADR-0054, measured against the
+      // metric-6→metric-4/metric-2 corpus (3,088 weighted rows, 100%):
+      // exact half/quarter products stay exact, everything else rounds to
+      // the nearest WHOLE count floored at ½ — `1 medium ×⅔ → 1`,
+      // `1 ×⅓ → ½`, `3 ×⅓ → 1`. A zero can never be rendered because
+      // upstream never renders one (4,568/4,568 sub-½ pairs nonzero).
+      for (const d of [2, 4]) {
+        if (Math.abs(p * d - Math.round(p * d)) < 1e-6) return Math.round(p * d) / d
+      }
+      return Math.max(0.5, Math.floor(p + 0.5))
+    }
+  }
+}
+
+/**
+ * Spoon grammar (ADR-0054, measured against 10,626 metric-6→metric-2 tsp
+ * prose rows, 100%): exact whole/half/quarter products stay exact
+ * (`¾ tsp ×⅓ → ¼`), everything else quantizes to the nearest ⅛ and the
+ * result snaps to the nearest value upstream ever AUTHORS (`⅝` and `⅞`
+ * never appear as tsp targets — `2 tsp ×⅓ → ¾`, not `⅝`) — floored at ⅛,
+ * never 0 (`¼ tsp ×⅓ → ⅛`). The snap only applies WITHIN the corpus's
+ * range: above the 4 tsp ceiling nothing is authored, so an off-grid
+ * value stays on the ⅛ grid instead of snapping DOWN to 4.
+ */
+function tspGrammar(p: number): number {
+  for (const d of [1, 2, 4]) {
+    if (Math.abs(p * d - Math.round(p * d)) < 1e-6) {
+      const r = Math.round(p * d) / d
+      return r > 0 ? r : 0.125
+    }
+  }
+  const q = Math.round(p * 8) / 8
+  const authored = [0.125, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 4]
+  // Above the corpus's ceiling (4) the authored list says nothing: the
+  // snap must never SHRINK an amount past it (`5.3 tsp → 4` would silently
+  // under-render a large seasoning by ~25%), so the ⅛ grid holds there.
+  if (q > 4) return q
+  if (authored.includes(q)) return q
+  return Math.max(0.125, nearestOf(authored, p))
+}
+
+/**
+ * Spoon-quantize a SCALED amount for display (ADR-0055's one vocabulary).
+ *
+ * The SEASONING branch's `scaleQuantity` returns an invented 3-decimal
+ * sub-linear intermediate (`0.75 × 2^0.75 ≈ 1.261`), unlike the exact
+ * products the linear path feeds `scaleMetricAmount`. The vocabulary's
+ * finest quantum is ⅛, so the intermediate first rounds onto the ⅛ grid
+ * and THEN runs through `tspGrammar` (arithmetic unchanged): its
+ * quarter-exactness keeps values on the fraction vocabulary
+ * (`1.25 → '1 ¼'`, `2.5 → '2 ½'` — the glyphs `formatFraction` already
+ * renders for near-quarter values, and what the grocery sum and the
+ * measured chip show for the same ingredient), while an off-vocabulary
+ * straggler (`1 ⅜`) still snaps to the nearest value the 10,626-row
+ * measured corpus authors. Upstream never writes a decimal spoon —
+ * `2.523 tsp` must read `2 ½ tsp`, never `2.5 tsp`.
+ *
+ * The unit is matched on its FIRST token: a step line's `parsed.unit` is
+ * the whole line rest (`'tsp salt'`, `'tbsp soy sauce'`), while the
+ * grocery and chip sites pass the clean quantity unit. Non-spoon units
+ * return the input unchanged.
+ */
+const SPOON_FIRST_TOKENS: ReadonlySet<string> = new Set(['tsp', 'teaspoon', 'tbsp', 'tablespoon'])
+
+export function quantizeSpoons(amount: number, unit: string): number {
+  const first = collapseUnitKey(unit.trim().toLowerCase().split(/\s+/)[0] ?? '')
+  if (!SPOON_FIRST_TOKENS.has(first)) return amount
+  return tspGrammar(Math.round(amount * 8) / 8)
+}
+
+/** Closest value of `list` to `v` (ties toward the larger — unused in the corpus). */
+function nearestOf(list: readonly number[], v: number): number {
+  let best = list[0]
+  for (const x of list) {
+    const d = Math.abs(x - v)
+    const bd = Math.abs(best - v)
+    if (d < bd - 1e-9 || (Math.abs(d - bd) < 1e-9 && x > best)) best = x
+  }
+  return best
+}
+
+/** The ml hybrid: tbsp-clean exact → cup grid (within 0.5 ml) → fl-oz. */
+function scaleMl(v: number, f: number): number {
+  if (v <= 120 && isMultiple(v, 7.5) && isMultiple(v * f, 2.5)) {
+    return Math.round(v * f * 10) / 10
+  }
+  const cups = v / CUP_ML
+  if (Math.abs(cups - qzTo(cups, 0.25)) * CUP_ML <= 0.5) {
+    return Math.round(qzTo(qzTo(cups, 0.25) * f, 0.25) * CUP_ML)
+  }
+  return Math.round((v / FL_OZ_ML) * f * FL_OZ_ML)
+}
+
+/**
+ * Render a scaled metric amount with the profile's own vocabulary:
+ * integer g/ml (½ quanta as glyphs), kg at 2–3 decimals, everything else
+ * as fraction glyphs. Falls back to `formatAmount`'s 1-decimal grammar
+ * for values that are neither integer nor on a fraction grid.
+ */
+export function formatMetricAmount(value: number, unit: string): string {
+  const key = collapseUnitKey(unit)
+  if (key === 'g' || key === 'ml') {
+    if (Math.abs(value - Math.round(value)) < 1e-6) return String(Math.round(value))
+    if (Math.abs(value * 2 - Math.round(value * 2)) < 1e-6) return formatFraction(value)
+    return formatAmount(value)
+  }
+  if (key === 'kg') {
+    const grams = value * 1000
+    if (Math.abs(grams - Math.round(grams)) < 1e-6) return String(Number((Math.round(grams) / 1000).toFixed(3)))
+    return String(Math.round(value * 100) / 100)
+  }
+  return formatFraction(value)
+}
+
+/** True when `frac` sits on a ⅛/⅓/¼ grid within `formatFraction`'s tolerance. */
+function isCommonFraction(frac: number): boolean {
+  for (const d of [2, 3, 4, 8]) {
+    if (Math.abs(Math.round(frac * d) / d - frac) < 0.02) return true
+  }
+  return false
+}
+
+/**
+ * Scale a `cup`-unit quantity (ADR-0057, measured over 880 upstream cup
+ * pairs): the scaled value STAYS cups — exact common fractions render as
+ * glyphs (`1 cup ×⅔ → ⅔ cup`, `2 cups ×⅔ → 1 ⅓ cups`), everything else
+ * quantizes to the ⅛ grid (`⅓ cup ×⅔ → ¼ cup`, `¼ cup ×⅔ → ⅛ cup`).
+ * Upstream's occasional cup→ml swap (~60/880 pairs) is re-authoring noise
+ * and is not mirrored.
+ */
+function scaleCupQuantity(amount: number, factor: number, unit: string): string {
+  const p = amount * factor
+  const base = unit.replace(/s$/i, '')
+  if (Math.abs(p - Math.round(p)) < 1e-6) {
+    const n = Math.round(p)
+    return `${n} ${n === 1 ? base : `${base}s`}`
+  }
+  const frac = p - Math.floor(p)
+  const value = isCommonFraction(frac) ? p : qzTo(p, 0.125)
+  // Fractional results below a whole cup render singular ('⅔ cup',
+  // '¾ cup' — 792 archive pairs), like every other count noun.
+  const noun = value <= 1 ? base : `${base}s`
+  return `${formatFraction(value)} ${noun}`
+}
+
+/**
+ * Container nouns whose COUNT the profiles quantize to the nearest ½
+ * (ADR-0057, measured): `1 (142 g) pkg ×⅔ → ½ (142 g) pkg`,
+ * `1 ½ pkgs ×⅔ → 1 pkg`. Same noun family as ADR-0017's grocery rule,
+ * but this is the per-recipe DISPLAY path — no ceil here.
+ */
+const CONTAINER_COUNT_NOUNS: ReadonlySet<string> = new Set([
+  'pkg',
+  'package',
+  'bunch',
+  'head',
+  'can',
+  'block',
+  'bag',
+  'jar',
+  'log',
+  'loaf',
+  'bottle',
+  'box',
+  'tin',
+  'carton',
+  'ear',
+  'stick',
+  'crown',
+  'heart',
+  'cap',
+])
+
+/** `2 cloves` ×⅔ renders `1 clove` — the profiles singularize at 1. */
+const SINGULAR_EXCEPTIONS: ReadonlyMap<string, string> = new Map([
+  ['cloves', 'clove'],
+  ['loaves', 'loaf'],
+  ['leaves', 'leaf'],
+  ['halves', 'half'],
+])
+
+function singularizeUnit(unit: string): string {
+  const tokens = unit.split(/\s+/)
+  const last = tokens[tokens.length - 1]
+  const lower = last?.toLowerCase() ?? ''
+  if (last && last.length > 3) {
+    const exception = SINGULAR_EXCEPTIONS.get(lower)
+    if (exception) tokens[tokens.length - 1] = exception
+    else if (/(?:ch|sh|x|z)es$/i.test(last)) tokens[tokens.length - 1] = last.slice(0, -2)
+    else if (/ies$/i.test(last)) tokens[tokens.length - 1] = `${last.slice(0, -3)}y`
+    else if (/s$/i.test(last)) tokens[tokens.length - 1] = last.slice(0, -1)
+  }
+  return tokens.join(' ')
+}
+
+/**
+ * Scale a display quantity by a factor. Non-parseable quantities pass
+ * through verbatim. The scaling is the ADR-0057 profile model
+ * (`scaleMetricAmount`), with the profile's own unit-class grammar on top:
+ * cups quantize on the ⅛ grid, container counts on the ½ grid, counts
+ * round, and everything singularizes at 1. `2129 ml` at ⅔ is `1420 ml`,
+ * not `1419.3 ml`.
+ */
+export function scaleQuantity(raw: string, factor: number): string {
+  const parsed = parseQuantity(raw)
+  if (!parsed || factor === 1) return raw
+  const unit = parsed.unit
+  const nounKey = collapseUnitKey(unit.split(/\s+/).pop() ?? '')
+  if (collapseUnitKey(unit) === 'cup' || nounKey === 'cup') {
+    return scaleCupQuantity(parsed.amount, factor, unit)
+  }
+  if (CONTAINER_COUNT_NOUNS.has(nounKey)) {
+    // Count of purchased objects — ADR-0054 measured grammar: exact
+    // half/quarter products stay exact, everything else rounds to the
+    // nearest WHOLE count floored at ½ (`1 small bunch ×⅔ → 1`, n=700;
+    // `1 ×⅓ → ½`, n=707). Weight-annotated counts (`(142 g)`, `(398 ml)`)
+    // behave like the cans corpus instead: nearest ½-unit
+    // (`1 ½ (398 ml) cans ×⅓ → ½`, n=117; `3 → 1`, n=385). Zero is never
+    // rendered — upstream doesn't (4,568/4,568 sub-½ pairs nonzero).
+    const p = parsed.amount * factor
+    const annotated = /[(]/.test(parsed.unit)
+    let count: number | undefined
+    for (const d of [2, 4]) {
+      if (Math.abs(p * d - Math.round(p * d)) < 1e-6) {
+        count = Math.round(p * d) / d
+        break
+      }
+    }
+    if (count === undefined) {
+      count = annotated
+        ? Math.max(0.5, Math.round(p * 2) / 2)
+        : Math.max(0.5, Math.floor(p + 0.5))
+    }
+    const rendered = formatFraction(count)
+    const noun = count <= 1 ? singularizeUnit(unit) : unit
+    return unit ? `${rendered} ${noun}` : rendered
+  }
+  const value = scaleMetricAmount(parsed.amount, factor, unit)
+  const rendered = formatMetricAmount(value, unit)
+  const singular = value === 1 ? singularizeUnit(unit) : unit
+  return unit ? `${rendered} ${singular}` : rendered
 }
 
 /** Total "popularity" score (sum over weekdays) for sorting. */
 export function popularityScore(popularity: Record<string, number>): number {
   return Object.values(popularity).reduce((a, b) => a + b, 0)
 }
+
+/**
+ * The string-typed twin of {@link humanizeAmount} for already-composed
+ * quantity strings ("2.25 large eggs").
+ */
+export function humanizeScaledQuantity(raw: string): string {
+  const parsed = parseQuantity(raw)
+  if (!parsed) return raw
+  const rounded = humanizeAmount(parsed.amount, parsed.unit)
+  return parsed.unit ? `${rounded} ${parsed.unit}` : rounded
+}
+
 
 /**
  * The NUMBER-side twin of {@link humanizeScaledQuantity}: round an already

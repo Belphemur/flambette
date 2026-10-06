@@ -18,7 +18,7 @@
 
 import { containerContribution, formatContainerQuantity, parseContainerQuantity } from './containers'
 import { nameKey } from './grocery'
-import { formatAmount, humanizeScaledQuantity, parseQuantity } from './quantity'
+import { formatMetricAmount, parseQuantity, quantizeSpoons, scaleMetricAmount } from './quantity'
 import { isSeasoning, scaleQuantity } from './recipe'
 import { localizeQuantity, type UnitSystem } from './units'
 import type { LineItem, RecipeDoc } from './types'
@@ -112,20 +112,22 @@ export function measuredQuantity(item: LineItem, factor: number, base: number): 
   const parsed = parseQuantity(item.quantity)
   if (!parsed) return null
   if (factor === 1) return item.quantity.trim()
-  // ONE scaling implementation for every display surface (the ingredient
-  // list and the step details call the same function): recipe.ts's
-  // seasoning-aware scaler, the exact one grocery.ts aggregates with.
-  // Container units keep ADR-0017's whole-container rule above and are
-  // NEVER humanized — a half package is not a cook-measurable rounding.
-  const scaled = scaleQuantity(
-    parsed.amount,
-    base,
-    base * factor,
-    isSeasoning(item.ingredient_name),
-    item.ingredient_name,
-  )
-  const rendered = parsed.unit ? `${formatAmount(scaled)} ${parsed.unit}` : formatAmount(scaled)
-  return humanizeScaledQuantity(rendered)
+  // ADR-0057: the SAME vocabulary as the grocery sum and the detail sheet —
+  // seasonings keep `recipe.scaleQuantity`'s sub-linear rule, everything
+  // else scales through `scaleMetricAmount`'s quantized grammar. One model,
+  // so the chip can never disagree with either surface.
+  const scaled = isSeasoning(item.ingredient_name)
+    ? // ADR-0055: the sub-linear intermediate joins the same spoon
+      // vocabulary as everywhere else — upstream never authors a decimal
+      // spoon (`2.523 tsp` reads `2 ½ tsp`).
+      quantizeSpoons(
+        scaleQuantity(parsed.amount, base, base * factor, true, item.ingredient_name),
+        parsed.unit,
+      )
+    : scaleMetricAmount(parsed.amount, factor, parsed.unit)
+  // ADR-0057: unit-aware rendering — integer ml/g, fraction glyphs.
+  const rendered = formatMetricAmount(scaled, parsed.unit)
+  return parsed.unit ? `${rendered} ${parsed.unit}` : rendered
 }
 
 /**
