@@ -67,7 +67,9 @@ export function useRestrictions() {
    */
   async function ensureLoaded(): Promise<void> {
     if (activeIds.value.length === 0) return
-    setsPromise ??= loadSets(`${import.meta.env.BASE_URL}data/`)
+    // loadSets appends `data/` itself (vite's SPA fallback answers a wrong
+    // path 200-with-HTML, so a double prefix would fail INERT, not loudly).
+    setsPromise ??= loadSets(import.meta.env.BASE_URL)
     const loaded = await setsPromise
     if (loaded) {
       sets.value = loaded
