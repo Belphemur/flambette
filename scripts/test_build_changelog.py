@@ -57,7 +57,7 @@ class ChangelogGoldens(unittest.TestCase):
                 fresh.pop("generatedAt", None)
                 doc.pop("generatedAt", None)
                 with open(OUT, "w") as f:
-                    json.dump(doc, f, indent=2)
+                    json.dump(fresh, f, indent=2)
                     f.write("\n")
         except Exception:
             pass

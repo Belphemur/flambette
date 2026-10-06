@@ -322,8 +322,10 @@ function openChangelog() {
 
 /**
  * Stale-version banner (ADR-0061): shown when a newer bundle is deployed.
- * Dismissal is SESSION-ONLY (component state, not a store slice); the next
- * page load re-checks fresh, so an update cannot be permanently silenced.
+ * Dismissal persists for 24 hours (localStorage, key 'bannerDismissedUntil'):
+ * while the deployed version remains newer, a dismissal silences the banner
+ * for a day so the five-minute poll cannot re-surface it. After 24h the
+ * check runs again, so a delayed rollout is still noticed.
  * The banner lives ABOVE the sticky header and never overlaps the bottom nav.
  */
 const showBanner = ref(false)
@@ -331,7 +333,34 @@ const bannerState = ref<VersionState | null>(null)
 let checkInterval: ReturnType<typeof setInterval> | null = null
 let visibilityHandler: (() => void) | null = null
 
+const BANNER_DISMISS_KEY = 'bannerDismissedUntil'
+
+function getDismissedUntil(): number | null {
+  try {
+    const raw = localStorage.getItem(BANNER_DISMISS_KEY)
+    if (!raw) return null
+    const ts = Number(raw)
+    return Number.isFinite(ts) && ts > Date.now() ? ts : null
+  } catch {
+    return null
+  }
+}
+
+function setDismissedUntil(): void {
+  try {
+    localStorage.setItem(BANNER_DISMISS_KEY, String(Date.now() + 24 * 60 * 60 * 1000))
+  } catch {
+    // localStorage may be unavailable (private mode) — dismissal is best-effort.
+  }
+}
+
 async function checkBannerVersion() {
+  // If the user dismissed the banner within the last 24h, stay hidden.
+  if (getDismissedUntil()) {
+    showBanner.value = false
+    bannerState.value = null
+    return
+  }
   const result = await checkVersion({ running: appVersion })
   bannerState.value = result.state
   showBanner.value = result.state === 'stale'
@@ -396,9 +425,9 @@ onBeforeUnmount(() => {
     v-if="showBanner"
     data-test="version-banner"
     role="status"
-    class="fixed top-0 inset-x-0 z-40 bg-brand px-4 py-2 text-center text-sm font-medium text-on-brand"
+    class="fixed top-0 inset-x-0 z-40 h-12 flex flex-nowrap items-center justify-center gap-1 bg-brand px-3 text-sm font-medium text-on-brand"
   >
-    <span data-test="version-banner-text">A new version of Flambette is available</span>
+    <span data-test="version-banner-text" class="whitespace-nowrap">A new version of Flambette is available</span>
     <button
       type="button"
       data-test="version-refresh"
@@ -412,7 +441,7 @@ onBeforeUnmount(() => {
       data-test="version-banner-dismiss"
       class="ml-2 inline-flex size-6 items-center justify-center rounded-full hover:bg-on-brand/20"
       aria-label="Dismiss version notice"
-      @click="showBanner = false"
+      @click="setDismissedUntil(); showBanner = false"
       ><X :size="14" aria-hidden="true" /></button
     >
   </div>

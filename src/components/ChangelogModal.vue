@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { X } from 'lucide-vue-next'
+import { parseChangelog } from '../lib/changelog'
 import type { ChangelogDoc, NormalizedVersion } from '../lib/changelog'
 
 /**
@@ -65,6 +66,7 @@ function close() {
 }
 
 function onKey(e: KeyboardEvent) {
+  if (!props.open) return
   if (e.key === 'Escape') {
     e.stopPropagation()
     close()
@@ -86,8 +88,9 @@ async function load() {
     const res = await fetch('/data/changelog.json')
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const json = (await res.json()) as ChangelogDoc
-    cache = json
-    data.value = json
+    const parsed = parseChangelog(json)
+    cache = parsed
+    data.value = parsed
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load the changelog'
   } finally {
@@ -100,6 +103,7 @@ watch(
   async (isOpen) => {
     if (!isOpen) return
     triggerEl.value = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    restoreFocusTo = triggerEl.value
     window.addEventListener('keydown', onKey)
     await nextTick()
     panel.value?.focus()

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-06T22:49:49Z",
+  "generatedAt": "2026-10-06T23:52:45Z",
   "versions": [
     {
       "version": "v2.3.0",
@@ -104,7 +104,7 @@
     {
       "version": "v1.4.0",
       "date": "2026-10-02",
-      "title": "Metric and imperial unit system",
+      "title": "Full TypeScript relay core and web worker observability",
       "features": [
         {
           "text": "Unhead client head + build-time prerendered recipe pages, sitemap & JSON-LD",
@@ -129,7 +129,7 @@
     {
       "version": "v1.3.0",
       "date": "2026-10-02",
-      "title": "Cloudflare deployment \u2014 Workers assets and Durable Object relay",
+      "title": "Metric and imperial unit system",
       "features": [
         {
           "text": "metric/imperial unit system",
@@ -150,7 +150,7 @@
     {
       "version": "v1.2.0",
       "date": "2026-10-02",
-      "title": "Cloudflare deploys from GitHub Actions and app version in the header",
+      "title": "Cloudflare deployment and app version in the header",
       "features": [
         {
           "text": "Cloudflare deploys from GitHub Actions + app version in the header",
@@ -371,10 +371,10 @@
     {
       "version": "v0.8.0",
       "date": "2026-09-28",
-      "title": "Backup &amp; restore (zip) + room payload customs + history opt-in sharing",
+      "title": "Backup & restore (zip) + room payload customs + history opt-in sharing",
       "features": [
         {
-          "text": "backup &amp; restore (zip) + room payload customs + history opt-in sharing",
+          "text": "backup & restore (zip) + room payload customs + history opt-in sharing",
           "scope": null,
           "pr": null,
           "adr": null
