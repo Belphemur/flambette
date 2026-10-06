@@ -1,0 +1,644 @@
+{
+  "generatedAt": "2026-10-06T22:49:49Z",
+  "versions": [
+    {
+      "version": "v2.3.0",
+      "date": "2026-10-06",
+      "title": "Upstream-exact restriction rendering",
+      "features": [
+        {
+          "text": "upstream-exact restriction rendering",
+          "scope": "dietary-restrictions",
+          "pr": 55,
+          "adr": null
+        },
+        {
+          "text": "dietary-restriction settings with upstream's own reworked recipe data",
+          "scope": "restrictions",
+          "pr": 54,
+          "adr": "ADR-0056"
+        }
+      ]
+    },
+    {
+      "version": "v2.2.0",
+      "date": "2026-10-06",
+      "title": "Import favourites from Mealime",
+      "features": [
+        {
+          "text": "import from Mealime via bookmarklet",
+          "scope": "favourites",
+          "pr": 53,
+          "adr": "ADR-0058"
+        },
+        {
+          "text": "measured rounding vocabulary \u2014 proper fractions, linear seasonings, mm conversion",
+          "scope": "units",
+          "pr": 51,
+          "adr": "ADR-0054"
+        }
+      ]
+    },
+    {
+      "version": "v2.1.0",
+      "date": "2026-10-05",
+      "title": "One tooltip component, tap-reveal, and a nutrition facts modal",
+      "features": [
+        {
+          "text": "one tooltip component + tap-reveal on the recipe detail view",
+          "scope": "ui",
+          "pr": 52,
+          "adr": "ADR-0055"
+        },
+        {
+          "text": "user recipes \u2014 All/PRO/New source filter, NEW badge, CIQUAL-derived nutrition, the pancake",
+          "scope": null,
+          "pr": 49,
+          "adr": "ADR-0054"
+        },
+        {
+          "text": "supplemental GF/LF/dairy-free index + generated ADR index",
+          "scope": "ingredients",
+          "pr": 48,
+          "adr": "ADR-0053"
+        }
+      ]
+    },
+    {
+      "version": "v2.0.0",
+      "date": "2026-10-05",
+      "title": "Rooms are the only way to share",
+      "features": [
+        {
+          "text": "retire one-time ?p= plan links; rooms are the only share",
+          "scope": "share",
+          "pr": 45,
+          "adr": "ADR-0051"
+        },
+        {
+          "text": "sub-section EXTRA ITEMS by category",
+          "scope": "grocery",
+          "pr": 44,
+          "adr": "ADR-0050"
+        }
+      ]
+    },
+    {
+      "version": "v1.5.0",
+      "date": "2026-10-03",
+      "title": "Household room UX and live peer count"
+    },
+    {
+      "version": "v1.4.1",
+      "date": "2026-10-02",
+      "title": "Header logo navigates to recipes list",
+      "fixes": [
+        {
+          "text": "header logo navigates to recipes list",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v1.4.0",
+      "date": "2026-10-02",
+      "title": "Metric and imperial unit system",
+      "features": [
+        {
+          "text": "Unhead client head + build-time prerendered recipe pages, sitemap & JSON-LD",
+          "scope": "seo",
+          "pr": 42,
+          "adr": "ADR-0048"
+        },
+        {
+          "text": "one TypeScript relay core, two thin adapters",
+          "scope": "core",
+          "pr": 41,
+          "adr": "ADR-0040"
+        },
+        {
+          "text": "full Workers Observability on the web worker",
+          "scope": "ops",
+          "pr": 40,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v1.3.0",
+      "date": "2026-10-02",
+      "title": "Cloudflare deployment \u2014 Workers assets and Durable Object relay",
+      "features": [
+        {
+          "text": "metric/imperial unit system",
+          "scope": null,
+          "pr": 39,
+          "adr": "ADR-0047"
+        }
+      ],
+      "fixes": [
+        {
+          "text": "previews run under the base worker name so the custom domains bind",
+          "scope": "ci",
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v1.2.0",
+      "date": "2026-10-02",
+      "title": "Cloudflare deploys from GitHub Actions and app version in the header",
+      "features": [
+        {
+          "text": "Cloudflare deploys from GitHub Actions + app version in the header",
+          "scope": null,
+          "pr": 37,
+          "adr": null
+        },
+        {
+          "text": "Cloudflare deployment \u2014 Workers assets + Durable Object relay",
+          "scope": null,
+          "pr": 35,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v1.1.0",
+      "date": "2026-10-01",
+      "title": "Live room sync client",
+      "features": [
+        {
+          "text": "remember the default serving size instead of hardcoding 6",
+          "scope": null,
+          "pr": 32,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v1.0.0",
+      "date": "2026-10-01",
+      "title": "Full local recipe catalog with indexed fuzzy search"
+    },
+    {
+      "version": "v0.15.0",
+      "date": "2026-10-01",
+      "title": "Rebuild Mealime as a kitchen companion",
+      "features": [
+        {
+          "text": "rebuild Mealime as a kitchen companion",
+          "scope": "design",
+          "pr": 22,
+          "adr": "ADR-0036"
+        },
+        {
+          "text": "cook any recipe, and remember which plan a cook came from",
+          "scope": null,
+          "pr": 16,
+          "adr": "ADR-0034"
+        },
+        {
+          "text": "a pointer cursor on every clickable element, desktop only",
+          "scope": "ui",
+          "pr": 15,
+          "adr": null
+        }
+      ],
+      "fixes": [
+        {
+          "text": "update dependency @vueuse/core to v15",
+          "scope": "deps",
+          "pr": 29,
+          "adr": null
+        },
+        {
+          "text": "update dependency vue-router to v5",
+          "scope": "deps",
+          "pr": 30,
+          "adr": null
+        },
+        {
+          "text": "replace invalid mergeMethod options (issue #18)",
+          "scope": "renovate",
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v0.14.1",
+      "date": "2026-10-01",
+      "title": "A Regenerate press must roll the seed",
+      "fixes": [
+        {
+          "text": "a Regenerate press must roll the seed",
+          "scope": "auto-plan",
+          "pr": 14,
+          "adr": "ADR-0033"
+        }
+      ]
+    },
+    {
+      "version": "v0.14.0",
+      "date": "2026-10-01",
+      "title": "Share cooked history with the household by default",
+      "features": [
+        {
+          "text": "share cooked history with the household by default",
+          "scope": "room",
+          "pr": null,
+          "adr": "ADR-0032"
+        }
+      ]
+    },
+    {
+      "version": "v0.13.0",
+      "date": "2026-09-30",
+      "title": "Share favourites + per-recipe ratings",
+      "features": [
+        {
+          "text": "share favourites + per-recipe ratings",
+          "scope": "household",
+          "pr": 13,
+          "adr": "ADR-0031"
+        }
+      ]
+    },
+    {
+      "version": "v0.12.0",
+      "date": "2026-09-30",
+      "title": "Variety-aware completion planning",
+      "features": [
+        {
+          "text": "variety-aware completion planning",
+          "scope": "auto-plan",
+          "pr": 12,
+          "adr": "ADR-0027"
+        },
+        {
+          "text": "unified quick filters, filter sync, Lucide icons, Auto-Plan preview",
+          "scope": "ui",
+          "pr": 8,
+          "adr": null
+        }
+      ],
+      "fixes": [
+        {
+          "text": "join-or-create rooms + explicit lifecycle (join was returning not_found)",
+          "scope": "room",
+          "pr": 7,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v0.11.1",
+      "date": "2026-09-29",
+      "title": "Copy throttle.mjs into the image; smoke-run images in CI",
+      "fixes": [
+        {
+          "text": "copy throttle.mjs into the image; smoke-run images in CI",
+          "scope": "relay",
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v0.11.0",
+      "date": "2026-09-29",
+      "title": "Waste-aware grocery, diet filter, household rooms, cooking timers, 3-word room codes+share link (ADR-0017..0023)",
+      "features": [
+        {
+          "text": "waste-aware grocery, diet filter, household rooms, cooking timers, 3-word room codes+share link (ADR-0017..0023)",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ],
+      "fixes": [
+        {
+          "text": "throttle address lookup killing create/join; CI matrix + merge gate",
+          "scope": "relay",
+          "pr": 4,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v0.10.1",
+      "date": "2026-09-28",
+      "title": "Spacing between Browse recipes button and add input in grocery empty state",
+      "fixes": [
+        {
+          "text": "spacing between Browse recipes button and add input in grocery empty state",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v0.10.0",
+      "date": "2026-09-28",
+      "title": "Settings tab, EXTRA ITEMS with category tags, ShopView auto-collapse",
+      "features": [
+        {
+          "text": "Settings tab, EXTRA ITEMS with category tags, ShopView auto-collapse",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v0.9.0",
+      "date": "2026-09-28",
+      "title": "Bulk add flow for groceries",
+      "features": [
+        {
+          "text": "bulk add flow for groceries",
+          "scope": null,
+          "pr": null,
+          "adr": "ADR-0014"
+        }
+      ]
+    },
+    {
+      "version": "v0.8.0",
+      "date": "2026-09-28",
+      "title": "Backup &amp; restore (zip) + room payload customs + history opt-in sharing",
+      "features": [
+        {
+          "text": "backup &amp; restore (zip) + room payload customs + history opt-in sharing",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v0.7.0",
+      "date": "2026-09-27",
+      "title": "Grocery add-item autocomplete backed by an extracted ingredient index",
+      "features": [
+        {
+          "text": "grocery add-item autocomplete backed by an extracted ingredient index",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v0.6.0",
+      "date": "2026-09-27",
+      "title": "Surface personal cooked history (detail line + /history tab)",
+      "features": [
+        {
+          "text": "surface personal cooked history (detail line + /history tab)",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v0.5.0",
+      "date": "2026-09-27",
+      "title": "Sub-linear seasoning scaling + Meanwhile concurrent step pairs",
+      "features": [
+        {
+          "text": "sub-linear seasoning scaling + Meanwhile concurrent step pairs",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v0.4.1",
+      "date": "2026-09-24",
+      "title": "Grocery UI polish \u2014 tooltip layout + auto-collapse done categories",
+      "fixes": [
+        {
+          "text": "grocery UI polish \u2014 tooltip layout + auto-collapse done categories",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v0.4.0",
+      "date": "2026-09-24",
+      "title": "Clear grocery list removes ingredients until meals are cooked",
+      "features": [
+        {
+          "text": "clear grocery list removes ingredients until meals are cooked",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v0.3.2",
+      "date": "2026-09-23",
+      "title": "Maintenance release"
+    },
+    {
+      "version": "v0.3.1",
+      "date": "2026-09-24",
+      "title": "Review findings on clear-grocery workflow",
+      "fixes": [
+        {
+          "text": "review findings on clear-grocery workflow",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v0.3.0",
+      "date": "2026-09-22",
+      "title": "Clear-grocery workflow + mark-cooked entry points",
+      "features": [
+        {
+          "text": "clear-grocery workflow + mark-cooked entry points",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "store plumbing for clear-grocery + cooked history",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v0.2.3",
+      "date": "2026-09-18",
+      "title": "Maintenance release"
+    },
+    {
+      "version": "v0.2.2",
+      "date": "2026-09-16",
+      "title": "Maintenance release"
+    },
+    {
+      "version": "v0.2.1",
+      "date": "2026-09-16",
+      "title": "Maintenance release"
+    },
+    {
+      "version": "v0.2.0",
+      "date": "2026-09-16",
+      "title": "E2e coverage for live rooms + shopping mode; relay as Playwright webServer; docs",
+      "features": [
+        {
+          "text": "e2e coverage for live rooms + shopping mode; relay as Playwright webServer; docs",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "full-screen shopping mode (/shop) with collapsible store sections and shared grocery-list composable",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "live room sync client (room store, join via ?room=, status chip, share sheet room actions)",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "in-memory WebSocket relay for live room sync (+compose, nginx /ws proxy)",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "recipe list lazy loading, plural name merge, tooltip pill, custom grocery items in share",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "grocery unit normalization + shared-ingredient provenance badge",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "plan share + import via URL",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "sort by latest + dark mode toggle",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "vue-router deep-linkable navigation",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "cooking mode (step-by-step fullscreen view)",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ],
+      "fixes": [
+        {
+          "text": "show static per-serving calories/sodium instead of scaling with servings",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "clipboard fallback for insecure origins + share link opens plan tab",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
+    {
+      "version": "v0.1.0",
+      "date": "2026-09-15",
+      "title": "Docker image (multi-stage nginx)",
+      "features": [
+        {
+          "text": "docker image (multi-stage nginx)",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "indexed fuzzy search (minisearch)",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "migrate state to Pinia with persisted localStorage",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "local image catalog (offline)",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "ship complete local recipe catalog (2730 recipes, offline)",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "grocery list",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "meal plan builder",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "recipes browse + detail",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "scaffold app shell + data layer",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ]
+    }
+  ]
+}

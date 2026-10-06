@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import { buildAppVersion } from './src/lib/appVersion'
@@ -54,14 +54,61 @@ const branch =
 const shaFull = process.env.PR_HEAD_SHA || process.env.GITHUB_SHA || gitOut('rev-parse HEAD')
 const sha = shaFull ? shaFull.slice(0, 7) : null
 
+/**
+ * The app version as a plain object — ONE computation feeding TWO consumers
+ * (ADR-0061 §1): the bundle define (`__APP_VERSION__`) and the emitted
+ * `dist/version.json`. A second version formula would drift exactly when it
+ * matters.
+ */
+const appVersionValue = buildAppVersion({ tag, branch, sha, isRelease: isTagRelease })
+
+/**
+ * Vite plugin that emits `dist/version.json` at build time and serves it
+ * from `configureServer` in dev — so local dev and the e2e preview behave
+ * like production (ADR-0061 §1).
+ */
+function versionJsonPlugin(): Plugin {
+  return {
+    name: 'version-json',
+    generateBundle(this: any) {
+      const obj = {
+        version: appVersionValue,
+        builtAt: new Date().toISOString(),
+      }
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify(obj, null, 2) + '\n',
+      })
+    },
+    /**
+     * Serve the identical version.json in dev so local dev and the e2e
+     * preview behave like production (ADR-0061 §1).
+     */
+    configureServer(server: any) {
+      server.middlewares.use('/version.json', (_req: unknown, res: unknown) => {
+        const r = res as { setHeader: (k: string, v: string) => void; end: (s: string) => void }
+        r.setHeader('Content-Type', 'application/json')
+        r.setHeader('Cache-Control', 'no-cache')
+        r.end(
+          JSON.stringify({
+            version: appVersionValue,
+            builtAt: new Date().toISOString(),
+          }) + '\n',
+        )
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [vue(), tailwindcss()],
-  server: { proxy: relayProxy },
+  plugins: [vue(), tailwindcss(), versionJsonPlugin()],
+  server: {
+    proxy: relayProxy,
+  },
   preview: { proxy: relayProxy },
   define: {
-    __APP_VERSION__: JSON.stringify(
-      buildAppVersion({ tag, branch, sha, isRelease: isTagRelease }),
-    ),
+    __APP_VERSION__: JSON.stringify(appVersionValue),
     // The canonical origin for SEO payloads (ADR-0048). A self-hosted build
     // can point every canonical, OG url and JSON-LD @id at its own origin
     // with SITE_URL=…; the prerenderer reads the SAME env var, so the

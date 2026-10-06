@@ -17,6 +17,12 @@
 /data/*
   Cache-Control: public, max-age=300, must-revalidate
 
+# Version file for stale-version detection (ADR-0061). No-cache so the
+# client always gets the current deployed version; the client's own
+# cache: 'no-store' fetch makes it correct even if a header is misconfigured.
+/version.json
+  Cache-Control: no-cache
+
 # HTML is deliberately NOT given a Cache-Control here. The asset
 # pipeline's own ETag/conditional-request handling is what keeps it
 # correct, and a blanket `no-cache` on top of it only adds a round trip
