@@ -125,3 +125,57 @@ describe('grocery key basis — ADR-0055 glyphs never re-key a checked line', ()
     expect(line.display).toBe('2 cups')
   })
 })
+
+/* ---------- Dietary restrictions: the key/display split ---------- */
+
+describe('aggregateGroceries displayNames (the restriction ADR)', () => {
+  const gfDoc = doc('Pasta Night', 6, [['15 oz', 'rotini pasta'], ['2 tbsp', 'soy sauce']])
+
+  test('a swapped ingredient groups under the ORIGINAL nameKey but renders the substituted name', () => {
+    const inputs: AggregateInput[] = [
+      {
+        ...input(gfDoc, 1),
+        displayNames: ['gluten-free rotini pasta', 'tamari soy sauce'],
+      },
+    ]
+    const items = aggregateGroceries(inputs)
+    // The group KEY is the base ingredient's nameKey…
+    expect(items.find((i) => i.normalized === 'rotini pasta')).toBeDefined()
+    expect(items.find((i) => i.normalized === 'soy sauce')).toBeDefined()
+    // …and the DISPLAYED name is the substituted one.
+    expect(items.find((i) => i.normalized === 'rotini pasta')?.name).toBe('gluten-free rotini pasta')
+    expect(items.find((i) => i.normalized === 'soy sauce')?.name).toBe('tamari soy sauce')
+  })
+
+  test('a substituted line still MERGES with the same base ingredient from another meal', () => {
+    const plainDoc = doc('Stir Fry', 6, [['2 tbsp', 'soy sauce']])
+    const inputs: AggregateInput[] = [
+      { ...input(gfDoc, 1), displayNames: ['gluten-free rotini pasta', 'tamari soy sauce'] },
+      input(plainDoc, 1),
+    ]
+    const soy = aggregateGroceries(inputs).find((i) => i.normalized === 'soy sauce')
+    expect(soy).toBeDefined()
+    // Both meals contributed to ONE group keyed by the base nameKey.
+    expect(soy!.recipes.length).toBe(2)
+  })
+
+  test('cleared keys still follow the BASE name', () => {
+    const inputs: AggregateInput[] = [
+      {
+        ...input(gfDoc, 1),
+        displayNames: ['gluten-free rotini pasta', 'tamari soy sauce'],
+        cleared: new Set(['soy sauce']),
+      },
+    ]
+    // The cleared key is the base nameKey; the overridden display never
+    // changes what clearing hides.
+    expect(aggregateGroceries(inputs).find((i) => i.normalized === 'soy sauce')).toBeUndefined()
+    expect(aggregateGroceries(inputs).find((i) => i.normalized === 'rotini pasta')).toBeDefined()
+  })
+
+  test('no overrides: the base names render as before', () => {
+    expect(displays([input(gfDoc, 1)], 'rotini pasta')).toEqual(['15 oz'])
+    const items = aggregateGroceries([input(gfDoc, 1)])
+    expect(items.find((i) => i.normalized === 'rotini pasta')?.name).toBe('rotini pasta')
+  })
+})

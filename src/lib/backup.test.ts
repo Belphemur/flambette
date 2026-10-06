@@ -146,6 +146,51 @@ describe('settings import (ADR-0013 registry)', () => {
     expect(useUiStore().unitSystem).toBe('imperial')
   })
 
+  test('dietary restrictions round-trip through the settings slice', () => {
+    // The restriction ADR: the device's active restriction ids ride the
+    // backup like every other ui preference.
+    settingsSlice().write({ dietaryRestrictionIds: [10, 1, 1] })
+    // The write normalizes (dedupe + ascending) — the store's sole writer.
+    expect(useUiStore().dietaryRestrictionIds).toEqual([1, 10])
+
+    // EXPORT carries the ids.
+    const { dietaryRestrictionIds } = settingsSlice().read() as {
+      dietaryRestrictionIds: number[]
+    }
+    expect(dietaryRestrictionIds).toEqual([1, 10])
+
+    // IMPORT restores them.
+    settingsSlice().write({ dietaryRestrictionIds: [4, 3] })
+    expect(useUiStore().dietaryRestrictionIds).toEqual([3, 4])
+    settingsSlice().write({ dietaryRestrictionIds })
+    expect(useUiStore().dietaryRestrictionIds).toEqual([1, 10])
+  })
+
+  test('a backup WITHOUT dietaryRestrictionIds leaves them untouched (absent ≠ wipe)', () => {
+    settingsSlice().write({ dietaryRestrictionIds: [1] })
+    expect(useUiStore().dietaryRestrictionIds).toEqual([1])
+    // A pre-restriction backup: only the old fields exist.
+    settingsSlice().write({ shareCookedHistory: true })
+    expect(useUiStore().dietaryRestrictionIds).toEqual([1])
+  })
+
+  test('unknown restriction ids are DROPPED at write, not rejected', () => {
+    // Ids 7/8 exist upstream but are unused and uncovered by the artifacts;
+    // a stale backup carrying one must not fail the whole restore — the
+    // store's sole writer normalizes it away.
+    settingsSlice().write({ dietaryRestrictionIds: [1, 7, 99] })
+    expect(useUiStore().dietaryRestrictionIds).toEqual([1])
+  })
+
+  test('malformed dietaryRestrictionIds reject the archive (validation-first)', () => {
+    const v = settingsSlice().validate
+    expect(v({ dietaryRestrictionIds: 'gluten-free' })).toContain('array of integer')
+    expect(v({ dietaryRestrictionIds: [1.5] })).toContain('array of integer')
+    expect(v({ dietaryRestrictionIds: ['1'] })).toContain('array of integer')
+    expect(v({ dietaryRestrictionIds: [] })).toBeNull()
+    expect(v({})).toBeNull()
+  })
+
   test('an ABSENT unitSystem validates and is "don\'t touch" on write', () => {
     // A backup written before ADR-0047 carries no key: restoring it must
     // not flip a device that reads imperial back to metric.

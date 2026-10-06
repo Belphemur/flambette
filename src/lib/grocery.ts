@@ -133,6 +133,15 @@ export interface AggregateInput {
   recipeName: string
   /** nameKey-normalized ingredient keys hidden for THIS meal only. */
   cleared?: Set<string>
+  /**
+   * Per-line display-name overrides (the restriction ADR), parallel to
+   * `doc.line_items`. ONLY the group's display name comes from here — the
+   * group key (`nameKey(item.ingredient_name)`), the quantities and the
+   * seasoning rule all stay the BASE line's, so a restriction toggle can
+   * never re-key checked state. Omitted (or per-line undefined) renders
+   * the base name.
+   */
+  displayNames?: (string | undefined)[]
 }
 
 /**
@@ -153,12 +162,13 @@ export interface AggregateInput {
 export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   const groups = new Map<string, Group>()
 
-  for (const { doc, factor, recipeName, cleared } of inputs) {
+  for (const { doc, factor, recipeName, cleared, displayNames } of inputs) {
     // ADR-0009: seasonings scale sub-linearly against the recipe's own
     // authored serving count, so keep base/target, not just the ratio.
     const base = doc.serving_count
     const target = base * factor
-    for (const item of doc.line_items) {
+    for (let lineIndex = 0; lineIndex < doc.line_items.length; lineIndex++) {
+      const item = doc.line_items[lineIndex]
       const normalized = nameKey(item.ingredient_name)
       if (!normalized) continue
       // Hidden for this meal (cleared from the grocery list) — skipped
@@ -167,7 +177,7 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       let group = groups.get(normalized)
       if (!group) {
         group = {
-          name: item.ingredient_name.trim(),
+          name: (displayNames?.[lineIndex] ?? item.ingredient_name).trim(),
           byUnit: new Map(),
           containers: new Map(),
           raw: new Set(),

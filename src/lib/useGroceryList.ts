@@ -16,6 +16,8 @@ import {
 import { usePlanStore } from '../stores/plan'
 import { useGroceryStore } from '../stores/grocery'
 import { useUiStore } from '../stores/ui'
+import { groceryDisplayNames } from './restrictions'
+import { useRestrictions } from '../composables/useRestrictions'
 
 /**
  * Shared grocery-list engine for the Grocery tab and Shopping mode:
@@ -26,6 +28,14 @@ export function useGroceryList() {
   const plan = usePlanStore()
   const checked = useGroceryStore()
   const ui = useUiStore()
+  // Dietary restrictions (the restriction ADR): the grocery list shows the
+  // substituted ingredient NAME when upstream's rework kept the line count,
+  // while keys/quantities stay the base doc's (the key/display split).
+  const restrictionPrefs = useRestrictions()
+  watch(
+    () => restrictionPrefs.activeIds.value,
+    () => void restrictionPrefs.ensureLoaded(),
+  )
 
   const docs = ref(new Map<number, RecipeDoc>())
   const loading = ref(false)
@@ -52,6 +62,8 @@ export function useGroceryList() {
           factor: entryServings(meta.id) / doc.serving_count,
           recipeName: meta.name,
           cleared: cleared?.length ? new Set(cleared) : undefined,
+          displayNames: groceryDisplayNames(doc, restrictionPrefs.overlayFor(doc.recipe_id))
+            ?? undefined,
         },
       ]
     }),
@@ -124,6 +136,9 @@ export function useGroceryList() {
       for (const doc of loaded) {
         docs.value.set(doc.id, doc)
       }
+      // Warm the restriction artifacts for whatever is active — no-op when
+      // none is; the overlay fetch is lazy and retries on failure.
+      void restrictionPrefs.ensureLoaded()
     } catch (e) {
       loadError.value = e instanceof Error ? e.message : String(e)
     } finally {

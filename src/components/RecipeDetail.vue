@@ -2,6 +2,9 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
+import TooltipBubble from './TooltipBubble.vue'
+import { restrictedDocView } from '../lib/restrictions'
+import { useRestrictions } from '../composables/useRestrictions'
 import { imageSrc, onImgError } from '../lib/images'
 import { measuredQuantity } from '../lib/measuredAmounts'
 import {
@@ -23,7 +26,6 @@ import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
 import { recipeSeoHead } from '../lib/seo'
 import HueIcon from './HueIcon.vue'
-import TooltipBubble from './TooltipBubble.vue'
 import { onMounted, onUnmounted } from 'vue'
 import { useHead } from '@unhead/vue'
 import {
@@ -47,10 +49,18 @@ const router = useRouter()
 /** Recipe variant id, passed as a route prop from /recipe/:id. */
 const props = defineProps<{ id: number }>()
 
-const doc = ref<RecipeDoc | null>(null)
-/** ADR-0055: the household badge forwards its tap to the bubble, where
-the tap-reveal state and 3 s timer live (one implementation, DRY). */
+const loadedDoc = ref<RecipeDoc | null>(null)
+// The restricted doc view (the restriction ADR): when a dietary restriction
+// is active and upstream reworked this recipe, line_items/instructions come
+// from upstream's own restricted rendering, wholesale. Keys are never read
+// off this view — only display.
 const badgeBubble = ref<InstanceType<typeof TooltipBubble> | null>(null)
+const restrictionPrefs = useRestrictions()
+const doc = computed<RecipeDoc | null>(() => {
+  const base = loadedDoc.value
+  if (!base) return null
+  return restrictedDocView(base, restrictionPrefs.overlayFor(base.recipe_id))
+})
 const loading = ref(false)
 const loadError = ref<string | null>(null)
 const ui = useUiStore()
@@ -227,7 +237,7 @@ async function loadDoc() {
   if (!m) return
   loading.value = true
   loadError.value = null
-  doc.value = null
+  loadedDoc.value = null
   // Every load starts with the facts modal CLOSED. `nutritionOpen` used to
   // survive a recipe-id change, and since the modal is `v-if`-gated on
   // `doc`, clearing the doc only unmounted it briefly — the new document
@@ -251,7 +261,7 @@ async function loadDoc() {
     // recipe's name with the old one's ingredients and instructions, in the
     // view AND in the SEO head (ADR-0048). The newer loadDoc already cleared
     // `doc`, so dropping this result simply leaves the newer one in charge.
-    if (meta.value?.id === m.id) doc.value = loaded
+    if (meta.value?.id === m.id) loadedDoc.value = loaded
   } catch (e) {
     // Same guard for the error: a failure belonging to a recipe we have
     // already left must not raise an error banner over the new one.
@@ -282,7 +292,12 @@ function onKey(e: KeyboardEvent) {
   if (nutritionOpen.value) return
   if (e.key === 'Escape') close()
 }
-onMounted(() => window.addEventListener('keydown', onKey))
+onMounted(() => {
+  window.addEventListener('keydown', onKey)
+  // Warm the restriction artifacts (control plane + overlay) so a swapped
+  // ingredient list is ready; no-op when no restriction is active.
+  void restrictionPrefs.ensureLoaded()
+})
 onUnmounted(() => window.removeEventListener('keydown', onKey))
 
 function addToPlan() {
@@ -368,7 +383,6 @@ function startCooking() {
   :role="typeRole"
   :size="18"
   :label="ICON_ROLES[typeRole].label"
-  tap-reveal
   />
   <span v-else-if="!mealTypeRole" class="capitalize">{{
   catalog?.dataById.get(meta.id)?.category_name ?? meta.ruleset
@@ -380,7 +394,6 @@ function startCooking() {
   :role="mealTypeRole"
   :size="18"
   :label="ICON_ROLES[mealTypeRole].label"
-  tap-reveal
   />
   <!-- ADR-0054: the PERMANENT authorship marker, styled like the two
   icons above — an icon in the SAME row, carrying its meaning in the
@@ -437,7 +450,7 @@ function startCooking() {
   <!-- ADR-0055: the absolute date becomes the one bubble (hover only;
   the p is not focusable — native-title parity). DESCENDANT of the
   group host; toContainText assertions on cook-history tolerate it. -->
-  <TooltipBubble v-if="cookLine" :text="cookLastTitle ?? ''" placement="below-right" />
+  <TooltipBubble v-if="cookLastTitle" :text="cookLastTitle" placement="below-right" />
   </p>
   <!-- Per-cook spoiler: one row per cook EVENT, relative AND absolute
   date, so "cooked twice" can be told apart into "last night" and
