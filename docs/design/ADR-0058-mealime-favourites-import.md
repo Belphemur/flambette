@@ -68,10 +68,23 @@ not assumed):
    resolves to exactly one of: matched-by-id, matched-by-name, or MISSING,
    and the import reports all three counts. Rows are never silently
    dropped, and a miss is never guessed into a wrong recipe.
-4. **Landing zone: the ADR-0031 favourites records.** Import ADDS
-   favourites (seed semantics — an import never un-favourites), materializes
-   the public set synchronously, and propagates to the household through
-   ordinary room sync. No new store slice; nothing new in `STORE_SLICES`.
+4. **Landing zone: the ADR-0031 favourites records — FULL OVERRIDE.** The
+   import REPLACES the favourited set: after a successful import the set
+   is EXACTLY the payload. Every payload id is starred at a FRESH stamp
+   (the import is a new opinion; an already-starred id is re-stamped,
+   never left with its old record), and every currently-starred id NOT in
+   the payload is un-starred via a FRESH tombstone — never a silent
+   delete, and never a silent wipe. The tombstones are load-bearing:
+   household peers reconcile PER KEY and an absent key means "don't
+   touch" (ADR-0031), so a plain wipe (`replaceAll`) would remove the
+   recipes locally while every other device kept them forever. Fresh
+   tombstones at a newer stamp propagate through ordinary room sync.
+   This includes the first-run Mealime seed
+   (`favourited_feasible_variants`) and any local stars: only the
+   imported set remains. Records that are already tombstones stay
+   untouched (re-tombstoning adds no information), and the public set is
+   materialized synchronously as with every store write. No new store
+   slice; nothing new in `STORE_SLICES`.
 5. The thumbnail-folder-equals-`recipe_id` identity is measured on one
    account and one pull. The importer therefore keeps the name fallback
    armed for id misses and counts both bridges in its report, rather than

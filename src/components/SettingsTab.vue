@@ -332,7 +332,7 @@ function cancelBackupImport(): void {
 const bookmarkletHref = mealimeBookmarkletHref()
 const mealimeInput = ref('')
 /** Non-null while the result report is on screen (success or empty run). */
-const mealimeReport = ref<MealimeMatchResult & { added: number } | null>(null)
+const mealimeReport = ref<MealimeMatchResult & { added: number; removed: number } | null>(null)
 
 function clearMealimeReport() {
   mealimeReport.value = null
@@ -376,9 +376,9 @@ async function importMealimeFavourites(): Promise<void> {
     catalog.variantMeta.filter((m) => m.id < USER_RECIPE_ID_BASE),
   )
   const favourites = useFavouritesStore()
-  const added = favourites.importFavourites(result.matched.map((m) => m.variantId))
+  const { added, removed } = favourites.importFavourites(result.matched.map((m) => m.variantId))
   mealimeInput.value = ''
-  mealimeReport.value = { ...result, added }
+  mealimeReport.value = { ...result, added, removed }
 }
 </script>
 
@@ -684,10 +684,15 @@ async function importMealimeFavourites(): Promise<void> {
   {{ mealimeReport.matched.length }} favourite{{ mealimeReport.matched.length === 1 ? '' : 's' }}
   imported ({{ mealimeReport.matched.filter((m) => m.by === 'id').length }} by id,
   {{ mealimeReport.matched.filter((m) => m.by === 'name').length }} by name).
-  <template v-if="mealimeReport.added === 0">They were already in your favourites — nothing new to add.</template>
-  <template v-else-if="mealimeReport.added < mealimeReport.matched.length">{{ mealimeReport.added }} new.</template>
+  <!-- Override import (ADR-0058 amended): only the imported set remains.
+  Say so plainly whenever the import removed anything. -->
+  <template v-if="mealimeReport.added === 0 && mealimeReport.removed === 0">They were already in your favourites — nothing new to add.</template>
+  <template v-else-if="mealimeReport.added > 0 && mealimeReport.added < mealimeReport.matched.length">{{ mealimeReport.added }} new.</template>
   </template>
   <template v-else>Nothing could be matched to recipes in this app.</template>
+  <template v-if="mealimeReport.removed > 0">
+  {{ mealimeReport.removed }} previously favourited recipe{{ mealimeReport.removed === 1 ? ' was' : 's were' }} removed — the import replaces your favourites with this Mealime set.
+  </template>
   <template v-if="mealimeReport.missing.length">
   {{ mealimeReport.missing.length }} could not be matched:
   {{ mealimeReport.missing.map((m) => m.name || `recipe #${m.recipe_id}`).join(', ') }}.

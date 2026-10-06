@@ -148,27 +148,45 @@ export const useFavouritesStore = defineStore(
     }
 
     /**
-     * Migration import (ADR-0058): star the given variant ids. ADDS only
-     * — an import never un-favourites and never clears. A recipe already
-     * starred is left untouched (its record keeps its own stamp); a
-     * recipe this device un-starred IS re-starred, at a fresh stamp, per
-     * the ordinary last-writer-wins rules — the user explicitly asked to
-     * import their Mealime favourites. Returns how many favourites were
-     * actually NEW (already-starred ids do not count), so the report can
-     * say "nothing new" honestly.
+     * Migration import (ADR-0058, amended): a FULL OVERRIDE — after a
+     * successful import the favourited set is EXACTLY the payload. Every
+     * payload id is starred at a FRESH stamp (the import is a new
+     * opinion; an already-starred id is re-stamped, not preserved), and
+     * every currently-starred id NOT in the payload is un-starred via a
+     * fresh tombstone — never a silent delete. The tombstones are
+     * load-bearing: household peers reconcile PER KEY and an absent key
+     * means "don't touch" (ADR-0031), so a plain wipe (`replaceAll`) could
+     * never propagate the removals to the other devices. Tombstones do.
+     * Records that are ALREADY tombstones stay untouched — re-tombstoning
+     * them would add no information. `records` is written even when only
+     * removals landed. Returns `{added, removed}` so the report can be
+     * honest about both directions.
      */
-    function importFavourites(variantIds: Iterable<number>, now: number = Date.now()): number {
+    function importFavourites(
+      variantIds: Iterable<number>,
+      now: number = Date.now(),
+    ): { added: number; removed: number } {
+      const stamp = Number.isFinite(now) && now > DEFAULT_STAMP ? now : Date.now()
+      const wanted = new Set<number>()
       const next = { ...records.value }
-      let added = 0
       for (const id of variantIds) {
         if (!Number.isFinite(id)) continue
-        const key = String(id)
-        if (next[key]?.favorited) continue
-        next[key] = { favorited: true, updatedAt: now }
-        added++
+        wanted.add(id)
+        next[String(id)] = { favorited: true, updatedAt: stamp }
       }
-      if (added) records.value = next
-      return added
+      let added = 0
+      for (const id of wanted) {
+        if (!ids.value.has(id)) added++
+      }
+      let removed = 0
+      for (const [key, record] of Object.entries(records.value)) {
+        if (record.favorited && !wanted.has(Number(key))) {
+          next[key] = { favorited: false, updatedAt: stamp }
+          removed++
+        }
+      }
+      records.value = next
+      return { added, removed }
     }
 
     /** Replace the set wholesale (backup import) — fresh local truth. */
