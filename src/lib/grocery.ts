@@ -401,6 +401,20 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
     for (const [raw, keyBasis] of group.raw) {
       lines.push({ key: `${normalized}||${keyBasis}`, display: raw })
     }
+    // Line keys stay unique (the checked map IS keyed by them): a
+    // raw-display row whose key source PARSES keys under the parsed
+    // grammar, and another contributor may already have emitted that same
+    // basis as a real by-unit line. The parsed line is pushed FIRST and
+    // carries a real display, so the colliding raw line — whose display is
+    // typically the overlay's blanked quantity — is dropped.
+    const seenKeys = new Set<string>()
+    const unique = lines.filter((l) => {
+      if (seenKeys.has(l.key)) return false
+      seenKeys.add(l.key)
+      return true
+    })
+    lines.length = 0
+    lines.push(...unique)
     // When the group's display names DIVERGE (different substitutes for the
     // same base ingredient, or a restricted meal plus an unrestricted one),
     // the label names them ALL — a first-seen-only label would silently

@@ -293,6 +293,27 @@ describe('aggregateGroceries displayLines (the restriction ADR)', () => {
     expect(agg.find((i) => i.normalized === 'paprika')!.lines[0].key).toBe(baseKey)
   })
 
+  test('a raw-display row whose parsed key collides with a by-unit line dedupes (keys stay unique)', () => {
+    // Restricted meal A: the overlay blanks the quantity while keyQuantity
+    // keeps the base `6`; unrestricted meal B contributes its own `6`. Both
+    // would key `egg||6` — the by-unit line (a real display) is pushed
+    // first and wins; the raw row's blank display is dropped, never a
+    // second line silently sharing the checkbox key.
+    const a = doc('Restricted Quiche', 6, [['6', 'eggs']])
+    const b = doc('Plain Omelette', 6, [['6', 'eggs']])
+    const agg = aggregateGroceries([
+      {
+        ...input(a, 1),
+        displayLines: [{ keyName: 'egg', name: 'egg', quantity: '', keyQuantity: '6', keyIngredient: 'eggs' }],
+      },
+      input(b, 1),
+    ])
+    const egg = agg.find((i) => i.normalized === 'egg')!
+    expect(egg.lines).toHaveLength(1)
+    expect(egg.lines[0].key).toBe('egg||6')
+    expect(egg.lines[0].display).toBe('6')
+  })
+
   test('divergent substitutes label the merged group with EVERY name', () => {
     // Two planned meals, the same BASE ingredient, different substitutes —
     // a first-seen-only label would claim the whole summed quantity for one
