@@ -5,14 +5,14 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**64 records.** One file per decision (`ADR-NNNN-slug.md`),
+**66 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
 
 ## In force
 
-The 51 accepted records below all still govern. Skim the ones
+The 53 accepted records below all still govern. Skim the ones
 near your change before proposing anything -- they encode *why* the
 architecture is shaped the way it is.
 
@@ -69,6 +69,8 @@ architecture is shaped the way it is.
 | [0057](ADR-0057-catalog-profiles-units-and-servings.md) | catalog profiles: units × servings are ACCOUNT settings, not per-recipe variants | 2026-10-06 |
 | [0058](ADR-0058-mealime-favourites-import.md) | Mealime favourites import via bookmarklet (recipe_id-first matching) | 2026-10-06 |
 | [0059](ADR-0059-split-restriction-artifacts.md) | dietary restriction artifacts are SPLIT and loaded ON DEMAND _(supersedes ADR-0056)_ | 2026-10-07 |
+| [0060](ADR-0060-build-time-changelog-module.md) | Build-time changelog module — git-derived, committed artifact, header modal | 2026-10-07 |
+| [0061](ADR-0061-stale-version-refresh-banner.md) | Stale-version detection and the refresh banner | 2026-10-07 |
 
 ## Not in force
 
@@ -105,8 +107,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0060**). Do not count the files -- that is how the
-   collisions above happened (64 files share 59 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0062**). Do not count the files -- that is how the
+   collisions above happened (66 files share 61 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.
