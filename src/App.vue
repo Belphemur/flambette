@@ -346,14 +346,16 @@ onMounted(async () => {
   <div class="flex items-center gap-2">
   <span
   data-test="app-version"
-  class="group relative max-w-28 min-w-0 truncate text-xs text-text-muted"
-  >{{ appVersion }}
+  class="group relative max-w-28 min-w-0"
+  ><span class="block truncate text-xs text-text-muted">{{ appVersion }}</span>
   <!-- ADR-0055: the OS `title` becomes the one bubble; a span is not
   focusable, so this reveals on hover only — the parity native `title`
   had. below-right: the header pattern (drops down, right-anchored —
   ADR-0049's viewport-overflow lesson). The bubble is a DESCENDANT of
   the group host — `group-hover` is a descendant selector; no spec reads
-  this span's textContent. -->
+  this span's textContent. The host is NOT the truncate element: the
+  wrapper carries `group relative`, the inner span carries `truncate` —
+  its `overflow: hidden` would clip a child bubble (coderabbit r1). -->
   <TooltipBubble :text="`Version ${appVersion}`" placement="below-right" />
   </span>
   <span
