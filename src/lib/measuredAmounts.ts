@@ -18,7 +18,7 @@
 
 import { containerContribution, formatContainerQuantity, parseContainerQuantity } from './containers'
 import { nameKey } from './grocery'
-import { formatMetricAmount, parseQuantity, scaleMetricAmount } from './quantity'
+import { formatMetricAmount, parseQuantity, quantizeSpoons, scaleMetricAmount } from './quantity'
 import { isSeasoning, scaleQuantity } from './recipe'
 import { localizeQuantity, type UnitSystem } from './units'
 import type { LineItem, RecipeDoc } from './types'
@@ -117,7 +117,13 @@ export function measuredQuantity(item: LineItem, factor: number, base: number): 
   // else scales through `scaleMetricAmount`'s quantized grammar. One model,
   // so the chip can never disagree with either surface.
   const scaled = isSeasoning(item.ingredient_name)
-    ? scaleQuantity(parsed.amount, base, base * factor, true, item.ingredient_name)
+    ? // ADR-0055: the sub-linear intermediate joins the same spoon
+      // vocabulary as everywhere else — upstream never authors a decimal
+      // spoon (`2.523 tsp` reads `2 ½ tsp`).
+      quantizeSpoons(
+        scaleQuantity(parsed.amount, base, base * factor, true, item.ingredient_name),
+        parsed.unit,
+      )
     : scaleMetricAmount(parsed.amount, factor, parsed.unit)
   // ADR-0057: unit-aware rendering — integer ml/g, fraction glyphs.
   const rendered = formatMetricAmount(scaled, parsed.unit)

@@ -249,6 +249,35 @@ function tspGrammar(p: number): number {
   return Math.max(0.125, nearestOf(authored, p))
 }
 
+/**
+ * Spoon-quantize a SCALED amount for display (ADR-0055's one vocabulary).
+ *
+ * The SEASONING branch's `scaleQuantity` returns an invented 3-decimal
+ * sub-linear intermediate (`0.75 × 2^0.75 ≈ 1.261`), unlike the exact
+ * products the linear path feeds `scaleMetricAmount`. The vocabulary's
+ * finest quantum is ⅛, so the intermediate first rounds onto the ⅛ grid
+ * and THEN runs through `tspGrammar` (arithmetic unchanged): its
+ * quarter-exactness keeps values on the fraction vocabulary
+ * (`1.25 → '1 ¼'`, `2.5 → '2 ½'` — the glyphs `formatFraction` already
+ * renders for near-quarter values, and what the grocery sum and the
+ * measured chip show for the same ingredient), while an off-vocabulary
+ * straggler (`1 ⅜`) still snaps to the nearest value the 10,626-row
+ * measured corpus authors. Upstream never writes a decimal spoon —
+ * `2.523 tsp` must read `2 ½ tsp`, never `2.5 tsp`.
+ *
+ * The unit is matched on its FIRST token: a step line's `parsed.unit` is
+ * the whole line rest (`'tsp salt'`, `'tbsp soy sauce'`), while the
+ * grocery and chip sites pass the clean quantity unit. Non-spoon units
+ * return the input unchanged.
+ */
+const SPOON_FIRST_TOKENS: ReadonlySet<string> = new Set(['tsp', 'teaspoon', 'tbsp', 'tablespoon'])
+
+export function quantizeSpoons(amount: number, unit: string): number {
+  const first = collapseUnitKey(unit.trim().toLowerCase().split(/\s+/)[0] ?? '')
+  if (!SPOON_FIRST_TOKENS.has(first)) return amount
+  return tspGrammar(Math.round(amount * 8) / 8)
+}
+
 /** Closest value of `list` to `v` (ties toward the larger — unused in the corpus). */
 function nearestOf(list: readonly number[], v: number): number {
   let best = list[0]

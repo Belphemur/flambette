@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { humanizeAmount, humanizeScaledQuantity } from './quantity'
+import { humanizeAmount, humanizeScaledQuantity, quantizeSpoons } from './quantity'
 
 /**
  * ADR-0054's display rule for SCALED quantities: the authored text stays
@@ -168,6 +168,33 @@ describe('scaleMetricAmount — the upstream metric profile scaling model', () =
     expect(scaleMetricAmount(2, 2 / 3, 'cups')).toBeCloseTo(1.3333333, 6)
     expect(scaleMetricAmount(3, 2 / 3, 'cups')).toBe(2)
     expect(scaleMetricAmount(4.5, 1 / 3, 'cups')).toBe(1.5)
+  })
+})
+
+describe('quantizeSpoons — the seasoning branch joins the spoon vocabulary', () => {
+  test('the sub-linear intermediate lands on the fraction vocabulary, never a decimal spoon', () => {
+    // ¾ tsp ×2^0.75 ≈ 1.261 → ⅛ grid → 1.25 — the quarter `formatFraction`
+    // already renders '1 ¼' (and the grocery sum shows for the same
+    // ingredient). A raw tspGrammar call would snap 1.25 → 1.5, the LINEAR
+    // render; the ⅛ pre-round keeps the quarter.
+    expect(quantizeSpoons(1.261, 'tsp')).toBe(1.25)
+    // 1 ½ tsp ×2^0.75 ≈ 2.523 → 2.5 → '2 ½' — the render upstream's
+    // vocabulary demands: no decimal spoon is ever authored (tspGrammar's
+    // 10,626-row measured corpus, 100%).
+    expect(quantizeSpoons(2.523, 'tsp')).toBe(2.5)
+  })
+
+  test('step-line compound units match on the first token', () => {
+    // scaleStepLine parses the WHOLE line, so the unit carries the name.
+    expect(quantizeSpoons(2.523, 'tsp salt')).toBe(2.5)
+    expect(quantizeSpoons(1.261, 'tsp crushed red pepper')).toBe(1.25)
+  })
+
+  test('non-spoon units and the cap value pass through unchanged', () => {
+    expect(quantizeSpoons(2.523, 'g')).toBe(2.523)
+    expect(quantizeSpoons(2.523, 'cup oil')).toBe(2.523)
+    // the 24-servings cap: 3 tsp is exact and stays exact
+    expect(quantizeSpoons(3, 'tsp')).toBe(3)
   })
 })
 

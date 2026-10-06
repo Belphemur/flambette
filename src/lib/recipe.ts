@@ -1,4 +1,9 @@
-import { formatMetricAmount, parseQuantity, scaleMetricAmount } from './quantity'
+import {
+  formatMetricAmount,
+  parseQuantity,
+  quantizeSpoons,
+  scaleMetricAmount,
+} from './quantity'
 import type { RecipeDoc } from './types'
 
 /** One instruction step, scaled to the target servings. */
@@ -167,8 +172,12 @@ function scaleStepLine(line: string, base: number, target: number, factor: numbe
   // is `formatMetricAmount` (unicode fraction glyphs, integer g/ml), so
   // `2129 ml ×⅔` reads `1420 ml` here too, never `1419 ml`.
   const amount = isSeasoning(line)
-    ? scaleQuantity(parsed.amount, base, target, true, line)
+    ? quantizeSpoons(scaleQuantity(parsed.amount, base, target, true, line), parsed.unit)
     : scaleMetricAmount(parsed.amount, factor, parsed.unit)
+  // The seasoning result joins the SAME spoon vocabulary: upstream never
+  // authors a decimal spoon, so `2.523 tsp` reads `2 ½ tsp` — the ⅛-grid
+  // glyph the grocery sum and the measured chip render for the same
+  // ingredient (ADR-0055, one vocabulary on every surface).
   const rendered = formatMetricAmount(amount, parsed.unit)
   return parsed.unit ? `${rendered} ${parsed.unit}` : rendered
 }

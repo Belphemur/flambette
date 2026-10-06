@@ -4,7 +4,7 @@ import {
   formatContainerQuantity,
   parseContainerQuantity,
 } from './containers'
-import { parseQuantity, formatMetricAmount, scaleMetricAmount } from './quantity'
+import { parseQuantity, formatMetricAmount, quantizeSpoons, scaleMetricAmount } from './quantity'
 import { isSeasoning, scaleQuantity } from './recipe'
 import { bucketFor, type StoreSection } from './sections'
 import type { RecipeDoc } from './types'
@@ -200,7 +200,13 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
         // ½-quanta yields integers, so the aggregate keeps the vocabulary;
         // seasonings keep `recipe.scaleQuantity`'s sub-linear rule.
         const scaled = isSeasoning(item.ingredient_name)
-          ? scaleQuantity(parsed.amount, base, target, true, item.ingredient_name)
+          ? // ADR-0055: the sub-linear intermediate joins the same spoon
+            // vocabulary as everywhere else — upstream never authors a
+            // decimal spoon (`2.523 tsp` reads `2 ½ tsp`).
+            quantizeSpoons(
+              scaleQuantity(parsed.amount, base, target, true, item.ingredient_name),
+              parsed.unit,
+            )
           : scaleMetricAmount(parsed.amount, factor, parsed.unit)
         const current = group.byUnit.get(key)
         if (current) current.amount += scaled
