@@ -130,14 +130,19 @@ test.describe('user recipes and the source filter (ADR-0054)', () => {
     await page.goto(`/recipe/${PANCAKE_ID}`)
     await dismissJoinCongrats(page)
     await expect(page.getByTestId('detail-title')).toContainText('Fluffy Pancakes')
-    // The PERMANENT authorship marker: visible on the detail sheet with the
-    // tooltip affordance (the card's NEW badge is the 30-day recency face;
-    // this one never expires). A Mealime recipe must NOT carry it.
+    // The PERMANENT authorship marker: visible on the detail sheet (the
+    // card's NEW badge is the 30-day recency face; this one never
+    // expires). ADR-0055: the native `title` became the one bubble —
+    // aria-hidden (the aria-label stays the meaning-carrier), revealed on
+    // hover and, being the detail view, by tap-reveal.
     const badge = page.getByTestId('user-recipe-badge')
     await expect(badge).toBeVisible()
-    await expect(badge).toHaveAttribute('title', /authored by this household/)
-    // Icon-only marker, same row as the type/occasion icons: no text pill.
-    await expect(badge).toHaveClass(/text-household/)
+    await expect(badge.getByText(/authored by this household/)).toContainText(
+      'authored by this household',
+    )
+    // Icon-only marker, same row as the type/occasion icons: no text pill;
+    // the household hue lives on the glyph inside the wrapper.
+    await expect(badge.locator('svg')).toHaveClass(/text-household/)
     await page.goto('/recipe/17452')
     await expect(page.getByTestId('user-recipe-badge')).toHaveCount(0)
     // The per-serving headline comes from meta.calories, which the authoring

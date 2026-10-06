@@ -14,6 +14,7 @@ import { homeSeoHead } from './lib/seo'
 import { normalizeRoomCode } from './lib/roomWords'
 import { useHead } from '@unhead/vue'
 import JoinCongratsModal from './components/JoinCongratsModal.vue'
+import TooltipBubble from './components/TooltipBubble.vue'
 
 /**
  * The app-level DEFAULT head (ADR-0048). Every app-shell route is served
@@ -345,9 +346,14 @@ onMounted(async () => {
   <div class="flex items-center gap-2">
   <span
   data-test="app-version"
-  class="max-w-28 min-w-0 truncate text-xs text-text-muted"
-  :title="`Version ${appVersion}`"
-  >{{ appVersion }}</span>
+  class="group relative max-w-28 min-w-0 truncate text-xs text-text-muted"
+  >{{ appVersion }}
+  <!-- ADR-0055: the OS `title` becomes the one bubble; a span is not
+  focusable, so this reveals on hover only — the parity native `title`
+  had. below-right: the header pattern (drops down, right-anchored —
+  ADR-0049's viewport-overflow lesson). -->
+  <TooltipBubble :text="`Version ${appVersion}`" placement="below-right" />
+  </span>
   <span
   v-if="roomChip"
   class="group relative flex shrink-0 cursor-help items-center gap-1.5 rounded-full bg-surface-sunken px-2.5 py-1.5 text-xs font-medium"
@@ -401,13 +407,19 @@ onMounted(async () => {
        DOCUMENT horizontally scrollable, and a horizontally scrollable
        document breaks hit-testing for the `fixed` bottom nav — every
        tap on a nav tab silently became a no-op. `display: none`
-       contributes nothing at all, exactly as HueIcon's bubble does. -->
-  <span
-  class="pointer-events-none absolute right-0 top-full z-30 mt-1.5 hidden w-max max-w-56 rounded-lg bg-surface-dark px-2 py-1 text-xs font-normal leading-snug text-text-dark shadow-md group-hover:block group-focus-within:block"
+       contributes nothing at all, exactly as HueIcon's bubble does.
+
+       ADR-0055: the bubble is now `TooltipBubble` — the ONE tooltip
+       implementation. CSS mode (no `active`): this chip is an ordinary
+       pointer-active element, so the group-hover/focus-within classes
+       live inside the component. `room-chip-tooltip` survives through
+       attribute fallthrough (ADR-0055 Decision 8); the load-bearing
+       `max-w-56` + `right-0` shape is the `below-right` placement. -->
+  <TooltipBubble
+  :text="roomChip.description"
+  placement="below-right"
   data-test="room-chip-tooltip"
-  role="tooltip"
-  aria-hidden="true"
-  >{{ roomChip.description }}</span>
+  />
   </span>
   <button
   class="flex size-11 items-center justify-center rounded-full text-xl transition-colors hover:bg-surface-sunken"

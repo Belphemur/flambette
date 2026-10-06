@@ -11,6 +11,7 @@ import { usePlanStore } from '../stores/plan'
 import { useFavouritesStore } from '../stores/favourites'
 import { useUiStore, type AutoPlanRuleset } from '../stores/ui'
 import FilterDropdown from './FilterDropdown.vue'
+import TooltipBubble from './TooltipBubble.vue'
 import type { FilterDropdownOption } from './FilterDropdown.vue'
 
 /**
@@ -484,7 +485,11 @@ function setCategory(value: string) {
   @error="onImgError"
   class="aspect-[4/3] w-full object-cover"
   />
-  <p class="line-clamp-2 px-1.5 py-1 text-[11px] leading-tight font-medium" :title="meal.name">
+  <!-- ADR-0055: the OS title on the line-clamped name becomes the one
+  bubble (hover only). above-center: below would clip against the
+  dialog's vertical scroll. -->
+  <p class="group relative line-clamp-2 px-1.5 py-1 text-[11px] leading-tight font-medium">
+  <TooltipBubble :text="meal.name" />
   {{ meal.name }}
   </p>
   <p class="px-1.5 pb-1 text-[10px]">{{ meal.minutes }} min</p>
@@ -492,12 +497,16 @@ function setCategory(value: string) {
   </ul>
   <div class="flex gap-2">
   <button
-  class="h-11 flex-1 rounded-xl bg-brand text-sm font-semibold text-on-brand active:bg-brand-strong"
+  class="group relative h-11 flex-1 rounded-xl bg-brand text-sm font-semibold text-on-brand active:bg-brand-strong"
   data-test="auto-plan-confirm"
   :disabled="!previewComplete"
-  :title="previewComplete ? undefined : autoPlanBusy ? 'Waiting for the new plan…' : 'Waiting for the preview to load'"
   @click="confirmAutoPlan"
   >
+  <!-- ADR-0055: conditional "Waiting…" bubble; empty once the preview
+  is complete ⇒ nothing rendered (the conditional title's parity). -->
+  <TooltipBubble
+  :text="previewComplete ? '' : autoPlanBusy ? 'Waiting for the new plan…' : 'Waiting for the preview to load'"
+  />
   {{ ui.autoPlanMode === 'add' ? 'Add these meals' : 'Use this plan' }}
   </button>
   <button
