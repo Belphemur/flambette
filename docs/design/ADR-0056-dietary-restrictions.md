@@ -186,3 +186,83 @@ architecture:
 * **Restriction as a plan-state filter** (hide planned restricted
   recipes). Rejected: it would orphan plan entries and grocery state the
   moment a chip toggles; discovery-only keeps every key alive.
+
+## Compositions (measured 2026-10-07)
+
+The 66 two-restriction combinations have been archived
+(`archive_catalog_profiles.py --combinations`, `../mealime-media/raw_profiles/restrictions/combos/`, gitignored analysis input) and analysed
+(`scripts/analyze_restriction_combinations.py`, results in `docs/analysis/`).
+Joins are on the stable `recipe_id`; line-level events come from the
+restricted docs in the build cache. Findings are measured, not assumed —
+they are the INPUT to the composed-overlays design decision; the DECISION
+is the owner's.
+
+### 1. Removal composition
+
+`removed(A,B)` vs `removed(A) | removed(B)` across all 66 pairs: exact (pair
+== union): **28 / 66 (42.4%)**; composition extras (pair removes what neither
+single removes): **459**; union-rule violations (single removed what pair
+kept): **0**; every combo's removed set sits inside all-free's (2,692
+recipes); union of all twelve singles' removed: 2,677 recipes. The 459
+composition extras are REAL upstream behaviour — each extra's unrestricted
+ingredient names still mention one or both of the pair's allergen families
+(keyword attribution, not a rule). They ship as data keyed by PAIR
+(`pairRemoved` in the dictionary), not as per-recipe dumps. Removal under a
+pair is always the union of the singles' removed sets.
+
+### 2. Swap composition
+
+9,359 pair swap events classified by their relation to the singles'
+own swaps: both-agree 107 (1.1%), from-single-a 8,092 (86.5%),
+from-single-b 1,102 (11.8%), a-over-b 0, b-over-a 23 (0.2%), pair-specific
+35 (0.4%). **99.6% trace to the singles' own substitutes.** 139 single
+swaps are dropped by the pair; 0 recipes are novel pair reworkings. At
+recipe-event-set level, 12,716 / 12,966 (98.1%) surviving recipes match the
+union of their singles' swap sets exactly.
+
+### 3. Substitution dictionary
+
+39 distinct `from` ingredients produce 56 distinct (from → to) pairs across
+all 79 payloads. **28 of 39 have exactly ONE substitute across every
+payload** — the swap table is largely fixed per ingredient. The 11 with
+multiple substitutes split by dish context (butter → virgin coconut oil /
+extra virgin olive oil / salt; mayonnaise → vegan / avocado oil mayo;
+peanuts → almonds / cashews). Top swaps: `soy sauce → tamari soy sauce`
+(2,398 events), `panko bread crumbs → gluten free bread crumbs` (941),
+`whole grain bread → gluten free bread` (890), `all purpose flour →
+gluten free flour` (838), `mayonnaise → vegan mayonnaise` (924).
+
+### 4. Quantity behaviour
+
+| relation | n | share |
+| --- | ---: | ---: |
+| same (verbatim) | 10,565 | 99.8% |
+| scaled (ratio 2.000 median) | 8 | 0.1% |
+| re-authored | 13 | 0.1% |
+| unit-change | 0 | 0.0% |
+
+99.8% of swaps keep the base quantity verbatim. The 8 scaled events are
+1:1 mass doubles (shallot → shallots). No unit changes observed.
+
+### 5. Design options (decision pending)
+
+* **Option A — Smallest-id-wins stays** (current ADR Decision 5). Apply the
+  smaller id's overlay when both restrictions rework a doc. Evidence: 98.1%
+  of pair swaps match the union of singles', 86.5% apply single a's
+  substitute. Risk: 139 drops, 35 pair-specific misses.
+* **Option B — Composed overlays ship.** Ship 66 pair overlays from upstream's
+  own renders. Evidence: the pair render IS upstream's answer. Risk: artifact
+  size; every new pair needs a build.
+* **Option C — Swap dictionary ships** (RECOMMENDED). Ship a small dict per
+  restriction: `from → to` + `quantityRule` + count, `pairRemoved` per pair,
+  `removed`. Runtime: match base line's ingredient against swaps (nameKey),
+  display substitute per rule; removal = union + pair extras. Evidence: 28/39
+  fixed substitutes, 99.8% verbatim, 0 union-rule violations, 459 real
+  composition extras keyed by pair. No per-recipe data ships.
+
+**DECISION: pending owner discussion.** Owner directive (2026-10-07): "First
+data analysis then discussion about pattern and design." Option C is the
+recommended path; the analysis (sections 1–4) is the input; the choice is
+the owner's.
+
+

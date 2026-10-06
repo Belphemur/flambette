@@ -166,6 +166,78 @@ class Overlays(unittest.TestCase):
         self.assertEqual(mod.check(), [], "committed restriction artifacts are stale")
 
 
+class RestrictionDict(unittest.TestCase):
+    """Golden tests for the runtime's ingredient substitution dictionary."""
+
+    def setUp(self):
+        self.doc = json.load(open(os.path.join(DATA, "restriction_dict.json")))
+
+    def test_every_live_restriction_is_present(self):
+        self.assertEqual(sorted(self.doc), sorted(EXPECTED))
+
+    def test_each_entry_has_removed_pairRemoved_and_swaps(self):
+        for rid, info in self.doc.items():
+            self.assertIsInstance(info.get("removed"), list, rid)
+            self.assertIsInstance(info.get("pairRemoved"), dict, rid)
+            self.assertIsInstance(info.get("swaps"), list, rid)
+            for s in info["swaps"]:
+                for k in ("from", "to", "quantityRule", "count"):
+                    self.assertIn(k, s, "%s: swap missing %s" % (rid, k))
+                self.assertTrue(isinstance(s["count"], int) and s["count"] > 0,
+                                "%s: count must be a positive int" % rid)
+
+    def test_pair_removed_is_symmetric(self):
+        """Both members of a pair list the same extra removals."""
+        for rid_str, info in self.doc.items():
+            for pair_key, extras in info["pairRemoved"].items():
+                a_str, b_str = pair_key.split(",")
+                partner = self.doc.get(b_str) or self.doc.get(a_str)
+                self.assertIsNotNone(partner, "%s partner missing" % pair_key)
+                self.assertEqual(extras, partner["pairRemoved"].get(pair_key),
+                                 "%s pairRemoved not symmetric" % pair_key)
+
+    def test_swaps_are_derived_from_overlay_docs(self):
+        """Every swap's substitute (to) appears in at least one overlay.
+
+        A swap (from -> to) means upstream REPLACED `from` with `to` in the
+        restricted doc, so `from` is absent and `to` is present. Checking for
+        BOTH in the same doc is wrong — the substitute REPLACES the original.
+        We verify the substitute exists somewhere in the committed overlays.
+
+        Comparison uses `name_key` normalization (punctuation stripped, lowercased),
+        matching how the dictionary keys its from/to pairs — upstream may spell
+        the same ingredient with a hyphen or a space across recipes.
+        """
+        import re
+        _nonword = re.compile(r"[^a-z0-9 ]+")
+        _spaces = re.compile(r"\s+")
+        def nk(name):
+            return _spaces.sub(" ", _nonword.sub(" ", name.lower())).strip()
+        swap_tos = set()
+        for info in self.doc.values():
+            for s in info["swaps"]:
+                swap_tos.add(nk(s["to"]))
+        found = set()
+        for slug in EXPECTED.values():
+            for _rid, doc in overlay(slug)["docs"].items():
+                names = {nk(li["ingredient_name"]) for li in doc["line_items"]}
+                found.update(names & swap_tos)
+        missing = swap_tos - found
+        self.assertFalse(missing, "swap substitutes not in any overlay: %s" % missing)
+
+    def test_quantity_rules_are_verbatim_or_rescale(self):
+        """Measured: 99.8% verbatim, 0.1% rescale, 0.1% re-authored.
+
+        No unit-change events were found in the measurement; upstream keeps
+        the base unit and only rescales or re-authors in rare cases.
+        """
+        allowed = {"verbatim", "rescale", "re-authored"}
+        for rid, info in self.doc.items():
+            for s in info["swaps"]:
+                self.assertIn(s["quantityRule"], allowed,
+                              "%s: %s %s -> %s has rule %r" % (rid, s["count"], s["from"], s["to"], s["quantityRule"]))
+
+
 class ArchiveFaithfulness(unittest.TestCase):
     """Tier 2 — needs the gitignored live archive; SKIP without it."""
 

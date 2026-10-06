@@ -79,6 +79,8 @@ import logging
 import os
 import re
 import time
+from collections import Counter
+from statistics import median
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -142,6 +144,147 @@ def load_payloads():
 def name_signature(meta):
     """The unit-free name list used to decide whether a doc was reworked."""
     return list(meta.get("ingredient_names") or [])
+
+
+# ---------------------------------------------------------------------------
+# Shared event-extraction helpers (also imported by the analysis script).
+# Stdlib only: the build runs inside the test:data gate, where uv deps are
+# not assumed.
+# ---------------------------------------------------------------------------
+
+_NONWORD = re.compile(r"[^a-z0-9 ]+")
+_SPACES = re.compile(r"\s+")
+
+
+def name_key(name):
+    """A forgiving normalised name for MATCHING lines across renders.
+
+    The runtime's `nameKey` (src/lib/grocery.ts) is the authority for KEYS;
+    this is only the matching normalisation for event extraction — lowercase,
+    punctuation stripped, spaces collapsed. It is deliberately NOT nameKey:
+    nothing here produces persisted keys.
+    """
+    s = _NONWORD.sub(" ", name.lower())
+    return _SPACES.sub(" ", s).strip()
+
+
+# First number (decimal or vulgar/simple fraction) + the unit-ish tail.
+_NUM = re.compile(r"^\s*(\d+(?:[.,]\d+)?|\d+\s+\d+/\d+|\d+/\d+|½|¼|¾|⅓|⅔)\s*(.*)$")
+_VULGAR = {"½": "1/2", "¼": "1/4", "¾": "3/4", "⅓": "1/3", "⅔": "2/3"}
+
+
+def parse_qty(q):
+    """(number | None, unit-tail | '') from a metric quantity string."""
+    if not q:
+        return None, ""
+    m = _NUM.match(q.replace("\u00a0", " ").strip())
+    if not m:
+        return None, q.strip()
+    tok, tail = m.group(1), m.group(2).strip()
+    tok = _VULGAR.get(tok, tok)
+    try:
+        if "/" in tok:
+            parts = tok.split()
+            if len(parts) == 2:
+                whole, frac = parts
+                n = int(whole) + int(frac.split("/")[0]) / int(frac.split("/")[1])
+            else:
+                n = int(tok.split("/")[0]) / int(tok.split("/")[1])
+        else:
+            n = float(tok.replace(",", "."))
+    except (ValueError, ZeroDivisionError):
+        return None, tail
+    return n, tail
+
+
+def qty_relation(qb, qn):
+    """same | spelling | scaled | unit-change | re-authored | unparseable."""
+    if (qb or "").strip() == (qn or "").strip():
+        return "same"
+    nb, ub = parse_qty(qb or "")
+    nn, un = parse_qty(qn or "")
+    if nb is None or nn is None:
+        return "unparseable"
+    if ub == un:
+        return "scaled" if abs(nn - nb) > 1e-9 else "spelling"
+    if abs(nn - nb) < 1e-9:
+        return "unit-change"
+    return "re-authored"
+
+
+QUANTITY_RULES = {"same": "verbatim", "spelling": "verbatim", "scaled": "rescale",
+                  "unit-change": "unit-change", "re-authored": "re-authored",
+                  "unparseable": "unparseable"}
+
+
+def pair_lines(base, ov):
+    """Mirror of the runtime's pairing (restrictions.ts pairOverlayToBase).
+
+    Returns (pairs, ov_left, base_left): pairs is {ov_index: base_index}.
+    base/ov rows are (key, name, quantity) triples — exact key first, unique
+    containment second, in-order leftovers with both quantities unique third.
+    """
+    used_b = set()
+    pairs = {}
+    for j, (k, _n, _q) in enumerate(ov):
+        if not k:
+            continue
+        for i, (bk, _bn, _bq) in enumerate(base):
+            if i in used_b or not bk:
+                continue
+            if bk == k:
+                pairs[j] = i
+                used_b.add(i)
+                break
+    open_ov = [j for j, (k, _n, _q) in enumerate(ov) if j not in pairs and k]
+    open_base = [i for i, (k, _n, _q) in enumerate(base) if i not in used_b and k]
+    for j in open_ov:
+        k = ov[j][0]
+        cands = [i for i in open_base
+                 if i not in used_b and (base[i][0] in k or k in base[i][0])]
+        if len(cands) == 1:
+            pairs[j] = cands[0]
+            used_b.add(cands[0])
+    open_ov = [j for j in open_ov if j not in pairs]
+    open_base = [i for i in open_base if i not in used_b]
+    ovq = Counter(ov[j][2].strip() for j in open_ov)
+    baseq = Counter(base[i][2].strip() for i in open_base)
+    for n in range(min(len(open_ov), len(open_base))):
+        j, i = open_ov[n], open_base[n]
+        qo, qb = ov[j][2].strip(), base[i][2].strip()
+        if qo == qb and ovq[qo] == 1 and baseq[qb] == 1:
+            pairs[j] = i
+            used_b.add(i)
+    ov_left = [j for j, (_k, _n, _q) in enumerate(ov) if j not in pairs]
+    base_left = [i for i, (_k, _n, _q) in enumerate(base) if i not in used_b]
+    return pairs, ov_left, base_left
+
+
+def events_for_doc(base_doc, rdoc):
+    """Substitution events between the base catalog doc and a restricted doc.
+
+    Each event: {kind: swap|added|removed, from/to names + keys, quantities}.
+    `swap` is emitted only when the normalised keys differ, so case/punctuation
+   -only spellings never count as substitutions.
+    """
+    base = [(name_key(li.get("ingredient_name") or ""), li.get("ingredient_name") or "",
+             (li.get("quantity") or "")) for li in base_doc.get("line_items", [])]
+    ov = [(name_key(li.get("ingredient_name") or ""), li.get("ingredient_name") or "",
+           (li.get("quantity") or "")) for li in rdoc.get("line_items", [])]
+    pairs, ov_left, base_left = pair_lines(base, ov)
+    evs = []
+    for j, i in sorted(pairs.items()):
+        if base[i][0] != ov[j][0]:
+            evs.append({"kind": "swap", "from": base[i][1], "from_key": base[i][0],
+                        "to": ov[j][1], "to_key": ov[j][0],
+                        "qty_base": base[i][2], "qty_new": ov[j][2]})
+    for j in ov_left:
+        evs.append({"kind": "added", "to": ov[j][1], "to_key": ov[j][0],
+                    "qty_new": ov[j][2]})
+    for i in base_left:
+        evs.append({"kind": "removed", "from": base[i][1], "from_key": base[i][0],
+                    "qty_base": base[i][2]})
+    return evs
 
 
 def fetch_doc_cached(slug, uuid, fetch=True):

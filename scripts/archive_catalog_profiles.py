@@ -395,6 +395,10 @@ def index_restriction_payload(label, restriction_ids, pulled_at=None):
 # committed overlays consume `-m6` (metric — see the module docstring).
 RESTRICTION_SUFFIX = {"metric": "m6", "us": "us6"}
 
+# Two-restriction combinations live in their own sub-directory, named by the
+# SORTED id pair: combos/<idA>-<idB>-<suffix>.json (C(12,2) = 66 files).
+COMBO_SUBDIR = "combos"
+
 
 def run_restrictions(token, force=False, only=None, family="metric"):
     """Archive every dietary-restriction builder payload in ONE unit family.
@@ -468,6 +472,156 @@ def run_restrictions(token, force=False, only=None, family="metric"):
     return 0 if not failed else 1
 
 
+def combo_targets(family="metric"):
+    """Every 2-element subset of the restriction ids, SORTED pair label.
+
+    Upstream's `recipe_restriction_ids` is an ARRAY, so the account profile can
+    carry more than one restriction at once. C(12,2) = 66 pairs; each is one
+    `set_profile` + `get_builder_data` render like the singles.
+    """
+    suffix = RESTRICTION_SUFFIX[family]
+    ids = sorted(RESTRICTIONS)
+    return [
+        ("%d-%d-%s" % (a, b, suffix), [a, b])
+        for i, a in enumerate(ids)
+        for b in ids[i + 1:]
+    ]
+
+
+_rids_cache: dict = {}
+
+
+def payload_rids(relpath):
+    """The recipe_id set of an archived restriction payload (cached)."""
+    if relpath in _rids_cache:
+        return _rids_cache[relpath]
+    path = os.path.join(RESTRICTION_ROOT, relpath)
+    with open(path) as f:
+        builder = json.load(f)
+    rids = frozenset(m["recipe_id"] for m in builder["variant_meta"])
+    _rids_cache[relpath] = rids
+    return rids
+
+
+def check_combo_coherence(label, ids, builder, single_rids, none_rids, allfree_rids):
+    """Does this render actually reflect the PAIR?
+
+    Three measured invariants (2026-10-06, singles; assumed for pairs and
+    verified here before saving):
+
+      1. strict subset: nothing is ADDED, and the pair removes at least each
+         single's own known-removed recipes (a render that raced the async
+         apply fails exactly here — it still looks like the PREVIOUS
+         profile, whose rids include recipes this pair must have removed);
+      2. the pair is never BIGGER than its smaller single;
+      3. all-free (all 12 active) is the extreme removal — its rids must be a
+         subset of every combo's.
+    """
+    rids = frozenset(m["recipe_id"] for m in builder["variant_meta"])
+    a, b = ids
+    problems = []
+    for rid in (a, b):
+        single = single_rids(rid)
+        removed = none_rids - single
+        spillover = removed & rids
+        if spillover:
+            problems.append(
+                "id %d: %d known-removed recipes PRESENT in the render (e.g. %s)"
+                % (rid, len(spillover), sorted(spillover)[:5]))
+        if len(rids) > len(single):
+            problems.append("render (%d) is bigger than single id %d (%d)"
+                            % (len(rids), rid, len(single)))
+    if not allfree_rids <= rids:
+        problems.append("all-free rids not a subset (missing %d)"
+                        % len(allfree_rids - rids))
+    return rids, problems
+
+
+def run_combinations(token, force=False, family="metric"):
+    """Archive every 2-restriction builder payload (66 pairs) in ONE family.
+
+    Same contract as `run_restrictions`: idempotent, the render's coherence is
+    verified BEFORE saving, and the account's standing profile is restored in
+    a `finally` whatever happens. A coherence failure retries the fetch ONCE
+    with a longer settle (the async `set_profile` apply may simply not have
+    landed yet) before giving up on that pair.
+    """
+    suffix = RESTRICTION_SUFFIX[family]
+    unit_family = UNIT_FAMILY[family]
+    combo_root = os.path.join(RESTRICTION_ROOT, COMBO_SUBDIR)
+    none_rel = "none-%s.json" % suffix
+    allfree_rel = "all-free-%s.json" % suffix
+    if not (os.path.exists(os.path.join(RESTRICTION_ROOT, none_rel))
+            and os.path.exists(os.path.join(RESTRICTION_ROOT, allfree_rel))):
+        log("ERROR: the none/all-free baselines must be archived first "
+            "(--restrictions)")
+        return 1
+    for rid in sorted(RESTRICTIONS):
+        rel = "%s-%s.json" % (RESTRICTIONS[rid][0], suffix)
+        if not os.path.exists(os.path.join(RESTRICTION_ROOT, rel)):
+            log("ERROR: single payload %s missing (run --restrictions first)" % rel)
+            return 1
+
+    none_rids = payload_rids(none_rel)
+    allfree_rids = payload_rids(allfree_rel)
+
+    def single_rids(rid):
+        return payload_rids("%s-%s.json" % (RESTRICTIONS[rid][0], suffix))
+
+    targets = combo_targets(family)
+    results = []
+    seen: dict = {}
+    try:
+        for label, ids in targets:
+            path = os.path.join(combo_root, label + ".json")
+            if os.path.exists(path) and not force:
+                log("combo %s: present, indexing only" % label)
+                index_restriction_payload(os.path.join(COMBO_SUBDIR, label), ids)
+                results.append((label, True))
+                continue
+            log("combo %s: fetching (ids=%s)" % (label, ids))
+            ok = False
+            problems = []
+            for attempt, settle in enumerate((PROFILE_APPLY_SETTLE_SECONDS, 12.0)):
+                set_profile(token, unit_family, 6, ids)
+                time.sleep(settle)
+                builder = fetch_builder(token)
+                fp = tuple(sorted({m["recipe_id"] for m in builder["variant_meta"]}))
+                if fp in seen:
+                    problems = ["render identical to %s (apply not settled)" % seen[fp]]
+                    log("combo %s: attempt %d: %s" % (label, attempt + 1, problems[0]))
+                    continue
+                rids, problems = check_combo_coherence(
+                    label, ids, builder, single_rids, none_rids, allfree_rids)
+                if problems:
+                    log("combo %s: attempt %d incoherent: %s"
+                        % (label, attempt + 1, "; ".join(problems)))
+                    continue
+                seen[fp] = label
+                os.makedirs(combo_root, exist_ok=True)
+                with open(path, "w") as f:
+                    json.dump(builder, f)
+                index_restriction_payload(os.path.join(COMBO_SUBDIR, label), ids)
+                log("combo %s: saved (%d recipes, settle %.0fs)"
+                    % (label, len(rids), settle))
+                ok = True
+                break
+            if not ok:
+                log("ERROR: combo %s: incoherent after retry — NOT saved (%s)"
+                    % (label, "; ".join(problems)))
+            results.append((label, ok))
+    finally:
+        log("restoring account profile to gluten-free %s / US units"
+            % ACCOUNT_DEFAULT_RESTRICTIONS)
+        try:
+            set_profile(token, UNIT_FAMILY["us"], 6, ACCOUNT_DEFAULT_RESTRICTIONS)
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as e:
+            log("ERROR: could not restore the account profile: %s" % e)
+            results.append(("restore", False))
+    failed = [lab for lab, ok in results if not ok]
+    return 0 if not failed else 1
+
+
 def main():
     global PROFILE_ROOT
     global INDEX_PATH
@@ -475,6 +629,10 @@ def main():
     ap.add_argument("--restrictions", action="store_true",
                     help="archive dietary-restriction profiles into "
                          "raw_profiles/restrictions (idempotent)")
+    ap.add_argument("--combinations", action="store_true",
+                    help="archive every 2-restriction combination (66 pairs, "
+                         "C(12,2)) into raw_profiles/restrictions/combos "
+                         "(idempotent; needs the singles + baselines on disk)")
     ap.add_argument("--restriction", action="append", type=int, choices=sorted(RESTRICTIONS),
                     help="archive ONE restriction profile (repeatable); implies --restrictions")
     ap.add_argument("--unit-family", choices=sorted(RESTRICTION_SUFFIX), default="metric",
@@ -493,7 +651,7 @@ def main():
         help="archive ALL profiles reachable via set_profile (2 unit systems x 3 serving counts)")
     args = ap.parse_args()
 
-    if args.restriction:
+    if args.restriction or args.combinations:
         args.restrictions = True
 
     if args.index:
@@ -511,6 +669,8 @@ def main():
         if not token:
             log("ERROR: --restrictions needs a live token at %s" % args.token_file)
             return 1
+        if args.combinations:
+            return run_combinations(token, force=args.force, family=args.unit_family)
         if args.restriction:
             ids = set(args.restriction)
             return run_restrictions(token, force=args.force, only=sorted(ids),
