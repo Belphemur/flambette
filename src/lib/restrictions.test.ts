@@ -2,52 +2,69 @@ import { describe, expect, test } from 'bun:test'
 import {
   RESTRICTIONS,
   activeDrops,
-  buildDictIndex,
+  buildLadderIndex,
+  ensurePair,
+  ensureRemoved,
+  ensureSwaps,
   groceryDisplayLines,
+  isDropName,
   isRemovedByRestriction,
-  loadRestrictionDict,
   normalizeRestrictionIds,
   restrictedDocView,
   swapName,
-  type DropEntry,
-  type RestrictionDict,
 } from './restrictions'
 import { nameKey } from './grocery'
 
-/* ---------- The dictionary (committed artifact) ---------- */
+/* ---------- Constants & test data ---------- */
 
-const dict: RestrictionDict = {
-  '1': {
-    removed: [50, 60, 195, 224, 863],
-    pairRemoved: { '1,10': [70] },
-    swaps: [
-      { from: 'soy sauce', to: 'tamari soy sauce', quantityRule: 'verbatim', count: 283 },
-      { from: 'rotini pasta', to: 'gluten free rotini pasta', quantityRule: 'verbatim', count: 43 },
-      { from: 'fettuccine pasta', to: 'gluten free fettuccine pasta', quantityRule: 'verbatim', count: 16 },
-      { from: 'butter, unsalted', to: 'virgin coconut oil', quantityRule: 'verbatim', count: 5 },
-    ],
-  },
-  '10': {
-    removed: [],
-    pairRemoved: { '1,10': [70] },
-    swaps: [
-      { from: 'mayonnaise', to: 'avocado oil mayonnaise', quantityRule: 'verbatim', count: 3 },
-    ],
-  },
-  '2': {
-    removed: [],
-    pairRemoved: { '1,10': [70] },
-    swaps: [
-      { from: 'mayonnaise', to: 'avocado oil mayonnaise', quantityRule: 'verbatim', count: 3 },
-    ],
-    drops: [
-      { from: 'crumbled feta cheese', count: 41 },
-      { from: 'butter, unsalted', count: 63 },
-    ],
-  },
+const GF_ID = 1
+const DF_ID = 2
+const PAIR_KEY = 'dairy-free-gluten-free'
+
+/** A minimal LadderIndex with swaps and drops loaded (from swaps.json shape). */
+function indexWithSwaps(swaps: typeof import('./restrictions').SwapEntry[], drops: typeof import('./restrictions').DropEntry[]) {
+  const idx = buildLadderIndex()
+  idx.swaps = swaps
+  idx.drops = drops
+  return idx
 }
 
-const index = buildDictIndex(dict)
+/** A LadderIndex with removed data loaded for specific slugs. */
+function indexWithRemoved(removedData: Record<string, number[]>) {
+  const idx = buildLadderIndex()
+  for (const [slug, ids] of Object.entries(removedData)) {
+    idx.removed.set(slug, ids)
+  }
+  return idx
+}
+
+/** A LadderIndex with pair extras loaded for specific pair keys. */
+function indexWithPairs(pairData: Record<string, number[]>) {
+  const idx = buildLadderIndex()
+  for (const [key, ids] of Object.entries(pairData)) {
+    idx.pairs.set(key, ids)
+  }
+  return idx
+}
+
+const sampleSwaps = [
+  { from: 'soy sauce', to: 'tamari soy sauce', quantityRule: 'verbatim', count: 283 },
+  { from: 'rotini pasta', to: 'gluten free rotini pasta', quantityRule: 'verbatim', count: 43 },
+  { from: 'fettuccine pasta', to: 'gluten free fettuccine pasta', quantityRule: 'verbatim', count: 16 },
+  { from: 'butter, unsalted', to: 'virgin coconut oil', quantityRule: 'verbatim', count: 5 },
+  { from: 'mayonnaise', to: 'avocado oil mayonnaise', quantityRule: 'verbatim', count: 3 },
+]
+
+const sampleDrops = [
+  { from: 'crumbled feta cheese', count: 41 },
+  { from: 'butter, unsalted', count: 63 },
+]
+
+const sampleRemovedGF = [50, 60, 195, 224, 863] // GF removes these recipe ids
+const sampleRemovedDF = []
+const sampleExtras110 = [70] // Pair GF+DF removes rid 70 (extra beyond singles)
+
+/* ---------- RESTRICTIONS ---------- */
 
 describe('RESTRICTIONS', () => {
   test('twelve entries in display order, unique ids and slugs', () => {
@@ -60,6 +77,8 @@ describe('RESTRICTIONS', () => {
     expect(new Set(RESTRICTIONS.map((r) => r.id)).size).toBe(12)
   })
 })
+
+/* ---------- normalizeRestrictionIds ---------- */
 
 describe('normalizeRestrictionIds', () => {
   test('drops unknown ids, dedupes, sorts ascending', () => {
@@ -76,67 +95,225 @@ describe('normalizeRestrictionIds', () => {
   })
 })
 
-describe('buildDictIndex', () => {
-  test('null/undefined index returns an empty swap map', () => {
-    const empty = buildDictIndex(null)
-    expect(empty.dict).toBeNull()
-    expect(empty.swaps.byNameKey.size).toBe(0)
-  })
-  test('stores the dict for query-time filtering', () => {
-    expect(index.dict).toBe(dict)
-  })
-  test('swaps indexed by nameKey of `from`', () => {
-    expect(index.swaps.byNameKey.get(nameKey('soy sauce'))?.to).toBe('tamari soy sauce')
-    expect(index.swaps.byNameKey.get(nameKey('rotini pasta'))?.to).toBe('gluten free rotini pasta')
-    expect(index.swaps.byNameKey.get(nameKey('fettuccine pasta'))?.to).toBe('gluten free fettuccine pasta')
-    expect(index.swaps.byNameKey.get(nameKey('butter, unsalted'))?.to).toBe('virgin coconut oil')
-    expect(index.swaps.byNameKey.has(nameKey('nonexistent'))).toBe(false)
+/* ---------- buildLadderIndex ---------- */
+
+describe('buildLadderIndex', () => {
+  test('returns empty index with null swaps and drops', () => {
+    const idx = buildLadderIndex()
+    expect(idx.swaps).toBeNull()
+    expect(idx.drops).toBeNull()
+    expect(idx.removed.size).toBe(0)
+    expect(idx.pairs.size).toBe(0)
+    expect(idx.restrictions).toHaveLength(12)
   })
 })
 
-describe('isRemovedByRestriction (dict-based)', () => {
-  test('a removed id under an active restriction is gone', () => {
-    expect(isRemovedByRestriction(50, [1], index)).toBe(true)
-    expect(isRemovedByRestriction(50, [], index)).toBe(false)
-    expect(isRemovedByRestriction(50, [2], index)).toBe(false)
+/* ---------- ensureSwaps (ladder) ---------- */
+
+describe('ensureSwaps (ladder)', () => {
+  test('loads swaps and drops from injected fetch', async () => {
+    const idx = buildLadderIndex()
+    const fetchImpl = async (_url: string) =>
+      new Response(JSON.stringify({ swaps: sampleSwaps, drops: sampleDrops }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    await ensureSwaps(idx, fetchImpl, '/base/')
+    expect(idx.swaps).toHaveLength(5)
+    expect(idx.drops).toHaveLength(2)
+    expect(idx.swaps![0].from).toBe('soy sauce')
   })
-  test('pairRemoved extras remove when the pair is active', () => {
-    // id 70 is in pairRemoved["1,10"] — removed only when BOTH 1 and 10 active
-    expect(isRemovedByRestriction(70, [1, 10], index)).toBe(true)
+  test('is cached (no second fetch on re-call)', async () => {
+    const idx = buildLadderIndex()
+    let calls = 0
+    const fetchImpl = async () => {
+      calls++
+      return new Response(JSON.stringify({ swaps: sampleSwaps, drops: sampleDrops }), { status: 200 })
+    }
+    await ensureSwaps(idx, fetchImpl, '/base/')
+    await ensureSwaps(idx, fetchImpl, '/base/')
+    expect(calls).toBe(1)
+  })
+  test('failed fetch leaves swaps null (identity display)', async () => {
+    const idx = buildLadderIndex()
+    const fetchImpl = async () => new Response('nope', { status: 404 })
+    await ensureSwaps(idx, fetchImpl, '/')
+    expect(idx.swaps).toBeNull()
+    expect(idx.drops).toBeNull()
+  })
+  test('failed fetch is retried on next call', async () => {
+    const idx = buildLadderIndex()
+    let calls = 0
+    const fetchImpl = async () => {
+      calls++
+      if (calls < 2) return new Response('nope', { status: 404 })
+      return new Response(JSON.stringify({ swaps: sampleSwaps, drops: sampleDrops }), { status: 200 })
+    }
+    await ensureSwaps(idx, fetchImpl, '/')
+    expect(idx.swaps).toBeNull() // first call failed
+    await ensureSwaps(idx, fetchImpl, '/') // second call succeeds
+    expect(idx.swaps).not.toBeNull()
+    expect(idx.swaps!.length).toBe(5)
+  })
+})
+
+/* ---------- ensureRemoved (ladder) ---------- */
+
+describe('ensureRemoved (ladder)', () => {
+  test('loads removed ids for a slug from injected fetch', async () => {
+    const idx = buildLadderIndex()
+    const fetchImpl = async (_url: string) =>
+      new Response(JSON.stringify({ removed: sampleRemovedGF }), { status: 200 })
+    await ensureRemoved('gluten-free', idx, fetchImpl, '/base/')
+    expect(idx.removed.get('gluten-free')).toEqual(sampleRemovedGF)
+  })
+  test('is cached (no second fetch on re-call)', async () => {
+    const idx = buildLadderIndex()
+    let calls = 0
+    const fetchImpl = async () => {
+      calls++
+      return new Response(JSON.stringify({ removed: [1, 2, 3] }), { status: 200 })
+    }
+    await ensureRemoved('gluten-free', idx, fetchImpl, '/base/')
+    await ensureRemoved('gluten-free', idx, fetchImpl, '/base/')
+    expect(calls).toBe(1)
+  })
+  test('failed fetch leaves empty list (identity display)', async () => {
+    const idx = buildLadderIndex()
+    const fetchImpl = async () => new Response('nope', { status: 404 })
+    await ensureRemoved('gluten-free', idx, fetchImpl, '/')
+    expect(idx.removed.get('gluten-free')).toEqual([])
+  })
+})
+
+/* ---------- ensurePair (ladder) ---------- */
+
+describe('ensurePair (ladder)', () => {
+  test('loads pair extras from injected fetch', async () => {
+    const idx = buildLadderIndex()
+    const fetchImpl = async (_url: string) =>
+      new Response(JSON.stringify({ extras: sampleExtras110 }), { status: 200 })
+    await ensurePair('gluten-free', 'dairy-free', idx, fetchImpl, '/base/')
+    expect(idx.pairs.get(PAIR_KEY)).toEqual(sampleExtras110)
+  })
+  test('pair key is canonical (a < b ordering)', async () => {
+    const idx = buildLadderIndex()
+    const fetchImpl = async () => new Response(JSON.stringify({ extras: [1, 2] }), { status: 200 })
+    // REVERSE order — should still store under canonical key (dairy-free-gluten-free)
+    await ensurePair('gluten-free', 'dairy-free', idx, fetchImpl, '/base/')
+    expect(idx.pairs.get(PAIR_KEY)).toEqual([1, 2])
+    expect(idx.pairs.has('dairy-free-gluten-free')).toBe(true)
+    expect(idx.pairs.has('gluten-free-dairy-free')).toBe(false)
+  })
+  test('is cached (no second fetch on re-call)', async () => {
+    const idx = buildLadderIndex()
+    let calls = 0
+    const fetchImpl = async () => {
+      calls++
+      return new Response(JSON.stringify({ extras: [1] }), { status: 200 })
+    }
+    await ensurePair('gluten-free', 'dairy-free', idx, fetchImpl, '/base/')
+    await ensurePair('gluten-free', 'dairy-free', idx, fetchImpl, '/base/')
+    expect(calls).toBe(1)
+  })
+  test('failed fetch leaves empty list', async () => {
+    const idx = buildLadderIndex()
+    const fetchImpl = async () => new Response('nope', { status: 404 })
+    await ensurePair('dairy-free', 'gluten-free', idx, fetchImpl, '/')
+    expect(idx.pairs.get(PAIR_KEY)).toEqual([])
+  })
+})
+
+/* ---------- isRemovedByRestriction (ladder) ---------- */
+
+describe('isRemovedByRestriction (ladder)', () => {
+  test('a removed id under an active restriction is gone', () => {
+    const idx = indexWithRemoved({ 'gluten-free': sampleRemovedGF })
+    expect(isRemovedByRestriction(50, [GF_ID], idx)).toBe(true)
+    expect(isRemovedByRestriction(50, [], idx)).toBe(false)
+    expect(isRemovedByRestriction(50, [DF_ID], idx)).toBe(false)
+  })
+  test('pair extras remove when the pair is active', () => {
+    const idx = indexWithRemoved({ 'gluten-free': [], 'dairy-free': [] })
+    idx.pairs.set(PAIR_KEY, sampleExtras110)
+    expect(isRemovedByRestriction(70, [GF_ID, DF_ID], idx)).toBe(true)
     // Only one of the pair is NOT enough
-    expect(isRemovedByRestriction(70, [1], index)).toBe(false)
-    expect(isRemovedByRestriction(70, [10], index)).toBe(false)
+    expect(isRemovedByRestriction(70, [GF_ID], idx)).toBe(false)
+    expect(isRemovedByRestriction(70, [DF_ID], idx)).toBe(false)
   })
   test('the union over several active ids removes if ANY does', () => {
-    expect(isRemovedByRestriction(60, [1, 10], index)).toBe(true)
-    expect(isRemovedByRestriction(80, [1, 10], index)).toBe(false)
+    const idx = indexWithRemoved({ 'gluten-free': [60] })
+    expect(isRemovedByRestriction(60, [GF_ID, DF_ID], idx)).toBe(true)
+    expect(isRemovedByRestriction(80, [GF_ID, DF_ID], idx)).toBe(false)
   })
   test('unknown ids and absent sets never remove', () => {
-    expect(isRemovedByRestriction(50, [7], index)).toBe(false)
+    const idx = buildLadderIndex()
+    expect(isRemovedByRestriction(50, [7], idx)).toBe(false)
   })
-  test('an absent dict never removes', () => {
-    const empty = buildDictIndex(undefined)
-    expect(isRemovedByRestriction(50, [1], empty)).toBe(false)
+  test('empty index never removes', () => {
+    expect(isRemovedByRestriction(50, [1], buildLadderIndex())).toBe(false)
   })
 })
 
-describe('swapName', () => {
+/* ---------- swapName (ladder) ---------- */
+
+describe('swapName (ladder)', () => {
   test('returns the substitute when a swap matches the nameKey', () => {
-    expect(swapName('soy sauce', index)).toBe('tamari soy sauce')
-    expect(swapName('rotini pasta', index)).toBe('gluten free rotini pasta')
-    expect(swapName('fettuccine pasta', index)).toBe('gluten free fettuccine pasta')
-    expect(swapName('butter, unsalted', index)).toBe('virgin coconut oil')
+    const idx = indexWithSwaps(sampleSwaps, sampleDrops)
+    expect(swapName('soy sauce', idx)).toBe('tamari soy sauce')
+    expect(swapName('rotini pasta', idx)).toBe('gluten free rotini pasta')
+    expect(swapName('fettuccine pasta', idx)).toBe('gluten free fettuccine pasta')
+    expect(swapName('butter, unsalted', idx)).toBe('virgin coconut oil')
   })
   test('returns the original when no swap matches', () => {
-    expect(swapName('broccoli', index)).toBe('broccoli')
-    expect(swapName('garlic', index)).toBe('garlic')
+    const idx = indexWithSwaps(sampleSwaps, sampleDrops)
+    expect(swapName('broccoli', idx)).toBe('broccoli')
+    expect(swapName('garlic', idx)).toBe('garlic')
   })
   test('nameKey matching is case-insensitive', () => {
-    expect(swapName('SOY SAUCE', index)).toBe('tamari soy sauce')
+    const idx = indexWithSwaps(sampleSwaps, sampleDrops)
+    expect(swapName('SOY SAUCE', idx)).toBe('tamari soy sauce')
+  })
+  test('pre-load: returns original when swaps not loaded', () => {
+    const idx = buildLadderIndex() // swaps is null
+    expect(swapName('soy sauce', idx)).toBe('soy sauce')
   })
 })
 
-describe('restrictedDocView (dictionary application)', () => {
+/* ---------- isDropName ---------- */
+
+describe('isDropName', () => {
+  test('returns true for nameKeys in the drops set', () => {
+    const drops = activeDrops([DF_ID], indexWithSwaps(sampleSwaps, sampleDrops))
+    expect(isDropName('crumbled feta cheese', drops)).toBe(true)
+  })
+  test('returns false for nameKeys not in the drops set', () => {
+    const drops = activeDrops([DF_ID], indexWithSwaps(sampleSwaps, sampleDrops))
+    expect(isDropName('broccoli', drops)).toBe(false)
+  })
+})
+
+/* ---------- activeDrops (ladder) ---------- */
+
+describe('activeDrops (ladder)', () => {
+  test('returns empty set when no restrictions are active', () => {
+    const idx = indexWithSwaps(sampleSwaps, sampleDrops)
+    expect(activeDrops([], idx).size).toBe(0)
+  })
+  test('returns union of drops across active restrictions', () => {
+    const idx = indexWithSwaps(sampleSwaps, sampleDrops)
+    const drops = activeDrops([DF_ID], idx)
+    expect(drops.has(nameKey('crumbled feta cheese'))).toBe(true)
+  })
+  test('empty drops list returns empty set', () => {
+    const idx = buildLadderIndex() // drops is null
+    expect(activeDrops([GF_ID], idx).size).toBe(0)
+  })
+})
+
+/* ---------- restrictedDocView (ladder) ---------- */
+
+describe('restrictedDocView (ladder)', () => {
   const baseDoc = {
     id: 40001,
     recipe_id: 400,
@@ -158,29 +335,28 @@ describe('restrictedDocView (dictionary application)', () => {
   }
 
   test('applies swaps to ingredient names, keeps base quantities and ids', () => {
-    const view = restrictedDocView(baseDoc, index, [1])
+    const view = restrictedDocView(baseDoc, indexWithSwaps(sampleSwaps, sampleDrops), [GF_ID])
     expect(view.line_items.map((l) => l.ingredient_name)).toEqual([
       'gluten free rotini pasta', 'tamari soy sauce', 'broccoli',
     ])
-    // Quantities stay verbatim from the base doc
     expect(view.line_items.map((l) => l.quantity)).toEqual(['15 oz', '2 tbsp', '300 g'])
-    // Ids stay the base ids
     expect(view.line_items.map((l) => l.id)).toEqual([11, 12, 13])
   })
   test('recipe prose stays AUTHENTIC — no substitution in instructions', () => {
-    const view = restrictedDocView(baseDoc, index, [1])
+    const view = restrictedDocView(baseDoc, indexWithSwaps(sampleSwaps, sampleDrops), [GF_ID])
     expect(view.instructions[0].primary_message).toBe('Boil the rotini pasta.')
   })
-  test('null/empty index returns the base doc unchanged (same reference)', () => {
+  test('null index returns the base doc unchanged (same reference)', () => {
     expect(restrictedDocView(baseDoc, null, [])).toBe(baseDoc)
-    expect(restrictedDocView(baseDoc, buildDictIndex(undefined), [])).toBe(baseDoc)
+    expect(restrictedDocView(baseDoc, buildLadderIndex(), [])).toBe(baseDoc)
   })
-  test('index with no swaps returns the base doc unchanged', () => {
-    const noSwapIndex = buildDictIndex({ '9': { removed: [], pairRemoved: {}, swaps: [], drops: [] } })
-    expect(restrictedDocView(baseDoc, noSwapIndex, [9])).toBe(baseDoc)
+  test('no swaps loaded yet = identity (pre-load)', () => {
+    const view = restrictedDocView(baseDoc, buildLadderIndex(), [GF_ID])
+    expect(view.line_items.map((l) => l.ingredient_name)).toEqual([
+      'rotini pasta', 'soy sauce', 'broccoli',
+    ])
   })
   test('drops hide lines from display only (no swap, no key change)', () => {
-    // DF (id 2) has drops: crumbled feta cheese, plain Greek yogurt, etc.
     const dfDoc = {
       ...baseDoc,
       line_items: [
@@ -188,13 +364,10 @@ describe('restrictedDocView (dictionary application)', () => {
         { id: 12, quantity: '2 tbsp', ingredient_name: 'broccoli' },
       ],
     }
-    const view = restrictedDocView(dfDoc, index, [2])
-    // crumbled feta cheese is a DF drop — hidden from display
+    const view = restrictedDocView(dfDoc, indexWithSwaps(sampleSwaps, sampleDrops), [DF_ID])
     expect(view.line_items.map((l) => l.ingredient_name)).toEqual(['broccoli'])
   })
   test('drops and swaps coexist — swap wins over drop for same from-ingredient', () => {
-    // DF (id 2): butter, unsalted is BOTH in swaps AND drops.
-    // When a swap applies, the line shows the swap (not hidden).
     const dfDoc = {
       ...baseDoc,
       line_items: [
@@ -202,19 +375,15 @@ describe('restrictedDocView (dictionary application)', () => {
         { id: 12, quantity: '1 ½ (113 g) pkgs', ingredient_name: 'crumbled feta cheese' },
       ],
     }
-    const view = restrictedDocView(dfDoc, index, [2])
+    const view = restrictedDocView(dfDoc, indexWithSwaps(sampleSwaps, sampleDrops), [DF_ID])
     expect(view.line_items.map((l) => l.ingredient_name)).toContain('virgin coconut oil')
     expect(view.line_items.map((l) => l.ingredient_name)).not.toContain('crumbled feta cheese')
   })
-  test('active ids select the right drops (union across active ids)', () => {
-    const dfDrops = activeDrops([2], index)
-    expect(dfDrops.has(nameKey('crumbled feta cheese'))).toBe(true)
-    const gfDrops = activeDrops([1], index)
-    expect(gfDrops.has(nameKey('crumbled feta cheese'))).toBe(false)
-  })
 })
 
-describe('groceryDisplayLines (key/display split, dictionary-based)', () => {
+/* ---------- groceryDisplayLines (ladder) ---------- */
+
+describe('groceryDisplayLines (ladder)', () => {
   const baseDoc = {
     id: 40001,
     recipe_id: 400,
@@ -236,14 +405,14 @@ describe('groceryDisplayLines (key/display split, dictionary-based)', () => {
   }
 
   test('the swap case: the substitute name on the base line, base quantity, base key', () => {
-    const rows = groceryDisplayLines(baseDoc, index, [1])
+    const rows = groceryDisplayLines(baseDoc, indexWithSwaps(sampleSwaps, sampleDrops), [GF_ID])
     expect(rows).toEqual([
-      { keyName: 'rotini pasta', name: 'gluten free rotini pasta', quantity: '15 oz', keyIngredient: 'rotini pasta' },
-      { keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '2 tbsp', keyIngredient: 'soy sauce' },
-      { keyName: 'broccoli', name: 'broccoli', quantity: '300 g', keyIngredient: 'broccoli' },
+      expect.objectContaining({ keyName: 'rotini pasta', name: 'gluten free rotini pasta', quantity: '15 oz' }),
+      expect.objectContaining({ keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '2 tbsp' }),
+      expect.objectContaining({ keyName: 'broccoli', name: 'broccoli', quantity: '300 g' }),
     ])
   })
-  test('drops hide lines from display only (no swap, key untouched)', () => {
+  test('drops remove lines from display only (key/checked state untouched)', () => {
     const dfDoc = {
       ...baseDoc,
       line_items: [
@@ -251,46 +420,30 @@ describe('groceryDisplayLines (key/display split, dictionary-based)', () => {
         { id: 12, quantity: '2 tbsp', ingredient_name: 'broccoli' },
       ],
     }
-    const rows = groceryDisplayLines(dfDoc, index, [2])!
-    expect(rows.some((r) => r.name === 'crumbled feta cheese')).toBe(false)
-    expect(rows.some((r) => r.name === 'broccoli')).toBe(true)
+    const rows = groceryDisplayLines(dfDoc, indexWithSwaps(sampleSwaps, sampleDrops), [DF_ID])
+    expect(rows).not.toBeNull()
+    expect(rows!.map((r) => r.name)).not.toContain('crumbled feta cheese')
+    expect(rows!.map((r) => r.name)).toContain('broccoli')
   })
-  test('drops and swaps coexist — swap wins over drop', () => {
-    const dfDoc = {
-      ...baseDoc,
-      line_items: [
-        { id: 11, quantity: '2 tbsp', ingredient_name: 'butter, unsalted' },
-        { id: 12, quantity: '1 ½ (113 g) pkgs', ingredient_name: 'crumbled feta cheese' },
-      ],
-    }
-    const rows = groceryDisplayLines(dfDoc, index, [2])!
-    expect(rows.some((r) => r.name === 'virgin coconut oil')).toBe(true)
-    expect(rows.some((r) => r.name === 'crumbled feta cheese')).toBe(false)
-  })
-  test('an unchanged doc yields null (no override)', () => {
-    const noSwapIndex = buildDictIndex({ '9': { removed: [], pairRemoved: {}, swaps: [], drops: [] } })
-    expect(groceryDisplayLines(baseDoc, noSwapIndex, [9])).toBeNull()
-  })
-  test('null index yields null', () => {
+  test('null index returns null (pre-load: base doc renders as-is)', () => {
     expect(groceryDisplayLines(baseDoc, null, [])).toBeNull()
-    expect(groceryDisplayLines(baseDoc, undefined, [])).toBeNull()
+    expect(groceryDisplayLines(baseDoc, buildLadderIndex(), [])).toBeNull()
   })
-  test('keys computed from the base line NEVER see the override', () => {
-    const rows = groceryDisplayLines(baseDoc, index, [1])
-    expect(nameKey(baseDoc.line_items[0].ingredient_name)).toBe('rotini pasta')
-    expect(rows[0].name).toBe('gluten free rotini pasta')
-    expect(rows[0].keyName).toBe('rotini pasta')
+  test('no swaps loaded yet = null (pre-load)', () => {
+    expect(groceryDisplayLines(baseDoc, buildLadderIndex(), [GF_ID])).toBeNull()
   })
 })
 
-describe('loadRestrictionDict (lazy fetch)', () => {
-  test('loads the committed dictionary artifact', async () => {
+/* ---------- loadRestrictionDict compatibility ---------- */
+
+describe('loadIndex (ladder)', () => {
+  test('loads index.json via injected fetch (cold start: nothing beyond index)', async () => {
+    const { loadIndex } = await import('./restrictions')
     const baseUrl = '/base/'
     const fetchImpl = async (url: string) => {
       const fs = require('fs')
       const path = require('path')
       const relativePath = url.replace(baseUrl, '')
-      // Resolve from the repo root: public/data/restriction_dict.json
       const fullPath = path.resolve(process.cwd(), 'public', relativePath)
       if (!fs.existsSync(fullPath)) {
         return new Response('not found', { status: 404 })
@@ -298,26 +451,19 @@ describe('loadRestrictionDict (lazy fetch)', () => {
       const data = fs.readFileSync(fullPath, 'utf-8')
       return new Response(data, { status: 200, headers: { 'content-type': 'application/json' } })
     }
-    const d = await loadRestrictionDict(fetchImpl, baseUrl)
-    expect(d).not.toBeNull()
-    const loaded = d as RestrictionDict
-    expect(Object.keys(loaded).length).toBeGreaterThanOrEqual(12)
-    // GF (id 1) should have soy sauce → tamari soy sauce
-    const gf = loaded['1']
-    expect(gf).toBeDefined()
-    const soySwap = gf?.swaps.find((s) => s.from === 'soy sauce')
-    expect(soySwap).toBeDefined()
-    expect(soySwap!.to).toBe('tamari soy sauce')
-    expect(soySwap!.quantityRule).toBe('verbatim')
+    const idx = await loadIndex(fetchImpl, baseUrl)
+    expect(idx).not.toBeNull()
+    const loaded = idx as import('./restrictions').LadderIndex
+    expect(loaded.restrictions).toHaveLength(12)
+    // Cold start: swaps, drops, removed, pairs are NOT loaded — only index.json
+    expect(loaded.swaps).toBeNull()
+    expect(loaded.drops).toBeNull()
+    expect(loaded.removed.size).toBe(0)
+    expect(loaded.pairs.size).toBe(0)
   })
-  test('a failed fetch resolves null and is retried', async () => {
-    let calls = 0
-    const fetchImpl = async () => {
-      calls += 1
-      return new Response('nope', { status: 404 })
-    }
-    const d = await loadRestrictionDict(fetchImpl, '/')
-    expect(d).toBeNull()
-    expect(calls).toBe(1)
+  test('failed index fetch resolves null', async () => {
+    const { loadIndex } = await import('./restrictions')
+    const idx = await loadIndex(async () => new Response('nope', { status: 404 }), '/')
+    expect(idx).toBeNull()
   })
 })

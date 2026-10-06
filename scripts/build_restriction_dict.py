@@ -1,29 +1,25 @@
 #!/usr/bin/env python3
-"""Build the ingredient substitution dictionary the runtime consumes.
+"""Build the split restriction artifacts the runtime consumes ON DEMAND.
 
-WHY THIS EXISTS
-===============
-The runtime does NOT compose or hardcode substitutions — it reads a small
-DATA DICTIONARY derived by the Python pipeline from upstream's own restricted
-renders. Per restriction id the dictionary carries:
+ADR-0059 split the old single `restriction_dict.json` (1,386,316 B, 96% redundant)
+into a tree keyed by query-time need. The 131,920 `pairRemoved` entries carry
+only 918 informative extras beyond the singles' union; the split tree ships those
+918 exactly, partitioned by pair, plus swaps (~8 KB) + removed lists (~44 KB).
 
-  * removed — the recipes upstream drops for that restriction
-  * pairRemoved — per two-restriction pair, the EXTRA recipes the pair removes
-    that NEITHER single removes (the composition effects measured in TASK 2)
-  * swaps — per (from -> to) ingredient pair, the quantity rule upstream applied
-    and how many events back it
+This script reads the SAME archive data as the old emission (the single-restriction
+caches under docs-metric/<slug>/ and the archive payloads) and emits the SPLIT TREE:
 
-Swaps are derived from the restricted DOCS in the build cache (not from the
-payload census, which has no quantities), so the quantityRule reflects the
-real re-authoring: 99.8% of upstream swaps keep the base quantity string
-verbatim, 0.1% rescale (same unit, doubled), 0.1% re-author.
+    public/data/restrictions/index.json     ~2 KB   12 entries + pair file list
+    public/data/restrictions/swaps.json     ~8 KB   from->to swaps + drops
+    public/data/restrictions/removed/<slug>.json  ~4 KB x12   removed ids
+    public/data/restrictions/pairs/<a>-<b>.json   ~1 KB x66   composition extras
 
-The 66 combo payloads are the ANALYSIS INPUT (gitignored, outside the repo).
-This script reads the SINGLE-restriction caches under docs-metric/<slug>/ —
-the same caches `build_restriction_sets.py` populates — and the archive
-payloads for removal sets. It is stdlib-only.
+Cold start fires ZERO network requests: index.json ships in the bundle (or is
+read from the lib's RESTRICTIONS constant). Swaps/removed/pairs load only when
+a chip activates.
 
     python3 scripts/build_restriction_dict.py            # build
+    python3 scripts/build_restriction_dict.py --check    # verify committed tree
 
 Shared join helpers live in build_restriction_sets.py (stdlib; runs inside
 the test:data gate where uv deps are not assumed).
@@ -39,7 +35,9 @@ from collections import Counter
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 DATA = os.path.join(ROOT, "public", "data")
-DICT_OUT = os.path.join(DATA, "restriction_dict.json")
+RESTRICTIONS_DIR = os.path.join(DATA, "restrictions")
+INDEX_OUT = os.path.join(RESTRICTIONS_DIR, "index.json")
+SWAPS_OUT = os.path.join(RESTRICTIONS_DIR, "swaps.json")
 
 # The ADR-0057 archive built by `archive_catalog_profiles.py --restrictions`.
 MEDIA = os.path.join(os.path.dirname(ROOT), "mealime-media")
@@ -199,76 +197,168 @@ def pair_extra_removals(a, b):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--check", action="store_true", help="verify the committed dict is well-formed")
+    ap.add_argument("--check", action="store_true", help="verify the committed split tree is well-formed")
     args = ap.parse_args()
 
     base_docs = load_base_docs()
 
     if args.check:
-        if not os.path.exists(DICT_OUT):
-            log("ERROR: %s is missing" % DICT_OUT)
-            return 1
-        with open(DICT_OUT) as f:
-            d = json.load(f)
         problems = []
-        for rid_str, info in d.items():
-            if not isinstance(info.get("removed"), list):
-                problems.append("%s: missing removed list" % rid_str)
-            if not isinstance(info.get("swaps"), list):
-                problems.append("%s: missing swaps list" % rid_str)
-            if not isinstance(info.get("pairRemoved"), dict):
-                problems.append("%s: missing pairRemoved dict" % rid_str)
-            if not isinstance(info.get("drops"), list):
-                problems.append("%s: missing drops list" % rid_str)
-            for s in info.get("swaps", []):
+
+        # index.json
+        if not os.path.exists(INDEX_OUT):
+            problems.append("index.json is missing")
+        else:
+            with open(INDEX_OUT) as f:
+                idx = json.load(f)
+            if not isinstance(idx.get("restrictions"), list) or len(idx["restrictions"]) != 12:
+                problems.append("index.json: expected 12 restrictions")
+            if not isinstance(idx.get("pairs"), list):
+                problems.append("index.json: missing pairs list")
+            for entry in idx.get("restrictions", []):
+                for k in ("id", "slug", "label"):
+                    if k not in entry:
+                        problems.append("index.json: entry missing %s" % k)
+
+        # swaps.json
+        if not os.path.exists(SWAPS_OUT):
+            problems.append("swaps.json is missing")
+        else:
+            with open(SWAPS_OUT) as f:
+                swaps = json.load(f)
+            if not isinstance(swaps.get("swaps"), list):
+                problems.append("swaps.json: missing swaps list")
+            if not isinstance(swaps.get("drops"), list):
+                problems.append("swaps.json: missing drops list")
+            for s in swaps.get("swaps", []):
                 for k in ("from", "to", "quantityRule", "count"):
                     if k not in s:
-                        problems.append("%s: swap missing %s" % (rid_str, k))
+                        problems.append("swaps.json: swap missing %s" % k)
+
+        # removed/<slug>.json x12
+        for rid_str in sorted(A.RESTRICTIONS, key=int):
+            slug = A.RESTRICTIONS[int(rid_str)][0]
+            path = os.path.join(RESTRICTIONS_DIR, "removed", slug + ".json")
+            if not os.path.exists(path):
+                problems.append("missing %s" % path)
+                continue
+            with open(path) as f:
+                doc = json.load(f)
+            if not isinstance(doc.get("removed"), list):
+                problems.append("%s: missing removed list" % path)
+
+        # pairs/<a>-<b>.json x66
+        for a in sorted(A.RESTRICTIONS):
+            for b in sorted(A.RESTRICTIONS):
+                if a >= b:
+                    continue
+                slug_a = A.RESTRICTIONS[a][0]
+                slug_b = A.RESTRICTIONS[b][0]
+                path = os.path.join(RESTRICTIONS_DIR, "pairs", "%s-%s.json" % (slug_a, slug_b))
+                if not os.path.exists(path):
+                    problems.append("missing %s" % path)
+                    continue
+                with open(path) as f:
+                    doc = json.load(f)
+                if not isinstance(doc.get("extras"), list):
+                    problems.append("%s: missing extras list" % path)
+
         if problems:
             for p in problems:
                 log("STALE: %s" % p)
             return 1
-        log("restriction_dict.json well-formed")
+        log("split tree well-formed")
         return 0
 
-    result = {}
+    # --- Build the split tree ---
+    os.makedirs(RESTRICTIONS_DIR, exist_ok=True)
+    os.makedirs(os.path.join(RESTRICTIONS_DIR, "removed"), exist_ok=True)
+    os.makedirs(os.path.join(RESTRICTIONS_DIR, "pairs"), exist_ok=True)
+
+    # Per-restriction data first (used by all split files).
+    per_restriction = {}
     total_swaps = 0
-    total_pairs = 0
     total_drops = 0
     for rid_str in sorted(A.RESTRICTIONS, key=int):
         rid = int(rid_str)
         slug = A.RESTRICTIONS[rid][0]
         swaps = swaps_for_restriction(rid, base_docs)
-        pair_removed = {}
-        for a in sorted(A.RESTRICTIONS):
-            if a == rid:
-                continue
-            pair_key = "%d,%d" % (min(rid, a), max(rid, a))
-            extras = pair_extra_removals(rid, a)
-            if extras:
-                pair_removed[pair_key] = extras
-                total_pairs += 1
         none_r = payload_rids("none-%s" % PAYLOAD_SUFFIX)
         single_r = payload_rids("%s-%s" % (slug, PAYLOAD_SUFFIX))
         removed = sorted(none_r - single_r)
         drops = drops_for_restriction(rid, base_docs)
-        result[rid_str] = {
+        per_restriction[rid_str] = {
             "removed": removed,
-            "pairRemoved": pair_removed,
             "swaps": swaps,
             "drops": drops,
         }
         total_swaps += len(swaps)
         total_drops += len(drops)
-        log("%s: removed=%d swaps=%d drops=%d pairs_with_extras=%d"
-            % (slug, len(removed), len(swaps), len(drops), len(pair_removed)))
+        log("%s: removed=%d swaps=%d drops=%d" % (slug, len(removed), len(swaps), len(drops)))
 
-    os.makedirs(DATA, exist_ok=True)
-    with open(DICT_OUT, "w") as f:
-        json.dump(result, f, indent=1, sort_keys=True)
+    # 1. index.json: 12 entries + pair file list
+    restrictions_meta = []
+    for rid_str in sorted(A.RESTRICTIONS, key=int):
+        rid = int(rid_str)
+        slug, label = A.RESTRICTIONS[rid]
+        restrictions_meta.append({"id": rid, "slug": slug, "label": label})
+    pair_file_list = []  # slugs like "gluten-free-dairy-free"
+    for a in sorted(A.RESTRICTIONS):
+        for b in sorted(A.RESTRICTIONS):
+            if a >= b:
+                continue
+            slug_a = A.RESTRICTIONS[a][0]
+            slug_b = A.RESTRICTIONS[b][0]
+            pair_file_list.append("%s-%s" % (slug_a, slug_b))
+    index_doc = {"restrictions": restrictions_meta, "pairs": pair_file_list}
+    with open(INDEX_OUT, "w") as f:
+        json.dump(index_doc, f, indent=1)
         f.write("\n")
-    log("wrote %s (%d restrictions, %d swap entries, %d drop entries, %d pair entries)"
-        % (DICT_OUT, len(result), total_swaps, total_drops, total_pairs))
+    log("wrote %s (%d restrictions, %d pairs)" % (INDEX_OUT, len(restrictions_meta), len(pair_file_list)))
+
+    # 2. swaps.json: UNIQUE from->to swaps (dedup across restrictions) + all drops
+    unique_swaps = {}
+    for rid_str in sorted(A.RESTRICTIONS, key=int):
+        for s in per_restriction[rid_str]["swaps"]:
+            key = (s["from"], s["to"])
+            if key not in unique_swaps or s["count"] > unique_swaps[key]["count"]:
+                unique_swaps[key] = s
+    all_swaps = sorted(unique_swaps.values(), key=lambda s: (-s["count"], s["from"], s["to"]))
+    all_drops = []
+    for rid_str in sorted(A.RESTRICTIONS, key=int):
+        all_drops.extend(per_restriction[rid_str]["drops"])
+    all_drops.sort(key=lambda d: (-d["count"], d["from"]))
+    swaps_doc = {"swaps": all_swaps, "drops": all_drops}
+    with open(SWAPS_OUT, "w") as f:
+        json.dump(swaps_doc, f, indent=1)
+        f.write("\n")
+    log("wrote %s (%d unique swaps, %d drops)" % (SWAPS_OUT, len(all_swaps), len(all_drops)))
+
+    # 3. removed/<slug>.json: per-restriction removed ids
+    for rid_str in sorted(A.RESTRICTIONS, key=int):
+        slug = A.RESTRICTIONS[int(rid_str)][0]
+        removed_doc = {"removed": per_restriction[rid_str]["removed"]}
+        with open(os.path.join(RESTRICTIONS_DIR, "removed", slug + ".json"), "w") as f:
+            json.dump(removed_doc, f, indent=1)
+            f.write("\n")
+        log("wrote removed/%s.json (%d removed)" % (slug, len(per_restriction[rid_str]["removed"])))
+
+    # 4. pairs/<a>-<b>.json: ONLY composition extras (extras beyond singles' union)
+    total_extras = 0
+    for a in sorted(A.RESTRICTIONS):
+        for b in sorted(A.RESTRICTIONS):
+            if a >= b:
+                continue
+            slug_a = A.RESTRICTIONS[a][0]
+            slug_b = A.RESTRICTIONS[b][0]
+            extras = pair_extra_removals(a, b)
+            pair_file = os.path.join(RESTRICTIONS_DIR, "pairs", "%s-%s.json" % (slug_a, slug_b))
+            with open(pair_file, "w") as f:
+                json.dump({"extras": extras}, f, indent=1)
+                f.write("\n")
+            total_extras += len(extras)
+            log("wrote pairs/%s-%s.json (%d extras)" % (slug_a, slug_b, len(extras)))
+    log("TOTAL pair extras across 66 pairs: %d" % total_extras)
     return 0
 
 

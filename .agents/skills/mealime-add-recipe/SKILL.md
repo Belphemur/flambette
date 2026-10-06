@@ -118,7 +118,8 @@ it is exactly the fabrication ADR-0054 forbids.
 
 User recipes are NOT removed by the dietary-restriction mechanism, and that
 is the documented behaviour, not a gap: the restriction data (`public/data/
-restriction_dict.json`) is keyed by upstream `recipe_id` and sourced from
+restrictions/` — a split tree: index.json, swaps.json, removed/<slug>.json,
+pairs/<a>-<b>.json) is keyed by upstream `recipe_id` and sourced from
 upstream's own restricted renderings, so the mechanism can never produce a
 variant for a household recipe. A user recipe therefore stays visible under
 EVERY active restriction, and its ingredient text stays authentic.
@@ -136,28 +137,27 @@ runtime matches each base line's nameKey against the dictionary's swaps
 written — the restriction still filters the recipe FROM discovery (by
 removed), but lines whose names aren't in any swap pass through unchanged.
 
-The covered from ingredients are listed in public/data/restriction_dict.json
-under every restriction's swaps[].from. To check whether an ingredient is
+The covered from ingredients are listed across `public/data/restrictions/
+swaps.json` (every restriction's swaps[].from). To check whether an ingredient is
 covered, grep the dictionary:
 ```bash
-jq -r '.[] | .swaps[].from' public/data/restriction_dict.json | sort -u
+jq -r '.[].swaps[].from' public/data/restrictions/swaps.json | sort -u
 ```
 Prefer a name that already appears there (any restriction's swap — the runtime
 considers ALL active restrictions' swaps together). For example, `soy sauce`
 is covered under GF (→ `tamari soy sauce`), dairy-free, fish-free, and
-shellfish-free; `rotini pasta` is covered under GF (→ `gluten free rotini pasta`);
+shellfish-free; `rotini pasta` is covered under GF (→ `gluten-free rotini pasta`);
 `butter, unsalted` is covered under dairy-free (→ `virgin coconut oil`) and
 egg-free (→ `virgin coconut oil`).
 
 If a NEW substitution is needed (an ingredient the dictionary doesn't yet
 cover), the author MUST add it to the dictionary, not hardcode it in the
-recipe: extend scripts/build_restriction_dict.py's swap-extraction logic
+recipe: extend `scripts/build_restriction_dict.py`'s swap-extraction logic
 (which reads upstream's restricted renderings from the gitignored archive
 under ../mealime-media/raw_profiles/restrictions/), rebuild with
-python3 scripts/build_restriction_dict.py, and run bun run test:data
-(which gates on test_build_restriction_sets.py's RestrictionDict golden
-class — well-formedness and symmetry). The updated public/data/
-restriction_dict.json must be committed alongside the recipe. A household
+`python3 scripts/build_restriction_dict.py`, and run bun run test:data
+(which gates on test_build_restriction_sets.py's SplitTreeWellFormed and
+ArchiveFaithfulness golden classes — well-formedness and symmetry). The updated `public/data/restrictions/` tree must be committed alongside the recipe. A household
 recipe that references an uncovered ingredient does not break anything — it
 just renders the raw name under the restriction — but a NEW substitution
 must flow through the dictionary so the runtime applies it uniformly across

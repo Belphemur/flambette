@@ -25,7 +25,7 @@ import {
 // catalog order (not search rank) and only ~60 cards render per batch, so the
 // long recipe NAME would OR-match >1500 variants and never render the target.
 const STILL_SHOWN = 'rotini'
-const SWAPPED = 'gluten free rotini pasta'
+const SWAPPED = 'gluten-free rotini pasta'
 const BASE_NAME = 'rotini pasta'
 
 async function searchRecipes(page: Page, query: string) {
@@ -170,7 +170,7 @@ test('the grocery row shows the substituted name and the checkbox key survives u
  * pasta` — a (name, quantity) pair that appears in NEITHER doc.
  */
 const FETTUCCINE = /Fettuccine Alfredo with Asparagus/
-const GF_FETTUCCINE = 'gluten free fettuccine pasta'
+const GF_FETTUCCINE = 'gluten-free fettuccine pasta'
 
 async function openRestrictedDetail(page: Page): Promise<ReturnType<Page['getByRole']>> {
   await page.goto('/recipes')
@@ -314,5 +314,72 @@ test('under DF a feta recipe does not render the dropped line in the grocery (Bu
   await expect(
     page.getByTestId('grocery-row').filter({ hasText: FETA_INGREDIENT }).first(),
   ).toHaveCount(0)
+})
+
+
+/* ---------- Network shape: on-demand loading (ADR-0059) ----------
+ *
+ * The split tree loads ON DEMAND keyed by query-time need:
+ *   * index.json         ~2 KB   always (or from lib RESTRICTIONS constant for cold start)
+ *   * swaps.json         ~8 KB   when ANY chip is active
+ *   * removed/<slug>.json ~4 KB  when THAT chip is active
+ *   * pairs/<a>-<b>.json  ~1 KB  when THAT PAIR is active
+ *
+ * Use request interception to assert the exact files fired. index.json ships in
+ * the bundle (cold start fires nothing beyond it); swaps/removed/pairs fire only
+ * when their chip/pair activates. A failed per-slug/pair fetch degrades to
+ * union-only + toast (ADR-0019's room-failure rule — never block the UI).
+ */
+
+async function interceptedRequests(page: Page) {
+  const requests: string[] = []
+  await page.route('**/data/restrictions/**', (route) => {
+    const url = route.request().url()
+    requests.push(url.replace(/^.*\/data\/restrictions\//, ''))
+    return route.continue()
+  })
+  return requests
+}
+
+test('cold start fires no restriction requests (index ships in the bundle)', async ({ page }) => {
+  const requests = await interceptedRequests(page)
+  await page.goto('/recipes')
+  await waitForCatalog(page)
+  // No restriction files requested at all before any chip is activated.
+  const restrictionRequests = requests.filter(
+    (r) => r.startsWith('index.json') || r.startsWith('swaps.json') || r.startsWith('removed/') || r.startsWith('pairs/'),
+  )
+  expect(restrictionRequests).toEqual([])
+})
+
+test('activating ONE chip fires index + swaps + one removed file', async ({ page }) => {
+  const requests = await interceptedRequests(page)
+  await page.goto('/settings')
+  await page.getByTestId('restriction-chip-gluten-free').click()
+  await expect(page.getByTestId('restriction-chip-gluten-free')).toHaveAttribute('aria-pressed', 'true')
+  const fired = requests.filter(
+    (r) => r.startsWith('index.json') || r.startsWith('swaps.json') || r.startsWith('removed/') || r.startsWith('pairs/'),
+  )
+  // Exactly: swaps.json + removed/gluten-free.json
+  // index.json is in the bundle (cold start) — not fetched at activation time.
+  expect(fired).toContain('swaps.json')
+  expect(fired).toContain('removed/gluten-free.json')
+  expect(fired).not.toContain('pairs/')
+})
+
+test('activating a SECOND chip fires the pair file (and the first removed stays)', async ({ page }) => {
+  const requests = await interceptedRequests(page)
+  await page.goto('/settings')
+  await page.getByTestId('restriction-chip-gluten-free').click()
+  await page.getByTestId('restriction-chip-dairy-free').click()
+  await expect(page.getByTestId('restriction-chip-dairy-free')).toHaveAttribute('aria-pressed', 'true')
+  const fired = requests.filter(
+    (r) => r.startsWith('index.json') || r.startsWith('swaps.json') || r.startsWith('removed/') || r.startsWith('pairs/'),
+  )
+  // Now pairs/gluten-free-dairy-free.json also fires (on-demand pair extras).
+  expect(fired).toContain('swaps.json')
+  expect(fired).toContain('removed/gluten-free.json')
+  expect(fired).toContain('removed/dairy-free.json')
+  expect(fired).toContain('pairs/dairy-free-gluten-free.json')
 })
 

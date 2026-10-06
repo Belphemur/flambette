@@ -1,30 +1,34 @@
 /**
- * Dietary restrictions: the runtime half of the restriction pipeline — ADR.
+ * Dietary restrictions: the runtime half of the restriction pipeline — ADR-0059.
  *
- * The runtime consumes ONE committed artifact: `data/restriction_dict.json`
- * (built by `scripts/build_restriction_dict.py`). Per restriction id the
- * dictionary carries:
+ * The runtime consumes a SPLIT TREE under `public/data/restrictions/`:
  *
- *   * removed — the recipes upstream drops for that restriction (recipe ids)
- *   * pairRemoved — per two-restriction pair, the EXTRA recipes the pair removes
- *     that NEITHER single removes (the composition extras, recipe ids)
- *   * swaps — per (from -> to) ingredient pair, the quantity rule upstream
- *     applied and how many events back it
+ *   * index.json       ~2 KB   the 12 entries {id, slug, label} + the pair file list — loaded ALWAYS
+ *   * swaps.json       ~8 KB   the from→to entries with quantityRule + the drops lists — loaded when ANY restriction is active
+ *   * removed/<slug>.json ~4 KB ×12  one restriction's removed recipe ids — loaded when THAT chip activates
+ *   * pairs/<a>-<b>.json  ~1 KB ×66  ONLY the composition extras (the 918 ids partitioned by pair) — loaded when THAT PAIR is active
  *
- * The runtime does NOT compose or hardcode substitutions — it reads the
- * dictionary. Nothing per-recipe ships in the app (the per-recipe overlay
- * dumps of ADR-0056 option B were deleted).
+ * The ladder: `loadIndex`, `ensureSwaps`, `ensureRemoved(slug)`, `ensurePair(a, b)` —
+ * each cached, retryable, injectable fetch (the tests inject fakes).
+ * `isRemovedByRestriction` consults the loaded union (from removed/*) + pair extras
+ * (from pairs/*); `swapName` consults swaps only when loaded (pre-load behaviour:
+ * identity — no restriction is "active-looking" until its data arrives; the existing
+ * aria/loading semantics are kept).
+ *
+ * Pure lib: no Vue, no Pinia, no fetch at module scope. The async pieces
+ * (loadIndex, ensureSwaps, ensureRemoved, ensurePair) take the fetch + base URL
+ * as parameters so bun-test can exercise them without an environment.
  *
  * THE KEY/DISPLAY SPLIT (the load-bearing rule of this module):
  * the swap is DISPLAY truth only. Every persisted or derived key — grocery
  * line keys, checked-state keys, cleared-ingredient keys — stays keyed by the
  * BASE doc's nameKey, so toggling a restriction can never orphan or uncheck a
- * saved item. Concretely: `restrictedDocView` (recipe detail, cooking view,
- * measured chips) applies swaps to `line_items` in place (display names
- * change, quantities stay verbatim, ids stay base), while `groceryDisplayLines`
- * builds the grocery's display rows so a row's (name, quantity) pair ALWAYS
- * co-occurs in one authoritative doc (the base doc, possibly with a swap on
- * the name) — never a cross-pair of base quantity under a substitute name.
+ * saved item. Concretely: `restrictedDocView` applies swaps to `line_items` in
+ * place (display names change, quantities stay verbatim, ids stay base), while
+ * `groceryDisplayLines` builds the grocery's display rows so a row's (name,
+ * quantity) pair ALWAYS co-occurs in one authoritative doc (the base doc,
+ * possibly with a swap on the name) — never a cross-pair of base quantity under
+ * a substitute name.
  *
  * WHY SWAPS ARE NAME-BASED: upstream's rework can REORDER lines within a doc,
  * so pairing by position alone once displayed `6 cloves gluten-free fettuccine
@@ -32,16 +36,12 @@
  * the substitute is the display, the base nameKey is the key, and the pairing
  * is trivial (it CAN'T go wrong because the substitute name is NEVER checked
  * state).
- *
- * Pure lib: no Vue, no Pinia, no fetch at module scope. The one async piece
- * (`loadRestrictionDict`) takes the fetch + base URL as parameters so bun-test
- * can exercise it without an environment.
  */
 
 import { nameKey, type RestrictedDisplayLine } from './grocery'
 import type { LineItem, RecipeDoc } from './types'
 
-/* ---------- The dictionary artifact (committed) ---------- */
+/* ---------- The split-tree artifact contracts ---------- */
 
 export interface SwapEntry {
   from: string
@@ -55,156 +55,164 @@ export interface DropEntry {
   count: number
 }
 
-export interface RestrictionDictEntry {
-  removed: number[]
-  pairRemoved: Record<string, number[]>
-  swaps: SwapEntry[]
-  drops: DropEntry[]
-}
-
-export type RestrictionDict = Record<string, RestrictionDictEntry>
-
-export interface SwapIndex {
-  /** nameKey -> the swap entry (across all restrictions; first match wins). */
-  byNameKey: Map<string, SwapEntry>
-}
-
-export interface DictIndex {
-  /** The committed dictionary (nullable when the artifact is absent). */
-  dict: RestrictionDict | null | undefined
-  /** nameKey -> swap entry across all restrictions. */
-  swaps: SwapIndex
-  /** rid -> set of nameKeys that DROP (no swap counterpart) under that restriction. */
-  dropsByRestriction: Map<string, Set<string>>
-  /** nameKey -> drop entry (across all restrictions; first match wins). */
-  dropsByIndex: Map<string, DropEntry>
-}
-
-/** Compute the union of drop nameKeys across the given active ids from the index. */
-export function activeDrops(activeIds: number[], index: DictIndex): Set<string> {
-  const out = new Set<string>()
-  if (!index.dict) return out
-  for (const id of activeIds) {
-    const perRestriction = index.dropsByRestriction.get(String(id))
-    if (perRestriction) {
-      for (const key of perRestriction) out.add(key)
-    }
-  }
-  return out
-}
-
-/**
- * Every inbound restriction-id list (backup import, a future room payload,
- * hand-edited localStorage) passes through here: unknown ids dropped, dupes
- * collapsed, ascending sort. Same discipline as `normalizeQuickFilters`.
- */
-export function normalizeRestrictionIds(raw: unknown): number[] {
-  if (!Array.isArray(raw)) return []
-  const out = new Set<number>()
-  for (const v of raw) {
-    if (typeof v === 'number' && Number.isInteger(v) && KNOWN_IDS.has(v)) out.add(v)
-    // String digits come from forms and URLs; a numeric string of a KNOWN id
-    // is accepted, everything else is dropped.
-    else if (typeof v === 'string' && /^\d+$/.test(v) && KNOWN_IDS.has(Number(v))) out.add(Number(v))
-  }
-  return [...out].sort((a, b) => a - b)
-}
-
+/** One restriction entry from index.json: {id, slug, label}. */
 export interface RestrictionEntry {
   id: number
   slug: string
   label: string
 }
 
-/**
- * Display order (the Settings selector reads this array in order):
- * allergens first, lifestyle-relevant nightshades last. Ids are upstream's
- * (live-verified 2026-10-06; 7 and 8 exist upstream but are unused).
- */
-export const RESTRICTIONS: RestrictionEntry[] = [
-  { id: 4, slug: 'shellfish-free', label: 'Shellfish-Free' },
-  { id: 3, slug: 'fish-free', label: 'Fish-Free' },
-  { id: 1, slug: 'gluten-free', label: 'Gluten-Free' },
-  { id: 2, slug: 'dairy-free', label: 'Dairy-Free' },
-  { id: 5, slug: 'peanut-free', label: 'Peanut-Free' },
-  { id: 6, slug: 'tree-nut-free', label: 'Tree Nut-Free' },
-  { id: 9, slug: 'soy-free', label: 'Soy-Free' },
-  { id: 11, slug: 'egg-free', label: 'Egg-Free' },
-  { id: 12, slug: 'sesame-free', label: 'Sesame-Free' },
-  { id: 13, slug: 'mustard-free', label: 'Mustard-Free' },
-  { id: 14, slug: 'sulfite-free', label: 'Sulfite-Free' },
-  { id: 10, slug: 'nightshade-free', label: 'Nightshade-Free' },
-]
+/** The committed split tree, loaded by the ladder. */
+export interface LadderIndex {
+  /** The 12 entries from index.json (or the lib's RESTRICTIONS constant). */
+  restrictions: RestrictionEntry[]
+  /** From→to entries from swaps.json (null until ensureSwaps loads it). */
+  swaps: SwapEntry[] | null
+  /** Drops entries from swaps.json (null until ensureSwaps loads it). */
+  drops: DropEntry[] | null
+  /** slug → removed recipe ids (from removed/<slug>.json). Filled per chip activation. */
+  removed: Map<string, number[]>
+  /** pairKey (a-b) → composition extras (from pairs/<a>-<b>.json). Filled per pair activation. */
+  pairs: Map<string, number[]>
+}
 
-const KNOWN_IDS = new Set(RESTRICTIONS.map((r) => r.id))
-export const SLUG_BY_ID = new Map(RESTRICTIONS.map((r) => [r.id, r.slug]))
+// Constants must be defined before buildLadderIndex (TDZ-safe ordering).
 
-/* ---------- O(1) lookups, built once per load ---------- */
 
-/**
- * Build the runtime index from the committed dictionary. The dict is stored
- * in the index so `isRemovedByRestriction` can filter by ACTIVE ids at query
- * time (a recipe removed by an INACTIVE restriction must not be removed).
- */
-export function buildDictIndex(dict: RestrictionDict | null | undefined): DictIndex {
-  const byNameKey = new Map<string, SwapEntry>()
-  const dropsByRestriction = new Map<string, Set<string>>()
-  const dropsByIndex = new Map<string, DropEntry>()
-  if (dict) {
-    for (const [rid_str, entry] of Object.entries(dict)) {
-      const swapSet = new Set<string>()
-      for (const s of entry.swaps ?? []) {
-        const key = nameKey(s.from)
-        // Keep the FIRST swap for a nameKey — the dictionary is sorted by
-        // count desc per restriction; the first restriction to claim a
-        // nameKey wins because RESTRICTIONS order gives the allergen-first
-        // pass.
-        if (!byNameKey.has(key)) {
-          byNameKey.set(key, s)
-        }
-        swapSet.add(key)
-      }
-      const dropSet = new Set<string>()
-      for (const drop of entry.drops ?? []) {
-        const key = nameKey(drop.from)
-        // Drops and swaps can overlap on the same from-ingredient (a swap
-        // in some recipes, a drop in others). The swap wins at application
-        // time; the drop is a second representation counted separately.
-        if (!dropSet.has(key) && !swapSet.has(key)) {
-          dropSet.add(key)
-          if (!dropsByIndex.has(key)) {
-            dropsByIndex.set(key, drop)
-          }
-        }
-      }
-      dropsByRestriction.set(rid_str, dropSet)
-    }
+/** Build an empty LadderIndex from the lib's RESTRICTIONS constant (cold start). */
+export function buildLadderIndex(): LadderIndex {
+  return {
+    restrictions: RESTRICTIONS.map((r) => ({ id: r.id, slug: r.slug, label: r.label })),
+    swaps: null,
+    drops: null,
+    removed: new Map(),
+    pairs: new Map(),
   }
-  return { dict, swaps: { byNameKey }, dropsByRestriction, dropsByIndex }
 }
 
 /**
- * Is this recipe removed from the catalog under the given active ids?
+ * Load index.json via `fetchImpl`. Cached, retryable, injectable.
+ * A failed fetch resolves null — index.json ships in the bundle, so a failure
+ * is a build problem; the caller should never see null in practice.
+ */
+export async function loadIndex(
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+): Promise<LadderIndex | null> {
+  const res = await fetchImpl(`${baseUrl}data/restrictions/index.json`).catch(() => null)
+  if (!res || !res.ok) return null
+  const doc = (await res.json()) as { restrictions: RestrictionEntry[]; pairs: string[] }
+  return {
+    restrictions: doc.restrictions,
+    swaps: null,
+    drops: null,
+    removed: new Map(),
+    pairs: new Map(),
+  }
+}
+
+/**
+ * Ensure swaps.json is loaded into the index. Cached (no-op if already loaded).
+ * A failed fetch leaves swaps as null (identity display) + is retried on the
+ * next call.
+ */
+export async function ensureSwaps(
+  index: LadderIndex,
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+): Promise<void> {
+  if (index.swaps !== null || index.drops !== null) return
+  const res = await fetchImpl(`${baseUrl}data/restrictions/swaps.json`).catch(() => null)
+  if (!res || !res.ok) return
+  const doc = (await res.json()) as { swaps: SwapEntry[]; drops: DropEntry[] }
+  index.swaps = doc.swaps
+  index.drops = doc.drops
+}
+
+/**
+ * Ensure removed/<slug>.json is loaded into the index. Cached (no-op if already loaded).
+ * A failed fetch leaves this slug's removed set as an empty list (identity display
+ * for that chip) + is retried on the next call.
+ */
+export async function ensureRemoved(
+  slug: string,
+  index: LadderIndex,
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+): Promise<void> {
+  if (index.removed.has(slug)) return
+  const res = await fetchImpl(`${baseUrl}data/restrictions/removed/${slug}.json`).catch(() => null)
+  if (!res || !res.ok) {
+    index.removed.set(slug, [])
+    return
+  }
+  const doc = (await res.json()) as { removed: number[] }
+  index.removed.set(slug, doc.removed ?? [])
+}
+
+/**
+ * Ensure pairs/<a>-<b>.json is loaded into the index. Cached (no-op if already loaded).
+ * The pairKey uses canonical ordering (a < b by slug string comparison).
+ * A failed fetch leaves this pair's extras as an empty list + is retried on the next call.
+ */
+export async function ensurePair(
+  a: string,
+  b: string,
+  index: LadderIndex,
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+): Promise<void> {
+  const pairKey = a < b ? `${a}-${b}` : `${b}-${a}`
+  if (index.pairs.has(pairKey)) return
+  const res = await fetchImpl(`${baseUrl}data/restrictions/pairs/${pairKey}.json`).catch(() => null)
+  if (!res || !res.ok) {
+    index.pairs.set(pairKey, [])
+    return
+  }
+  const doc = (await res.json()) as { extras: number[] }
+  index.pairs.set(pairKey, doc.extras ?? [])
+}
+
+/* ---------- Query-time consultation ---------- */
+
+/**
+ * Is this recipe removed by an active restriction?
  *
- * A recipe is removed if ANY active restriction lists it in `removed`, or if
- * ANY active pair lists it in `pairRemoved` (the composition extras — a recipe
+ * A recipe is removed if ANY active restriction's removed/<slug>.json lists it,
+ * or if ANY active pair's pairs/<a>-<b>.json lists it (the composition extras —
  * removed by the PAIR but by NEITHER single).
+ *
+ * The union of all active restrictions' removed sets + the union of all active
+ * pairs' extras. If swaps/drops have not arrived yet (pre-load), removal is
+ * still computed from loaded removed/* and pairs/* data (those load first in
+ * the ladder). If neither has arrived, returns false.
  */
 export function isRemovedByRestriction(
   recipeId: number,
   activeIds: number[],
-  index: DictIndex,
+  index: LadderIndex,
 ): boolean {
-  if (activeIds.length === 0 || !index.dict) return false
+  if (activeIds.length === 0) return false
+  // Check removed sets from loaded removed/<slug>.json files
   for (const id of activeIds) {
-    const entry = index.dict[String(id)]
+    const entry = index.restrictions.find((r) => r.id === id)
     if (!entry) continue
-    if (entry.removed.includes(recipeId)) return true
-    for (const [pairKey, rids] of Object.entries(entry.pairRemoved)) {
-      const [aStr, bStr] = pairKey.split(',')
-      const a = parseInt(aStr)
-      const b = parseInt(bStr)
-      if (activeIds.includes(a) && activeIds.includes(b) && rids.includes(recipeId)) return true
+    const removed = index.removed.get(entry.slug)
+    if (removed && removed.includes(recipeId)) return true
+  }
+  // Check pair extras from loaded pairs/<a>-<b>.json files
+  // (only pairs where BOTH members are active)
+  for (let i = 0; i < activeIds.length; i++) {
+    const aEntry = index.restrictions.find((r) => r.id === activeIds[i])
+    if (!aEntry) continue
+    for (let j = i + 1; j < activeIds.length; j++) {
+      const bEntry = index.restrictions.find((r) => r.id === activeIds[j])
+      if (!bEntry) continue
+      const pairKey = aEntry.slug < bEntry.slug
+        ? `${aEntry.slug}-${bEntry.slug}`
+        : `${bEntry.slug}-${aEntry.slug}`
+      const extras = index.pairs.get(pairKey)
+      if (extras && extras.includes(recipeId)) return true
     }
   }
   return false
@@ -213,26 +221,40 @@ export function isRemovedByRestriction(
 /* ---------- Dictionary application (display truth) ---------- */
 
 /**
- * Apply the dictionary swap to a display name when an active swap matches this
- * nameKey. Returns the substitute name when a swap applies, otherwise the
- * original name unchanged. The quantity stays VERBATIM from the base doc —
- * measured: 99.8% of upstream swaps keep the base quantity string (verbatim),
- * 0.1% rescale (same unit, doubled), 0.1% re-authored. The runtime never invents
- * a quantity: no swap entry means no change.
+ * Build the union of drop nameKeys across the given active ids from the index.
+ * Drops come from swaps.json (loaded when any chip is active). If swaps haven't
+ * loaded yet, returns an empty set (pre-load: no drops visible). Drops apply
+ * only when at least one restriction is active.
  */
-export function swapName(name: string, index: DictIndex): string {
-  const swap = index.swaps.byNameKey.get(nameKey(name))
-  return swap ? swap.to : name
+export function activeDrops(activeIds: number[], index: LadderIndex): Set<string> {
+  const out = new Set<string>()
+  if (activeIds.length === 0 || !index.drops) return out
+  for (const drop of index.drops) {
+    out.add(nameKey(drop.from))
+  }
+  return out
 }
 
 /**
- * Is this nameKey in the drops set for any of the active restrictions?
+ * Is this nameKey in the drops set (union across all loaded drops)?
  * Drops are ingredients that DISAPPEAR in kept recipes under a restriction
- * with NO swap counterpart (e.g. crumbled feta cheese under DF). Used for
- * display-only hiding — keys and checked state are untouched.
+ * with NO swap counterpart. Used for display-only hiding.
  */
 export function isDropName(name: string, drops: Set<string>): boolean {
   return drops.has(nameKey(name))
+}
+
+/**
+ * Apply the swap to a display name when a swap matches this nameKey.
+ * Returns the substitute name when a swap applies, otherwise the original
+ * name unchanged. swapName consults swaps.json ONLY when it has loaded
+ * (pre-load behaviour: identity — no restriction is "active-looking" until
+ * its data arrives; the existing aria/loading semantics are kept).
+ */
+export function swapName(name: string, index: LadderIndex): string {
+  if (!index.swaps) return name
+  const swap = index.swaps.find((s) => s.from === name || s.from === nameKey(name))
+  return swap ? swap.to : name
 }
 
 /**
@@ -243,20 +265,21 @@ export function isDropName(name: string, drops: Set<string>): boolean {
  * names in line items (ADR-0022). A line whose nameKey is in the drops set
  * (no swap counterpart under any active restriction) is HIDDEN from display
  * only; the key/checked state is UNTOUCHED. `null` index returns the base doc
- * unchanged.
+ * unchanged. No swaps loaded yet = identity (pre-load behaviour).
  */
 export function restrictedDocView(
   doc: RecipeDoc,
-  index: DictIndex | null | undefined,
+  index: LadderIndex | null | undefined,
   activeIds: number[],
 ): RecipeDoc {
-  if (!index || !index.dict) return doc
-  if (index.swaps.byNameKey.size === 0 && index.dropsByIndex.size === 0) return doc
+  if (!index) return doc
+  if (!index.swaps || index.swaps.length === 0) return doc
   const drops = activeDrops(activeIds, index)
+  if (drops.size === 0 && index.swaps.length === 0) return doc
   const line_items: LineItem[] = []
   for (const li of doc.line_items) {
     const lk = nameKey(li.ingredient_name)
-    const swap = index.swaps.byNameKey.get(lk)
+    const swap = index.swaps.find((s) => nameKey(s.from) === lk)
     if (swap) {
       // Swap applies: substitute the display name, keep everything else.
       line_items.push({ ...li, ingredient_name: swap.to })
@@ -275,27 +298,23 @@ export function restrictedDocView(
  * should render as-is (no active swaps and no active drops — every row's
  * (name, quantity) pair ALWAYS co-occurs in one authoritative doc (the base
  * doc, possibly with a swap on the name) — never a cross-pair of base
- * quantity under a substitute name).
- *
- * A line whose nameKey is in the drops set (no swap counterpart under any
- * active restriction) is HIDDEN from display only; the key/checked state is
- * UNTOUCHED (un-hiding on toggle restores the row automatically — the key
- * never changed). A line whose nameKey has an active swap shows the
- * substitute name with the base doc's verbatim quantity.
+ * quantity under a substitute name). No swaps loaded yet = null (pre-load:
+ * base doc renders as-is).
  */
 export function groceryDisplayLines(
   doc: RecipeDoc,
-  index: DictIndex | null | undefined,
+  index: LadderIndex | null | undefined,
   activeIds: number[],
 ): RestrictedDisplayLine[] | null {
-  if (!index || !index.dict) return null
-  if (index.swaps.byNameKey.size === 0 && index.dropsByIndex.size === 0) return null
+  if (!index) return null
+  if (!index.swaps || index.swaps.length === 0) return null
   const drops = activeDrops(activeIds, index)
+  if (drops.size === 0 && index.swaps.length === 0) return null
   let changed = false
   const rows: RestrictedDisplayLine[] = []
   for (const li of doc.line_items) {
     const lk = nameKey(li.ingredient_name)
-    const swap = index.swaps.byNameKey.get(lk)
+    const swap = index.swaps!.find((s) => nameKey(s.from) === lk)
     if (swap) {
       changed = true
       rows.push({
@@ -305,7 +324,6 @@ export function groceryDisplayLines(
         keyIngredient: li.ingredient_name,
       })
     } else if (drops.has(lk)) {
-      // Drop: hide from display only; key/checked state untouched.
       changed = true
       continue
     } else {
@@ -320,26 +338,50 @@ export function groceryDisplayLines(
   return changed ? rows : null
 }
 
-/* ---------- Dictionary loading (lazy, per active set) ---------- */
+/* ---------- Constants ---------- */
+
+export interface RestrictionEntryFull {
+  id: number
+  slug: string
+  label: string
+}
 
 /**
- * Fetch the committed dictionary, cached. `fetchImpl` and `baseUrl` are
- * injected so tests run without a browser environment. A failed fetch
- * resolves null — a missing dictionary DEGRADES to the base doc (the feature
- * is display enrichment; it must never take the catalog down), and is retried
- * on the next call.
+ * Display order (the Settings selector reads this array in order):
+ * allergens first, lifestyle-relevant nightshades last. Ids are upstream's
+ * (live-verified 2026-10-06; 7 and 8 exist upstream but are unused).
  */
-export function loadRestrictionDict(
-  fetchImpl: typeof fetch,
-  baseUrl: string,
-): Promise<RestrictionDict | null> {
-  return fetchImpl(`${baseUrl}data/restriction_dict.json`).then(
-    async (res) => {
-      if (!res.ok) {
-        return null
-      }
-      return (await res.json()) as RestrictionDict
-    },
-    () => null,
-  )
+export const RESTRICTIONS: RestrictionEntryFull[] = [
+  { id: 4, slug: 'shellfish-free', label: 'Shellfish-Free' },
+  { id: 3, slug: 'fish-free', label: 'Fish-Free' },
+  { id: 1, slug: 'gluten-free', label: 'Gluten-Free' },
+  { id: 2, slug: 'dairy-free', label: 'Dairy-Free' },
+  { id: 5, slug: 'peanut-free', label: 'Peanut-Free' },
+  { id: 6, slug: 'tree-nut-free', label: 'Tree Nut-Free' },
+  { id: 9, slug: 'soy-free', label: 'Soy-Free' },
+  { id: 11, slug: 'egg-free', label: 'Egg-Free' },
+  { id: 12, slug: 'sesame-free', label: 'Sesame-Free' },
+  { id: 13, slug: 'mustard-free', label: 'Mustard-Free' },
+  { id: 14, slug: 'sulfite-free', label: 'Sulfite-Free' },
+  { id: 10, slug: 'nightshade-free', label: 'Nightshade-Free' },
+]
+
+const KNOWN_IDS = new Set(RESTRICTIONS.map((r) => r.id))
+export const SLUG_BY_ID = new Map(RESTRICTIONS.map((r) => [r.id, r.slug]))
+
+/**
+ * Every inbound restriction-id list (backup import, a future room payload,
+ * hand-edited localStorage) passes through here: unknown ids dropped, dupes
+ * collapsed, ascending sort. Same discipline as `normalizeQuickFilters`.
+ */
+export function normalizeRestrictionIds(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return []
+  const out = new Set<number>()
+  for (const v of raw) {
+    if (typeof v === 'number' && Number.isInteger(v) && KNOWN_IDS.has(v)) out.add(v)
+    // String digits come from forms and URLs; a numeric string of a KNOWN id
+    // is accepted, everything else is dropped.
+    else if (typeof v === 'string' && /^\d+$/.test(v) && KNOWN_IDS.has(Number(v))) out.add(Number(v))
+  }
+  return [...out].sort((a, b) => a - b)
 }

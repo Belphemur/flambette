@@ -1,0 +1,1560 @@
+{
+ "swaps": [
+  {
+   "count": 283,
+   "from": "soy sauce",
+   "quantityRule": "verbatim",
+   "to": "tamari soy sauce"
+  },
+  {
+   "count": 109,
+   "from": "whole grain bread",
+   "quantityRule": "verbatim",
+   "to": "gluten-free bread"
+  },
+  {
+   "count": 105,
+   "from": "panko bread crumbs",
+   "quantityRule": "verbatim",
+   "to": "gluten-free bread crumbs"
+  },
+  {
+   "count": 78,
+   "from": "all-purpose flour",
+   "quantityRule": "verbatim",
+   "to": "gluten-free flour"
+  },
+  {
+   "count": 78,
+   "from": "mayonnaise",
+   "quantityRule": "verbatim",
+   "to": "vegan mayonnaise"
+  },
+  {
+   "count": 52,
+   "from": "whole grain buns or rolls",
+   "quantityRule": "verbatim",
+   "to": "gluten-free buns or rolls"
+  },
+  {
+   "count": 43,
+   "from": "rotini pasta",
+   "quantityRule": "verbatim",
+   "to": "gluten-free rotini pasta"
+  },
+  {
+   "count": 33,
+   "from": "penne pasta",
+   "quantityRule": "verbatim",
+   "to": "gluten-free penne pasta"
+  },
+  {
+   "count": 32,
+   "from": "soy sauce",
+   "quantityRule": "verbatim",
+   "to": "coconut aminos"
+  },
+  {
+   "count": 29,
+   "from": "small flour tortillas",
+   "quantityRule": "verbatim",
+   "to": "small corn tortillas"
+  },
+  {
+   "count": 27,
+   "from": "spaghetti pasta",
+   "quantityRule": "verbatim",
+   "to": "gluten-free spaghetti pasta"
+  },
+  {
+   "count": 20,
+   "from": "macaroni (elbow) pasta",
+   "quantityRule": "verbatim",
+   "to": "gluten-free macaroni (elbow) pasta"
+  },
+  {
+   "count": 19,
+   "from": "Worcestershire sauce",
+   "quantityRule": "verbatim",
+   "to": "soy sauce"
+  },
+  {
+   "count": 19,
+   "from": "butter, unsalted",
+   "quantityRule": "verbatim",
+   "to": "virgin coconut oil"
+  },
+  {
+   "count": 16,
+   "from": "fettuccine pasta",
+   "quantityRule": "verbatim",
+   "to": "gluten-free fettuccine pasta"
+  },
+  {
+   "count": 14,
+   "from": "linguine pasta",
+   "quantityRule": "verbatim",
+   "to": "gluten-free linguine pasta"
+  },
+  {
+   "count": 13,
+   "from": "whole milk",
+   "quantityRule": "verbatim",
+   "to": "almond milk, unsweetened"
+  },
+  {
+   "count": 12,
+   "from": "vanilla ice cream",
+   "quantityRule": "verbatim",
+   "to": "vanilla ice cream, vegan"
+  },
+  {
+   "count": 11,
+   "from": "fish sauce",
+   "quantityRule": "verbatim",
+   "to": "soy sauce"
+  },
+  {
+   "count": 10,
+   "from": "mayonnaise",
+   "quantityRule": "verbatim",
+   "to": "avocado oil mayonnaise"
+  },
+  {
+   "count": 9,
+   "from": "butter, unsalted",
+   "quantityRule": "verbatim",
+   "to": "extra virgin olive oil"
+  },
+  {
+   "count": 9,
+   "from": "natural peanut butter",
+   "quantityRule": "verbatim",
+   "to": "natural almond butter"
+  },
+  {
+   "count": 4,
+   "from": "peanuts, roasted unsalted",
+   "quantityRule": "verbatim",
+   "to": "cashews, roasted unsalted"
+  },
+  {
+   "count": 4,
+   "from": "sourdough bread",
+   "quantityRule": "verbatim",
+   "to": "gluten-free bread"
+  },
+  {
+   "count": 3,
+   "from": "honey",
+   "quantityRule": "verbatim",
+   "to": "pure maple syrup"
+  },
+  {
+   "count": 3,
+   "from": "linguine pasta",
+   "quantityRule": "verbatim",
+   "to": "gluten-free spaghetti pasta"
+  },
+  {
+   "count": 3,
+   "from": "panko bread crumbs",
+   "quantityRule": "verbatim",
+   "to": "almond meal/flour"
+  },
+  {
+   "count": 3,
+   "from": "pork sausages",
+   "quantityRule": "verbatim",
+   "to": "pre-cooked vegan sausage"
+  },
+  {
+   "count": 3,
+   "from": "walnuts",
+   "quantityRule": "verbatim",
+   "to": "pumpkin seeds"
+  },
+  {
+   "count": 2,
+   "from": "granola",
+   "quantityRule": "verbatim",
+   "to": "granola, nut free"
+  },
+  {
+   "count": 2,
+   "from": "vanilla whey-based protein powder (containing 20 grams protein/serving)",
+   "quantityRule": "verbatim",
+   "to": "vanilla plant-based protein powder (containing 20 grams protein/serving)"
+  },
+  {
+   "count": 1,
+   "from": "Gala apples",
+   "quantityRule": "verbatim",
+   "to": "Granny Smith apples"
+  },
+  {
+   "count": 1,
+   "from": "Thai curry paste, red",
+   "quantityRule": "verbatim",
+   "to": "Thai curry paste, green"
+  },
+  {
+   "count": 1,
+   "from": "Worcestershire sauce",
+   "quantityRule": "verbatim",
+   "to": "balsamic vinegar"
+  },
+  {
+   "count": 1,
+   "from": "Worcestershire sauce",
+   "quantityRule": "verbatim",
+   "to": "coconut aminos"
+  },
+  {
+   "count": 1,
+   "from": "all-purpose flour",
+   "quantityRule": "verbatim",
+   "to": "black pepper"
+  },
+  {
+   "count": 1,
+   "from": "butter, unsalted",
+   "quantityRule": "verbatim",
+   "to": "neutral vegetable oil"
+  },
+  {
+   "count": 1,
+   "from": "butter, unsalted",
+   "quantityRule": "verbatim",
+   "to": "salt"
+  },
+  {
+   "count": 1,
+   "from": "crushed red pepper",
+   "quantityRule": "verbatim",
+   "to": "black pepper"
+  },
+  {
+   "count": 1,
+   "from": "fish sauce",
+   "quantityRule": "verbatim",
+   "to": "salt"
+  },
+  {
+   "count": 1,
+   "from": "granola",
+   "quantityRule": "verbatim",
+   "to": "granola, vegan"
+  },
+  {
+   "count": 1,
+   "from": "honey mustard dressing",
+   "quantityRule": "verbatim",
+   "to": "French vinaigrette"
+  },
+  {
+   "count": 1,
+   "from": "ketchup",
+   "quantityRule": "verbatim",
+   "to": "chili-garlic sauce"
+  },
+  {
+   "count": 1,
+   "from": "large flour tortillas",
+   "quantityRule": "verbatim",
+   "to": "small gluten-free tortillas"
+  },
+  {
+   "count": 1,
+   "from": "lemon",
+   "quantityRule": "re-authored",
+   "to": "lemons"
+  },
+  {
+   "count": 1,
+   "from": "mayonnaise",
+   "quantityRule": "verbatim",
+   "to": "brown sugar"
+  },
+  {
+   "count": 1,
+   "from": "mayonnaise",
+   "quantityRule": "verbatim",
+   "to": "cornstarch"
+  },
+  {
+   "count": 1,
+   "from": "mayonnaise",
+   "quantityRule": "verbatim",
+   "to": "soy sauce"
+  },
+  {
+   "count": 1,
+   "from": "new potatoes",
+   "quantityRule": "verbatim",
+   "to": "cremini mushrooms"
+  },
+  {
+   "count": 1,
+   "from": "peanuts, roasted unsalted",
+   "quantityRule": "verbatim",
+   "to": "almonds"
+  },
+  {
+   "count": 1,
+   "from": "peanuts, roasted unsalted",
+   "quantityRule": "verbatim",
+   "to": "almonds, sliced"
+  },
+  {
+   "count": 1,
+   "from": "pecan halves",
+   "quantityRule": "verbatim",
+   "to": "pumpkin seeds"
+  },
+  {
+   "count": 1,
+   "from": "pork chops, boneless",
+   "quantityRule": "verbatim",
+   "to": "pre-cooked vegan sausage"
+  },
+  {
+   "count": 1,
+   "from": "shallot",
+   "quantityRule": "rescale",
+   "to": "shallots"
+  },
+  {
+   "count": 1,
+   "from": "smoked paprika",
+   "quantityRule": "verbatim",
+   "to": "paprika"
+  },
+  {
+   "count": 1,
+   "from": "tamari soy sauce",
+   "quantityRule": "verbatim",
+   "to": "coconut aminos"
+  },
+  {
+   "count": 1,
+   "from": "whole grain buns or rolls",
+   "quantityRule": "verbatim",
+   "to": "whole grain pitas"
+  }
+ ],
+ "drops": [
+  {
+   "count": 137,
+   "from": "panko bread crumbs"
+  },
+  {
+   "count": 121,
+   "from": "whole grain bread"
+  },
+  {
+   "count": 109,
+   "from": "all-purpose flour"
+  },
+  {
+   "count": 72,
+   "from": "whole grain buns or rolls"
+  },
+  {
+   "count": 63,
+   "from": "butter, unsalted"
+  },
+  {
+   "count": 50,
+   "from": "plain Greek yogurt"
+  },
+  {
+   "count": 47,
+   "from": "fish sauce"
+  },
+  {
+   "count": 45,
+   "from": "Worcestershire sauce"
+  },
+  {
+   "count": 44,
+   "from": "Parmesan cheese"
+  },
+  {
+   "count": 44,
+   "from": "soy sauce"
+  },
+  {
+   "count": 41,
+   "from": "crumbled feta cheese"
+  },
+  {
+   "count": 38,
+   "from": "raw peeled shrimp, fresh or frozen"
+  },
+  {
+   "count": 32,
+   "from": "small flour tortillas"
+  },
+  {
+   "count": 29,
+   "from": "whole milk"
+  },
+  {
+   "count": 22,
+   "from": "salmon fillet"
+  },
+  {
+   "count": 21,
+   "from": "eggs"
+  },
+  {
+   "count": 21,
+   "from": "soy sauce"
+  },
+  {
+   "count": 19,
+   "from": "chunk light tuna in water"
+  },
+  {
+   "count": 18,
+   "from": "Worcestershire sauce"
+  },
+  {
+   "count": 16,
+   "from": "goat cheese"
+  },
+  {
+   "count": 16,
+   "from": "rotisserie chicken, white and dark meat"
+  },
+  {
+   "count": 15,
+   "from": "cod fillet"
+  },
+  {
+   "count": 15,
+   "from": "honey"
+  },
+  {
+   "count": 14,
+   "from": "honey"
+  },
+  {
+   "count": 14,
+   "from": "honey"
+  },
+  {
+   "count": 13,
+   "from": "cheddar cheese"
+  },
+  {
+   "count": 13,
+   "from": "peanuts, roasted unsalted"
+  },
+  {
+   "count": 13,
+   "from": "pistachios, unsalted"
+  },
+  {
+   "count": 13,
+   "from": "plain Greek yogurt"
+  },
+  {
+   "count": 12,
+   "from": "lean ground beef"
+  },
+  {
+   "count": 11,
+   "from": "anchovy fillets, packed in oil"
+  },
+  {
+   "count": 11,
+   "from": "natural peanut butter"
+  },
+  {
+   "count": 9,
+   "from": "ground turkey"
+  },
+  {
+   "count": 9,
+   "from": "heavy whipping cream"
+  },
+  {
+   "count": 9,
+   "from": "lean ground beef"
+  },
+  {
+   "count": 9,
+   "from": "pine nuts"
+  },
+  {
+   "count": 9,
+   "from": "walnuts"
+  },
+  {
+   "count": 8,
+   "from": "butter, unsalted"
+  },
+  {
+   "count": 8,
+   "from": "cashews, roasted unsalted"
+  },
+  {
+   "count": 8,
+   "from": "chicken thighs, boneless skinless"
+  },
+  {
+   "count": 8,
+   "from": "ground turkey"
+  },
+  {
+   "count": 8,
+   "from": "lean ground pork"
+  },
+  {
+   "count": 7,
+   "from": "Worcestershire sauce"
+  },
+  {
+   "count": 7,
+   "from": "almonds, sliced"
+  },
+  {
+   "count": 7,
+   "from": "brown sugar"
+  },
+  {
+   "count": 7,
+   "from": "pork sausages"
+  },
+  {
+   "count": 7,
+   "from": "tilapia fillet"
+  },
+  {
+   "count": 7,
+   "from": "whole wheat couscous"
+  },
+  {
+   "count": 6,
+   "from": "almonds"
+  },
+  {
+   "count": 6,
+   "from": "black pepper"
+  },
+  {
+   "count": 6,
+   "from": "chicken breasts, boneless skinless"
+  },
+  {
+   "count": 6,
+   "from": "fish sauce"
+  },
+  {
+   "count": 6,
+   "from": "honey"
+  },
+  {
+   "count": 6,
+   "from": "new potatoes"
+  },
+  {
+   "count": 6,
+   "from": "pecan halves"
+  },
+  {
+   "count": 6,
+   "from": "pork chops, boneless"
+  },
+  {
+   "count": 5,
+   "from": "Parmesan cheese, shredded"
+  },
+  {
+   "count": 5,
+   "from": "Worcestershire sauce"
+  },
+  {
+   "count": 5,
+   "from": "chicken breasts, boneless skinless"
+  },
+  {
+   "count": 5,
+   "from": "chicken or vegetable broth"
+  },
+  {
+   "count": 5,
+   "from": "chunk light tuna in water"
+  },
+  {
+   "count": 5,
+   "from": "pork sausages"
+  },
+  {
+   "count": 5,
+   "from": "raw peeled shrimp, fresh or frozen"
+  },
+  {
+   "count": 5,
+   "from": "salt"
+  },
+  {
+   "count": 5,
+   "from": "shredded cheese, Mexican blend"
+  },
+  {
+   "count": 5,
+   "from": "smoked salmon"
+  },
+  {
+   "count": 5,
+   "from": "vanilla ice cream"
+  },
+  {
+   "count": 5,
+   "from": "vanilla ice cream"
+  },
+  {
+   "count": 4,
+   "from": "Parmesan cheese"
+  },
+  {
+   "count": 4,
+   "from": "Worcestershire sauce"
+  },
+  {
+   "count": 4,
+   "from": "chicken thighs, boneless skinless"
+  },
+  {
+   "count": 4,
+   "from": "fresh mozzarella cheese"
+  },
+  {
+   "count": 4,
+   "from": "ground chicken"
+  },
+  {
+   "count": 4,
+   "from": "ground chicken"
+  },
+  {
+   "count": 4,
+   "from": "ground chicken"
+  },
+  {
+   "count": 4,
+   "from": "ground turkey"
+  },
+  {
+   "count": 4,
+   "from": "lean ground beef"
+  },
+  {
+   "count": 4,
+   "from": "lean ground pork"
+  },
+  {
+   "count": 4,
+   "from": "linguine pasta"
+  },
+  {
+   "count": 4,
+   "from": "mozzarella cheese"
+  },
+  {
+   "count": 4,
+   "from": "pork sausages"
+  },
+  {
+   "count": 4,
+   "from": "rotini pasta"
+  },
+  {
+   "count": 4,
+   "from": "sourdough bread"
+  },
+  {
+   "count": 4,
+   "from": "striploin (New York strip) steak"
+  },
+  {
+   "count": 4,
+   "from": "whole grain pitas"
+  },
+  {
+   "count": 4,
+   "from": "whole milk"
+  },
+  {
+   "count": 3,
+   "from": "Thai curry paste, red"
+  },
+  {
+   "count": 3,
+   "from": "Worcestershire sauce"
+  },
+  {
+   "count": 3,
+   "from": "bacon"
+  },
+  {
+   "count": 3,
+   "from": "brown sugar"
+  },
+  {
+   "count": 3,
+   "from": "butter, unsalted"
+  },
+  {
+   "count": 3,
+   "from": "chicken breasts, boneless skinless"
+  },
+  {
+   "count": 3,
+   "from": "crumbled feta cheese"
+  },
+  {
+   "count": 3,
+   "from": "eggs"
+  },
+  {
+   "count": 3,
+   "from": "eggs"
+  },
+  {
+   "count": 3,
+   "from": "garlic"
+  },
+  {
+   "count": 3,
+   "from": "honey"
+  },
+  {
+   "count": 3,
+   "from": "jasmine rice"
+  },
+  {
+   "count": 3,
+   "from": "jasmine rice"
+  },
+  {
+   "count": 3,
+   "from": "large flour tortillas"
+  },
+  {
+   "count": 3,
+   "from": "lean ground beef"
+  },
+  {
+   "count": 3,
+   "from": "lean ground pork"
+  },
+  {
+   "count": 3,
+   "from": "raw peeled shrimp, fresh or frozen"
+  },
+  {
+   "count": 3,
+   "from": "raw peeled shrimp, fresh or frozen"
+  },
+  {
+   "count": 3,
+   "from": "sea scallops"
+  },
+  {
+   "count": 3,
+   "from": "striploin (New York strip) steak"
+  },
+  {
+   "count": 2,
+   "from": "English cucumbers"
+  },
+  {
+   "count": 2,
+   "from": "French vinaigrette"
+  },
+  {
+   "count": 2,
+   "from": "French vinaigrette"
+  },
+  {
+   "count": 2,
+   "from": "Italian seasoning"
+  },
+  {
+   "count": 2,
+   "from": "Parmesan cheese"
+  },
+  {
+   "count": 2,
+   "from": "butter, unsalted"
+  },
+  {
+   "count": 2,
+   "from": "butter, unsalted"
+  },
+  {
+   "count": 2,
+   "from": "cheddar cheese"
+  },
+  {
+   "count": 2,
+   "from": "chicken breasts, boneless skinless"
+  },
+  {
+   "count": 2,
+   "from": "chunk light tuna in water"
+  },
+  {
+   "count": 2,
+   "from": "crumbled blue cheese"
+  },
+  {
+   "count": 2,
+   "from": "crushed red pepper"
+  },
+  {
+   "count": 2,
+   "from": "dark chocolate chips"
+  },
+  {
+   "count": 2,
+   "from": "dark chocolate chips"
+  },
+  {
+   "count": 2,
+   "from": "eggs"
+  },
+  {
+   "count": 2,
+   "from": "fish sauce"
+  },
+  {
+   "count": 2,
+   "from": "fish sauce"
+  },
+  {
+   "count": 2,
+   "from": "garlic powder"
+  },
+  {
+   "count": 2,
+   "from": "grape tomatoes"
+  },
+  {
+   "count": 2,
+   "from": "ground pork sausage"
+  },
+  {
+   "count": 2,
+   "from": "honey"
+  },
+  {
+   "count": 2,
+   "from": "honey mustard dressing"
+  },
+  {
+   "count": 2,
+   "from": "honey mustard dressing"
+  },
+  {
+   "count": 2,
+   "from": "panko bread crumbs"
+  },
+  {
+   "count": 2,
+   "from": "panko bread crumbs"
+  },
+  {
+   "count": 2,
+   "from": "panko bread crumbs"
+  },
+  {
+   "count": 2,
+   "from": "peanuts, roasted unsalted"
+  },
+  {
+   "count": 2,
+   "from": "peanuts, roasted unsalted"
+  },
+  {
+   "count": 2,
+   "from": "penne pasta"
+  },
+  {
+   "count": 2,
+   "from": "pork chops, bone-in"
+  },
+  {
+   "count": 2,
+   "from": "pork chops, boneless"
+  },
+  {
+   "count": 2,
+   "from": "potato gnocchi"
+  },
+  {
+   "count": 2,
+   "from": "potato gnocchi"
+  },
+  {
+   "count": 2,
+   "from": "salmon fillet"
+  },
+  {
+   "count": 2,
+   "from": "shredded cheese, Italian blend"
+  },
+  {
+   "count": 2,
+   "from": "spring mix (mixed greens)"
+  },
+  {
+   "count": 2,
+   "from": "striploin (New York strip) steak"
+  },
+  {
+   "count": 2,
+   "from": "tamari soy sauce"
+  },
+  {
+   "count": 2,
+   "from": "vanilla extract"
+  },
+  {
+   "count": 2,
+   "from": "vanilla whey-based protein powder (containing 20 grams protein/serving)"
+  },
+  {
+   "count": 2,
+   "from": "whole grain bread"
+  },
+  {
+   "count": 2,
+   "from": "whole milk"
+  },
+  {
+   "count": 2,
+   "from": "whole milk"
+  },
+  {
+   "count": 1,
+   "from": "Caesar dressing"
+  },
+  {
+   "count": 1,
+   "from": "Caesar dressing"
+  },
+  {
+   "count": 1,
+   "from": "Caesar dressing"
+  },
+  {
+   "count": 1,
+   "from": "English cucumbers"
+  },
+  {
+   "count": 1,
+   "from": "English cucumbers"
+  },
+  {
+   "count": 1,
+   "from": "Gala apples"
+  },
+  {
+   "count": 1,
+   "from": "Gala apples"
+  },
+  {
+   "count": 1,
+   "from": "Granny Smith apples"
+  },
+  {
+   "count": 1,
+   "from": "Granny Smith apples"
+  },
+  {
+   "count": 1,
+   "from": "Italian (flat-leaf) parsley"
+  },
+  {
+   "count": 1,
+   "from": "Italian seasoning"
+  },
+  {
+   "count": 1,
+   "from": "Parmesan cheese"
+  },
+  {
+   "count": 1,
+   "from": "Parmesan cheese"
+  },
+  {
+   "count": 1,
+   "from": "Parmesan cheese, shredded"
+  },
+  {
+   "count": 1,
+   "from": "Parmesan cheese, shredded"
+  },
+  {
+   "count": 1,
+   "from": "almond meal/flour"
+  },
+  {
+   "count": 1,
+   "from": "bacon"
+  },
+  {
+   "count": 1,
+   "from": "bacon"
+  },
+  {
+   "count": 1,
+   "from": "bacon"
+  },
+  {
+   "count": 1,
+   "from": "balsamic vinegar"
+  },
+  {
+   "count": 1,
+   "from": "balsamic vinegar"
+  },
+  {
+   "count": 1,
+   "from": "basil, dried"
+  },
+  {
+   "count": 1,
+   "from": "basil, dried"
+  },
+  {
+   "count": 1,
+   "from": "basmati rice"
+  },
+  {
+   "count": 1,
+   "from": "black pepper"
+  },
+  {
+   "count": 1,
+   "from": "black pepper"
+  },
+  {
+   "count": 1,
+   "from": "black pepper"
+  },
+  {
+   "count": 1,
+   "from": "black pepper"
+  },
+  {
+   "count": 1,
+   "from": "brown sugar"
+  },
+  {
+   "count": 1,
+   "from": "brown sugar"
+  },
+  {
+   "count": 1,
+   "from": "brown sugar"
+  },
+  {
+   "count": 1,
+   "from": "butter, unsalted"
+  },
+  {
+   "count": 1,
+   "from": "butter, unsalted"
+  },
+  {
+   "count": 1,
+   "from": "carrots"
+  },
+  {
+   "count": 1,
+   "from": "cashews, roasted unsalted"
+  },
+  {
+   "count": 1,
+   "from": "cayenne pepper"
+  },
+  {
+   "count": 1,
+   "from": "cheddar cheese"
+  },
+  {
+   "count": 1,
+   "from": "cheddar cheese"
+  },
+  {
+   "count": 1,
+   "from": "chicken breasts, boneless skinless"
+  },
+  {
+   "count": 1,
+   "from": "chicken breasts, boneless skinless"
+  },
+  {
+   "count": 1,
+   "from": "chicken thighs, boneless skinless"
+  },
+  {
+   "count": 1,
+   "from": "chicken thighs, boneless skinless"
+  },
+  {
+   "count": 1,
+   "from": "chicken wings, split with tips removed"
+  },
+  {
+   "count": 1,
+   "from": "chili-garlic sauce"
+  },
+  {
+   "count": 1,
+   "from": "chili-garlic sauce"
+  },
+  {
+   "count": 1,
+   "from": "chili-garlic sauce"
+  },
+  {
+   "count": 1,
+   "from": "chili-garlic sauce"
+  },
+  {
+   "count": 1,
+   "from": "chunk light tuna in water"
+  },
+  {
+   "count": 1,
+   "from": "chunk light tuna in water"
+  },
+  {
+   "count": 1,
+   "from": "cilantro"
+  },
+  {
+   "count": 1,
+   "from": "cod fillet"
+  },
+  {
+   "count": 1,
+   "from": "cod fillet"
+  },
+  {
+   "count": 1,
+   "from": "cornstarch"
+  },
+  {
+   "count": 1,
+   "from": "crumbled feta cheese"
+  },
+  {
+   "count": 1,
+   "from": "crumbled feta cheese"
+  },
+  {
+   "count": 1,
+   "from": "crushed red pepper"
+  },
+  {
+   "count": 1,
+   "from": "cumin, ground"
+  },
+  {
+   "count": 1,
+   "from": "deli roast beef"
+  },
+  {
+   "count": 1,
+   "from": "dill, dried"
+  },
+  {
+   "count": 1,
+   "from": "dried cranberries"
+  },
+  {
+   "count": 1,
+   "from": "extra virgin olive oil"
+  },
+  {
+   "count": 1,
+   "from": "extra virgin olive oil"
+  },
+  {
+   "count": 1,
+   "from": "fish sauce"
+  },
+  {
+   "count": 1,
+   "from": "fish sauce"
+  },
+  {
+   "count": 1,
+   "from": "fish sauce"
+  },
+  {
+   "count": 1,
+   "from": "flank steaks"
+  },
+  {
+   "count": 1,
+   "from": "flatbreads or naan"
+  },
+  {
+   "count": 1,
+   "from": "flatbreads or naan"
+  },
+  {
+   "count": 1,
+   "from": "fresh mint"
+  },
+  {
+   "count": 1,
+   "from": "fresh mozzarella cheese"
+  },
+  {
+   "count": 1,
+   "from": "frozen peas"
+  },
+  {
+   "count": 1,
+   "from": "frozen peas"
+  },
+  {
+   "count": 1,
+   "from": "garlic powder"
+  },
+  {
+   "count": 1,
+   "from": "garlic powder"
+  },
+  {
+   "count": 1,
+   "from": "goat cheese"
+  },
+  {
+   "count": 1,
+   "from": "granulated sugar"
+  },
+  {
+   "count": 1,
+   "from": "granulated sugar"
+  },
+  {
+   "count": 1,
+   "from": "grape tomatoes"
+  },
+  {
+   "count": 1,
+   "from": "ground chicken"
+  },
+  {
+   "count": 1,
+   "from": "ground chicken"
+  },
+  {
+   "count": 1,
+   "from": "ground chicken"
+  },
+  {
+   "count": 1,
+   "from": "ground turkey"
+  },
+  {
+   "count": 1,
+   "from": "ground turkey"
+  },
+  {
+   "count": 1,
+   "from": "ground turkey"
+  },
+  {
+   "count": 1,
+   "from": "ham steak, boneless"
+  },
+  {
+   "count": 1,
+   "from": "ham steak, boneless"
+  },
+  {
+   "count": 1,
+   "from": "heavy whipping cream"
+  },
+  {
+   "count": 1,
+   "from": "honey"
+  },
+  {
+   "count": 1,
+   "from": "honey"
+  },
+  {
+   "count": 1,
+   "from": "honey mustard dressing"
+  },
+  {
+   "count": 1,
+   "from": "ketchup"
+  },
+  {
+   "count": 1,
+   "from": "lean ground beef"
+  },
+  {
+   "count": 1,
+   "from": "lean ground pork"
+  },
+  {
+   "count": 1,
+   "from": "lemons"
+  },
+  {
+   "count": 1,
+   "from": "mayonnaise"
+  },
+  {
+   "count": 1,
+   "from": "mayonnaise"
+  },
+  {
+   "count": 1,
+   "from": "natural peanut butter"
+  },
+  {
+   "count": 1,
+   "from": "natural peanut butter"
+  },
+  {
+   "count": 1,
+   "from": "natural peanut butter"
+  },
+  {
+   "count": 1,
+   "from": "new potatoes"
+  },
+  {
+   "count": 1,
+   "from": "orange bell peppers"
+  },
+  {
+   "count": 1,
+   "from": "oregano, dried"
+  },
+  {
+   "count": 1,
+   "from": "panko bread crumbs"
+  },
+  {
+   "count": 1,
+   "from": "peanuts, roasted unsalted"
+  },
+  {
+   "count": 1,
+   "from": "pine nuts"
+  },
+  {
+   "count": 1,
+   "from": "pineapples"
+  },
+  {
+   "count": 1,
+   "from": "pineapples"
+  },
+  {
+   "count": 1,
+   "from": "plain Greek yogurt"
+  },
+  {
+   "count": 1,
+   "from": "plain Greek yogurt"
+  },
+  {
+   "count": 1,
+   "from": "plain Greek yogurt"
+  },
+  {
+   "count": 1,
+   "from": "plain Greek yogurt"
+  },
+  {
+   "count": 1,
+   "from": "pork chops, bone-in"
+  },
+  {
+   "count": 1,
+   "from": "pork chops, bone-in"
+  },
+  {
+   "count": 1,
+   "from": "pork chops, boneless"
+  },
+  {
+   "count": 1,
+   "from": "pork chops, boneless"
+  },
+  {
+   "count": 1,
+   "from": "pork sausages"
+  },
+  {
+   "count": 1,
+   "from": "prosciutto"
+  },
+  {
+   "count": 1,
+   "from": "prosciutto"
+  },
+  {
+   "count": 1,
+   "from": "raw peeled shrimp, fresh or frozen"
+  },
+  {
+   "count": 1,
+   "from": "raw peeled shrimp, fresh or frozen"
+  },
+  {
+   "count": 1,
+   "from": "raw peeled shrimp, fresh or frozen"
+  },
+  {
+   "count": 1,
+   "from": "red bell peppers"
+  },
+  {
+   "count": 1,
+   "from": "red chili peppers"
+  },
+  {
+   "count": 1,
+   "from": "romaine lettuce"
+  },
+  {
+   "count": 1,
+   "from": "romaine lettuce"
+  },
+  {
+   "count": 1,
+   "from": "rosemary, dried"
+  },
+  {
+   "count": 1,
+   "from": "rosemary, dried"
+  },
+  {
+   "count": 1,
+   "from": "rotisserie chicken, white and dark meat"
+  },
+  {
+   "count": 1,
+   "from": "shallots"
+  },
+  {
+   "count": 1,
+   "from": "shredded cheese, Mexican blend"
+  },
+  {
+   "count": 1,
+   "from": "small flour tortillas"
+  },
+  {
+   "count": 1,
+   "from": "smoked salmon"
+  },
+  {
+   "count": 1,
+   "from": "sockeye salmon fillet"
+  },
+  {
+   "count": 1,
+   "from": "soy sauce"
+  },
+  {
+   "count": 1,
+   "from": "soy sauce"
+  },
+  {
+   "count": 1,
+   "from": "soy sauce"
+  },
+  {
+   "count": 1,
+   "from": "soy sauce"
+  },
+  {
+   "count": 1,
+   "from": "striploin (New York strip) steak"
+  },
+  {
+   "count": 1,
+   "from": "sugar snap peas"
+  },
+  {
+   "count": 1,
+   "from": "sweet potatoes"
+  },
+  {
+   "count": 1,
+   "from": "sweet potatoes"
+  },
+  {
+   "count": 1,
+   "from": "tomato paste"
+  },
+  {
+   "count": 1,
+   "from": "tomatoes"
+  },
+  {
+   "count": 1,
+   "from": "tomatoes"
+  },
+  {
+   "count": 1,
+   "from": "vanilla extract"
+  },
+  {
+   "count": 1,
+   "from": "whole grain bread"
+  },
+  {
+   "count": 1,
+   "from": "whole grain buns or rolls"
+  },
+  {
+   "count": 1,
+   "from": "whole grain buns or rolls"
+  },
+  {
+   "count": 1,
+   "from": "whole grain buns or rolls"
+  },
+  {
+   "count": 1,
+   "from": "whole milk"
+  },
+  {
+   "count": 1,
+   "from": "wild pink salmon, traditional style"
+  },
+  {
+   "count": 1,
+   "from": "yellow onions"
+  },
+  {
+   "count": 1,
+   "from": "yellow potatoes"
+  },
+  {
+   "count": 1,
+   "from": "yellow potatoes"
+  }
+ ]
+}

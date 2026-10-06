@@ -1,8 +1,8 @@
 # ADR-0056 — dietary restrictions: a committed substitution dictionary, runtime-applied
 
 * Extends: ADR-0018 (diet chips — superseded for restriction-type filtering), ADR-0057 (profile-archive machinery), ADR-0013 (backup registry), ADR-0003 (derived grocery), ADR-0024 (Auto-Plan eligibility outside the pure lib), ADR-0022 (measured amounts under step text)
-* Status: **Accepted**
-* Companions: `scripts/build_restriction_dict.py`, `scripts/build_restriction_sets.py` (verification-only), `public/data/restriction_dict.json`, `src/lib/restrictions.ts`, `src/composables/useRestrictions.ts`
+* Status: **Accepted, superseded-in-part** — artifact layout superseded by ADR-0059 (split tree); swap/drop/removal logic survives
+* Companions: `scripts/build_restriction_dict.py`, `scripts/build_restriction_sets.py` (verification-only), `src/lib/restrictions.ts`, `src/composables/useRestrictions.ts`; DATA: `public/data/restrictions/` (index.json, swaps.json, removed/<slug>.json, pairs/<a>-<b>.json); `public/data/restriction_dict.json` DELETED
 
 ## Context
 
@@ -37,25 +37,15 @@ raced payload fails the build loudly instead of shipping a wrong
 
 ## Decision
 
-1. **The committed artifact is a SMALL substitution DICTIONARY, not a
-   dump of reworked docs.** `public/data/restriction_dict.json` carries,
-   per restriction id: `removed` (recipe_ids upstream drops),
-   `pairRemoved` (recipe_ids removed by a PAIR of restrictions but by
-   NEITHER single), and `swaps` (`from` → `to` ingredient pairs with a
-   `quantityRule` and an event `count`). Total committed: **~265 KB /
-   12 restrictions / 6,531 swap entries**. The runtime reads the
-   dictionary at load time and indexes it once; every view function
-   queries the index with the active restriction ids at query time.
+1. **The committed data is a SPLIT TREE under `public/data/restrictions/`** (superseded-in-part by ADR-0059 — the single `public/data/restriction_dict.json`, 1,386,316 B, is DELETED; its 131,920 `pairRemoved` entries carry only 918 informative extras beyond the singles' union; the split tree ships those 918 exactly, partitioned by pair, plus swaps 8 KB + removed lists 44 KB). 
+   `index.json` (~2 KB — the 12 entries `{id, slug, label}` + the pair-extras file list; loaded when the Settings card opens, or read from the lib's own `RESTRICTIONS` constant at cold start), `swaps.json` (~8 KB — the from→to entries with `quantityRule` + the drops lists; loaded when ANY restriction is active), `removed/<slug>.json` (~4 KB × 12 — one restriction's removed recipe ids; loaded when THAT chip activates), `pairs/<a>-<b>.json` (~1 KB ×66 — ONLY the composition extras; loaded when that PAIR is active).
 
 2. **Swaps are derived from upstream's own restricted docs, never
    invented.** `scripts/build_restriction_dict.py` reads the archived
    single-restriction payloads (`<slug>-m6.json`), extracts swap events
    (from_key → to_key) between the unrestricted baseline and each
    restriction, tallies the `quantityRule` upstream applied (verbatim,
-   rescale, re-authored — measured 99.8% / 0.1% / 0.1%), and emits the
-   dictionary. The dictionary is the ONE source of truth for the runtime;
-   `scripts/build_restriction_sets.py` is now verification-only and
-   checks the dictionary's well-formedness and symmetry.
+   rescale, re-authored — measured 99.8% / 0.1% / 0.1%), and emits the SPLIT TREE (`public/data/restrictions/`). The split files are the ONE source of truth for the runtime; `scripts/build_restriction_sets.py` is verification-only and checks the artifacts' well-formedness and symmetry.
 
 3. **Removal is computed at query time, not pre-computed.**
    `isRemovedByRestriction(recipeId, activeIds, index)` iterates the
