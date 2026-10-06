@@ -137,13 +137,18 @@ function reposition() {
     nudge.value = null
     return
   }
-  // Skip the layout reads while the bubble cannot be seen — EXCEPT in
-  // CSS mode, where JS has no other signal that a hover/focus reveal
-  // is starting (those measure on mount/resize and on the host's
-  // pointerenter/focusin below instead).
+  // Skip the redundant layout reads while the bubble cannot be seen —
+  // EXCEPT in CSS mode, where JS has no other signal that a hover/focus
+  // reveal is starting (those measure on mount/resize and on the host's
+  // pointerenter/focusin below instead). A skip must KEEP the existing
+  // clamp: the bubble hides via visibility, which keeps its layout box,
+  // so dropping the transform while hidden would leave an unclamped box
+  // in the document (the ADR-0049 hazard) until first reveal. Skip only
+  // once a clamp exists; the FIRST measurement while hidden still runs
+  // (kody r2). A reveal always measures fresh — the early-out is
+  // gated on !shown.
   const cssMode = props.active === undefined
-  if (!cssMode && !shown.value) {
-    nudge.value = null
+  if (!cssMode && !shown.value && nudge.value !== null) {
     return
   }
   const host = node.parentElement
@@ -200,18 +205,30 @@ function scheduleReposition() {
 /**
  * CSS-mode bubbles: the host's own hover/focus — the same signal the
  * reveal classes use — is the cheap trigger for one measurement. No
- * scroll listener (see the clamp note above).
+ * scroll listener (see the clamp note above). The host is captured
+ * REACTIVELY: the root span is behind `v-if="text"`, so it may not
+ * exist at mount (a conditional title that starts empty) — a
+ * mount-time-only capture would never attach and the reveal-time
+ * re-measure would never run for that bubble (kody r2).
  */
 let host: HTMLElement | null = null
 
-onMounted(() => {
-  scheduleReposition()
-  window.addEventListener('resize', scheduleReposition, { passive: true })
-  host = el.value?.parentElement ?? null
+watch(el, (node) => {
+  if (host) {
+    host.removeEventListener('pointerenter', scheduleReposition)
+    host.removeEventListener('focusin', scheduleReposition)
+    host = null
+  }
+  host = node?.parentElement ?? null
   if (host && props.active === undefined) {
     host.addEventListener('pointerenter', scheduleReposition, { passive: true })
     host.addEventListener('focusin', scheduleReposition, { passive: true })
   }
+}, { immediate: true })
+
+onMounted(() => {
+  scheduleReposition()
+  window.addEventListener('resize', scheduleReposition, { passive: true })
 })
 
 onBeforeUnmount(() => {
