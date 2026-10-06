@@ -87,14 +87,28 @@ export function parseMealimePayload(text: string): MealimeParseResult {
     return { ok: false, error: `the payload has too many rows (${favourites.length})` }
   }
   const rows: MealimeFavouriteRow[] = []
+  let unusable = 0
   for (const row of favourites) {
-    if (typeof row !== 'object' || row === null) continue
+    if (typeof row !== 'object' || row === null) {
+      unusable++
+      continue
+    }
     const id = (row as MealimeFavouriteRow).recipe_id
     const name = (row as MealimeFavouriteRow).name
     const clean: MealimeFavouriteRow = {}
     if (typeof id === 'number' && Number.isFinite(id) && id > 0) clean.recipe_id = id
     if (typeof name === 'string' && name.trim() !== '') clean.name = name
     if (clean.recipe_id !== undefined || clean.name !== undefined) rows.push(clean)
+    else unusable++
+  }
+  // Extra fields are tolerated; a row with NEITHER a usable id nor a
+  // non-blank name is not — it would silently vanish from the report
+  // otherwise, and the import must never drop a row without saying so.
+  if (unusable > 0) {
+    return {
+      ok: false,
+      error: `${unusable} of the payload's ${favourites.length} favourite rows are malformed`,
+    }
   }
   if (rows.length === 0) {
     return { ok: false, error: 'the payload contains no favourites' }

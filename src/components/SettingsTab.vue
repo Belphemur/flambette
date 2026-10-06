@@ -7,6 +7,7 @@ import { MAX_SERVINGS, MIN_SERVINGS } from '../lib/servings'
 import { UNIT_SYSTEMS, UNIT_SYSTEM_LABEL, type UnitSystem } from '../lib/units'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
 import { getCatalog } from '../lib/catalog'
+import { USER_RECIPE_ID_BASE } from '../lib/userRecipes'
 import {
   matchMealimeFavourites,
   parseMealimePayload,
@@ -354,7 +355,14 @@ async function importMealimeFavourites(): Promise<void> {
     return
   }
   const catalog = await getCatalog()
-  const result = matchMealimeFavourites(parsed.favourites, catalog.variantMeta)
+  // Mealime-catalog entries ONLY: a Mealime favourite must never star the
+  // household's own recipes (ADR-0054, ids at or above USER_RECIPE_ID_BASE),
+  // and a household recipe sharing a name must not make a Mealime name
+  // match ambiguous.
+  const result = matchMealimeFavourites(
+    parsed.favourites,
+    catalog.variantMeta.filter((m) => m.id < USER_RECIPE_ID_BASE),
+  )
   const favourites = useFavouritesStore()
   const added = favourites.importFavourites(result.matched.map((m) => m.variantId))
   mealimeInput.value = ''

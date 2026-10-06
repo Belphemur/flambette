@@ -67,14 +67,14 @@ describe('parseMealimePayload', () => {
     expect(parseMealimePayload(payload([{ foo: 1 }, 'junk', null])).ok).toBe(false)
   })
 
-  test('drops unusable rows but keeps the usable ones', () => {
+  test('rejects a payload with ANY malformed row — nothing is silently dropped', () => {
     const result = parseMealimePayload(
       payload([{ recipe_id: 121 }, 'junk', { recipe_id: 'no', name: '' }, { name: 'Tilapia' }]),
     )
-    expect(result.ok).toBe(true)
-    if (result.ok) {
-      expect(result.favourites).toEqual([{ recipe_id: 121 }, { name: 'Tilapia' }])
-    }
+    expect(result).toEqual({
+      ok: false,
+      error: '2 of the payload\'s 4 favourite rows are malformed',
+    })
   })
 })
 
