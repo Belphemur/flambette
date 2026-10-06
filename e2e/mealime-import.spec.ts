@@ -123,6 +123,35 @@ test('a single-recipe import overrides the seeded set down to that one recipe', 
   await expectZeroMealimeRequests(page)
 })
 
+test('an all-miss payload is reported, not applied — favourites survive the override', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await openSettings(page)
+  // Every row misses: 999999 is a deliberate miss, and the name matches
+  // nothing. Nothing matched = a match-layer failure, NOT a user opinion
+  // (ADR-0058 amended) — the seeded set must survive untouched.
+  await page.getByTestId('mealime-import-input').fill(
+    JSON.stringify({
+      source: 'flambette-bookmarklet',
+      favourites: [{ recipe_id: 999_999, name: 'Gone From The Catalog' }],
+    }),
+  )
+  await page.getByTestId('mealime-import-button').click()
+  const report = page.getByTestId('mealime-import-report')
+  await expect(report).toContainText('Nothing could be matched to recipes in this app.')
+  await expect(report).toContainText('1 could not be matched: Gone From The Catalog')
+  await expect(report).not.toContainText('removed')
+
+  // The seed is intact — no tombstone storm wiped it.
+  await page.goto('/recipe/36222')
+  await expect(
+    page.getByRole('button', { name: 'Remove from favourites' }),
+  ).toBeVisible()
+
+  await expectZeroMealimeRequests(page)
+})
+
 test('a malformed paste errors and applies nothing', async ({ page }) => {
   await page.goto('/')
   await openSettings(page)

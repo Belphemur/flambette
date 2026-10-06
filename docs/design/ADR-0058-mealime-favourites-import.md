@@ -84,7 +84,13 @@ not assumed):
    imported set remains. Records that are already tombstones stay
    untouched (re-tombstoning adds no information), and the public set is
    materialized synchronously as with every store write. No new store
-   slice; nothing new in `STORE_SLICES`.
+   slice; nothing new in `STORE_SLICES`. One boundary: the override
+   replaces the set with the RESOLVED payload — a payload where NOTHING
+   matched is a match-layer failure, not a user opinion (matching never
+   guesses, point 3), so an all-miss import does not touch the set at
+   all; the favourites stay intact and the misses are reported. An empty
+   or wholly-malformed payload is refused by validation before any of
+   this is reached, so the set can never be emptied by accident.
 5. The thumbnail-folder-equals-`recipe_id` identity is measured on one
    account and one pull. The importer therefore keeps the name fallback
    armed for id misses and counts both bridges in its report, rather than

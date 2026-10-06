@@ -376,9 +376,18 @@ async function importMealimeFavourites(): Promise<void> {
     catalog.variantMeta.filter((m) => m.id < USER_RECIPE_ID_BASE),
   )
   const favourites = useFavouritesStore()
-  const { added, removed } = favourites.importFavourites(result.matched.map((m) => m.variantId))
-  mealimeInput.value = ''
-  mealimeReport.value = { ...result, added, removed }
+  // Override discipline (ADR-0058 amended): the override replaces the set
+  // with the RESOLVED payload. A payload where NOTHING matched is a
+  // match-layer failure, not a user opinion — the matching never guesses
+  // (ADR-0058 §3), so it must never be allowed to tombstone the whole
+  // set either. Favourites stay intact and the misses are reported.
+  if (result.matched.length > 0) {
+    const { added, removed } = favourites.importFavourites(result.matched.map((m) => m.variantId))
+    mealimeInput.value = ''
+    mealimeReport.value = { ...result, added, removed }
+  } else {
+    mealimeReport.value = { ...result, added: 0, removed: 0 }
+  }
 }
 </script>
 
