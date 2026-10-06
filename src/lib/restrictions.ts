@@ -55,6 +55,26 @@ export interface DropEntry {
   count: number
 }
 
+/**
+ * One recipe's EXACT per-restriction rework from events/<slug>.json —
+ * upstream's own (s)waps with their re-authored quantities, per-recipe
+ * (d)rops, same-name (r)equants and (a)dded lines. The events map is the
+ * per-recipe truth (1649/1649 byte-exact against upstream's docs); the
+ * swaps.json dictionary is the GLOBAL fallback for recipes without an
+ * events entry — its drops are a per-restriction UNION over all recipes,
+ * which wrongly hides e.g. garlic in a GF recipe whose own rework keeps it.
+ */
+export interface RecipeEvents {
+  /** [from, to, qty_new?] — the substitute display name + optional re-authored quantity. */
+  s?: [string, string, string?][]
+  /** Dropped ingredient display names (this recipe, this restriction). */
+  d?: string[]
+  /** [from, qty_new] — same-ingredient quantity re-authors. */
+  q?: [string, string][]
+  /** [name, qty] — lines upstream ADDS to the reworked doc. */
+  a?: [string, string][]
+}
+
 /** One restriction entry from index.json: {id, slug, label}. */
 export interface RestrictionEntry {
   id: number
@@ -68,12 +88,14 @@ export interface LadderIndex {
   restrictions: RestrictionEntry[]
   /** From→to entries from swaps.json (null until ensureSwaps loads it). */
   swaps: SwapEntry[] | null
-  /** Drops entries from swaps.json (null until ensureSwaps loads it). */
-  drops: DropEntry[] | null
+  /** Drops entries from swaps.json — keyed BY RESTRICTION id (null until ensureSwaps). */
+  drops: Record<string, DropEntry[]> | null
   /** slug → removed recipe ids (from removed/<slug>.json). Filled per chip activation. */
   removed: Map<string, number[]>
   /** pairKey (a-b) → composition extras (from pairs/<a>-<b>.json). Filled per pair activation. */
   pairs: Map<string, number[]>
+  /** slug → recipeId → the per-recipe exact rework (from events/<slug>.json). */
+  events: Map<string, Record<string, RecipeEvents>>
 }
 
 // Constants must be defined before buildLadderIndex (TDZ-safe ordering).
@@ -87,6 +109,7 @@ export function buildLadderIndex(): LadderIndex {
     drops: null,
     removed: new Map(),
     pairs: new Map(),
+    events: new Map(),
   }
 }
 
@@ -108,6 +131,7 @@ export async function loadIndex(
     drops: null,
     removed: new Map(),
     pairs: new Map(),
+    events: new Map(),
   }
 }
 
@@ -124,7 +148,7 @@ export async function ensureSwaps(
   if (index.swaps !== null || index.drops !== null) return
   const res = await fetchImpl(`${baseUrl}data/restrictions/swaps.json`).catch(() => null)
   if (!res || !res.ok) return
-  const doc = (await res.json()) as { swaps: SwapEntry[]; drops: DropEntry[] }
+  const doc = (await res.json()) as { swaps: SwapEntry[]; drops: Record<string, DropEntry[]> }
   index.swaps = doc.swaps
   index.drops = doc.drops
 }
@@ -171,6 +195,29 @@ export async function ensurePair(
   }
   const doc = (await res.json()) as { extras: number[] }
   index.pairs.set(pairKey, doc.extras ?? [])
+}
+
+/**
+ * Ensure events/<slug>.json is loaded into the index. Cached (no-op if already
+ * loaded). A failed fetch leaves this slug's events map EMPTY (the dictionary
+ * swap/drop fallback keeps working for that chip) + is retried on the next call.
+ * The events files exist ONLY for restrictions that rework at least one recipe,
+ * so a 404 is normal for the smallest sets — cached as an empty map, not an error.
+ */
+export async function ensureEvents(
+  slug: string,
+  index: LadderIndex,
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+): Promise<void> {
+  if (index.events.has(slug)) return
+  const res = await fetchImpl(`${baseUrl}data/restrictions/events/${slug}.json`).catch(() => null)
+  if (!res || !res.ok) {
+    index.events.set(slug, {})
+    return
+  }
+  const doc = (await res.json()) as Record<string, RecipeEvents>
+  index.events.set(slug, doc)
 }
 
 /* ---------- Query-time consultation ---------- */
@@ -229,8 +276,14 @@ export function isRemovedByRestriction(
 export function activeDrops(activeIds: number[], index: LadderIndex): Set<string> {
   const out = new Set<string>()
   if (activeIds.length === 0 || !index.drops) return out
-  for (const drop of index.drops) {
-    out.add(nameKey(drop.from))
+  // Drops are PER RESTRICTION: only the ACTIVE restrictions' drops apply. The
+  // flat-array emission used to union every restriction's drops under any one
+  // active chip — hiding garlic under Gluten-Free alone because garlic is a
+  // Dairy/Soy drop (the CI e2e caught it on the grocery fixture).
+  for (const id of activeIds) {
+    const byId = index.drops[String(id)]
+    if (!byId) continue
+    for (const drop of byId) out.add(nameKey(drop.from))
   }
   return out
 }
@@ -255,6 +308,112 @@ export function swapName(name: string, index: LadderIndex): string {
   if (!index.swaps) return name
   const swap = index.swaps.find((s) => s.from === name || s.from === nameKey(name))
   return swap ? swap.to : name
+}
+
+/**
+ * The recipe doc under an ACTIVE restriction, EXACT when upstream has a
+ * per-recipe events entry for it: apply the entry's swaps (+ their
+ * re-authored quantities), requants, drops and added lines verbatim — the
+ * same render that matched upstream's own docs 1649/1649. Returns null when
+ * NO active restriction carries an events entry for this recipe (the caller
+ * falls back to the dictionary's restrictedDocView).
+ *
+ * Precedence for MULTIPLE active restrictions: apply each active slug's
+ * entry in ascending id order (the smallest id's rework is the base; a
+ * later entry's `from` names are matched against the CURRENT display name,
+ * so a composed rework chains the way upstream's own combined profiles do).
+ */
+export function eventsDocView(
+  doc: RecipeDoc,
+  index: LadderIndex | null | undefined,
+  activeIds: number[],
+): RecipeDoc | null {
+  if (!index || activeIds.length === 0) return null
+  const entries: { id: number; slug: string; ev: RecipeEvents }[] = []
+  for (const id of [...activeIds].sort((a, b) => a - b)) {
+    const slug = SLUG_BY_ID.get(id)
+    if (!slug) continue
+    const byRecipe = index.events.get(slug)
+    if (!byRecipe) continue
+    const ev = byRecipe[String(doc.recipe_id)]
+    if (ev) entries.push({ id, slug, ev })
+  }
+  if (entries.length === 0) return null
+  // Apply the entries in id order; each pass matches `from` against the
+  // CURRENT line names so chained reworks compose.
+  let items: LineItem[] = doc.line_items.map((li) => ({ ...li }))
+  for (const { ev } of entries) {
+    // Drops first (display-only hiding), then swaps/requants on survivors,
+    // then additions — the same order events_for_doc emitted them from.
+    if (ev.d?.length) {
+      const dropNames = new Set(ev.d)
+      items = items.filter((li) => !dropNames.has(li.ingredient_name))
+    }
+    if (ev.s?.length) {
+      for (const [from, to, qty] of ev.s) {
+        const li = items.find((l) => l.ingredient_name === from)
+        if (!li) continue
+        li.ingredient_name = to
+        if (qty && qty !== li.quantity) li.quantity = qty
+      }
+    }
+    if (ev.q?.length) {
+      for (const [from, qty] of ev.q) {
+        const li = items.find((l) => l.ingredient_name === from)
+        if (li) li.quantity = qty
+      }
+    }
+    if (ev.a?.length) {
+      let addId = Math.max(-1, ...items.map((l) => l.id)) + 1
+      for (const [name, qty] of ev.a) {
+        items.push({
+          id: addId++,
+          quantity: qty,
+          ingredient_name: name,
+        })
+      }
+    }
+  }
+  return { ...doc, line_items: items }
+}
+
+/**
+ * The grocery's display rows for a recipe under an ACTIVE restriction with a
+ * per-recipe events entry — EXACT (each row's (name, quantity) pair comes
+ * from upstream's own reworked doc, never a cross-pair). `keyName` stays the
+ * BASE doc's nameKey for swapped/requant lines (the key/display split), and
+ * an added line keys on its own nameKey (it has no base counterpart).
+ * Returns null when NO active restriction carries an events entry — the
+ * caller falls back to groceryDisplayLines (dictionary) then the base doc.
+ */
+export function eventsDisplayLines(
+  doc: RecipeDoc,
+  index: LadderIndex | null | undefined,
+  activeIds: number[],
+): RestrictedDisplayLine[] | null {
+  const view = eventsDocView(doc, index, activeIds)
+  if (!view) return null
+  // Recover the base keys: a line whose CURRENT name equals a swap's `to`
+  // keys on the swap's `from`; everything else keys on its own name.
+  const toByFrom = new Map<string, { from: string; qty?: string }>()
+  for (const id of [...activeIds].sort((a, b) => a - b)) {
+    const slug = SLUG_BY_ID.get(id)
+    const byRecipe = slug ? index?.events.get(slug) : undefined
+    const ev = byRecipe?.[String(doc.recipe_id)]
+    for (const [from, to] of ev?.s ?? []) toByFrom.set(to, { from })
+  }
+  const rows: RestrictedDisplayLine[] = []
+  for (const li of view.line_items) {
+    const pair = toByFrom.get(li.ingredient_name)
+    const baseName = pair ? pair.from : li.ingredient_name
+    rows.push({
+      keyName: nameKey(baseName),
+      name: li.ingredient_name,
+      quantity: li.quantity,
+      keyIngredient: baseName,
+    })
+  }
+  return rows
 }
 
 /**

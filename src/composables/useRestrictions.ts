@@ -2,6 +2,7 @@ import { computed, shallowRef, watch, triggerRef } from 'vue'
 import {
   RESTRICTIONS,
   buildLadderIndex,
+  ensureEvents,
   ensurePair,
   ensureRemoved,
   ensureSwaps,
@@ -76,6 +77,13 @@ export function useRestrictions() {
     ensureLoadedPromise = (async () => {
       // swaps.json covers swaps AND drops (loaded when ANY chip is active).
       await ensureSwaps(index.value, fetch, baseUrl)
+      // events/<slug>.json — the PER-RECIPE exact rework (loaded per chip;
+      // takes precedence over the dictionary's global swap/drop union).
+      const eventPromises = ids.map((id) => {
+        const slug = RESTRICTIONS.find((r) => r.id === id)?.slug
+        return slug ? ensureEvents(slug, index.value, fetch, baseUrl) : Promise.resolve()
+      })
+      await Promise.all(eventPromises)
       // removed/<slug>.json for each active restriction.
       const slugPromises = ids.map((id) => {
         const slug = RESTRICTIONS.find((r) => r.id === id)?.slug
