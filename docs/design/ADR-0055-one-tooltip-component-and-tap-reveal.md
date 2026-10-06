@@ -131,9 +131,14 @@ room for it, the horizontal position is clamped to an 8px viewport
 margin, and the vertical position is clamped the same way. The
 transform is applied even while the bubble is hidden, so the layout box
 itself can never widen the document (the ADR-0049 failure mode).
-Recomputation runs on mount, on text change, on resize and on any
-scroll (rAF-throttled, passive, capture-phase) — never on the reveal
-path itself, so a reveal is never delayed by measurement.
+Recomputation runs on mount, on text change, on resize, and at the
+reveal boundary — the host's `pointerenter`/`focusin` in CSS mode (the
+same signal the reveal classes use) or a `shown` transition in
+controlled/tap mode — rAF-throttled and passive. There is deliberately
+NO global scroll listener: an absolute bubble travels with its host
+when the page scrolls, so per-scroll-frame measurement would be a
+redundant layout read per bubble (kody r1); the reveal-time measurement
+is the one the refinement requires.
 
 Shared chrome: `pointer-events-none absolute z-20 opacity-0 invisible
 transition-[opacity,visibility] duration-150 w-max bg-surface-dark px-2

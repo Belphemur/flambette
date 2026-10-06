@@ -50,9 +50,14 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
  * (the `placement` prop) is flipped to the other side when it does not
  * fit, and the horizontal position is clamped at the screen edges. The
  * transform is applied even while hidden, so the layout box can never
- * widen the document. Recomputed on mount, on text change, on resize
- * and on any scroll (rAF-throttled, passive, capture) — never on the
- * reveal path itself.
+ * widen the document. Recomputed on mount, on text change, on resize,
+ * on the HOST's pointerenter/focusin (CSS mode — the cheap hover
+ * signal CSS already drives, so no scroll listener is spent), or when
+ * the controlled/tap verdict turns true (watch) — never a global
+ * scroll listener: an absolute bubble TRAVELS WITH its host when the
+ * page scrolls, so re-clamping per scroll frame would be redundant
+ * layout reads per bubble (kody r1), and the reveal-time measurement
+ * is the one the refinement requires.
  *
  * Chrome (ADR-0055 Decision 3): ONE chrome for all bubbles.
  * `pointer-events-none` — a bubble must never swallow a click aimed at
@@ -132,6 +137,15 @@ function reposition() {
     nudge.value = null
     return
   }
+  // Skip the layout reads while the bubble cannot be seen — EXCEPT in
+  // CSS mode, where JS has no other signal that a hover/focus reveal
+  // is starting (those measure on mount/resize and on the host's
+  // pointerenter/focusin below instead).
+  const cssMode = props.active === undefined
+  if (!cssMode && !shown.value) {
+    nudge.value = null
+    return
+  }
   const host = node.parentElement
   if (!host) {
     nudge.value = null
@@ -183,23 +197,37 @@ function scheduleReposition() {
   if (raf === 0) raf = requestAnimationFrame(reposition)
 }
 
-function onScroll() {
-  scheduleReposition()
-}
+/**
+ * CSS-mode bubbles: the host's own hover/focus — the same signal the
+ * reveal classes use — is the cheap trigger for one measurement. No
+ * scroll listener (see the clamp note above).
+ */
+let host: HTMLElement | null = null
 
 onMounted(() => {
   scheduleReposition()
   window.addEventListener('resize', scheduleReposition, { passive: true })
-  window.addEventListener('scroll', onScroll, { passive: true, capture: true })
+  host = el.value?.parentElement ?? null
+  if (host && props.active === undefined) {
+    host.addEventListener('pointerenter', scheduleReposition, { passive: true })
+    host.addEventListener('focusin', scheduleReposition, { passive: true })
+  }
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', scheduleReposition)
-  window.removeEventListener('scroll', onScroll, { capture: true })
+  if (host) {
+    host.removeEventListener('pointerenter', scheduleReposition)
+    host.removeEventListener('focusin', scheduleReposition)
+    host = null
+  }
   if (raf !== 0) cancelAnimationFrame(raf)
 })
 
 watch(() => props.text, scheduleReposition)
+watch(shown, (now) => {
+  if (now) scheduleReposition()
+})
 
 /** The clamp transform overrides the class translate for centered bubbles. */
 const nudgeStyle = computed(() => {
