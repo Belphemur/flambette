@@ -35,7 +35,9 @@ describe('mealime bookmarklet (ADR-0058)', () => {
 
   test('the href is the URL-encoded source behind javascript:', () => {
     const href = mealimeBookmarkletHref()
-    expect(href.startsWith('javascript:')).toBe(true)
-    expect(decodeURIComponent(href.slice('javascript:'.length))).toBe(MEALIME_BOOKMARKLET_SOURCE)
+    // Parse, don't string-match the scheme (CodeQL js/incomplete-url-scheme-check).
+    const url = new URL(href)
+    expect(url.protocol).toBe('javascript:')
+    expect(decodeURIComponent(url.pathname)).toBe(MEALIME_BOOKMARKLET_SOURCE)
   })
 })
