@@ -316,7 +316,10 @@ def main():
         f.write("\n")
     log("wrote %s (%d restrictions, %d pairs)" % (INDEX_OUT, len(restrictions_meta), len(pair_file_list)))
 
-    # 2. swaps.json: UNIQUE from->to swaps (dedup across restrictions) + all drops
+    # 2. swaps.json: per-restriction swaps (dedup across restrictions) + drops
+    # PER RESTRICTION (attribution is load-bearing: the runtime hides a dropped
+    # ingredient only when ITS restriction is active — a flat array would hide
+    # garlic under Gluten-Free alone, because garlic is a Dairy/Soy drop).
     unique_swaps = {}
     for rid_str in sorted(A.RESTRICTIONS, key=int):
         for s in per_restriction[rid_str]["swaps"]:
@@ -324,15 +327,54 @@ def main():
             if key not in unique_swaps or s["count"] > unique_swaps[key]["count"]:
                 unique_swaps[key] = s
     all_swaps = sorted(unique_swaps.values(), key=lambda s: (-s["count"], s["from"], s["to"]))
-    all_drops = []
+    drops_by_restriction = {}
     for rid_str in sorted(A.RESTRICTIONS, key=int):
-        all_drops.extend(per_restriction[rid_str]["drops"])
-    all_drops.sort(key=lambda d: (-d["count"], d["from"]))
-    swaps_doc = {"swaps": all_swaps, "drops": all_drops}
+        drops_by_restriction[rid_str] = sorted(
+            per_restriction[rid_str]["drops"], key=lambda d: (-d["count"], d["from"]))
+    swaps_doc = {"swaps": all_swaps, "drops": drops_by_restriction}
     with open(SWAPS_OUT, "w") as f:
         json.dump(swaps_doc, f, indent=1)
         f.write("\n")
-    log("wrote %s (%d unique swaps, %d drops)" % (SWAPS_OUT, len(all_swaps), len(all_drops)))
+    log("wrote %s (%d unique swaps, drops across %d restrictions)"
+        % (SWAPS_OUT, len(all_swaps), len(drops_by_restriction)))
+
+    # 2b. events/<slug>.json — the PER-RECIPE upstream truth (owner-approved
+    # option C+ design, 2026-10-08): the analysis proved upstream's swaps/drops
+    # are per-recipe decisions, not global ingredient rules (drop-vs-swap
+    # conflicts: 912 events across 12 restrictions; a global dictionary
+    # mis-fires 525+ times under GF alone). The whole map is 116 KB raw /
+    # 11 KB gzipped — smaller than the dictionary + exceptions it replaces and
+    # EXACT. Structure: {<slug>: {"<recipe_id>": {"s": [[from, to]…], "d": [from…]}}}.
+    events_dir = os.path.join(RESTRICTIONS_DIR, "events")
+    os.makedirs(events_dir, exist_ok=True)
+    total_ev = 0
+    for rid_str in sorted(A.RESTRICTIONS, key=int):
+        slug = A.RESTRICTIONS[int(rid_str)][0]
+        payload = json.load(open(os.path.join(ARCHIVE, "%s-%s.json" % (slug, PAYLOAD_SUFFIX))))
+        uuids = {m["recipe_id"]: m["published_recipe_uuid"] for m in payload["variant_meta"]}
+        none_p = json.load(open(os.path.join(ARCHIVE, "none-%s.json" % PAYLOAD_SUFFIX)))
+        none_ids = {m["recipe_id"] for m in none_p["variant_meta"]}
+        removed = none_ids - set(uuids)
+        per_doc = {}
+        for r in sorted(uuids):
+            if r in removed or r not in base_docs:
+                continue
+            rp = os.path.join(DOC_CACHE, slug, uuids[r] + ".json")
+            if not os.path.exists(rp):
+                continue
+            evs = B.events_for_doc(base_docs[r], json.load(open(rp)))
+            doc_events = {"s": [[e["from"], e["to"], e["qty_new"]] for e in evs if e["kind"] == "swap"],
+                          "d": [e["from"] for e in evs if e["kind"] == "removed"],
+                          "q": [[e["from"], e["qty_new"]] for e in evs if e["kind"] == "requant"],
+                          "a": [[e["to"], e["qty_new"]] for e in evs if e["kind"] == "added"]}
+            if doc_events["s"] or doc_events["d"] or doc_events["q"] or doc_events["a"]:
+                per_doc[str(r)] = doc_events
+                total_ev += len(doc_events["s"]) + len(doc_events["d"])
+        with open(os.path.join(events_dir, slug + ".json"), "w") as f:
+            json.dump(per_doc, f, separators=(",", ":"))
+            f.write("\n")
+        log("wrote events/%s.json (%d docs, %d events)" % (slug, len(per_doc), total_ev))
+    log("TOTAL upstream per-recipe events: %d" % total_ev)
 
     # 3. removed/<slug>.json: per-restriction removed ids
     for rid_str in sorted(A.RESTRICTIONS, key=int):

@@ -194,7 +194,13 @@ def pair_lines(base, ov):
         if len(cands) == 1:
             pairs[j] = cands[0]
             used_b.add(cands[0])
+    # Refresh BOTH open lists after the containment pass — used_b grew, and a
+    # stale open_base keeps consumed base rows in front of the quantity loop,
+    # which then compares against the wrong line and skips real pairs
+    # (`ov8 gluten-free flour('')` vs consumed `base2('510 g')` bounded the
+    # loop before it ever reached `base6 all-purpose flour('')`).
     open_ov = [j for j in open_ov if j not in pairs]
+    open_base = [i for i in open_base if i not in used_b]
     base_left = [i for i in open_base if i not in used_b]
     # Fallback: pair a base-left line to an overlay-left line by EITHER:
     #   (a) name containment + quantity agreement (catches family-token
@@ -219,13 +225,40 @@ def pair_lines(base, ov):
         elif ovq[qo] == 1 and baseq[qb] == 1:
             pairs[j] = i
             used_b.add(i)
-    return pairs, open_ov, base_left
+    # Last resort: leftover lines whose quantities are BOTH EMPTY and both
+    # docs' leftover lists are otherwise unpaired — pair them IN DOCUMENT
+    # ORDER. Upstream keeps the seasoning aisle in the same relative order
+    # (`all-purpose flour` -> `gluten-free flour` is the measured miss: the
+    # paraphrased name shares no substring with the base, both quantities are
+    # empty, and the empty-quantity class is large, so the containment and
+    # uniqueness rules above can't see it).
+    ov_left2 = [j for j in open_ov if j not in pairs]
+    base_left2 = [i for i in open_base if i not in used_b]
+    empty_ov = [j for j in ov_left2 if not ov[j][2].strip()]
+    empty_base = [i for i in base_left2 if not base[i][2].strip()]
+    if empty_ov and empty_base:
+        ov_only_empty = all(not ov[j][2].strip() for j in ov_left2)
+        base_only_empty = all(not base[i][2].strip() for i in base_left2)
+        if ov_only_empty and base_only_empty and len(empty_ov) == len(empty_base):
+            for n, (j, i) in enumerate(zip(empty_ov, empty_base)):
+                pairs[j] = i
+    # Exclude the newly-paired leftovers from the returned leftover lists —
+    # events_for_doc treats `base_left` as drops and `ov_left` as additions,
+    # so an unfiltered list would double-report a paired line as BOTH a swap
+    # and a drop (the flour case above).
+    final_ov_left = [j for j in open_ov if j not in pairs]
+    final_base_left = [i for i in open_base if i not in used_b]
+    return pairs, final_ov_left, final_base_left
 
 
 def events_for_doc(base_doc, rdoc):
     """Substitution events between the base catalog doc and a restricted doc.
 
-    Each event: {kind: swap|added|removed, from/to names + keys, quantities}.
+    Each event: {kind: swap|added|removed|requant, from/to names + keys, quantities}.
+    `requant` records a same-ingredient quantity re-author (name key identical,
+    quantity string differs — measured 209 events across the 12 singles; the
+    Parmesan 42 g → 84 g class). Without it the per-recipe event map renders a
+    stale quantity for that line.
     """
     base = [(name_key(li.get("ingredient_name") or ""), li.get("ingredient_name") or "",
              (li.get("quantity") or "")) for li in base_doc.get("line_items", [])]
@@ -237,6 +270,9 @@ def events_for_doc(base_doc, rdoc):
         if base[i][0] != ov[j][0]:
             evs.append({"kind": "swap", "from": base[i][1], "from_key": base[i][0],
                         "to": ov[j][1], "to_key": ov[j][0],
+                        "qty_base": base[i][2], "qty_new": ov[j][2]})
+        elif base[i][2].strip() != ov[j][2].strip():
+            evs.append({"kind": "requant", "from": base[i][1], "from_key": base[i][0],
                         "qty_base": base[i][2], "qty_new": ov[j][2]})
     for j in ov_left:
         evs.append({"kind": "added", "to": ov[j][1], "to_key": ov[j][0],
