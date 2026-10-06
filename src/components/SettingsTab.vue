@@ -1,6 +1,28 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Download, Link, Dices, Minus, Plus, Scale, Upload, Utensils } from 'lucide-vue-next'
+import {
+  Bean,
+  CircleDot,
+  Download,
+  Dices,
+  Egg,
+  Fish,
+  FlaskConical,
+  Link,
+  Milk,
+  Minus,
+  Nut,
+  Plus,
+  Scale,
+  Shrimp,
+  Sprout,
+  TestTubeDiagonal,
+  Upload,
+  Utensils,
+  Wheat,
+  Cherry,
+  type LucideIcon,
+} from 'lucide-vue-next'
 import { applyBackup, backupFileName, buildBackupZip } from '../lib/backup'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { MAX_SERVINGS, MIN_SERVINGS } from '../lib/servings'
@@ -53,6 +75,26 @@ function bumpDefaultServings(delta: number) {
 }
 
 /* ---------- Dietary restrictions (the restriction ADR) ---------- */
+
+/** One decorative glyph per restriction (ADR-0029: lucide-vue-next, bundled).
+ *  The label carries the meaning, so the icons are neutral — no new hue
+ *  tokens (ADR-0036: a food-type role that does not exist in the registry
+ *  is not invented for a control); selected chips tint through the chip's
+ *  own class. Glyphs are distinct so the row reads apart in monochrome. */
+const RESTRICTION_ICONS: Record<string, LucideIcon> = {
+  'shellfish-free': Shrimp,
+  'fish-free': Fish,
+  'gluten-free': Wheat,
+  'dairy-free': Milk,
+  'peanut-free': Bean,
+  'tree-nut-free': Nut,
+  'soy-free': Sprout,
+  'egg-free': Egg,
+  'sesame-free': CircleDot,
+  'mustard-free': FlaskConical,
+  'sulfite-free': TestTubeDiagonal,
+  'nightshade-free': Cherry,
+}
 
 const restrictionPrefs = useRestrictions()
 
@@ -574,7 +616,7 @@ async function importMealimeFavourites(): Promise<void> {
   <button
   v-for="restriction in RESTRICTIONS"
   :key="restriction.id"
-  class="rounded-full border px-3 py-2 text-sm font-semibold"
+  class="flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm font-semibold"
   :class="
   isActiveRestriction(restriction.id)
     ? 'border-primary-tint bg-primary-tint text-primary-strong'
@@ -585,6 +627,11 @@ async function importMealimeFavourites(): Promise<void> {
   :data-test="`restriction-chip-${restriction.slug}`"
   @click="toggleRestriction(restriction.id)"
   >
+  <component
+  :is="RESTRICTION_ICONS[restriction.slug]"
+  :size="16"
+  aria-hidden="true"
+  />
   {{ restriction.label }}
   </button>
   </div>

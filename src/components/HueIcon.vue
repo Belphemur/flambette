@@ -66,6 +66,10 @@ const props = withDefaults(
     size?: number
     label?: string
     tooltip?: string
+    /** Overrides the root span's `data-test="hue-icon"` for call sites
+    * that need to point at THIS icon unambiguously (e.g. the detail
+    * header carries two labelled HueIcons: type + meal occasion). */
+    testId?: string
     /** Opt-in tap-reveal (ADR-0055): ENGAGED by the recipe detail view
     only — browse cards stay hover-only (the host stays
     pointer-transparent so the card's stretched link keeps the tap). */
@@ -116,7 +120,7 @@ function onHostClick() {
   <span
   ref="hostEl"
   tabindex="0"
-  data-test="hue-icon"
+  :data-test="props.testId ?? 'hue-icon'"
   class="relative inline-flex rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
   :class="props.tapReveal ? 'hovercap:cursor-pointer' : 'pointer-events-none'"
   @click="onHostClick"

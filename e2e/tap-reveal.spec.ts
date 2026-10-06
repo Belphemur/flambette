@@ -18,10 +18,12 @@ import {
  * the Pixel 7 project, where `(hover: hover)` never matches.
  */
 
-/** The detail header's first named type icon (same locator the
- * design-visual tooltip case pins). */
+/** The detail header's type icon. The header carries TWO labelled
+ * HueIcons now (ingredient type + meal occasion, ADR-0043), so the
+ * position-based `…[data-test="hue-icon"]` first() match is ambiguous —
+ * the type icon carries its own explicit test id instead. */
 function detailTypeIcon(page: import('@playwright/test').Page) {
-  return page.locator('header [data-test="hue-icon"]', { has: page.locator('svg[role="img"]') }).first()
+  return page.getByTestId('detail-type-icon')
 }
 
 async function openDetail(page: import('@playwright/test').Page) {

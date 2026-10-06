@@ -383,6 +383,8 @@ function startCooking() {
   :role="typeRole"
   :size="18"
   :label="ICON_ROLES[typeRole].label"
+  tap-reveal
+  test-id="detail-type-icon"
   />
   <span v-else-if="!mealTypeRole" class="capitalize">{{
   catalog?.dataById.get(meta.id)?.category_name ?? meta.ruleset
@@ -394,6 +396,8 @@ function startCooking() {
   :role="mealTypeRole"
   :size="18"
   :label="ICON_ROLES[mealTypeRole].label"
+  tap-reveal
+  test-id="detail-meal-icon"
   />
   <!-- ADR-0054: the PERMANENT authorship marker, styled like the two
   icons above — an icon in the SAME row, carrying its meaning in the
