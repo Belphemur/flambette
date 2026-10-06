@@ -347,13 +347,13 @@ onMounted(async () => {
   <span
   data-test="app-version"
   class="group relative max-w-28 min-w-0 truncate text-xs text-text-muted"
-  >{{ appVersion }}
+  >{{ appVersion }}</span>
   <!-- ADR-0055: the OS `title` becomes the one bubble; a span is not
   focusable, so this reveals on hover only — the parity native `title`
   had. below-right: the header pattern (drops down, right-anchored —
-  ADR-0049's viewport-overflow lesson). -->
+  ADR-0049's viewport-overflow lesson). Sibling of the span (same flex
+  parent), anchored to it — the version text stays clean. -->
   <TooltipBubble :text="`Version ${appVersion}`" placement="below-right" />
-  </span>
   <span
   v-if="roomChip"
   class="group relative flex shrink-0 cursor-help items-center gap-1.5 rounded-full bg-surface-sunken px-2.5 py-1.5 text-xs font-medium"

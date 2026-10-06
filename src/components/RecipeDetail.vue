@@ -429,11 +429,12 @@ function startCooking() {
   class="group relative text-sm font-medium text-brand-text"
   data-test="cook-history"
   >
-  <!-- ADR-0055: the absolute date becomes the one bubble (hover only;
-  the p is not focusable — native-title parity). -->
-  <TooltipBubble :text="cookLastTitle ?? ''" placement="below-right" />
   <ChefHat :size="16" aria-hidden="true" class="mr-1 inline align-[-2px]" />{{ cookLine }}
   </p>
+  <!-- ADR-0055: the absolute date becomes the one bubble (hover only;
+  the p is not focusable — native-title parity). Sibling of the p, so
+  the line's text stays clean. -->
+  <TooltipBubble v-if="cookLine" :text="cookLastTitle ?? ''" placement="below-right" />
   <!-- Per-cook spoiler: one row per cook EVENT, relative AND absolute
   date, so "cooked twice" can be told apart into "last night" and
   "the Sunday before" (ADR-0034). -->

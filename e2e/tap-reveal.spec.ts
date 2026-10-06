@@ -77,8 +77,17 @@ test('tapping a browse-card icon navigates — the card bubble never reveals', a
   await expectZeroMealimeRequests(page)
 
   // ADR-0044, still pinned by ADR-0055: on a browse card the icon host
-  // is pointer-transparent, so the tap reaches the stretched link. The
-  // tap-reveal is ABSENT there by construction — the tap must NAVIGATE.
-  await page.locator('[data-test="recipe-card-link"]').first().locator('[data-test="hue-icon"]').first().tap()
+  // is pointer-transparent, so the tap reaches the stretched link (the
+  // link is the TITLE; its ::after stretch covers the whole card — the
+  // icons sit beside it, not inside it). The tap-reveal is ABSENT there
+  // by construction — the tap must NAVIGATE. The interception is the
+  // THING BEING PINNED, so locator.tap()'s actionability check would
+  // refuse it; a physical tap at the icon's coordinates is what a user's
+  // finger does, and it must land on the link.
+  const icon = page.locator('[data-test="recipe-card"]').first().locator('[data-test="hue-icon"]').first()
+  await expect(icon).toBeVisible()
+  const box = await icon.boundingBox()
+  expect(box).not.toBeNull()
+  await page.touchscreen.tap(box!.x + box!.width / 2, box!.y + box!.height / 2)
   await expect(page.getByTestId('detail-title')).toBeVisible()
 })

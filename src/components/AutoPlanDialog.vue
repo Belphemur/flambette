@@ -487,11 +487,13 @@ function setCategory(value: string) {
   />
   <!-- ADR-0055: the OS title on the line-clamped name becomes the one
   bubble (hover only). above-center: below would clip against the
-  dialog's vertical scroll. -->
+  dialog's vertical scroll. The bubble is a SIBLING of the p, never a
+  child — the tile text must stay clean for readers of textContent
+  (the e2e preview round-trip asserts against the p's own text). -->
   <p class="group relative line-clamp-2 px-1.5 py-1 text-[11px] leading-tight font-medium">
-  <TooltipBubble :text="meal.name" />
   {{ meal.name }}
   </p>
+  <TooltipBubble :text="meal.name" />
   <p class="px-1.5 pb-1 text-[10px]">{{ meal.minutes }} min</p>
   </li>
   </ul>
@@ -502,12 +504,14 @@ function setCategory(value: string) {
   :disabled="!previewComplete"
   @click="confirmAutoPlan"
   >
+  {{ ui.autoPlanMode === 'add' ? 'Add these meals' : 'Use this plan' }}
   <!-- ADR-0055: conditional "Waiting…" bubble; empty once the preview
-  is complete ⇒ nothing rendered (the conditional title's parity). -->
+  is complete ⇒ nothing rendered (the conditional title's parity).
+  Sibling of the button (same parent), anchored to it — never a child,
+  so the button's own label text stays clean. -->
   <TooltipBubble
   :text="previewComplete ? '' : autoPlanBusy ? 'Waiting for the new plan…' : 'Waiting for the preview to load'"
   />
-  {{ ui.autoPlanMode === 'add' ? 'Add these meals' : 'Use this plan' }}
   </button>
   <button
   class="h-11 flex-1 rounded-xl border text-sm font-medium"

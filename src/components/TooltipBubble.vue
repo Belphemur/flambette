@@ -29,7 +29,11 @@ import { computed, onBeforeUnmount, ref } from 'vue'
  *    Rules: auto-dismiss after TOOLTIP_TAP_REVEAL_MS; a second tap while
  *    open hides IMMEDIATELY (toggle — a user who taps again is
  *    dismissing); the timer is cleared on unmount, which covers leaving
- *    the view.
+ *    the view. The open state is an INLINE `display: block`, not a class:
+ *    the base class is `hidden`, and Tailwind sorts `.hidden` AFTER
+ *    `.block` in the same layer, so a plain `block` class can never win —
+ *    the hover modes win because their `hovercap:`/`group-hover:` VARIANTS
+ *    sort later than base utilities. An inline style needs no such order.
  *
  * Chrome (ADR-0055 Decision 3): ONE chrome for all bubbles. `hidden` —
  * never `invisible`, whose layout occupancy overflowed the Pixel 7
@@ -116,7 +120,8 @@ const revealClasses = computed(() => {
   v-if="text"
   aria-hidden="true"
   class="pointer-events-none absolute z-20 hidden w-max rounded-md bg-surface-dark px-2 py-1 font-normal leading-snug text-text-dark"
-  :class="[PLACEMENTS[placement], revealClasses, tapOpen ? 'block' : '']"
+  :class="[PLACEMENTS[placement], revealClasses]"
+  :style="tapOpen ? { display: 'block' } : undefined"
   >
   {{ text }}
   </span>

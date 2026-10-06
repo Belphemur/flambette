@@ -248,10 +248,12 @@ function canMore(meal: PlannedMeal): boolean {
   @click="openShareSheet"
   >
   Share
-  <!-- ADR-0055: the OS title becomes the one bubble; a focusable button
-  gets hover AND focus-within reveal. -->
-  <TooltipBubble text="Share your plan via a link or a live room" placement="below-right" />
   </button>
+  <!-- ADR-0055: the OS title becomes the one bubble; a focusable button
+  gets hover AND focus-within reveal. Sibling of the button (same
+  parent), anchored to it — never a child, so the button's label text
+  stays clean. -->
+  <TooltipBubble text="Share your plan via a link or a live room" placement="below-right" />
   </div>
   </template>
 
@@ -302,12 +304,6 @@ function canMore(meal: PlannedMeal): boolean {
   <label
   class="group relative flex items-start gap-2.5 py-1"
   >
-  <!-- ADR-0055: the OS title becomes the one bubble; the checkbox
-  inside makes focus-within reachable. -->
-  <TooltipBubble
-  text="On by default — turn it off to stop sharing future cooks (already-shared cooks stay in the room)"
-  placement="below-right"
-  />
   <input
   type="checkbox"
   data-test="share-history-toggle"
@@ -320,6 +316,12 @@ function canMore(meal: PlannedMeal): boolean {
   <span class="block text-xs">On by default — the room keeps one merged cooking log. Turn it off to stop sharing new cooks: already-shared cooks stay in the room. Also in Settings → Household sync.</span>
   </span>
   </label>
+  <!-- ADR-0055: the OS title becomes the one bubble; the checkbox in
+  the label above makes focus-within reachable. Sibling of the label. -->
+  <TooltipBubble
+  text="On by default — turn it off to stop sharing future cooks (already-shared cooks stay in the room)"
+  placement="below-right"
+  />
   <template v-if="room.inRoom">
   <input
   class="h-11 w-full rounded-lg border border-border bg-surface px-3 text-xs text-text-muted outline-none focus:border-brand-text"

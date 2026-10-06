@@ -59,7 +59,7 @@ props: {
   tapReveal?: boolean           // opt-in tap reveal (Decision 4)
 }
 expose: { tap(), hide() }
-constant TOOLTIP_TAP_REVEAL_MS = 3_000
+constant TOOLTIP_TAP_REVEAL_MS = 3_000   // internal, not exported
 ```
 
 `data-test` and other attributes fall through to the bubble's root span,
@@ -148,6 +148,12 @@ Tap-reveal rules, pinned:
 - Duration: 3 000 ms, ONE constant (`TOOLTIP_TAP_REVEAL_MS`) in
   `TooltipBubble.vue`.
 - Auto-dismiss on timeout.
+- The open state is an INLINE `display: block`, not a class. The base
+  chrome carries `hidden`, and Tailwind sorts `.hidden` AFTER `.block`
+  inside the same layer, so a plain `block` class can never open the
+  bubble — the hover modes win only because `hovercap:block` /
+  `group-hover:block` are VARIANTS, which sort after base utilities. An
+  inline style is order-independent.
 - A second tap while open hides IMMEDIATELY (toggle semantics — chosen
   over restart-timer: a user who taps again is dismissing, and the
   immediate hide makes that observable).
@@ -183,6 +189,16 @@ Non-focusable hosts (`p`, `h2`, spans) reveal on hover only. That is the
 information-parity the native `title` had (also unreachable by keyboard);
 no `tabindex` is added, because growing the tab order for a cosmetic
 bubble is an a11y regression, not an improvement.
+
+**The bubble is a SIBLING of its host element, never a child** (for every
+host whose own text carries meaning). The host keeps `group relative` and
+the absolutely-positioned bubble is placed immediately after it inside
+the same parent — visually identical, but the host's `textContent` stays
+exactly what it was, which is load-bearing: the Auto-Plan preview's e2e
+round-trip reads the tile `p`'s text and looks the meal up as a heading,
+and a bubble INSIDE the `p` doubled every title. The room chip keeps the
+bubble inside the chip span — that was the pre-ADR-0055 structure, with
+the same text, so no spec surface changes.
 
 ### Decision 6 — what survives from ADR-0044, named explicitly
 
