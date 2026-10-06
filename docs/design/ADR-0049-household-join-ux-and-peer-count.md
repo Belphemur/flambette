@@ -4,7 +4,7 @@
   ADR-0023 (share-room link), ADR-0026 (join-or-create lifecycle), ADR-0038
   (the Cloudflare relay adapter), ADR-0040 (the one TypeScript relay core),
   ADR-0044 (icon-scoped tooltips)
-* Status: **Proposed** (2026-10-04)
+* Status: **Proposed** (2026-10-04) — the Decision 6 bubble mechanics are superseded in part by ADR-0055 (the shared tooltip component; the meaning-carrier rules are inherited)
 * Companions: `server/relay-core/protocol.ts`, `server/relay-core/lifecycle.ts`,
   `server/relay.ts`, `server/worker/room.ts`, `src/stores/room.ts`,
   `src/App.vue`, `src/components/SettingsTab.vue`,

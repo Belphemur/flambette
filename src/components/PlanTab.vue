@@ -19,6 +19,7 @@ import { usePlanStore } from '../stores/plan'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 import AutoPlanDialog from './AutoPlanDialog.vue'
+import TooltipBubble from './TooltipBubble.vue'
 
 const plan = usePlanStore()
 const room = useRoomStore()
@@ -243,11 +244,16 @@ function canMore(meal: PlannedMeal): boolean {
   Clear plan
   </button>
   <button
-  class="w-full rounded-xl border py-3 text-sm font-medium hover:bg-surface-sunken"
-  title="Share your plan via a link or a live room"
+  class="group relative w-full rounded-xl border py-3 text-sm font-medium hover:bg-surface-sunken"
   @click="openShareSheet"
   >
   Share
+  <!-- ADR-0055: the OS title becomes the one bubble; a focusable button
+  gets hover AND focus-within reveal. The bubble is a CHILD of the
+  button — the button is the group host — and aria-hidden keeps it out
+  of the button's accessible name (all specs locate it by role name
+  'Share' exact). -->
+  <TooltipBubble text="Share your plan via a link or a live room" placement="below-right" />
   </button>
   </div>
   </template>
@@ -297,9 +303,15 @@ function canMore(meal: PlannedMeal): boolean {
   Share your plan live: everyone sees plan, grocery and recipe-filter changes instantly, both ways.
   </p>
   <label
-  class="flex items-start gap-2.5 py-1"
-  title="On by default — turn it off to stop sharing future cooks (already-shared cooks stay in the room)"
+  class="group relative flex items-start gap-2.5 py-1"
   >
+  <!-- ADR-0055: the OS title becomes the one bubble; the checkbox in
+  the label makes focus-within reachable. DESCENDANT of the group host
+  (the label). -->
+  <TooltipBubble
+  text="On by default — turn it off to stop sharing future cooks (already-shared cooks stay in the room)"
+  placement="below-right"
+  />
   <input
   type="checkbox"
   data-test="share-history-toggle"

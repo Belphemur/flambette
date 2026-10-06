@@ -23,6 +23,7 @@ import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
 import { recipeSeoHead } from '../lib/seo'
 import HueIcon from './HueIcon.vue'
+import TooltipBubble from './TooltipBubble.vue'
 import { onMounted, onUnmounted } from 'vue'
 import { useHead } from '@unhead/vue'
 import {
@@ -47,6 +48,9 @@ const router = useRouter()
 const props = defineProps<{ id: number }>()
 
 const doc = ref<RecipeDoc | null>(null)
+/** ADR-0055: the household badge forwards its tap to the bubble, where
+the tap-reveal state and 3 s timer live (one implementation, DRY). */
+const badgeBubble = ref<InstanceType<typeof TooltipBubble> | null>(null)
 const loading = ref(false)
 const loadError = ref<string | null>(null)
 const ui = useUiStore()
@@ -364,6 +368,7 @@ function startCooking() {
   :role="typeRole"
   :size="18"
   :label="ICON_ROLES[typeRole].label"
+  tap-reveal
   />
   <span v-else-if="!mealTypeRole" class="capitalize">{{
   catalog?.dataById.get(meta.id)?.category_name ?? meta.ruleset
@@ -375,6 +380,7 @@ function startCooking() {
   :role="mealTypeRole"
   :size="18"
   :label="ICON_ROLES[mealTypeRole].label"
+  tap-reveal
   />
   <!-- ADR-0054: the PERMANENT authorship marker, styled like the two
   icons above — an icon in the SAME row, carrying its meaning in the
@@ -382,15 +388,35 @@ function startCooking() {
   cursor-help + title). The card's NEW badge is the 30-day recency
   face; this one never expires. Household status colour (DESIGN.md);
   a label, never an IconRole — a recipe is not "the plum one". -->
-  <NotebookPen
+  <!-- ADR-0054 → ADR-0055: the PERMANENT authorship marker. The OS
+  `title` becomes the one bubble, engaged with tap-reveal — this is the
+  detail view, the owner's tap-reveal scope; the bubble reveals on
+  hover/focus-within AND for 3 s after a tap. The wrapper carries the
+  click (the badge glyph itself stays a plain labelled icon; the
+  aria-label keeps being the meaning-carrier, the bubble aria-hidden). -->
+  <span
   v-if="isHouseholdRecipe"
+  class="group relative inline-flex hovercap:cursor-help"
+  data-test="user-recipe-badge"
+  @click="badgeBubble?.tap()"
+  >
+  <NotebookPen
   :size="18"
   role="img"
-  class="cursor-help text-household"
-  data-test="user-recipe-badge"
+  class="text-household"
   :aria-label="'Household recipe: authored by this household, not part of the imported catalog'"
-  title="Household recipe — authored by this household, not part of the imported catalog"
   />
+  <!-- ADR-0055 decision log (owner refinement, 2026-10-06): the
+  detail-view badge's bubble text is just "New" — the full meaning stays
+  in the aria-label, which is the single carrier (ADR-0049's rule
+  inherited); the bubble is its short visual dual. -->
+  <TooltipBubble
+  ref="badgeBubble"
+  text="New"
+  placement="above-center"
+  tap-reveal
+  />
+  </span>
   </div>
   <h2 class="text-headline-md sm:text-headline-lg" data-test="detail-title">
   {{ meta.name }}
@@ -404,11 +430,14 @@ function startCooking() {
   </div>
   <p
   v-if="cookLine"
-  class="text-sm font-medium text-brand-text"
-  :title="cookLastTitle"
+  class="group relative text-sm font-medium text-brand-text"
   data-test="cook-history"
   >
   <ChefHat :size="16" aria-hidden="true" class="mr-1 inline align-[-2px]" />{{ cookLine }}
+  <!-- ADR-0055: the absolute date becomes the one bubble (hover only;
+  the p is not focusable — native-title parity). DESCENDANT of the
+  group host; toContainText assertions on cook-history tolerate it. -->
+  <TooltipBubble v-if="cookLine" :text="cookLastTitle ?? ''" placement="below-right" />
   </p>
   <!-- Per-cook spoiler: one row per cook EVENT, relative AND absolute
   date, so "cooked twice" can be told apart into "last night" and

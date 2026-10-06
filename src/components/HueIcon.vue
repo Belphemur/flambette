@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { ICON_ROLES, ROLE_GLYPHS, hueClass, type IconRole } from '../lib/palette'
 import { useIconHoverTarget } from '../composables/useIconHoverTarget'
+import TooltipBubble from './TooltipBubble.vue'
 
 /**
  * The one renderer for a role glyph (ADR-0036 item 5: ONE role-to-glyph
@@ -54,17 +55,24 @@ import { useIconHoverTarget } from '../composables/useIconHoverTarget'
  * is the ONE tooltip implementation (DRY); `RatingStars`' rating
  * preview is a DIFFERENT hover surface with its own group (ADR-0044 §3).
  *
- * KNOWN, DELIBERATE: the icon keeps its native `title`, so a
- * hover-capable browser will eventually also show its own OS-level
- * tooltip beside this bubble. `title` is retained on instruction
- * (see the ADR-0040 handoff); the follow-up is to drop `title` on
- * bubble-bearing icons only.
+ * ADR-0055: the glyph's native `title` is GONE — ADR-0040's recorded
+ * follow-up ("drop title on bubble-bearing icons") is closed here; the
+ * bubble is the visual dual of the accessible name and the OS tooltip
+ * no longer doubles it.
  */
-const props = withDefaults(defineProps<{ role: IconRole; size?: number; label?: string; tooltip?: string }>(), {
-  size: 18,
-  label: undefined,
-  tooltip: undefined,
-})
+const props = withDefaults(
+  defineProps<{
+    role: IconRole
+    size?: number
+    label?: string
+    tooltip?: string
+    /** Opt-in tap-reveal (ADR-0055): ENGAGED by the recipe detail view
+    only — browse cards stay hover-only (the host stays
+    pointer-transparent so the card's stretched link keeps the tap). */
+    tapReveal?: boolean
+  }>(),
+  { size: 18, label: undefined, tooltip: undefined, tapReveal: false },
+)
 
 /** The bubble text: an explicit tooltip, else the label, else nothing. */
 const bubble = computed(() => {
@@ -85,17 +93,33 @@ const focusWithin = ref(false)
 if (bubble.value) {
   useIconHoverTarget(hostEl, pointerInside)
 }
+
+/**
+ * ADR-0055: the tap-reveal STATE lives inside TooltipBubble; the host
+ * (pointer-active ONLY when tapReveal is engaged) forwards the tap. The
+ * bubble ref is set only when a bubble exists, so the handler is safe to
+ * attach unconditionally.
+ */
+const bubbleEl = ref<InstanceType<typeof TooltipBubble> | null>(null)
+function onHostClick() {
+  if (props.tapReveal) bubbleEl.value?.tap()
+}
 </script>
 
 <template>
   <!-- Focusable so the keyboard can reach the same information the
-  pointer gets (see the header note); `pointer-events-none` so the card's
-  stretched link keeps the click path under the icon. -->
+  pointer gets (see the header note). ADR-0055: `pointer-events-none`
+  ONLY where the tap must pass through to a stretched link (browse
+  cards — ADR-0044's pinned rule); where tapReveal is engaged (the
+  detail header) there is no stretched link, so the host becomes
+  tap-responsive. -->
   <span
   ref="hostEl"
   tabindex="0"
   data-test="hue-icon"
-  class="pointer-events-none relative inline-flex rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+  class="relative inline-flex rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+  :class="props.tapReveal ? 'hovercap:cursor-pointer' : 'pointer-events-none'"
+  @click="onHostClick"
   @focusin="focusWithin = true"
   @focusout="focusWithin = false"
   >
@@ -106,17 +130,18 @@ if (bubble.value) {
     :role="props.label ? 'img' : undefined"
     :aria-hidden="props.label ? undefined : 'true'"
     :aria-label="props.label"
-    :title="props.label"
     />
-    <span
+    <!-- ADR-0055: the ONE bubble component; `icon-tooltip` arrives by
+    attribute fallthrough. Controlled mode — this host is
+    pointer-transparent (ADR-0044), so the JS hit-test/focus verdict is
+    the `active` prop. -->
+    <TooltipBubble
     v-if="bubble"
-    role="presentation"
-    aria-hidden="true"
+    ref="bubbleEl"
+    :text="bubble"
+    :active="pointerInside || focusWithin"
+    :tap-reveal="props.tapReveal"
     data-test="icon-tooltip"
-    class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-max max-w-40 -translate-x-1/2 rounded-md bg-surface-dark px-2 py-1 text-[11px] leading-snug text-on-brand shadow-lg"
-    :class="pointerInside || focusWithin ? 'hovercap:block' : ''"
-    >
-    {{ bubble }}
-    </span>
+    />
   </span>
 </template>

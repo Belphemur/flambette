@@ -8,6 +8,7 @@ import { imageSrc, onImgError } from '../lib/images'
 import type { VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
+import TooltipBubble from './TooltipBubble.vue'
 
 const router = useRouter()
 const plan = usePlanStore()
@@ -113,14 +114,22 @@ function addToPlan(row: Row) {
   <!-- What plan this batch was, and when it was put together
   (ADR-0034). The absolute date lives in the title: the
   relative one is the one that reads well in a list. -->
+  <!-- ADR-0055: the absolute date lives in the bubble now (hover only —
+  the h2 is not focusable, same parity the native title had). The bubble
+  is a DESCENDANT of the group host (group-hover is a descendant
+  selector); the h2's textContent is only asserted with toContainText,
+  which tolerates it. -->
   <h2
-  class="flex items-baseline gap-2 text-xs font-semibold uppercase tracking-wide text-text-muted"
-  :title="group.planCreatedAt === null ? undefined : `Planned ${formatAbsolute(group.planCreatedAt)}`"
+  class="group relative flex items-baseline gap-2 text-xs font-semibold uppercase tracking-wide text-text-muted"
   data-test="history-group-title"  >
   {{ groupTitle(group) }}
   <span class="font-normal normal-case">
   {{ group.count === 1 ? '1 cook' : `${group.count} cooks` }}
   </span>
+  <TooltipBubble
+  :text="group.planCreatedAt === null ? '' : `Planned ${formatAbsolute(group.planCreatedAt)}`"
+  placement="below-right"
+  />
   </h2>
   <ul class="space-y-2">
   <li
@@ -140,9 +149,10 @@ function addToPlan(row: Row) {
   <div class="min-w-0 flex-1 hovercap:cursor-pointer" @click="openRecipe(row.variantId)">
   <h3 class="line-clamp-2 text-sm font-semibold">{{ row.meta.name }}</h3>
   <p
-  class="mt-0.5 text-xs text-text-muted"
-  :title="formatAbsolute(row.lastAt)"
+  class="group relative mt-0.5 text-xs text-text-muted"
   >
+  <!-- ADR-0055: the absolute date — a descendant of the group host,
+  below-right of it. -->
   <span
   class="mr-1 rounded bg-brand/10 px-1.5 py-px text-[10px] font-bold text-brand-text"
   :data-test="`history-count-${row.variantId}`"
@@ -150,6 +160,7 @@ function addToPlan(row: Row) {
   {{ row.count === 1 ? 'cooked once' : `cooked ${row.count} times` }}
   </span>
   {{ formatRelative(row.lastAt) }}
+  <TooltipBubble :text="formatAbsolute(row.lastAt)" placement="below-right" />
   </p>
   </div>
   <button
