@@ -6,8 +6,19 @@ import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { MAX_SERVINGS, MIN_SERVINGS } from '../lib/servings'
 import { UNIT_SYSTEMS, UNIT_SYSTEM_LABEL, type UnitSystem } from '../lib/units'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
+import { getCatalog } from '../lib/catalog'
+import { USER_RECIPE_ID_BASE } from '../lib/userRecipes'
+import {
+  matchMealimeFavourites,
+  mealimeReportLines,
+  parseMealimePayload,
+  type MealimeMatchResult,
+} from '../lib/mealimeImport'
+import { mealimeBookmarkletHref } from '../lib/mealimeBookmarklet'
+import { useFavouritesStore } from '../stores/favourites'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
+import MealimeImportModal from './MealimeImportModal.vue'
 
 /**
  * Settings (ADR-0016): the app's data surface. Backup & restore MOVED here
@@ -311,6 +322,110 @@ function onBackupInputChange(e: Event): void {
 function cancelBackupImport(): void {
   pendingBackup.value = null
 }
+
+/* ---------- Import from Mealime (ADR-0058) ---------- */
+
+/** One-shot migration: Mealime shuts down 2026-10-21. The bookmarklet on
+ *  the user's bookmarks bar reads their Mealime favourites and copies a
+ *  small JSON payload; the paste box below is the only ingress — the app
+ *  itself NEVER contacts mealime.com (e2e-enforced). Matching is
+ *  validate-first and applied atomically through the favourites store's
+ *  record path (adds only, ADR-0031 semantics intact). */
+const bookmarkletHref = mealimeBookmarkletHref()
+const mealimeInput = ref('')
+/** Non-null while the result report is on screen (success or empty run). */
+const mealimeReport = ref<MealimeMatchResult & { added: number; removed: number } | null>(null)
+/** Non-null while the SUCCESS modal is open: the report plus the catalog
+ *  tiles (name + image) for the matched variant ids. The failure paths —
+ *  malformed paste, all-miss, catalog-load failure — never open it. */
+const mealimeModal = ref<
+  (MealimeMatchResult & { added: number; removed: number }) & {
+    catalogById: Map<number, { name: string; image: string }>
+  }
+| null>(null)
+
+/** Resolve the matched variant ids against the SAME catalog slice the
+ *  matcher ran on — the parent already awaits getCatalog(), so this is
+ *  synchronous and cannot race; a failed load returns before any of it. */
+function resolveImportCatalog(
+  result: MealimeMatchResult,
+  meta: ReadonlyArray<{ id: number; name: string; thumbnail_image_url: string }>,
+): Map<number, { name: string; image: string }> {
+  const byId = new Map(meta.map((m) => [m.id, m]))
+  const tiles = new Map<number, { name: string; image: string }>()
+  for (const match of result.matched) {
+    const entry = byId.get(match.variantId)
+    if (entry) {
+      tiles.set(match.variantId, { name: entry.name, image: entry.thumbnail_image_url })
+    }
+  }
+  return tiles
+}
+
+function clearMealimeReport() {
+  mealimeReport.value = null
+}
+
+/** Dragging is the affordance; clicking on THIS page would run the
+ *  bookmarklet against the wrong origin and dead-end, so say so instead. */
+function onBookmarkletClick() {
+  ui.showToast('Drag this button to your bookmarks bar, then click it on my.mealime.com', {
+    duration: 6000,
+  })
+}
+
+async function importMealimeFavourites(): Promise<void> {
+  const text = mealimeInput.value
+  const parsed = parseMealimePayload(text)
+  if (!parsed.ok) {
+    // Nothing applied; the paste stays in the box so it can be fixed.
+    ui.showToast(`Couldn't import — ${parsed.error}`, { kind: 'error', duration: 6000 })
+    return
+  }
+  let catalog
+  try {
+    catalog = await getCatalog()
+  } catch {
+    // The catalog failed to load — say so. getCatalog() memoizes the
+    // rejection for this page load, so a reload (which has it back by
+    // first paint anyway) is the recovery, not a retry here.
+    ui.showToast("Couldn't import — the recipe catalog failed to load. Reload the page and try again.", {
+      kind: 'error',
+      duration: 6000,
+    })
+    return
+  }
+  // Mealime-catalog entries ONLY: a Mealime favourite must never star the
+  // household's own recipes (ADR-0054, ids at or above USER_RECIPE_ID_BASE),
+  // and a household recipe sharing a name must not make a Mealime name
+  // match ambiguous.
+  const result = matchMealimeFavourites(
+    parsed.favourites,
+    catalog.variantMeta.filter((m) => m.id < USER_RECIPE_ID_BASE),
+  )
+  const favourites = useFavouritesStore()
+  // Override discipline (ADR-0058 amended): the override replaces the set
+  // with the RESOLVED payload. A payload where NOTHING matched is a
+  // match-layer failure, not a user opinion — the matching never guesses
+  // (ADR-0058 §3), so it must never be allowed to tombstone the whole
+  // set either. Favourites stay intact and the misses are reported.
+  if (result.matched.length > 0) {
+    const { added, removed } = favourites.importFavourites(result.matched.map((m) => m.variantId))
+    mealimeInput.value = ''
+    mealimeReport.value = { ...result, added, removed }
+    // Success modal (ADR-0058 amendment): the applied import gets the
+    // preview — including the honest zero, where the headline says the
+    // favourites already match. All-miss never reaches this branch.
+    mealimeModal.value = {
+      ...result,
+      added,
+      removed,
+      catalogById: resolveImportCatalog(result, catalog.variantMeta),
+    }
+  } else {
+    mealimeReport.value = { ...result, added: 0, removed: 0 }
+  }
+}
 </script>
 
 <template>
@@ -548,6 +663,77 @@ function cancelBackupImport(): void {
   />
   </div>
 
+  <!-- Import from Mealime (ADR-0058): a one-shot migration before
+  Mealime shuts down (2026-10-21). The bookmarklet link is dragged to the
+  user's bookmarks bar and clicked on my.mealime.com, where it copies the
+  favourites payload to the clipboard; the paste box here is the only
+  ingress — this app never contacts mealime.com. -->
+  <div class="space-y-2 rounded-xl bg-surface p-3" data-test="mealime-import-section">
+  <span class="text-sm font-bold tracking-tight">Import from Mealime</span>
+  <p class="text-xs font-semibold" data-test="mealime-import-notice">
+  Mealime closes on 21 October 2026 — import your favourites before then. They sync to your
+  household like any favourites you star here.
+  </p>
+  <ol class="list-decimal space-y-1 pl-4 text-xs" aria-label="How to import your Mealime favourites">
+  <li>
+  Show your browser's bookmarks bar
+  <span class="opacity-80">(Ctrl + Shift + B, or Command + Shift + B on Mac)</span>.
+  </li>
+  <li>
+  Drag this button to the bookmarks bar:
+  <a
+  :href="bookmarkletHref"
+  class="mt-1 inline-flex items-center gap-1 rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs font-semibold text-primary-strong"
+  data-test="mealime-bookmarklet-link"
+  aria-label="Flambette: copy my favourites — drag this to your bookmarks bar, then click it on my.mealime.com"
+  @click.prevent="onBookmarkletClick"
+  >Flambette: copy my favourites</a>
+  </li>
+  <li>
+  Log in at
+  <a
+  href="https://my.mealime.com"
+  target="_blank"
+  rel="noopener noreferrer"
+  class="font-medium underline underline-offset-2"
+  aria-label="Open my.mealime.com in a new tab to log in"
+  data-test="mealime-login-link"
+  >my.mealime.com</a>.
+  </li>
+  <li>
+  On the Mealime site, click the bookmark — it copies your favourites. Come back here and paste:
+  </li>
+  </ol>
+  <textarea
+  v-model="mealimeInput"
+  class="h-24 w-full rounded-xl border bg-surface-raised px-3 py-2 text-xs outline-none focus:border-brand-text"
+  placeholder='Paste here — the text the bookmark copied (starts with {"source":…}).'
+  aria-label="Paste your copied Mealime favourites here"
+  data-test="mealime-import-input"
+  @input="clearMealimeReport"
+  ></textarea>
+  <button
+  class="h-11 w-full rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand active:bg-brand-strong"
+  data-test="mealime-import-button"
+  aria-label="Import the pasted Mealime favourites"
+  @click="importMealimeFavourites"
+  >
+  Import favourites
+  </button>
+  <!-- The wording lives in `mealimeReportLines` — the success modal
+  (ADR-0058 amendment) repeats it, so both surfaces render ONE source. -->
+  <p
+  v-if="mealimeReport"
+  class="text-xs"
+  data-test="mealime-import-report"
+  aria-live="polite"
+  >
+  <template v-for="(line, i) in mealimeReportLines(mealimeReport)" :key="i">
+  {{ line }}<br v-if="i < mealimeReportLines(mealimeReport).length - 1" />
+  </template>
+  </p>
+  </div>
+
   <p class="px-1 text-xs text-text-muted">
   Everything lives on this device — the app never talks to a server about your data, so a backup file is the
   only way to move it.
@@ -591,5 +777,15 @@ function cancelBackupImport(): void {
   </div>
   </div>
   </div>
+
+  <!-- Import-from-Mealime SUCCESS modal (ADR-0058 amendment): the
+  applied import gets the preview. v-if-gated MOUNT, so one mount == one
+  open and the focus restore runs on unmount (NutritionModal's pattern). -->
+  <MealimeImportModal
+  v-if="mealimeModal"
+  :result="mealimeModal"
+  :catalog-by-id="mealimeModal.catalogById"
+  @close="mealimeModal = null"
+  />
   </section>
 </template>

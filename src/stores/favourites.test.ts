@@ -127,3 +127,96 @@ describe('useFavouritesStore (ADR-0031 tombstones)', () => {
     expect(store.records['1'].updatedAt).toBe(9_000)
   })
 })
+
+describe('importFavourites (ADR-0058, amended: full override)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  test('override: payload ids starred at now, set members NOT in the payload tombstoned at now', () => {
+    const store = useFavouritesStore()
+    store.toggleFavourite(5, 1_000) // will NOT be in the payload
+    store.toggleFavourite(8, 1_000) // will NOT be in the payload
+    const { added, removed } = store.importFavourites([5, 6, 7], 9_000)
+    expect(added).toBe(2) // 6 and 7 were not favourited before
+    expect(removed).toBe(1) // only 8 leaves the set
+    expect(store.isFavourite(6)).toBe(true)
+    expect(store.records['6']).toEqual({ favorited: true, updatedAt: 9_000 })
+    // The removal is a FRESH TOMBSTONE, never a silent delete: a peer
+    // merges per key and an absent key means "don't touch" (ADR-0031).
+    expect(store.isFavourite(8)).toBe(false)
+    expect(store.records['8']).toEqual({ favorited: false, updatedAt: 9_000 })
+  })
+
+  test('an already-starred payload id is RE-STAMPED — the import is a new opinion', () => {
+    const store = useFavouritesStore()
+    store.toggleFavourite(5, 1_000)
+    const { added } = store.importFavourites([5], 9_000)
+    expect(added).toBe(0)
+    expect(store.records['5']).toEqual({ favorited: true, updatedAt: 9_000 })
+  })
+
+  test('re-stars a locally un-starred recipe (the import is an explicit ask)', () => {
+    const store = useFavouritesStore()
+    store.toggleFavourite(5, 1_000)
+    store.toggleFavourite(5, 2_000) // tombstone
+    expect(store.isFavourite(5)).toBe(false)
+    const { added, removed } = store.importFavourites([5], 9_000)
+    expect(added).toBe(1)
+    expect(removed).toBe(0)
+    expect(store.isFavourite(5)).toBe(true)
+    expect(store.records['5']).toEqual({ favorited: true, updatedAt: 9_000 })
+  })
+
+  test('an import lands in the household sync as an ordinary opinion — stars AND removals', () => {
+    const a = useFavouritesStore()
+    a.toggleFavourite(1, 1_000)
+    a.importFavourites([3], 4_000)
+    setActivePinia(createPinia())
+    const b = useFavouritesStore()
+    b.toggleFavourite(1, 1_000) // b also has 1 starred
+    b.mergeRemote(a.records)
+    expect(b.isFavourite(3)).toBe(true)
+    // The import's tombstone for 1 propagates: the set is the payload's.
+    expect(b.isFavourite(1)).toBe(false)
+    expect(b.records['1']).toEqual({ favorited: false, updatedAt: 4_000 })
+  })
+
+  test('removal-only import (empty payload) still writes and reports honestly', () => {
+    const store = useFavouritesStore()
+    store.toggleFavourite(1, 1_000)
+    store.toggleFavourite(2, 1_000)
+    const { added, removed } = store.importFavourites([], 9_000)
+    expect(added).toBe(0)
+    expect(removed).toBe(2)
+    expect([...store.ids]).toEqual([])
+    expect(store.records['1']).toEqual({ favorited: false, updatedAt: 9_000 })
+    expect(store.records['2']).toEqual({ favorited: false, updatedAt: 9_000 })
+  })
+
+  test('an import after seedFrom wipes the seed down to the payload', () => {
+    const store = useFavouritesStore()
+    store.seedFrom([1, 2, 3])
+    const { added, removed } = store.importFavourites([2, 9], 9_000)
+    expect(added).toBe(1) // 9 is new
+    expect(removed).toBe(2) // 1 and 3 leave
+    expect([...store.ids].sort()).toEqual([2, 9])
+  })
+
+  test('importing the exact current set is an honest no-op ({added: 0, removed: 0})', () => {
+    const store = useFavouritesStore()
+    store.importFavourites([1, 2], 1_000)
+    const { added, removed } = store.importFavourites([1, 2], 9_000)
+    expect(added).toBe(0)
+    expect(removed).toBe(0)
+    expect([...store.ids].sort()).toEqual([1, 2])
+  })
+
+  test('non-finite ids are skipped, never starred', () => {
+    const store = useFavouritesStore()
+    const { added, removed } = store.importFavourites([Number.NaN, 5], 9_000)
+    expect(added).toBe(1)
+    expect(removed).toBe(0)
+    expect(store.isFavourite(5)).toBe(true)
+  })
+})

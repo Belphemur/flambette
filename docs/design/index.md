@@ -5,14 +5,14 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**61 records.** One file per decision (`ADR-NNNN-slug.md`),
+**62 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
 
 ## In force
 
-The 49 accepted records below all still govern. Skim the ones
+The 50 accepted records below all still govern. Skim the ones
 near your change before proposing anything -- they encode *why* the
 architecture is shaped the way it is.
 
@@ -67,6 +67,7 @@ architecture is shaped the way it is.
 | [0054](ADR-0054-user-recipes-and-source-filter.md) | User recipes live in the catalog, and "source" replaces the PRO filter _(supersedes ADR-0027)_ | 2026-10-05 |
 | [0055](ADR-0055-one-tooltip-component-and-tap-reveal.md) | one tooltip component + mobile tap-reveal on the recipe detail view _(supersedes ADR-0049)_ | 2026-10-06 |
 | [0057](ADR-0057-catalog-profiles-units-and-servings.md) | catalog profiles: units × servings are ACCOUNT settings, not per-recipe variants | 2026-10-06 |
+| [0058](ADR-0058-mealime-favourites-import.md) | Mealime favourites import via bookmarklet (recipe_id-first matching) | 2026-10-06 |
 
 ## Not in force
 
@@ -102,8 +103,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0058**). Do not count the files -- that is how the
-   collisions above happened (61 files share 56 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0059**). Do not count the files -- that is how the
+   collisions above happened (62 files share 57 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.

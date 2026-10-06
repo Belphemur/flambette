@@ -147,6 +147,48 @@ export const useFavouritesStore = defineStore(
       if (changed) records.value = next
     }
 
+    /**
+     * Migration import (ADR-0058, amended): a FULL OVERRIDE — after a
+     * successful import the favourited set is EXACTLY the payload. Every
+     * payload id is starred at a FRESH stamp (the import is a new
+     * opinion; an already-starred id is re-stamped, not preserved), and
+     * every currently-starred id NOT in the payload is un-starred via a
+     * fresh tombstone — never a silent delete. The tombstones are
+     * load-bearing: household peers reconcile PER KEY and an absent key
+     * means "don't touch" (ADR-0031), so a plain wipe (`replaceAll`) could
+     * never propagate the removals to the other devices. Tombstones do.
+     * Records that are ALREADY tombstones stay untouched — re-tombstoning
+     * them would add no information. `records` is written even when only
+     * removals landed. Returns `{added, removed}` so the report can be
+     * honest about both directions.
+     */
+    function importFavourites(
+      variantIds: Iterable<number>,
+      now: number = Date.now(),
+    ): { added: number; removed: number } {
+      const stamp = Number.isFinite(now) && now > DEFAULT_STAMP ? now : Date.now()
+      const wanted = new Set<number>()
+      const next = { ...records.value }
+      for (const id of variantIds) {
+        if (!Number.isFinite(id)) continue
+        wanted.add(id)
+        next[String(id)] = { favorited: true, updatedAt: stamp }
+      }
+      let added = 0
+      for (const id of wanted) {
+        if (!ids.value.has(id)) added++
+      }
+      let removed = 0
+      for (const [key, record] of Object.entries(records.value)) {
+        if (record.favorited && !wanted.has(Number(key))) {
+          next[key] = { favorited: false, updatedAt: stamp }
+          removed++
+        }
+      }
+      records.value = next
+      return { added, removed }
+    }
+
     /** Replace the set wholesale (backup import) — fresh local truth. */
     function replaceAll(newIds: number[]): void {
       records.value = fromIds(
@@ -155,7 +197,17 @@ export const useFavouritesStore = defineStore(
       )
     }
 
-    return { ids, records, replaceAll, seedFrom, seeded, isFavourite, toggleFavourite, mergeRemote }
+    return {
+      ids,
+      records,
+      replaceAll,
+      seedFrom,
+      seeded,
+      isFavourite,
+      toggleFavourite,
+      mergeRemote,
+      importFavourites,
+    }
   },
   {
     persist: {
