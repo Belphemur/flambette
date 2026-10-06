@@ -83,10 +83,56 @@ def load_base_docs():
     return docs
 
 
+def drops_for_restriction(rid, base_docs):
+    """Ingredients dropped (no swap) in KEPT recipes under this restriction.
+
+    Returns a list of {from, count} entries. `from` is the BASE CATALOG doc's
+    exact spelling (catalog nameKey preserves punctuation; the folded
+    name_key must NOT be used — see Bug A). A from-ingredient that swaps in
+    SOME recipes and drops in others gets BOTH representations (count each
+    kind); this list only carries the drops.
+    """
+    slug = A.RESTRICTIONS[rid][0]
+    none_r = payload_rids("none-%s" % PAYLOAD_SUFFIX)
+    single_r = payload_rids("%s-%s" % (slug, PAYLOAD_SUFFIX))
+    removed_ids = none_r - single_r
+
+    with open(os.path.join(ARCHIVE, "%s-%s.json" % (slug, PAYLOAD_SUFFIX))) as f:
+        payload = json.load(f)
+    uuids = uuid_map(payload)
+
+    drop_counter = Counter()
+    for rid_in_payload in sorted(uuids):
+        if rid_in_payload in removed_ids:
+            continue
+        if rid_in_payload not in base_docs:
+            continue
+        uuid = uuids[rid_in_payload]
+        if not os.path.exists(os.path.join(DOC_CACHE, slug, uuid + ".json")):
+            continue
+        with open(os.path.join(DOC_CACHE, slug, uuid + ".json")) as f:
+            rdoc = json.load(f)
+        base_doc = base_docs[rid_in_payload]
+        events = B.events_for_doc(base_doc, rdoc)
+        for e in events:
+            if e["kind"] != "removed":
+                continue
+            drop_counter[e["from"]] += 1
+
+    drops = [
+        {"from": f, "count": c}
+        for f, c in sorted(drop_counter.items(), key=lambda kv: (-kv[1], kv[0]))
+    ]
+    return drops
+
+
 def swaps_for_restriction(rid, base_docs):
     """Extract all swap events from one restriction's restricted docs.
 
     Returns a list of {from, to, quantityRule, count} sorted by count desc.
+    `from` and `to` use the BASE CATALOG doc's exact spelling (catalog
+    nameKey preserves punctuation; the Python name_key FOLDS it, which would
+    never match the runtime's nameKey — Bug A).
     """
     slug = A.RESTRICTIONS[rid][0]
     none_r = payload_rids("none-%s" % PAYLOAD_SUFFIX)
@@ -98,7 +144,7 @@ def swaps_for_restriction(rid, base_docs):
     uuids = uuid_map(payload)
 
     from collections import defaultdict as _dd
-    rule_counter = _dd(Counter)  # (from_key, to_key) -> Counter(quantityRule -> n)
+    rule_counter = _dd(Counter)  # (from, to) -> Counter(quantityRule -> n)
 
     for rid_in_payload in sorted(uuids):
         if rid_in_payload in removed_ids:
@@ -115,7 +161,7 @@ def swaps_for_restriction(rid, base_docs):
         for e in events:
             if e["kind"] != "swap":
                 continue
-            F, T = e["from_key"], e["to_key"]
+            F, T = e["from"], e["to"]
             qb = e.get("qty_base") or ""
             qn = e.get("qty_new") or ""
             rule = B.QUANTITY_RULES.get(B.qty_relation(qb, qn), "unparseable")
@@ -172,6 +218,8 @@ def main():
                 problems.append("%s: missing swaps list" % rid_str)
             if not isinstance(info.get("pairRemoved"), dict):
                 problems.append("%s: missing pairRemoved dict" % rid_str)
+            if not isinstance(info.get("drops"), list):
+                problems.append("%s: missing drops list" % rid_str)
             for s in info.get("swaps", []):
                 for k in ("from", "to", "quantityRule", "count"):
                     if k not in s:
@@ -186,6 +234,7 @@ def main():
     result = {}
     total_swaps = 0
     total_pairs = 0
+    total_drops = 0
     for rid_str in sorted(A.RESTRICTIONS, key=int):
         rid = int(rid_str)
         slug = A.RESTRICTIONS[rid][0]
@@ -202,21 +251,24 @@ def main():
         none_r = payload_rids("none-%s" % PAYLOAD_SUFFIX)
         single_r = payload_rids("%s-%s" % (slug, PAYLOAD_SUFFIX))
         removed = sorted(none_r - single_r)
+        drops = drops_for_restriction(rid, base_docs)
         result[rid_str] = {
             "removed": removed,
             "pairRemoved": pair_removed,
             "swaps": swaps,
+            "drops": drops,
         }
         total_swaps += len(swaps)
-        log("%s: removed=%d swaps=%d pairs_with_extras=%d"
-            % (slug, len(removed), len(swaps), len(pair_removed)))
+        total_drops += len(drops)
+        log("%s: removed=%d swaps=%d drops=%d pairs_with_extras=%d"
+            % (slug, len(removed), len(swaps), len(drops), len(pair_removed)))
 
     os.makedirs(DATA, exist_ok=True)
     with open(DICT_OUT, "w") as f:
         json.dump(result, f, indent=1, sort_keys=True)
         f.write("\n")
-    log("wrote %s (%d restrictions, %d swap entries, %d pair entries)"
-        % (DICT_OUT, len(result), total_swaps, total_pairs))
+    log("wrote %s (%d restrictions, %d swap entries, %d drop entries, %d pair entries)"
+        % (DICT_OUT, len(result), total_swaps, total_drops, total_pairs))
     return 0
 
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   RESTRICTIONS,
+  activeDrops,
   buildDictIndex,
   groceryDisplayLines,
   isRemovedByRestriction,
@@ -8,6 +9,7 @@ import {
   normalizeRestrictionIds,
   restrictedDocView,
   swapName,
+  type DropEntry,
   type RestrictionDict,
 } from './restrictions'
 import { nameKey } from './grocery'
@@ -30,6 +32,17 @@ const dict: RestrictionDict = {
     pairRemoved: { '1,10': [70] },
     swaps: [
       { from: 'mayonnaise', to: 'avocado oil mayonnaise', quantityRule: 'verbatim', count: 3 },
+    ],
+  },
+  '2': {
+    removed: [],
+    pairRemoved: { '1,10': [70] },
+    swaps: [
+      { from: 'mayonnaise', to: 'avocado oil mayonnaise', quantityRule: 'verbatim', count: 3 },
+    ],
+    drops: [
+      { from: 'crumbled feta cheese', count: 41 },
+      { from: 'butter, unsalted', count: 63 },
     ],
   },
 }
@@ -145,7 +158,7 @@ describe('restrictedDocView (dictionary application)', () => {
   }
 
   test('applies swaps to ingredient names, keeps base quantities and ids', () => {
-    const view = restrictedDocView(baseDoc, index)
+    const view = restrictedDocView(baseDoc, index, [1])
     expect(view.line_items.map((l) => l.ingredient_name)).toEqual([
       'gluten free rotini pasta', 'tamari soy sauce', 'broccoli',
     ])
@@ -155,16 +168,49 @@ describe('restrictedDocView (dictionary application)', () => {
     expect(view.line_items.map((l) => l.id)).toEqual([11, 12, 13])
   })
   test('recipe prose stays AUTHENTIC — no substitution in instructions', () => {
-    const view = restrictedDocView(baseDoc, index)
+    const view = restrictedDocView(baseDoc, index, [1])
     expect(view.instructions[0].primary_message).toBe('Boil the rotini pasta.')
   })
   test('null/empty index returns the base doc unchanged (same reference)', () => {
-    expect(restrictedDocView(baseDoc, null)).toBe(baseDoc)
-    expect(restrictedDocView(baseDoc, buildDictIndex(undefined))).toBe(baseDoc)
+    expect(restrictedDocView(baseDoc, null, [])).toBe(baseDoc)
+    expect(restrictedDocView(baseDoc, buildDictIndex(undefined), [])).toBe(baseDoc)
   })
   test('index with no swaps returns the base doc unchanged', () => {
-    const noSwapIndex = buildDictIndex({ '9': { removed: [], pairRemoved: {}, swaps: [] } })
-    expect(restrictedDocView(baseDoc, noSwapIndex)).toBe(baseDoc)
+    const noSwapIndex = buildDictIndex({ '9': { removed: [], pairRemoved: {}, swaps: [], drops: [] } })
+    expect(restrictedDocView(baseDoc, noSwapIndex, [9])).toBe(baseDoc)
+  })
+  test('drops hide lines from display only (no swap, no key change)', () => {
+    // DF (id 2) has drops: crumbled feta cheese, plain Greek yogurt, etc.
+    const dfDoc = {
+      ...baseDoc,
+      line_items: [
+        { id: 11, quantity: '1 ½ (113 g) pkgs', ingredient_name: 'crumbled feta cheese' },
+        { id: 12, quantity: '2 tbsp', ingredient_name: 'broccoli' },
+      ],
+    }
+    const view = restrictedDocView(dfDoc, index, [2])
+    // crumbled feta cheese is a DF drop — hidden from display
+    expect(view.line_items.map((l) => l.ingredient_name)).toEqual(['broccoli'])
+  })
+  test('drops and swaps coexist — swap wins over drop for same from-ingredient', () => {
+    // DF (id 2): butter, unsalted is BOTH in swaps AND drops.
+    // When a swap applies, the line shows the swap (not hidden).
+    const dfDoc = {
+      ...baseDoc,
+      line_items: [
+        { id: 11, quantity: '2 tbsp', ingredient_name: 'butter, unsalted' },
+        { id: 12, quantity: '1 ½ (113 g) pkgs', ingredient_name: 'crumbled feta cheese' },
+      ],
+    }
+    const view = restrictedDocView(dfDoc, index, [2])
+    expect(view.line_items.map((l) => l.ingredient_name)).toContain('virgin coconut oil')
+    expect(view.line_items.map((l) => l.ingredient_name)).not.toContain('crumbled feta cheese')
+  })
+  test('active ids select the right drops (union across active ids)', () => {
+    const dfDrops = activeDrops([2], index)
+    expect(dfDrops.has(nameKey('crumbled feta cheese'))).toBe(true)
+    const gfDrops = activeDrops([1], index)
+    expect(gfDrops.has(nameKey('crumbled feta cheese'))).toBe(false)
   })
 })
 
@@ -190,23 +236,47 @@ describe('groceryDisplayLines (key/display split, dictionary-based)', () => {
   }
 
   test('the swap case: the substitute name on the base line, base quantity, base key', () => {
-    const rows = groceryDisplayLines(baseDoc, index)!
+    const rows = groceryDisplayLines(baseDoc, index, [1])
     expect(rows).toEqual([
       { keyName: 'rotini pasta', name: 'gluten free rotini pasta', quantity: '15 oz', keyIngredient: 'rotini pasta' },
       { keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '2 tbsp', keyIngredient: 'soy sauce' },
       { keyName: 'broccoli', name: 'broccoli', quantity: '300 g', keyIngredient: 'broccoli' },
     ])
   })
+  test('drops hide lines from display only (no swap, key untouched)', () => {
+    const dfDoc = {
+      ...baseDoc,
+      line_items: [
+        { id: 11, quantity: '1 ½ (113 g) pkgs', ingredient_name: 'crumbled feta cheese' },
+        { id: 12, quantity: '2 tbsp', ingredient_name: 'broccoli' },
+      ],
+    }
+    const rows = groceryDisplayLines(dfDoc, index, [2])!
+    expect(rows.some((r) => r.name === 'crumbled feta cheese')).toBe(false)
+    expect(rows.some((r) => r.name === 'broccoli')).toBe(true)
+  })
+  test('drops and swaps coexist — swap wins over drop', () => {
+    const dfDoc = {
+      ...baseDoc,
+      line_items: [
+        { id: 11, quantity: '2 tbsp', ingredient_name: 'butter, unsalted' },
+        { id: 12, quantity: '1 ½ (113 g) pkgs', ingredient_name: 'crumbled feta cheese' },
+      ],
+    }
+    const rows = groceryDisplayLines(dfDoc, index, [2])!
+    expect(rows.some((r) => r.name === 'virgin coconut oil')).toBe(true)
+    expect(rows.some((r) => r.name === 'crumbled feta cheese')).toBe(false)
+  })
   test('an unchanged doc yields null (no override)', () => {
-    const noSwapIndex = buildDictIndex({ '9': { removed: [], pairRemoved: {}, swaps: [] } })
-    expect(groceryDisplayLines(baseDoc, noSwapIndex)).toBeNull()
+    const noSwapIndex = buildDictIndex({ '9': { removed: [], pairRemoved: {}, swaps: [], drops: [] } })
+    expect(groceryDisplayLines(baseDoc, noSwapIndex, [9])).toBeNull()
   })
   test('null index yields null', () => {
-    expect(groceryDisplayLines(baseDoc, null)).toBeNull()
-    expect(groceryDisplayLines(baseDoc, undefined)).toBeNull()
+    expect(groceryDisplayLines(baseDoc, null, [])).toBeNull()
+    expect(groceryDisplayLines(baseDoc, undefined, [])).toBeNull()
   })
   test('keys computed from the base line NEVER see the override', () => {
-    const rows = groceryDisplayLines(baseDoc, index)!
+    const rows = groceryDisplayLines(baseDoc, index, [1])
     expect(nameKey(baseDoc.line_items[0].ingredient_name)).toBe('rotini pasta')
     expect(rows[0].name).toBe('gluten free rotini pasta')
     expect(rows[0].keyName).toBe('rotini pasta')

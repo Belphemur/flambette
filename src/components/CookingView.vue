@@ -50,7 +50,8 @@ const restrictionPrefs = useRestrictions()
 const doc = computed<RecipeDoc | null>(() => {
   const base = loadedDoc.value
   if (!base) return null
-  return restrictedDocView(base, restrictionPrefs.index.value)
+  return restrictedDocView(base, restrictionPrefs.index.value,
+    restrictionPrefs.activeIds.value)
 })
 
 const meta = computed(() => catalog.value?.byId.get(props.id) ?? null)

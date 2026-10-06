@@ -59,6 +59,11 @@ from statistics import median
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
+# The restricted-doc cache lives in the gitignored archive, outside the repo
+# (`build_restriction_sets.py` used to own this path; option C removed the
+# overlay machinery — the analysis reads the RAW cache directly).
+ARCHIVE = os.path.join(os.path.dirname(ROOT), "mealime-media", "raw_profiles", "restrictions")
+DOC_CACHE = os.path.join(ARCHIVE, "docs-metric")
 sys.path.insert(0, HERE)
 
 import build_restriction_sets as B  # noqa: E402  (loader, doc cache, RESTRICTIONS)
@@ -195,7 +200,7 @@ def rids(payload):
 
 
 def doc_cached(slug, uuid):
-    return os.path.exists(os.path.join(B.DOC_CACHE, slug, uuid + ".json"))
+    return os.path.exists(os.path.join(DOC_CACHE, slug, uuid + ".json"))
 
 
 def uuid_of(payload, recipe_id):
@@ -296,7 +301,7 @@ def payload_events(slug, cens, uuids, base_docs, none_meta):
         changed += 1
         uuid = uuids.get(r)
         if uuid and doc_cached(slug, uuid):
-            with open(os.path.join(B.DOC_CACHE, slug, uuid + ".json")) as f:
+            with open(os.path.join(DOC_CACHE, slug, uuid + ".json")) as f:
                 rdoc = json.load(f)
             out[r] = events_for_doc(base_docs[r], rdoc)
             n_docs += 1

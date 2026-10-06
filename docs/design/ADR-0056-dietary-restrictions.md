@@ -188,3 +188,112 @@ Joins are on the stable `recipe_id`; line-level events come from the
 restricted docs in the build cache. Findings are measured, not assumed —
 they are the INPUT to the composed-subset design decision; the DECISION
 is the owner's.
+
+## Three mechanisms, faithfully reproduced (measured 2026-10-08 over the fresh archive)
+
+Upstream's restriction filtering is NOT just an exclusion filter. Three
+mechanisms are in effect, all reproduced by the dictionary
+(`public/data/restriction_dict.json`) at build time and enforced by the
+runtime (`src/lib/restrictions.ts`).
+
+### 1. Exclusion — restricted catalogs are strict subsets
+
+The restricted render removes recipes outright. `added=0` holds for all 12
+restrictions (validated at build time). Measured against the 2,759-catalog
+baseline, the single-restriction survivors are:
+
+| restriction | kept | removed |
+| --- | ---: | ---: |
+| Gluten-Free | 2,264 | 495 |
+| Dairy-Free | 1,384 | 1,375 |
+| Fish-Free | 2,459 | 300 |
+| Shellfish-Free | 2,652 | 107 |
+| Peanut-Free | 2,634 | 125 |
+| Tree Nut-Free | 2,379 | 380 |
+| Soy-Free | 2,336 | 423 |
+| Nightshade-Free | 779 | 1,980 |
+| Egg-Free | 2,086 | 673 |
+| Sesame-Free | 2,435 | 324 |
+| Mustard-Free | 2,244 | 515 |
+| Sulfite-Free | 1,681 | 1,078 |
+
+The dictionary's `removed` sets reproduce these EXACTLY (495/1375/125/107 /
+etc., verified). Removal is computed at query time — `isRemovedByRestriction`
+iterates the ACTIVE ids only, so a recipe removed by an INACTIVE restriction
+must not disappear from discovery.
+
+### 2. Substitution — kept recipes get ingredient swaps
+
+Kept recipes get ingredient name swaps. The dictionary carries 88 swap
+entries total (measured, not invented) — per restriction, each entry is
+`{ from, to, quantityRule, count }` where `from`/`to` are the catalog-
+spelling ingredient names and `quantityRule` is one of `verbatim` (99.8%),
+`rescale` (0.1%), `re-authored` (0.1%) — the three measured categories from
+upstream's rework. The runtime applies swaps by `nameKey` match; base
+documents stay the key basis (the key/display split).
+
+| restriction | swap entries |
+| --- | ---: |
+| Gluten-Free | 23 |
+| Dairy-Free | 13 |
+| Fish-Free | 15 |
+| Shellfish-Free | 4 |
+| Peanut-Free | 5 |
+| Tree Nut-Free | 5 |
+| Soy-Free | 5 |
+| Nightshade-Free | 4 |
+| Egg-Free | 9 |
+| Mustard-Free | 0 |
+| Sesame-Free | 0 |
+| Sulfite-Free | 5 |
+
+### 3. Drop — kept recipes lose ingredients with no substitute
+
+Kept recipes sometimes lose an ingredient outright — no swap counterpart
+exists in that recipe (e.g. `crumbled feta cheese` under DF, `plain Greek
+yogurt` under DF). The dictionary carries a `drops` list per restriction:
+`{ from, count }` entries counting how many KEPT recipes under that
+restriction lose the ingredient with no substitute. A from-ingredient that
+swaps in SOME recipes and drops in others gets BOTH representations — count
+each kind (e.g. `butter, unsalted` under DF: 19 swaps to virgin coconut
+oil AND 63 drops). Total: 303 drop entries across 12 restrictions.
+
+The runtime HIDEs display lines whose `nameKey` is in the active
+restriction's drops set (union across active ids) ONLY when no swap applies
+for that line; keys and checked state are UNTOUCHED (the line is hidden for
+display only; un-hiding on toggle restores the row automatically — the key
+never changed).
+
+### Dictionary schema (committed: `public/data/restriction_dict.json`)
+
+Per restriction id:
+
+- `removed` — `number[]` of recipe_ids upstream drops (query-time filter
+  basis)
+- `pairRemoved` — `Record<string, number[]>` — per two-restriction pair,
+  recipe_ids removed by the PAIR but by NEITHER single (composition extras;
+  apply only when BOTH restrictions are active)
+- `swaps` — `{ from, to, quantityRule, count }[]` — ingredient name swaps
+  with the measured quantity rule and event count; `from`/`to` use the
+  BASE CATALOG doc's exact spelling (catalog `nameKey` preserves
+  punctuation; the Python `name_key` FOLDS it — the folded spelling must
+  NEVER be used as a `from` key or the runtime match breaks — Bug A)
+- `drops` — `{ from, count }[]` — ingredients that DISAPPEAR in kept
+  recipes with no swap counterpart; counted per restriction; `from` uses
+  catalog spelling; a from-ingredient may appear in BOTH `swaps` and `drops`
+  (Bug B)
+
+The build pipeline: `scripts/build_restriction_sets.py` (pairing + event
+extraction) → `scripts/build_restriction_dict.py` (dictionary assembly) →
+`public/data/restriction_dict.json` (committed, ~1.4 MB). The pairing
+fallback in `pair_lines` matches on name containment + quantity agreement
+Bug C fix; the runtime's `pairOverlayToBase` mirrors this.
+
+**Gate**: `scripts/test_build_restriction_sets.py` verifies the committed
+dictionary is well-formed and that `removed` sets exactly match the payload
+subset difference (tier 1 — offline always; tier 2 — archive-faithfulness,
+skips without the archive). `build_restriction_dict.py --check` verifies the
+on-disk artifact. The e2e suite pins the v2 default 4-pack and the GF
+substitution (`rotini pasta` → `gluten-free rotini pasta`), the DF drop
+(`crumbled feta cheese` hidden), and the DF swap (`butter, unsalted` →
+`virgin coconut oil`).

@@ -145,6 +145,27 @@ QUANTITY_RULES = {"same": "verbatim", "spelling": "verbatim", "scaled": "rescale
                   "unparseable": "unparseable"}
 
 
+def _name_contains(base_key: str, overlay_key: str) -> bool:
+    """True when overlay's name contains the base name's key or its head noun.
+
+    Upstream's substitutes keep the quantity but the name carries a family
+    token: `soy sauce` -> `tamari soy sauce` (base key is a substring),
+    `rotini pasta` -> `gluten free rotini pasta` (base key is a substring),
+    `panko bread crumbs` -> `gluten free bread crumbs` (base head noun
+    `bread crumbs` is a substring). First checks direct bidirectional
+    containment, then falls back to tail word sequences (head noun).
+    """
+    if base_key in overlay_key or overlay_key in base_key:
+        return True
+    bwords = base_key.split()
+    for length in range(min(len(bwords), 4), 1, -1):
+        for start in range(len(bwords) - length + 1):
+            phrase = " ".join(bwords[start:start + length])
+            if len(phrase) >= 3 and phrase in overlay_key:
+                return True
+    return False
+
+
 def pair_lines(base, ov):
     """Mirror of the runtime's pairing (restrictions.ts pairOverlayToBase).
 
@@ -175,12 +196,27 @@ def pair_lines(base, ov):
             used_b.add(cands[0])
     open_ov = [j for j in open_ov if j not in pairs]
     base_left = [i for i in open_base if i not in used_b]
+    # Fallback: pair a base-left line to an overlay-left line by EITHER:
+    #   (a) name containment + quantity agreement (catches family-token
+    #       substitutes: `soy sauce` -> `tamari soy sauce`, `rotini pasta` ->
+    #       `gluten free rotini pasta`, `panko bread crumbs` -> `gluten free
+    #       bread crumbs` — Bug C); OR
+    #   (b) equal quantity that is unique in BOTH docs (catches
+    #       completely different ingredient names that keep the quantity:
+    #       `butter, unsalted` -> `virgin coconut oil`).
+    # (b) requires uniqueness to avoid index-order mis-pairing when two
+    #     different base ingredients share a quantity string.
     ovq = Counter(ov[j][2].strip() for j in open_ov)
     baseq = Counter(base[i][2].strip() for i in open_base)
     for n in range(min(len(open_ov), len(open_base))):
         j, i = open_ov[n], open_base[n]
         qo, qb = ov[j][2].strip(), base[i][2].strip()
-        if qo == qb and ovq[qo] == 1 and baseq[qb] == 1:
+        if qo != qb:
+            continue
+        if _name_contains(base[i][0], ov[j][0]):
+            pairs[j] = i
+            used_b.add(i)
+        elif ovq[qo] == 1 and baseq[qb] == 1:
             pairs[j] = i
             used_b.add(i)
     return pairs, open_ov, base_left

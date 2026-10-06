@@ -250,3 +250,69 @@ test('the grocery row pairs the substituted name with ITS OWN quantity (no cross
     .first()
   await expect(garlic).toBeVisible()
 })
+
+/* ---------- Bug A regression: butter swaps under DF (catalog spelling matches) ----------
+ *
+ * Under DF, `butter, unsalted` (catalog spelling, comma preserved) swaps to
+ * `virgin coconut oil`. The dictionary's `from` uses the catalog spelling so
+ * the runtime's `nameKey` match works (Bug A fix). This is the regression pair
+ * for Bug A: the folded spelling `butter unsalted` must NOT appear as a `from`.
+ */
+const BUTTER_RECIPE = 'Lemon-Butter Chicken'
+const BUTTER_SWAP = 'virgin coconut oil'
+
+/* ---------- Bug B: DF drops (feta) ----------
+ *
+ * Under DF, `crumbled feta cheese` is DROPPED (no swap counterpart) in kept
+ * recipes. The drop is display-only: the line is hidden from the grocery, the
+ * key/checked state is untouched. See Bug B.
+ */
+const FETA_RECIPE = 'Arugula, Apricot'
+const FETA_INGREDIENT = 'crumbled feta cheese'
+
+async function activateDairyFree(page: Page) {
+  await page.goto('/settings')
+  await page.getByTestId('restriction-chip-dairy-free').click()
+  await expect(page.getByTestId('restriction-chip-dairy-free')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+}
+
+test('a DF butter recipe shows the substitute name (Bug A regression: catalog spelling matches)', async ({
+  page,
+}) => {
+  await activateDairyFree(page)
+  await page.goto('/recipes')
+  await waitForCatalog(page)
+  await searchRecipes(page, 'parsnip')
+  await cardFor(page, /Lemon-Butter Chicken/).first().click()
+  const sheet = page.getByRole('dialog')
+  await expect(sheet).toBeVisible()
+  // The dictionary swap: `butter, unsalted` -> `virgin coconut oil`.
+  await expect(sheet.getByText(BUTTER_SWAP).first()).toBeVisible()
+  // The folded spelling must NOT appear as a display name (Bug A).
+  await expect(sheet.getByText('butter unsalted')).toHaveCount(0)
+})
+
+test('under DF a feta recipe does not render the dropped line in the grocery (Bug B)', async ({
+  page,
+}) => {
+  await activateDairyFree(page)
+  await page.goto('/recipes')
+  await waitForCatalog(page)
+  await searchRecipes(page, 'arugula')
+  await cardFor(page, /Arugula, Apricot/).first().click()
+  const sheet = page.getByRole('dialog')
+  await expect(sheet).toBeVisible()
+  await sheet.getByTestId('add-to-plan').click()
+  await page.keyboard.press('Escape')
+
+  await gotoTab(page, 'Grocery')
+  // The feta line is a DF drop (no swap counterpart) — it is HIDDEN from
+  // display only; the key stays base. No grocery row should name feta.
+  await expect(
+    page.getByTestId('grocery-row').filter({ hasText: FETA_INGREDIENT }).first(),
+  ).toHaveCount(0)
+})
+

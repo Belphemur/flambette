@@ -50,10 +50,16 @@ export interface SwapEntry {
   count: number
 }
 
+export interface DropEntry {
+  from: string
+  count: number
+}
+
 export interface RestrictionDictEntry {
   removed: number[]
   pairRemoved: Record<string, number[]>
   swaps: SwapEntry[]
+  drops: DropEntry[]
 }
 
 export type RestrictionDict = Record<string, RestrictionDictEntry>
@@ -68,6 +74,23 @@ export interface DictIndex {
   dict: RestrictionDict | null | undefined
   /** nameKey -> swap entry across all restrictions. */
   swaps: SwapIndex
+  /** rid -> set of nameKeys that DROP (no swap counterpart) under that restriction. */
+  dropsByRestriction: Map<string, Set<string>>
+  /** nameKey -> drop entry (across all restrictions; first match wins). */
+  dropsByIndex: Map<string, DropEntry>
+}
+
+/** Compute the union of drop nameKeys across the given active ids from the index. */
+export function activeDrops(activeIds: number[], index: DictIndex): Set<string> {
+  const out = new Set<string>()
+  if (!index.dict) return out
+  for (const id of activeIds) {
+    const perRestriction = index.dropsByRestriction.get(String(id))
+    if (perRestriction) {
+      for (const key of perRestriction) out.add(key)
+    }
+  }
+  return out
 }
 
 /**
@@ -125,21 +148,39 @@ export const SLUG_BY_ID = new Map(RESTRICTIONS.map((r) => [r.id, r.slug]))
  */
 export function buildDictIndex(dict: RestrictionDict | null | undefined): DictIndex {
   const byNameKey = new Map<string, SwapEntry>()
+  const dropsByRestriction = new Map<string, Set<string>>()
+  const dropsByIndex = new Map<string, DropEntry>()
   if (dict) {
-    for (const entry of Object.values(dict)) {
-      for (const swap of entry.swaps) {
-        const key = nameKey(swap.from)
+    for (const [rid_str, entry] of Object.entries(dict)) {
+      const swapSet = new Set<string>()
+      for (const s of entry.swaps ?? []) {
+        const key = nameKey(s.from)
         // Keep the FIRST swap for a nameKey — the dictionary is sorted by
         // count desc per restriction; the first restriction to claim a
         // nameKey wins because RESTRICTIONS order gives the allergen-first
         // pass.
         if (!byNameKey.has(key)) {
-          byNameKey.set(key, swap)
+          byNameKey.set(key, s)
+        }
+        swapSet.add(key)
+      }
+      const dropSet = new Set<string>()
+      for (const drop of entry.drops ?? []) {
+        const key = nameKey(drop.from)
+        // Drops and swaps can overlap on the same from-ingredient (a swap
+        // in some recipes, a drop in others). The swap wins at application
+        // time; the drop is a second representation counted separately.
+        if (!dropSet.has(key) && !swapSet.has(key)) {
+          dropSet.add(key)
+          if (!dropsByIndex.has(key)) {
+            dropsByIndex.set(key, drop)
+          }
         }
       }
+      dropsByRestriction.set(rid_str, dropSet)
     }
   }
-  return { dict, swaps: { byNameKey } }
+  return { dict, swaps: { byNameKey }, dropsByRestriction, dropsByIndex }
 }
 
 /**
@@ -176,7 +217,7 @@ export function isRemovedByRestriction(
  * nameKey. Returns the substitute name when a swap applies, otherwise the
  * original name unchanged. The quantity stays VERBATIM from the base doc —
  * measured: 99.8% of upstream swaps keep the base quantity string (verbatim),
- * 0.1% rescale (same unit, doubled), 0.1% re-author. The runtime never invents
+ * 0.1% rescale (same unit, doubled), 0.1% re-authored. The runtime never invents
  * a quantity: no swap entry means no change.
  */
 export function swapName(name: string, index: DictIndex): string {
@@ -185,53 +226,97 @@ export function swapName(name: string, index: DictIndex): string {
 }
 
 /**
+ * Is this nameKey in the drops set for any of the active restrictions?
+ * Drops are ingredients that DISAPPEAR in kept recipes under a restriction
+ * with NO swap counterpart (e.g. crumbled feta cheese under DF). Used for
+ * display-only hiding — keys and checked state are untouched.
+ */
+export function isDropName(name: string, drops: Set<string>): boolean {
+  return drops.has(nameKey(name))
+}
+
+/**
  * The recipe doc as it displays under the active restrictions: swaps are
  * applied to each line item's ingredient_name (nameKey match); the base
  * quantity string stays verbatim; ids stay the base ids. Recipe prose (step
  * instructions) stays AUTHENTIC — substitution only applies to ingredient
- * names in line items (ADR-0022). `null` index returns the base doc unchanged.
+ * names in line items (ADR-0022). A line whose nameKey is in the drops set
+ * (no swap counterpart under any active restriction) is HIDDEN from display
+ * only; the key/checked state is UNTOUCHED. `null` index returns the base doc
+ * unchanged.
  */
 export function restrictedDocView(
   doc: RecipeDoc,
   index: DictIndex | null | undefined,
+  activeIds: number[],
 ): RecipeDoc {
-  if (!index || !index.dict || index.swaps.byNameKey.size === 0) return doc
-  const line_items: LineItem[] = doc.line_items.map((li) => ({
-    ...li,
-    ingredient_name: swapName(li.ingredient_name, index),
-  }))
+  if (!index || !index.dict) return doc
+  if (index.swaps.byNameKey.size === 0 && index.dropsByIndex.size === 0) return doc
+  const drops = activeDrops(activeIds, index)
+  const line_items: LineItem[] = []
+  for (const li of doc.line_items) {
+    const lk = nameKey(li.ingredient_name)
+    const swap = index.swaps.byNameKey.get(lk)
+    if (swap) {
+      // Swap applies: substitute the display name, keep everything else.
+      line_items.push({ ...li, ingredient_name: swap.to })
+    } else if (drops.has(lk)) {
+      // Drop: hide this line from display only — key/checked state untouched.
+      continue
+    } else {
+      line_items.push({ ...li })
+    }
+  }
   return { ...doc, line_items }
 }
 
-/* ---------- The grocery seam (keys stay base, display follows the swap) ---------- */
-
 /**
  * The grocery's display rows for this recipe, or null when the base doc
- * should render as-is (no active swaps — every row's name matches its key).
+ * should render as-is (no active swaps and no active drops — every row's
+ * (name, quantity) pair ALWAYS co-occurs in one authoritative doc (the base
+ * doc, possibly with a swap on the name) — never a cross-pair of base
+ * quantity under a substitute name).
  *
- * Every row's (name, quantity) pair co-occurs in the BASE doc: display is
- * the substitute name (when a swap applies), quantity is the base doc's
- * verbatim string, keyName is the base doc's nameKey. A display row is never
- * a cross-pair of base quantity under a substitute name — that was the option-B
- * bug, eliminated by the swap table (each line's key and display are one
- * ingredient).
+ * A line whose nameKey is in the drops set (no swap counterpart under any
+ * active restriction) is HIDDEN from display only; the key/checked state is
+ * UNTOUCHED (un-hiding on toggle restores the row automatically — the key
+ * never changed). A line whose nameKey has an active swap shows the
+ * substitute name with the base doc's verbatim quantity.
  */
 export function groceryDisplayLines(
   doc: RecipeDoc,
   index: DictIndex | null | undefined,
+  activeIds: number[],
 ): RestrictedDisplayLine[] | null {
-  if (!index || !index.dict || index.swaps.byNameKey.size === 0) return null
+  if (!index || !index.dict) return null
+  if (index.swaps.byNameKey.size === 0 && index.dropsByIndex.size === 0) return null
+  const drops = activeDrops(activeIds, index)
   let changed = false
-  const rows = doc.line_items.map((li) => {
-    const swapped = swapName(li.ingredient_name, index)
-    if (swapped !== li.ingredient_name) changed = true
-    return {
-      keyName: nameKey(li.ingredient_name),
-      name: swapped,
-      quantity: li.quantity,
-      keyIngredient: li.ingredient_name,
+  const rows: RestrictedDisplayLine[] = []
+  for (const li of doc.line_items) {
+    const lk = nameKey(li.ingredient_name)
+    const swap = index.swaps.byNameKey.get(lk)
+    if (swap) {
+      changed = true
+      rows.push({
+        keyName: lk,
+        name: swap.to,
+        quantity: li.quantity,
+        keyIngredient: li.ingredient_name,
+      })
+    } else if (drops.has(lk)) {
+      // Drop: hide from display only; key/checked state untouched.
+      changed = true
+      continue
+    } else {
+      rows.push({
+        keyName: lk,
+        name: li.ingredient_name,
+        quantity: li.quantity,
+        keyIngredient: li.ingredient_name,
+      })
     }
-  })
+  }
   return changed ? rows : null
 }
 
