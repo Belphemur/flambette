@@ -114,6 +114,30 @@ it is exactly the fabrication ADR-0054 forbids.
   contributing food publishes it — partial sums never ship.
 - No "Mealime" wording in user-facing copy for household recipes.
 
+## Dietary Restrictions (ADR-0056)
+
+User recipes are NOT covered by the dietary-restriction mechanism, and that
+is the documented behaviour, not a gap: the restriction artifacts (`removed`
+sets and `restriction_overlays/`) are keyed by upstream `recipe_id` and
+sourced from upstream's own restricted renderings, so the mechanism can
+never produce a variant for a household recipe. A user recipe therefore
+stays visible under EVERY active restriction, and its ingredient text stays
+authentic — the same rule as ADR-0054's authored-prose rule.
+
+If the author WANTS a restricted variant (say, a gluten-free version of the
+pancake), add it as a SEPARATE household recipe — upstream's own model:
+restricted variants are per-recipe authored docs, not a runtime transform.
+When naming its substituted ingredients, use the CATALOG's substitution
+vocabulary where one exists, so the grocery list reads consistently next to
+upstream recipes under the same restriction (`gluten-free rotini pasta`,
+`tamari soy sauce`, `virgin coconut oil`, `natural almond butter`, …).
+
+The authoritative substitution vocabulary is the committed data:
+`public/data/restriction_sets.json` (which restriction removed what) and
+`public/data/restriction_overlays/<slug>.json` (upstream's own reworked
+ingredient names, per doc). Grep an overlay for the ingredient being
+substituted before inventing a spelling of your own.
+
 ## Pitfalls
 
 - **Never hand-edit `user_recipes.json`.** The next authoring run
