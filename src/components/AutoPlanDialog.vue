@@ -475,7 +475,7 @@ function setCategory(value: string) {
   <li
   v-for="meal in pendingMeals"
   :key="meal.id"
-  class="overflow-hidden rounded-lg ring-1"
+  class="group relative rounded-lg ring-1"
   :data-test="`auto-plan-meal-${meal.id}`"
   >
   <img
@@ -483,14 +483,18 @@ function setCategory(value: string) {
   :alt="meal.name"
   loading="lazy"
   @error="onImgError"
-  class="aspect-[4/3] w-full object-cover"
+  class="aspect-[4/3] w-full rounded-t-lg object-cover"
   />
   <!-- ADR-0055: the OS title on the line-clamped name becomes the one
   bubble (hover only). above-center: below would clip against the
-  dialog's vertical scroll. The bubble is a SIBLING of the p, never a
-  child — the tile text must stay clean for readers of textContent
-  (the e2e preview round-trip asserts against the p's own text). -->
-  <p class="group relative line-clamp-2 px-1.5 py-1 text-[11px] leading-tight font-medium">
+  dialog's vertical scroll. The GROUP HOST is the tile li (not the p):
+  group-hover is a descendant selector, so the bubble must hang under
+  the hovered element, and the p's own text must stay clean — the e2e
+  preview round-trip reads the p's textContent and looks the meal up as
+  a heading. The tile's overflow clipping moved onto the image (rounded
+  top corners), or the absolutely-positioned bubble would be clipped by
+  its own tile. -->
+  <p class="line-clamp-2 px-1.5 py-1 text-[11px] leading-tight font-medium">
   {{ meal.name }}
   </p>
   <TooltipBubble :text="meal.name" />
@@ -507,8 +511,10 @@ function setCategory(value: string) {
   {{ ui.autoPlanMode === 'add' ? 'Add these meals' : 'Use this plan' }}
   <!-- ADR-0055: conditional "Waiting…" bubble; empty once the preview
   is complete ⇒ nothing rendered (the conditional title's parity).
-  Sibling of the button (same parent), anchored to it — never a child,
-  so the button's own label text stays clean. -->
+  The bubble is a CHILD of the button — the button IS the group host —
+  and `aria-hidden` keeps it out of the button's accessible name; the
+  button's textContent is not read by any spec, and the accessible
+  name is what role-based locators match. -->
   <TooltipBubble
   :text="previewComplete ? '' : autoPlanBusy ? 'Waiting for the new plan…' : 'Waiting for the preview to load'"
   />

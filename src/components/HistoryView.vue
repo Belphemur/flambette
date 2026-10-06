@@ -115,8 +115,9 @@ function addToPlan(row: Row) {
   relative one is the one that reads well in a list. -->
   <!-- ADR-0055: the absolute date lives in the bubble now (hover only —
   the h2 is not focusable, same parity the native title had). The bubble
-  is a SIBLING of the h2 (same parent), anchored to it — never a child,
-  so the heading's text stays clean. -->
+  is a DESCENDANT of the group host (group-hover is a descendant
+  selector); the h2's textContent is only asserted with toContainText,
+  which tolerates it. -->
   <h2
   class="group relative flex items-baseline gap-2 text-xs font-semibold uppercase tracking-wide text-text-muted"
   data-test="history-group-title"  >
@@ -124,11 +125,11 @@ function addToPlan(row: Row) {
   <span class="font-normal normal-case">
   {{ group.count === 1 ? '1 cook' : `${group.count} cooks` }}
   </span>
-  </h2>
   <TooltipBubble
   :text="group.planCreatedAt === null ? '' : `Planned ${formatAbsolute(group.planCreatedAt)}`"
   placement="below-right"
   />
+  </h2>
   <ul class="space-y-2">
   <li
   v-for="row in group.rows"
@@ -149,6 +150,8 @@ function addToPlan(row: Row) {
   <p
   class="group relative mt-0.5 text-xs text-text-muted"
   >
+  <!-- ADR-0055: the absolute date — a descendant of the group host,
+  below-right of it. -->
   <span
   class="mr-1 rounded bg-brand/10 px-1.5 py-px text-[10px] font-bold text-brand-text"
   :data-test="`history-count-${row.variantId}`"
@@ -156,10 +159,8 @@ function addToPlan(row: Row) {
   {{ row.count === 1 ? 'cooked once' : `cooked ${row.count} times` }}
   </span>
   {{ formatRelative(row.lastAt) }}
-  </p>
-  <!-- ADR-0055: the absolute last-cooked date — sibling of the p, so
-  the row's text stays clean. -->
   <TooltipBubble :text="formatAbsolute(row.lastAt)" placement="below-right" />
+  </p>
   </div>
   <button
   class="shrink-0 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-brand-text hover:bg-surface"

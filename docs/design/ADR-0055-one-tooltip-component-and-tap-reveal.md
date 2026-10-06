@@ -190,15 +190,25 @@ information-parity the native `title` had (also unreachable by keyboard);
 no `tabindex` is added, because growing the tab order for a cosmetic
 bubble is an a11y regression, not an improvement.
 
-**The bubble is a SIBLING of its host element, never a child** (for every
-host whose own text carries meaning). The host keeps `group relative` and
-the absolutely-positioned bubble is placed immediately after it inside
-the same parent — visually identical, but the host's `textContent` stays
-exactly what it was, which is load-bearing: the Auto-Plan preview's e2e
-round-trip reads the tile `p`'s text and looks the meal up as a heading,
-and a bubble INSIDE the `p` doubled every title. The room chip keeps the
-bubble inside the chip span — that was the pre-ADR-0055 structure, with
-the same text, so no spec surface changes.
+**The bubble is a DESCENDANT of its `.group` host — never a sibling.**
+`group-hover:` is a descendant selector, so a bubble placed BESIDE the
+host can never fire (an initial sibling layout was corrected after the
+first review round caught it). The host is therefore chosen per site so
+that no text a consumer reads is polluted:
+
+- where the host's own text is read verbatim by the e2e (the Auto-Plan
+  preview tile reads the `p`'s `textContent` and looks the meal up as a
+  heading), the `group relative` host moves UP a level — the tile `li`
+  hosts both the p (clean text) and the bubble; the tile's
+  `overflow-hidden` moved onto the image (`rounded-t-lg`), because an
+  absolutely-positioned bubble would be clipped by its own tile.
+- where only role/accessible-name or `toContainText` assertions exist
+  (buttons, the room chip, the cook line, the group title), the bubble
+  hangs directly under the host: `aria-hidden` keeps it out of the
+  accessible name, and `toContainText` tolerates extra text.
+
+The room chip keeps the bubble inside the chip span — that was the
+pre-ADR-0055 structure, with the same text, so no spec surface changes.
 
 ### Decision 6 — what survives from ADR-0044, named explicitly
 
