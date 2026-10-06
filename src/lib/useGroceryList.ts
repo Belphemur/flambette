@@ -63,7 +63,7 @@ export function useGroceryList() {
           factor: entryServings(meta.id) / doc.serving_count,
           recipeName: meta.name,
           cleared: cleared?.length ? new Set(cleared) : undefined,
-          displayLines: groceryDisplayLines(doc, restrictionPrefs.overlayFor(doc.recipe_id))
+          displayLines: groceryDisplayLines(doc, restrictionPrefs.index.value)
             ?? undefined,
         },
       ]

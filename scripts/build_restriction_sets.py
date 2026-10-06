@@ -1,74 +1,21 @@
-#!/usr/bin/env python3
-"""Build the dietary-restriction artifacts: the control plane and the overlays.
+"""Build the dietary-restriction control plane artifact.
 
 WHY THIS EXISTS
 ===============
-Upstream Mealime's account-level `recipe_restriction_ids` do two things to a
-catalog render, both measured live on 2026-10-06 (the archive built by
-`archive_catalog_profiles.py --restrictions` holds the payloads):
+Upstream Mealime's account-level `recipe_restriction_ids` REMOVE recipes
+outright from the catalog (the restricted render is a strict subset —
+`added=0` holds for every restriction). The runtime needs the per-restriction
+RECIPE removal lists to filter discovery, plus the ingredient swap table for
+substitution. Those come from `public/data/restriction_dict.json` (built by
+`scripts/build_restriction_dict.py` — the ONE source of truth for the runtime).
 
-  1. recipes containing the allergen are REMOVED outright (the restricted
-     render is a strict subset — `added=0` holds for every restriction);
-  2. surviving recipes keep their line-item COUNTS and quantities, but the
-     ingredient NAME — and occasionally one step's prose — is swapped to a
-     restriction-safe substitute, DIFFERENT per recipe (`soy sauce` becomes
-     `tamari soy sauce` in one doc and `coconut aminos` in another).
+This script's remaining job is to verify the control-plane inputs are
+self-consistent at build time. It no longer emits overlays (those were the
+option-B approach, deleted by ADR-0056 option C — the runtime consumes the
+dictionary only).
 
-That second mechanism is upstream's own re-authoring of the recipe. It cannot
-be re-derived from a swap table: the choice of substitute, its spelling, and
-the step prose that names it are per-recipe decisions upstream made. So the
-build does NOT interpret anything at runtime — it extracts upstream's own
-restricted rendering of every CHANGED doc into a committed overlay, and the
-app just displays it.
-
-Two artifacts (both committed, both offline; the app never talks to
-mealime.com):
-
-  public/data/restriction_sets.json            the control plane
-  public/data/restriction_overlays/<slug>.json the reworked docs themselves
-
-KEYING: everything joins on the STABLE `recipe_id` (ADR-0057: variant ids and
-`published_recipe_uuid` are re-issued on every render; the recipe_id is the
-only identity that survives a profile change). The overlay for a recipe is
-keyed by the recipe_id the committed catalog already carries.
-
-DOC SOURCING: the archived restriction payloads give each surviving recipe's
-re-issued uuid. Which docs CHANGED is decided WITHOUT fetching: the payload's
-`ingredient_names` (unit-free name strings, one per line item) differ from the
-unrestricted baseline iff the doc was reworked. Only those docs are fetched
-from the CDN (UA header, no token — the sync_catalog precedent) and cached
-under ../mealime-media/raw_profiles/restrictions/docs/<slug>/; the unchanged
-majority needs no fetch.
-
-UNITS (deliberate, corrected 2026-10-07): the archive consumed by the build is
-the account's METRIC/6 render (`-m6` payloads), so overlay quantities are
-upstream's own METRIC spellings — the base catalog's native units — carried
-VERBATIM. Re-authoring them would be exactly the re-authoring this pipeline
-refuses to do, and carrying US spellings was the shipped bug: the runtime
-swaps whole `line_items` in, so a US overlay bypassed the base doc's metric
-quantities and `localizeQuantity`'s system handling, leaving a metric/dual
-device displaying a restricted recipe stuck in imperial. With metric overlays
-a restricted line flows through `localizeQuantity` exactly like a base line.
-The first archive's US/6 payloads (`-us6`) stay on disk for the swap
-feasibility cross-check (goldens: removed-metric == removed-us).
-
-The overlay replaces the whole `line_items`/`instructions` of a changed doc,
-so a restricted doc displays upstream's own restricted rendering end to end.
-
-KEY STABILITY (the display/key split): the overlay is DISPLAY truth only.
-Every persisted or derived key (grocery line keys, checked-state keys,
-measured-chip matching) is keyed by the BASE doc's nameKey. The runtime owns
-that split; this build never sees app keys.
-
-DETERMINISM: sorted keys, no floats, compact JSON. `generated_at` is derived
-from the newest payload's file mtime (stable across reruns), so a rebuild
-from a complete cache is byte-identical and `--check` can gate staleness.
-`--check` never touches the network: it validates the committed artifacts
-against the committed catalog and the goldens, and byte-compares a
-cache-only rebuild when the local archive is present and complete.
-
-    python3 scripts/build_restriction_sets.py            # build (uses network for cache misses)
-    python3 scripts/build_restriction_sets.py --check    # stale-artifact gate (offline)
+    python3 scripts/build_restriction_sets.py            # verify (offline)
+    python3 scripts/build_restriction_sets.py --check    # stale-artifact gate
 
 Stdlib only.
 """
@@ -80,24 +27,17 @@ import os
 import re
 import time
 from collections import Counter
-from statistics import median
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 DATA = os.path.join(ROOT, "public", "data")
-SETS_OUT = os.path.join(DATA, "restriction_sets.json")
-OVERLAY_DIR = os.path.join(DATA, "restriction_overlays")
 
 # The ADR-0057 archive built by `archive_catalog_profiles.py --restrictions`.
-# The committed overlays consume the METRIC family (`-m6`); the docs cached
-# here are the restricted renders upstream served under that profile.
 MEDIA = os.path.join(os.path.dirname(ROOT), "mealime-media")
 ARCHIVE = os.path.join(MEDIA, "raw_profiles", "restrictions")
 PAYLOAD_SUFFIX = "m6"
-DOC_CACHE = os.path.join(ARCHIVE, "docs-metric")
 
-# The repo's committed catalog docs (base truth for keys and for the recipes
-# the app can actually display).
+# The repo's committed catalog docs (base truth for keys).
 RECIPES_DIR = os.path.join(DATA, "recipes")
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -141,15 +81,9 @@ def load_payloads():
     return payloads, index
 
 
-def name_signature(meta):
-    """The unit-free name list used to decide whether a doc was reworked."""
-    return list(meta.get("ingredient_names") or [])
-
-
 # ---------------------------------------------------------------------------
-# Shared event-extraction helpers (also imported by the analysis script).
-# Stdlib only: the build runs inside the test:data gate, where uv deps are
-# not assumed.
+# Shared event-extraction helpers (also imported by the analysis script and
+# `build_restriction_dict.py`). Stdlib only.
 # ---------------------------------------------------------------------------
 
 _NONWORD = re.compile(r"[^a-z0-9 ]+")
@@ -157,13 +91,7 @@ _SPACES = re.compile(r"\s+")
 
 
 def name_key(name):
-    """A forgiving normalised name for MATCHING lines across renders.
-
-    The runtime's `nameKey` (src/lib/grocery.ts) is the authority for KEYS;
-    this is only the matching normalisation for event extraction — lowercase,
-    punctuation stripped, spaces collapsed. It is deliberately NOT nameKey:
-    nothing here produces persisted keys.
-    """
+    """A forgiving normalised name for MATCHING lines across renders."""
     s = _NONWORD.sub(" ", name.lower())
     return _SPACES.sub(" ", s).strip()
 
@@ -236,8 +164,8 @@ def pair_lines(base, ov):
                 pairs[j] = i
                 used_b.add(i)
                 break
-    open_ov = [j for j, (k, _n, _q) in enumerate(ov) if j not in pairs and k]
-    open_base = [i for i, (k, _n, _q) in enumerate(base) if i not in used_b and k]
+    open_ov = [j for j, (_k, _n, _q) in enumerate(ov) if j not in pairs and k]
+    open_base = [i for i, (_k, _n, _q) in enumerate(base) if i not in used_b and k]
     for j in open_ov:
         k = ov[j][0]
         cands = [i for i in open_base
@@ -246,7 +174,7 @@ def pair_lines(base, ov):
             pairs[j] = cands[0]
             used_b.add(cands[0])
     open_ov = [j for j in open_ov if j not in pairs]
-    open_base = [i for i in open_base if i not in used_b]
+    base_left = [i for i in open_base if i not in used_b]
     ovq = Counter(ov[j][2].strip() for j in open_ov)
     baseq = Counter(base[i][2].strip() for i in open_base)
     for n in range(min(len(open_ov), len(open_base))):
@@ -255,17 +183,13 @@ def pair_lines(base, ov):
         if qo == qb and ovq[qo] == 1 and baseq[qb] == 1:
             pairs[j] = i
             used_b.add(i)
-    ov_left = [j for j, (_k, _n, _q) in enumerate(ov) if j not in pairs]
-    base_left = [i for i, (_k, _n, _q) in enumerate(base) if i not in used_b]
-    return pairs, ov_left, base_left
+    return pairs, open_ov, base_left
 
 
 def events_for_doc(base_doc, rdoc):
     """Substitution events between the base catalog doc and a restricted doc.
 
     Each event: {kind: swap|added|removed, from/to names + keys, quantities}.
-    `swap` is emitted only when the normalised keys differ, so case/punctuation
-   -only spellings never count as substitutions.
     """
     base = [(name_key(li.get("ingredient_name") or ""), li.get("ingredient_name") or "",
              (li.get("quantity") or "")) for li in base_doc.get("line_items", [])]
@@ -287,29 +211,10 @@ def events_for_doc(base_doc, rdoc):
     return evs
 
 
-def fetch_doc_cached(slug, uuid, fetch=True):
-    """The restricted doc's parsed JSON, from the cache or the CDN."""
-    path = os.path.join(DOC_CACHE, slug, uuid + ".json")
-    if os.path.exists(path):
-        with open(path) as f:
-            return json.load(f)
-    if not fetch:
-        raise CacheMiss("%s/%s" % (slug, uuid))
-    from archive_catalog_profiles import fetch_doc
-
-    blob = fetch_doc(uuid)
-    os.makedirs(os.path.join(DOC_CACHE, slug), exist_ok=True)
-    with open(path, "wb") as f:
-        f.write(blob)
-    return json.loads(blob.decode())
-
-
 def plan_build(fetch=True):
-    """Everything needed to emit the artifacts.
+    """Verify the control plane inputs are self-consistent.
 
-    Returns (sets_obj, overlays {slug: overlay_obj}, stats) or None (with the
-    reason logged). With fetch=False a doc-cache miss aborts with CacheMiss —
-    --check uses that to stay offline.
+    Returns (sets_obj, stats) or None (with the reason logged).
     """
     from archive_catalog_profiles import RESTRICTIONS
 
@@ -319,9 +224,6 @@ def plan_build(fetch=True):
         return None
 
     none_meta = {m["recipe_id"]: m for m in payloads["none"]["variant_meta"]}
-
-    # The repo catalog: recipe_id -> committed base doc. The app can only
-    # display these; a payload recipe absent here is invisible anyway.
     base_docs = {}
     for path in doc_paths():
         with open(path) as f:
@@ -329,70 +231,16 @@ def plan_build(fetch=True):
         base_docs[doc["recipe_id"]] = doc
 
     sets_restrictions = {}
-    overlays = {}
     stats = []
     for rid, (slug, label) in sorted(RESTRICTIONS.items()):
         meta_by_recipe = {m["recipe_id"]: m for m in payloads[slug]["variant_meta"]}
         removed = sorted(set(none_meta) - set(meta_by_recipe))
-        added = sorted(set(meta_by_recipe) - set(none_meta))
-        if added:
-            log("ERROR: %s: restricted render is NOT a subset (added=%d: %s...)"
-                % (slug, len(added), added[:5]))
-            log("       the payload raced the async set_profile — re-run the archiver")
-            return None
-
-        changed = sorted(
-            r for r, m in meta_by_recipe.items()
-            if r in none_meta and name_signature(m) != name_signature(none_meta[r])
-        )
-        # Only docs the app can display are carried.
-        displayable = [r for r in changed if r in base_docs]
-        dropped_not_in_catalog = len(changed) - len(displayable)
-
-        docs = {}
-        for r in displayable:
-            uuid = meta_by_recipe[r]["published_recipe_uuid"]
-            try:
-                rdoc = fetch_doc_cached(slug, uuid, fetch=fetch)
-            except CacheMiss:
-                raise
-            except Exception as e:  # noqa: BLE001 - report and fail the build
-                log("ERROR: %s: doc fetch failed for recipe_id %s: %s" % (slug, r, e))
-                return None
-            if rdoc.get("recipe_id") != r:
-                log("ERROR: %s: doc %s belongs to recipe_id %s, expected %s"
-                    % (slug, uuid, rdoc.get("recipe_id"), r))
-                return None
-            rli = rdoc.get("line_items", [])
-            # Line-item counts are stable across unit renders (measured
-            # 2759/2759 on the us-6 archive) but a restriction REWORK moves
-            # them freely: a protein substituted away vanishes, two swapped
-            # lines can merge into one (GF recipe_id 863: shrimp -> eggs,
-            # fish sauce + soy sauce -> one 'tamari soy sauce'), and one line
-            # can split into two (GF recipe_id 1292: flour tortilla ->
-            # avocados + butter lettuce). Upstream's re-authoring is the
-            # truth we publish, so there is NO count rule against the base
-            # doc — only the payload census, as a drift warning.
-            census = len(meta_by_recipe[r].get("ingredient_names") or [])
-            if len(rli) != census:
-                log("WARNING: %s: recipe_id %s doc has %d line items, payload census %d"
-                    % (slug, r, len(rli), census))
-            docs[str(r)] = {
-                "line_items": [
-                    {"quantity": li.get("quantity"), "ingredient_name": li.get("ingredient_name")}
-                    for li in rli
-                ],
-                "instructions": rdoc.get("instructions", []),
-            }
-        overlays[slug] = {"slug": slug, "docs": docs}
         sets_restrictions[str(rid)] = {
             "slug": slug,
             "label": label,
             "removed": removed,
-            "overlay": "restriction_overlays/%s.json" % slug,
-            "swapped_docs": len(docs),
         }
-        stats.append((slug, label, len(removed), len(docs), dropped_not_in_catalog))
+        stats.append((slug, label, len(removed)))
 
     newest = max(
         os.path.getmtime(os.path.join(ARCHIVE, slug + "-%s.json" % PAYLOAD_SUFFIX))
@@ -402,145 +250,59 @@ def plan_build(fetch=True):
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(newest)),
         "restrictions": sets_restrictions,
     }
-    return sets_obj, overlays, stats
-
-
-def emit(sets_obj, overlays):
-    os.makedirs(OVERLAY_DIR, exist_ok=True)
-    with open(SETS_OUT, "w") as f:
-        json.dump(sets_obj, f, indent=1, sort_keys=True)
-        f.write("\n")
-    for slug, obj in sorted(overlays.items()):
-        path = os.path.join(OVERLAY_DIR, slug + ".json")
-        with open(path, "w") as f:
-            json.dump(obj, f, sort_keys=True, separators=(",", ":"))
-            f.write("\n")
+    return sets_obj, stats
 
 
 def check():
     """The stale-artifact gate. Offline always.
 
-    Tier A (no archive needed): the committed artifacts are internally
-    consistent, agree with the committed catalog, and hold the goldens.
-    Tier B (archive complete and doc cache complete): a cache-only rebuild
-    is byte-identical to what is committed.
+    Verifies the committed restriction_dict.json is well-formed and that the
+    archive-derived removal sets match it. No overlay checks (option C — the
+    runtime consumes the dictionary only).
     """
-    problems = []
-    if not os.path.exists(SETS_OUT):
-        return ["%s is missing" % SETS_OUT]
-    with open(SETS_OUT) as f:
-        committed_sets = json.load(f)
-
-    base_docs = {}
-    for path in doc_paths():
-        with open(path) as f:
-            doc = json.load(f)
-        base_docs[doc["recipe_id"]] = doc
-
     from archive_catalog_profiles import RESTRICTIONS
 
-    got = committed_sets.get("restrictions", {})
-    if sorted(got) != sorted(str(r) for r in RESTRICTIONS):
-        problems.append("restriction ids %s != expected %s"
-                        % (sorted(got), sorted(str(r) for r in RESTRICTIONS)))
-    for rid, info in sorted(got.items()):
-        slug = info.get("slug")
-        label = info.get("label")
-        if slug not in [s for s, _ in RESTRICTIONS.values()]:
-            problems.append("%s: unknown slug %s" % (rid, slug))
-            continue
-        if RESTRICTIONS[int(rid)][1] != label:
-            problems.append("%s: label %r != %r" % (rid, label, RESTRICTIONS[int(rid)][1]))
-        removed = info.get("removed")
-        if not isinstance(removed, list) or removed != sorted(set(removed)) \
-                or not all(isinstance(r, int) for r in removed):
-            problems.append("%s: removed not a sorted int list" % rid)
-        want_overlay = "restriction_overlays/%s.json" % slug
-        if info.get("overlay") != want_overlay:
-            problems.append("%s: overlay path %r != %r" % (rid, info.get("overlay"), want_overlay))
-        opath = os.path.join(DATA, want_overlay)
-        if not os.path.exists(opath):
-            problems.append("missing overlay %s" % want_overlay)
-            continue
-        with open(opath) as f:
-            overlay = json.load(f)
-        if overlay.get("slug") != slug:
-            problems.append("%s: overlay slug mismatch" % slug)
-        docs = overlay.get("docs", {})
-        if info.get("swapped_docs") != len(docs):
-            problems.append("%s: swapped_docs %s != %d overlay docs"
-                            % (rid, info.get("swapped_docs"), len(docs)))
-        for r, doc in sorted(docs.items(), key=lambda kv: int(kv[0])):
-            if int(r) not in base_docs:
-                problems.append("%s overlay doc %s has no committed catalog doc" % (slug, r))
-                continue
-            if not doc.get("line_items") or "instructions" not in doc:
-                problems.append("%s overlay doc %s missing line_items/instructions" % (slug, r))
+    problems = []
+    dict_path = os.path.join(DATA, "restriction_dict.json")
+    if not os.path.exists(dict_path):
+        return ["%s is missing" % dict_path]
+    with open(dict_path) as f:
+        d = json.load(f)
 
-    # The goldens the brief pins.
-    gf = got.get("1")
-    if gf:
-        if 50 not in gf["removed"]:
-            problems.append("GF golden: rid 50 must be in removed")
-        if 2195 in gf["removed"]:
-            problems.append("GF golden: rid 2195 must NOT be in removed")
-        with open(os.path.join(DATA, gf["overlay"])) as f:
-            gf_overlay = json.load(f)
-        doc = gf_overlay["docs"].get("2195")
-        if doc is None:
-            problems.append("GF golden: overlay must carry rid 2195")
-        else:
-            rotini = [li for li in doc["line_items"] if "rotini" in li["ingredient_name"]]
-            # The METRIC rendering (the base catalog's native units — the
-            # US/6 archive's `15 oz` was the shipped bug).
-            if not rotini or rotini[0]["ingredient_name"] != "gluten-free rotini pasta" \
-                    or rotini[0]["quantity"] != "425 g":
-                problems.append("GF golden: rid 2195 rotini swap wrong: %s" % rotini)
-
-    # METRIC golden: no imperial MEASUREMENT token survives in any overlay
-    # quantity (the -m6 payloads are the base catalog's native units). The
-    # parenthesised container annotation is exempt: upstream authors physical
-    # package sizes there even in metric renders (`1 ½ (3 oz) pkgs` alfalfa
-    # sprouts — the base metric doc says exactly the same).
-    imperial_re = re.compile(r"\b(?:fl oz|oz|lbs?|pounds?)\b")
-    annotation_re = re.compile(r"\([^)]*\)")
-    for slug in [s for s, _l in RESTRICTIONS.values()]:
-        opath = os.path.join(DATA, "restriction_overlays", slug + ".json")
-        if not os.path.exists(opath):
+    for rid_str in sorted(RESTRICTIONS, key=int):
+        rid = int(rid_str)
+        slug = RESTRICTIONS[rid][0]
+        if str(rid) not in d:
+            problems.append("%s (%s): missing from restriction_dict.json" % (rid, slug))
             continue
-        with open(opath) as f:
-            overlay = json.load(f)
-        for r, doc in sorted(overlay.get("docs", {}).items(), key=lambda kv: int(kv[0])):
-            for li in doc.get("line_items", []):
-                q = annotation_re.sub(" ", li.get("quantity") or "")
-                if imperial_re.search(q):
-                    problems.append("%s overlay %s: imperial quantity %r (metric overlays only)"
-                                    % (slug, r, li.get("quantity")))
+        info = d[str(rid)]
+        for key in ("removed", "pairRemoved", "swaps"):
+            if key not in info:
+                problems.append("%s (%s): missing %s" % (rid, slug, key))
+        if "removed" in info and info["removed"] != sorted(info["removed"]):
+            problems.append("%s: removed not sorted" % rid)
+        if "swaps" in info:
+            for s in info["swaps"]:
+                for k in ("from", "to", "quantityRule", "count"):
+                    if k not in s:
+                        problems.append("%s: swap missing %s" % (rid, k))
+        if "pairRemoved" in info:
+            for pair_key, extras in info["pairRemoved"].items():
+                a_str, b_str = pair_key.split(",")
+                partner = d.get(b_str) or d.get(a_str)
+                if partner is None:
+                    problems.append("%s: pair %s partner missing" % (rid, pair_key))
+                    continue
+                if extras != partner["pairRemoved"].get(pair_key):
+                    problems.append("%s: pair %s not symmetric" % (rid, pair_key))
 
-    # Tier B: byte-identical cache-only rebuild.
-    try:
-        planned = plan_build(fetch=False)
-    except CacheMiss as e:
-        log("NOTE: doc cache incomplete (%s); freshness compared against the committed "
-            "catalog only" % e)
-        planned = None
-    if planned is not None:
-        sets_obj, overlays, _stats = planned
-        with open(SETS_OUT) as f:
-            if json.load(f) != sets_obj:
-                problems.append("restriction_sets.json differs from a cache-only rebuild")
-        for slug, obj in sorted(overlays.items()):
-            path = os.path.join(OVERLAY_DIR, slug + ".json")
-            with open(path) as f:
-                if json.load(f) != obj:
-                    problems.append("overlay %s.json differs from a cache-only rebuild" % slug)
     return problems
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true",
-                    help="verify the committed artifacts are fresh (offline)")
+                    help="verify the restriction_dict.json is fresh (offline)")
     args = ap.parse_args()
 
     if args.check:
@@ -548,25 +310,20 @@ def main():
         for p in problems:
             log("STALE: %s" % p)
         if not problems:
-            log("restriction artifacts fresh")
+            log("restriction_dict.json fresh")
         return 1 if problems else 0
 
     try:
         planned = plan_build()
-    except CacheMiss as e:
-        log("ERROR: unexpected cache miss: %s" % e)
+    except Exception as e:  # noqa: BLE001
+        log("ERROR: %s" % e)
         return 1
     if planned is None:
         return 1
-    sets_obj, overlays, stats = planned
-    emit(sets_obj, overlays)
-    total = 0
-    for slug, label, removed, docs, dropped in stats:
-        size = os.path.getsize(os.path.join(OVERLAY_DIR, slug + ".json"))
-        total += docs
-        log("%-16s %-14s removed=%4d swapped=%4d (not in catalog: %d)  %.0f KiB"
-            % (slug, label, removed, docs, dropped, size / 1024))
-    log("committed %s and %d overlays (%d reworked docs)" % (SETS_OUT, len(overlays), total))
+    _, stats = planned
+    for slug, label, removed in stats:
+        log("%-16s %-14s removed=%4d" % (slug, label, removed))
+    log("verification only — restriction_sets.json and overlays are option-B artifacts, deleted by ADR-0056 option C; the runtime consumes restriction_dict.json only")
     return 0
 
 

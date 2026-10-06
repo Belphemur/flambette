@@ -66,7 +66,7 @@ architecture is shaped the way it is.
 | [0053](ADR-0053-generated-adr-index.md) | the ADR index is generated, and AGENTS.md links it | 2026-10-05 |
 | [0054](ADR-0054-user-recipes-and-source-filter.md) | User recipes live in the catalog, and "source" replaces the PRO filter _(supersedes ADR-0027)_ | 2026-10-05 |
 | [0055](ADR-0055-one-tooltip-component-and-tap-reveal.md) | one tooltip component + mobile tap-reveal on the recipe detail view _(supersedes ADR-0049)_ | 2026-10-06 |
-| [0056](ADR-0056-dietary-restrictions.md) | dietary restrictions: upstream's own reworks, committed offline; filter is discovery-only | 2026-10-06 |
+| [0056](ADR-0056-dietary-restrictions.md) | dietary restrictions: a committed substitution dictionary, runtime-applied | 2026-10-06 |
 | [0057](ADR-0057-catalog-profiles-units-and-servings.md) | catalog profiles: units × servings are ACCOUNT settings, not per-recipe variants | 2026-10-06 |
 | [0058](ADR-0058-mealime-favourites-import.md) | Mealime favourites import via bookmarklet (recipe_id-first matching) | 2026-10-06 |
 

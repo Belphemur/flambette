@@ -1,16 +1,12 @@
-import { computed, shallowRef, ref } from 'vue'
+import { computed, shallowRef } from 'vue'
 import {
   RESTRICTIONS,
-  SLUG_BY_ID,
-  buildRestrictionIndex,
-  createOverlayLoader,
+  buildDictIndex,
   isRemovedByRestriction,
+  loadRestrictionDict,
   normalizeRestrictionIds,
-  overlayDocFor,
-  type OverlayDoc,
-  type OverlaysBySlug,
-  type RestrictionIndex,
-  type RestrictionSetsFile,
+  type DictIndex,
+  type RestrictionDict,
 } from '../lib/restrictions'
 import { useUiStore } from '../stores/ui'
 
@@ -18,12 +14,13 @@ import { useUiStore } from '../stores/ui'
  * Reactive singleton over the restriction artifacts (the composable seam of
  * `src/lib/restrictions.ts`, whose functions stay pure).
  *
- * `data/restriction_sets.json` (the control plane) is fetched once, lazily —
- * only when a restriction is ACTIVE, so an unrestricted install never spends
- * the request. Overlay payloads load per active slug through the injected
- * loader (a failed fetch resolves null and retries; the app degrades to the
- * base doc). Everything is OFFLINE: static assets from the bundle, never a
- * mealime.com request (the e2e suite enforces that).
+ * `data/restriction_dict.json` (the ingredient substitution dictionary, built
+ * by `scripts/build_restriction_dict.py`) is fetched once, lazily — only when
+ * a restriction is ACTIVE, so an unrestricted install never spends the request.
+ * The dictionary carries swaps (nameKey match → substitute name, base quantity
+ * verbatim), removed sets (recipe ids), and pair extras, all in one ~1.4 MB
+ * committed artifact. Everything is OFFLINE: static assets from the bundle,
+ * never a mealime.com request (the e2e suite enforces that).
  *
  * OUT OF SCOPE BY DECISION (the restriction ADR): the ACTIVE ids are a
  * device-local ui preference and do NOT ride the room payload — household
@@ -31,27 +28,9 @@ import { useUiStore } from '../stores/ui'
  * apply and need their own decision).
  */
 
-let setsPromise: Promise<RestrictionSetsFile | null> | null = null
-const sets = shallowRef<RestrictionSetsFile | null>(null)
-const index = shallowRef<RestrictionIndex>(buildRestrictionIndex(null))
-const overlays = shallowRef<OverlaysBySlug>({})
-const overlaysLoaded = ref(false)
-
-// ONE shared overlay loader at module scope: its per-slug cache must
-// dedupe across ALL callers (RecipesTab/RecipeDetail onMounted, the
-// grocery watch, SettingsTab's toggle each fire ensureLoaded; a per-call
-// loader re-fetched the same multi-megabyte overlay payload per caller).
-const loadOverlay = createOverlayLoader(fetch, import.meta.env.BASE_URL)
-
-async function loadSets(baseUrl: string): Promise<RestrictionSetsFile | null> {
-  try {
-    const res = await fetch(`${baseUrl}data/restriction_sets.json`)
-    if (!res.ok) return null
-    return (await res.json()) as RestrictionSetsFile
-  } catch {
-    return null
-  }
-}
+let dictPromise: Promise<RestrictionDict | null> | null = null
+const dict = shallowRef<RestrictionDict | null>(null)
+const index = shallowRef<DictIndex>(buildDictIndex(null))
 
 export function useRestrictions() {
   const ui = useUiStore()
@@ -59,65 +38,37 @@ export function useRestrictions() {
   /** The device's active restriction ids, normalized (never trusted). */
   const activeIds = computed(() => normalizeRestrictionIds(ui.dietaryRestrictionIds))
 
-  /** Slugs that still need their overlay payload. */
-  const missingSlugs = computed(() =>
-    activeIds.value
-      .map((id) => SLUG_BY_ID.get(id))
-      .filter((slug): slug is string => !!slug && !(slug in overlays.value)),
-  )
-
-  /**
-   * Idempotent: fetch the control plane, then every active slug's overlay.
-   * Fire-and-forget from consumers; a failed load leaves the feature inert
-   * (no filtering, base docs everywhere) until the next call retries.
-   */
-  async function ensureLoaded(): Promise<void> {
-    if (activeIds.value.length === 0) return
-    // loadSets appends `data/` itself (vite's SPA fallback answers a wrong
-    // path 200-with-HTML, so a double prefix would fail INERT, not loudly).
-    setsPromise ??= loadSets(import.meta.env.BASE_URL)
-    const loaded = await setsPromise
-    if (loaded) {
-      sets.value = loaded
-      index.value = buildRestrictionIndex(loaded)
-    } else {
-      // A failed load is NOT memoized: the next ensureLoaded() retries, as
-      // the documented contract says. Concurrent callers awaited the same
-      // attempt; whoever observes the failure clears the memo.
-      setsPromise = null
-    }
-    if (missingSlugs.value.length === 0) {
-      overlaysLoaded.value = true
-      return
-    }
-    await Promise.all(
-      missingSlugs.value.map(async (slug) => {
-        const overlay = await loadOverlay(slug)
-        if (overlay) overlays.value = { ...overlays.value, [slug]: overlay }
-      }),
-    )
-    overlaysLoaded.value = true
-  }
-
   /** Catalog discovery filter: is this recipe removed by an active id? */
   function isRemoved(recipeId: number): boolean {
     return isRemovedByRestriction(recipeId, activeIds.value, index.value)
   }
 
-  /** The reworked doc for this recipe, or null (base doc displays). */
-  function overlayFor(recipeId: number): OverlayDoc | null {
-    return overlayDocFor(recipeId, activeIds.value, overlays.value)
+  /**
+   * Idempotent: fetch the dictionary once. Fire-and-forget from consumers; a
+   * failed load leaves the feature inert (no filtering, base docs everywhere)
+   * until the next call retries. Concurrent callers awaited the same attempt;
+   * whoever observes the failure clears the memo.
+   */
+  async function ensureLoaded(): Promise<void> {
+    if (activeIds.value.length === 0) return
+    dictPromise ??= loadRestrictionDict(fetch, import.meta.env.BASE_URL)
+    const loaded = await dictPromise
+    if (loaded) {
+      dict.value = loaded
+      index.value = buildDictIndex(loaded)
+    } else {
+      // A failed load is NOT memoized: the next ensureLoaded() retries, as
+      // the documented contract says.
+      dictPromise = null
+    }
   }
 
   return {
     restrictions: RESTRICTIONS,
     activeIds,
-    sets,
+    dict,
     index,
-    overlays,
-    overlaysLoaded,
     ensureLoaded,
     isRemoved,
-    overlayFor,
   }
 }

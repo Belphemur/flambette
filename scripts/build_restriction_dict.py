@@ -183,13 +183,12 @@ def main():
         log("restriction_dict.json well-formed")
         return 0
 
-    sets_doc = json.load(open(os.path.join(DATA, "restriction_sets.json")))
     result = {}
     total_swaps = 0
     total_pairs = 0
-    for rid_str in sorted(sets_doc["restrictions"], key=int):
+    for rid_str in sorted(A.RESTRICTIONS, key=int):
         rid = int(rid_str)
-        info = sets_doc["restrictions"][rid_str]
+        slug = A.RESTRICTIONS[rid][0]
         swaps = swaps_for_restriction(rid, base_docs)
         pair_removed = {}
         for a in sorted(A.RESTRICTIONS):
@@ -200,14 +199,17 @@ def main():
             if extras:
                 pair_removed[pair_key] = extras
                 total_pairs += 1
+        none_r = payload_rids("none-%s" % PAYLOAD_SUFFIX)
+        single_r = payload_rids("%s-%s" % (slug, PAYLOAD_SUFFIX))
+        removed = sorted(none_r - single_r)
         result[rid_str] = {
-            "removed": info["removed"],
+            "removed": removed,
             "pairRemoved": pair_removed,
             "swaps": swaps,
         }
         total_swaps += len(swaps)
         log("%s: removed=%d swaps=%d pairs_with_extras=%d"
-            % (info["slug"], len(info["removed"]), len(swaps), len(pair_removed)))
+            % (slug, len(removed), len(swaps), len(pair_removed)))
 
     os.makedirs(DATA, exist_ok=True)
     with open(DICT_OUT, "w") as f:

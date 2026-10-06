@@ -59,7 +59,7 @@ const restrictionPrefs = useRestrictions()
 const doc = computed<RecipeDoc | null>(() => {
   const base = loadedDoc.value
   if (!base) return null
-  return restrictedDocView(base, restrictionPrefs.overlayFor(base.recipe_id))
+  return restrictedDocView(base, restrictionPrefs.index.value)
 })
 const loading = ref(false)
 const loadError = ref<string | null>(null)

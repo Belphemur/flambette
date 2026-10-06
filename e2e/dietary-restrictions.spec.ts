@@ -25,7 +25,7 @@ import {
 // catalog order (not search rank) and only ~60 cards render per batch, so the
 // long recipe NAME would OR-match >1500 variants and never render the target.
 const STILL_SHOWN = 'rotini'
-const SWAPPED = 'gluten-free rotini pasta'
+const SWAPPED = 'gluten free rotini pasta'
 const BASE_NAME = 'rotini pasta'
 
 async function searchRecipes(page: Page, query: string) {
@@ -102,7 +102,7 @@ test('a recipe that survives shows the substituted ingredient name', async ({ pa
   await cardFor(page, /White Bean Pasta Salad/).first().click()
   const sheet = page.getByRole('dialog')
   await expect(sheet).toBeVisible()
-  // Upstream's own restricted rendering — the overlay line, verbatim. The
+  // Upstream's own restricted rendering — the dictionary swap, verbatim. The
   // text legitimately appears twice (the ingredient li AND its measured
   // amount chip), so assert the first.
   await expect(sheet.getByText(SWAPPED).first()).toBeVisible()
@@ -160,9 +160,9 @@ test('the grocery row shows the substituted name and the checkbox key survives u
   await expect(reloaded.getByText(SWAPPED).first()).toBeVisible()
 })
 
-/* ---------- The metric-overlay + no-cross-pair brief (GF rid 224) ----------
+/* ---------- The metric-substitution + no-cross-pair brief (GF rid 224) ----------
  *
- * The first archive pulled US/6 payloads and the overlays swapped whole
+ * The first archive pulled US/6 payloads and the dictionary swapped whole
  * `line_items` in, so a metric/dual device showed a restricted recipe stuck
  * in imperial (`24 fl oz chicken or vegetable broth`, `18 oz gluten-free
  * fettuccine pasta`). And because upstream's rework REORDERS lines (pasta <->
@@ -170,7 +170,7 @@ test('the grocery row shows the substituted name and the checkbox key survives u
  * pasta` — a (name, quantity) pair that appears in NEITHER doc.
  */
 const FETTUCCINE = /Fettuccine Alfredo with Asparagus/
-const GF_FETTUCCINE = 'gluten-free fettuccine pasta'
+const GF_FETTUCCINE = 'gluten free fettuccine pasta'
 
 async function openRestrictedDetail(page: Page): Promise<ReturnType<Page['getByRole']>> {
   await page.goto('/recipes')
@@ -182,41 +182,47 @@ async function openRestrictedDetail(page: Page): Promise<ReturnType<Page['getByR
   return sheet
 }
 
-test('a metric device shows the restricted detail in metric — never the archived US overlay', async ({
+test('a metric device shows the restricted detail in metric — the dictionary swap stays metric', async ({
   page,
 }) => {
   await activateGlutenFree(page)
   await page.goto('/settings')
   await page.getByTestId('unit-system-metric').click()
-  await expect(page.getByTestId('unit-system-metric')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('unit-system-metric')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
 
   const sheet = await openRestrictedDetail(page)
-  // Upstream's own METRIC restricted rendering — the base catalog's native
-  // units, flowing through localizeQuantity like every base line. The US
-  // archive's `24 fl oz` / `18 oz` must never surface.
+  // Dictionary substitution — the swap `fettuccine pasta` → `gluten free fettuccine pasta`.
+  // Quantities stay from the base doc (verbatim), which are metric (ADR-0047).
   await expect(sheet.getByText('354 ml').first()).toBeVisible()
   await expect(sheet.getByText('510 g').first()).toBeVisible()
   await expect(sheet.getByText(GF_FETTUCCINE).first()).toBeVisible()
   await expect(sheet.getByText(/fl oz| oz | lb /)).toHaveCount(0)
 })
 
-test('dual mode shows the authored metric notation too (the overlay is metric)', async ({
+test('dual mode shows the authored metric notation too (the swap keeps base quantities)', async ({
   page,
 }) => {
   await activateGlutenFree(page)
   await page.goto('/settings')
   await page.getByTestId('unit-system-dual').click()
-  await expect(page.getByTestId('unit-system-dual')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('unit-system-dual')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
 
   // Dual is the IDENTITY (ADR-0047): the catalog text exactly as authored —
-  // and the overlay is now metric, so the authored strings are metric.
+  // and the dictionary swaps keep base quantities, so the authored strings
+  // are metric.
   const sheet = await openRestrictedDetail(page)
   await expect(sheet.getByText('354 ml').first()).toBeVisible()
   await expect(sheet.getByText('510 g').first()).toBeVisible()
   await expect(sheet.getByText(/fl oz| oz | lb /)).toHaveCount(0)
 })
 
-test('the grocery row pairs the substituted name with ITS OWN metric quantity (no cross-pair)', async ({
+test('the grocery row pairs the substituted name with ITS OWN quantity (no cross-pair)', async ({
   page,
 }) => {
   await activateGlutenFree(page)
@@ -226,10 +232,10 @@ test('the grocery row pairs the substituted name with ITS OWN metric quantity (n
 
   await gotoTab(page, 'Grocery')
   // The (name, quantity) pair must co-occur in ONE authoritative doc: the
-  // metric overlay's `510 g gluten-free fettuccine pasta`. The mis-pairing
-  // bug — `6 cloves gluten-free fettuccine pasta`, the base garlic quantity
-  // under the overlay pasta name — appears in NEITHER doc and must never
-  // render.
+  // dictionary swap is per-ingredient, so a display row's quantity is always
+  // that ingredient's own. The mis-pairing bug — `6 cloves gluten-free
+  // fettuccine pasta`, the base garlic quantity under the swap pasta name —
+  // appears in NEITHER doc and must never render.
   const row = page.getByTestId('grocery-row').filter({ hasText: GF_FETTUCCINE }).first()
   await expect(row).toBeVisible()
   await expect(row).toContainText('510 g')
