@@ -71,12 +71,16 @@ lands in a shell history or a process listing).
 
 import argparse
 import json
+import logging
 import os
 import sys
 import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+
+# Diagnostics go through the `logging` module (same messages, standard
+# verbosity control) — never a bare print pipeline.
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -105,8 +109,8 @@ UA = "Mozilla/5.0 (X11; Linux x86_64; rv:156.0) Gecko/20100101 Firefox/156.0"
 WORKERS = 8
 
 
-def log(msg):
-    print(msg, flush=True)
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+log = logging.info
 
 
 def read_token(path):
@@ -288,7 +292,10 @@ def main():
     global INDEX_PATH
     ap = argparse.ArgumentParser()
     ap.add_argument("--label", help="profile name, e.g. us-6 / metric-4")
-    ap.add_argument("--token-file", default=os.path.join(MEDIA, ".mealime_token"))
+    ap.add_argument(
+        "--token-file",
+        default=os.getenv("MEALIME_TOKEN_FILE") or os.path.join(MEDIA, ".mealime_token"),
+    )
     ap.add_argument("--builder-json", help="use a saved builder payload instead of the API")
     ap.add_argument("--index", action="store_true", help="print the profile index and exit")
     ap.add_argument("--force", action="store_true", help="re-fetch docs already archived")
