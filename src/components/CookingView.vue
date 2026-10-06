@@ -15,7 +15,7 @@ import {
   X,
 } from 'lucide-vue-next'
 import { catalog, getRecipe } from '../lib/catalog'
-import { restrictedDocView } from '../lib/restrictions'
+import { eventsDocView, restrictedDocView } from '../lib/restrictions'
 import { useRestrictions } from '../composables/useRestrictions'
 import { measuredChipsForLines, type MeasuredChip } from '../lib/measuredAmounts'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
@@ -50,7 +50,13 @@ const restrictionPrefs = useRestrictions()
 const doc = computed<RecipeDoc | null>(() => {
   const base = loadedDoc.value
   if (!base) return null
-  return restrictedDocView(base, restrictionPrefs.overlayFor(base.recipe_id))
+  // Same precedence as the detail sheet (the two surfaces must read ONE
+  // view): the per-recipe events map wins when upstream has an exact
+  // rework, the dictionary view is the fallback.
+  return (
+    eventsDocView(base, restrictionPrefs.index.value, restrictionPrefs.activeIds.value) ??
+    restrictedDocView(base, restrictionPrefs.index.value, restrictionPrefs.activeIds.value)
+  )
 })
 
 const meta = computed(() => catalog.value?.byId.get(props.id) ?? null)

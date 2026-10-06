@@ -1,0 +1,132 @@
+{
+ "restrictions": [
+  {
+   "id": 1,
+   "slug": "gluten-free",
+   "label": "Gluten-Free"
+  },
+  {
+   "id": 2,
+   "slug": "dairy-free",
+   "label": "Dairy-Free"
+  },
+  {
+   "id": 3,
+   "slug": "fish-free",
+   "label": "Fish-Free"
+  },
+  {
+   "id": 4,
+   "slug": "shellfish-free",
+   "label": "Shellfish-Free"
+  },
+  {
+   "id": 5,
+   "slug": "peanut-free",
+   "label": "Peanut-Free"
+  },
+  {
+   "id": 6,
+   "slug": "tree-nut-free",
+   "label": "Tree Nut-Free"
+  },
+  {
+   "id": 9,
+   "slug": "soy-free",
+   "label": "Soy-Free"
+  },
+  {
+   "id": 10,
+   "slug": "nightshade-free",
+   "label": "Nightshade-Free"
+  },
+  {
+   "id": 11,
+   "slug": "egg-free",
+   "label": "Egg-Free"
+  },
+  {
+   "id": 12,
+   "slug": "sesame-free",
+   "label": "Sesame-Free"
+  },
+  {
+   "id": 13,
+   "slug": "mustard-free",
+   "label": "Mustard-Free"
+  },
+  {
+   "id": 14,
+   "slug": "sulfite-free",
+   "label": "Sulfite-Free"
+  }
+ ],
+ "pairs": [
+  "gluten-free-dairy-free",
+  "gluten-free-fish-free",
+  "gluten-free-shellfish-free",
+  "gluten-free-peanut-free",
+  "gluten-free-tree-nut-free",
+  "gluten-free-soy-free",
+  "gluten-free-nightshade-free",
+  "gluten-free-egg-free",
+  "gluten-free-sesame-free",
+  "gluten-free-mustard-free",
+  "gluten-free-sulfite-free",
+  "dairy-free-fish-free",
+  "dairy-free-shellfish-free",
+  "dairy-free-peanut-free",
+  "dairy-free-tree-nut-free",
+  "dairy-free-soy-free",
+  "dairy-free-nightshade-free",
+  "dairy-free-egg-free",
+  "dairy-free-sesame-free",
+  "dairy-free-mustard-free",
+  "dairy-free-sulfite-free",
+  "fish-free-shellfish-free",
+  "fish-free-peanut-free",
+  "fish-free-tree-nut-free",
+  "fish-free-soy-free",
+  "fish-free-nightshade-free",
+  "fish-free-egg-free",
+  "fish-free-sesame-free",
+  "fish-free-mustard-free",
+  "fish-free-sulfite-free",
+  "shellfish-free-peanut-free",
+  "shellfish-free-tree-nut-free",
+  "shellfish-free-soy-free",
+  "shellfish-free-nightshade-free",
+  "shellfish-free-egg-free",
+  "shellfish-free-sesame-free",
+  "shellfish-free-mustard-free",
+  "shellfish-free-sulfite-free",
+  "peanut-free-tree-nut-free",
+  "peanut-free-soy-free",
+  "peanut-free-nightshade-free",
+  "peanut-free-egg-free",
+  "peanut-free-sesame-free",
+  "peanut-free-mustard-free",
+  "peanut-free-sulfite-free",
+  "tree-nut-free-soy-free",
+  "tree-nut-free-nightshade-free",
+  "tree-nut-free-egg-free",
+  "tree-nut-free-sesame-free",
+  "tree-nut-free-mustard-free",
+  "tree-nut-free-sulfite-free",
+  "soy-free-nightshade-free",
+  "soy-free-egg-free",
+  "soy-free-sesame-free",
+  "soy-free-mustard-free",
+  "soy-free-sulfite-free",
+  "nightshade-free-egg-free",
+  "nightshade-free-sesame-free",
+  "nightshade-free-mustard-free",
+  "nightshade-free-sulfite-free",
+  "egg-free-sesame-free",
+  "egg-free-mustard-free",
+  "egg-free-sulfite-free",
+  "sesame-free-mustard-free",
+  "sesame-free-sulfite-free",
+  "mustard-free-sulfite-free"
+ ]
+}

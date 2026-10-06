@@ -16,7 +16,7 @@ import {
 import { usePlanStore } from '../stores/plan'
 import { useGroceryStore } from '../stores/grocery'
 import { useUiStore } from '../stores/ui'
-import { groceryDisplayLines } from './restrictions'
+import { eventsDisplayLines, groceryDisplayLines } from './restrictions'
 import { useRestrictions } from '../composables/useRestrictions'
 
 /**
@@ -63,7 +63,10 @@ export function useGroceryList() {
           factor: entryServings(meta.id) / doc.serving_count,
           recipeName: meta.name,
           cleared: cleared?.length ? new Set(cleared) : undefined,
-          displayLines: groceryDisplayLines(doc, restrictionPrefs.overlayFor(doc.recipe_id))
+          displayLines:
+            eventsDisplayLines(doc, restrictionPrefs.index.value, restrictionPrefs.activeIds.value) ??
+            groceryDisplayLines(doc, restrictionPrefs.index.value,
+              restrictionPrefs.activeIds.value)
             ?? undefined,
         },
       ]

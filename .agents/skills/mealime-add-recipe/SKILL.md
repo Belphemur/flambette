@@ -114,29 +114,57 @@ it is exactly the fabrication ADR-0054 forbids.
   contributing food publishes it — partial sums never ship.
 - No "Mealime" wording in user-facing copy for household recipes.
 
-## Dietary Restrictions (ADR-0056)
+## Dietary Restrictions (ADR-0056, option C — the substitution dictionary runtime)
 
-User recipes are NOT covered by the dietary-restriction mechanism, and that
-is the documented behaviour, not a gap: the restriction artifacts (`removed`
-sets and `restriction_overlays/`) are keyed by upstream `recipe_id` and
-sourced from upstream's own restricted renderings, so the mechanism can
-never produce a variant for a household recipe. A user recipe therefore
-stays visible under EVERY active restriction, and its ingredient text stays
-authentic — the same rule as ADR-0057's authored-prose rule.
+User recipes are NOT removed by the dietary-restriction mechanism, and that
+is the documented behaviour, not a gap: the restriction data (`public/data/
+restrictions/` — a split tree: index.json, swaps.json, removed/<slug>.json,
+pairs/<a>-<b>.json) is keyed by upstream `recipe_id` and sourced from
+upstream's own restricted renderings, so the mechanism can never produce a
+variant for a household recipe. A user recipe therefore stays visible under
+EVERY active restriction, and its ingredient text stays authentic.
 
 If the author WANTS a restricted variant (say, a gluten-free version of the
 pancake), add it as a SEPARATE household recipe — upstream's own model:
 restricted variants are per-recipe authored docs, not a runtime transform.
-When naming its substituted ingredients, use the CATALOG's substitution
-vocabulary where one exists, so the grocery list reads consistently next to
-upstream recipes under the same restriction (`gluten-free rotini pasta`,
-`tamari soy sauce`, `virgin coconut oil`, `natural almond butter`, …).
 
-The authoritative substitution vocabulary is the committed data:
-`public/data/restriction_sets.json` (which restriction removed what) and
-`public/data/restriction_overlays/<slug>.json` (upstream's own reworked
-ingredient names, per doc). Grep an overlay for the ingredient being
-substituted before inventing a spelling of your own.
+**Prefer dictionary-covered ingredient names.** When a household recipe is
+MEANT to work under a restriction (e.g. a gluten-free recipe), write its
+ingredient names so the runtime can substitute them automatically. The
+runtime matches each base line's nameKey against the dictionary's swaps
+(from → to) and renders the substitute name with the base quantity
+(verbatim). An ingredient the dictionary doesn't cover stays DISPLAYED as
+written — the restriction still filters the recipe FROM discovery (by
+removed), but lines whose names aren't in any swap pass through unchanged.
+
+The covered from ingredients are listed across `public/data/restrictions/
+swaps.json` (every restriction's swaps[].from). To check whether an ingredient is
+covered, grep the dictionary:
+```bash
+jq -r '.[].swaps[].from' public/data/restrictions/swaps.json | sort -u
+```
+Prefer a name that already appears there (any restriction's swap — the runtime
+considers ALL active restrictions' swaps together). For example, `soy sauce`
+is covered under GF (→ `tamari soy sauce`), dairy-free, fish-free, and
+shellfish-free; `rotini pasta` is covered under GF (→ `gluten-free rotini pasta`);
+`butter, unsalted` is covered under dairy-free (→ `virgin coconut oil`) and
+egg-free (→ `virgin coconut oil`).
+
+If a NEW substitution is needed (an ingredient the dictionary doesn't yet
+cover), the author MUST add it to the dictionary, not hardcode it in the
+recipe: extend `scripts/build_restriction_dict.py`'s swap-extraction logic
+(which reads upstream's restricted renderings from the gitignored archive
+under ../mealime-media/raw_profiles/restrictions/), rebuild with
+`python3 scripts/build_restriction_dict.py`, and run bun run test:data
+(which gates on test_build_restriction_sets.py's SplitTreeWellFormed and
+ArchiveFaithfulness golden classes — well-formedness and symmetry). The updated `public/data/restrictions/` tree must be committed alongside the recipe. A household
+recipe that references an uncovered ingredient does not break anything — it
+just renders the raw name under the restriction — but a NEW substitution
+must flow through the dictionary so the runtime applies it uniformly across
+every catalog doc under that restriction, never just one recipe.
+
+Keep the surgical-edit rule: update only this section of the skill, don't
+rewrite the whole SKILL.md.
 
 ## Pitfalls
 

@@ -1,0 +1,2654 @@
+{
+ "changed_counts": {
+  "all-free": 40,
+  "combos/1-10": 186,
+  "combos/1-11": 557,
+  "combos/1-12": 672,
+  "combos/1-13": 721,
+  "combos/1-14": 506,
+  "combos/1-2": 662,
+  "combos/1-3": 803,
+  "combos/1-4": 833,
+  "combos/1-5": 809,
+  "combos/1-6": 800,
+  "combos/1-9": 581,
+  "combos/10-11": 45,
+  "combos/10-12": 19,
+  "combos/10-13": 17,
+  "combos/10-14": 17,
+  "combos/11-12": 98,
+  "combos/11-13": 88,
+  "combos/11-14": 92,
+  "combos/12-13": 3,
+  "combos/12-14": 34,
+  "combos/13-14": 35,
+  "combos/2-10": 105,
+  "combos/2-11": 322,
+  "combos/2-12": 255,
+  "combos/2-13": 221,
+  "combos/2-14": 190,
+  "combos/2-3": 351,
+  "combos/2-4": 283,
+  "combos/2-5": 279,
+  "combos/2-6": 206,
+  "combos/2-9": 277,
+  "combos/3-10": 33,
+  "combos/3-11": 221,
+  "combos/3-12": 140,
+  "combos/3-13": 132,
+  "combos/3-14": 99,
+  "combos/3-4": 207,
+  "combos/3-5": 170,
+  "combos/3-6": 198,
+  "combos/3-9": 84,
+  "combos/4-10": 25,
+  "combos/4-11": 144,
+  "combos/4-12": 33,
+  "combos/4-13": 39,
+  "combos/4-14": 67,
+  "combos/4-5": 57,
+  "combos/4-6": 97,
+  "combos/4-9": 56,
+  "combos/5-10": 26,
+  "combos/5-11": 130,
+  "combos/5-12": 14,
+  "combos/5-13": 21,
+  "combos/5-14": 52,
+  "combos/5-6": 69,
+  "combos/5-9": 52,
+  "combos/6-10": 57,
+  "combos/6-11": 145,
+  "combos/6-12": 55,
+  "combos/6-13": 53,
+  "combos/6-14": 69,
+  "combos/6-9": 103,
+  "combos/9-10": 32,
+  "combos/9-11": 100,
+  "combos/9-12": 19,
+  "combos/9-13": 45,
+  "combos/9-14": 55,
+  "dairy-free": 268,
+  "egg-free": 117,
+  "fish-free": 171,
+  "gluten-free": 860,
+  "mustard-free": 3,
+  "nightshade-free": 22,
+  "peanut-free": 19,
+  "sesame-free": 0,
+  "shellfish-free": 42,
+  "soy-free": 47,
+  "sulfite-free": 38,
+  "tree-nut-free": 62
+ },
+ "coverage": {
+  "all-free": 40,
+  "combos/1-10": 186,
+  "combos/1-11": 557,
+  "combos/1-12": 672,
+  "combos/1-13": 721,
+  "combos/1-14": 506,
+  "combos/1-2": 662,
+  "combos/1-3": 803,
+  "combos/1-4": 833,
+  "combos/1-5": 809,
+  "combos/1-6": 800,
+  "combos/1-9": 581,
+  "combos/10-11": 45,
+  "combos/10-12": 19,
+  "combos/10-13": 17,
+  "combos/10-14": 17,
+  "combos/11-12": 98,
+  "combos/11-13": 88,
+  "combos/11-14": 92,
+  "combos/12-13": 3,
+  "combos/12-14": 34,
+  "combos/13-14": 35,
+  "combos/2-10": 105,
+  "combos/2-11": 322,
+  "combos/2-12": 255,
+  "combos/2-13": 221,
+  "combos/2-14": 190,
+  "combos/2-3": 351,
+  "combos/2-4": 283,
+  "combos/2-5": 279,
+  "combos/2-6": 206,
+  "combos/2-9": 277,
+  "combos/3-10": 33,
+  "combos/3-11": 221,
+  "combos/3-12": 140,
+  "combos/3-13": 132,
+  "combos/3-14": 99,
+  "combos/3-4": 207,
+  "combos/3-5": 170,
+  "combos/3-6": 198,
+  "combos/3-9": 84,
+  "combos/4-10": 25,
+  "combos/4-11": 144,
+  "combos/4-12": 33,
+  "combos/4-13": 39,
+  "combos/4-14": 67,
+  "combos/4-5": 57,
+  "combos/4-6": 97,
+  "combos/4-9": 56,
+  "combos/5-10": 26,
+  "combos/5-11": 130,
+  "combos/5-12": 14,
+  "combos/5-13": 21,
+  "combos/5-14": 52,
+  "combos/5-6": 69,
+  "combos/5-9": 52,
+  "combos/6-10": 57,
+  "combos/6-11": 145,
+  "combos/6-12": 55,
+  "combos/6-13": 53,
+  "combos/6-14": 69,
+  "combos/6-9": 103,
+  "combos/9-10": 32,
+  "combos/9-11": 100,
+  "combos/9-12": 19,
+  "combos/9-13": 45,
+  "combos/9-14": 55,
+  "dairy-free": 268,
+  "egg-free": 117,
+  "fish-free": 171,
+  "gluten-free": 860,
+  "mustard-free": 3,
+  "nightshade-free": 22,
+  "peanut-free": 19,
+  "sesame-free": 0,
+  "shellfish-free": 42,
+  "soy-free": 47,
+  "sulfite-free": 38,
+  "tree-nut-free": 62
+ },
+ "dictionary": {
+  "distinct_from": 39,
+  "distinct_pairs": 56,
+  "diversity": {
+   "1": 28,
+   "2": 7,
+   "3": 2,
+   "4": 2
+  },
+  "per_from_context": {
+   "all purpose flour": {
+    "black pepper": 10,
+    "gluten free flour": 838
+   },
+   "butter unsalted": {
+    "extra virgin olive oil": 94,
+    "neutral vegetable oil": 8,
+    "salt": 21,
+    "virgin coconut oil": 290
+   },
+   "crushed red pepper": {
+    "black pepper": 9
+   },
+   "fettuccine pasta": {
+    "gluten free fettuccine pasta": 160
+   },
+   "fish sauce": {
+    "salt": 7,
+    "soy sauce": 105,
+    "tamari soy sauce": 12
+   },
+   "gala apples": {
+    "granny smith apples": 11
+   },
+   "granola": {
+    "granola nut free": 21,
+    "granola vegan": 30
+   },
+   "honey": {
+    "pure maple syrup": 87
+   },
+   "honey mustard dressing": {
+    "french vinaigrette": 27
+   },
+   "ketchup": {
+    "chili garlic sauce": 8
+   },
+   "large flour tortillas": {
+    "small gluten free tortillas": 9
+   },
+   "lemon": {
+    "lemons": 13
+   },
+   "linguine pasta": {
+    "gluten free linguine pasta": 137,
+    "gluten free spaghetti pasta": 30
+   },
+   "macaroni elbow pasta": {
+    "gluten free macaroni elbow pasta": 186
+   },
+   "mayonnaise": {
+    "avocado oil mayonnaise": 117,
+    "vegan mayonnaise": 924
+   },
+   "natural peanut butter": {
+    "natural almond butter": 79
+   },
+   "new potatoes": {
+    "cremini mushrooms": 9
+   },
+   "panko bread crumbs": {
+    "almond meal flour": 25,
+    "gluten free bread crumbs": 941
+   },
+   "peanuts roasted unsalted": {
+    "almonds": 10,
+    "almonds sliced": 34,
+    "cashews roasted unsalted": 34
+   },
+   "pecan halves": {
+    "pumpkin seeds": 11
+   },
+   "penne pasta": {
+    "gluten free penne pasta": 326
+   },
+   "pork chops boneless": {
+    "pre cooked vegan sausage": 8
+   },
+   "pork sausages": {
+    "pre cooked vegan sausage": 76
+   },
+   "rotini pasta": {
+    "gluten free rotini pasta": 405
+   },
+   "shallot": {
+    "shallots": 8
+   },
+   "small flour tortillas": {
+    "small corn tortillas": 272
+   },
+   "smoked paprika": {
+    "paprika": 7
+   },
+   "sourdough bread": {
+    "gluten free bread": 31
+   },
+   "soy sauce": {
+    "coconut aminos": 425,
+    "tamari soy sauce": 2398
+   },
+   "spaghetti pasta": {
+    "gluten free spaghetti pasta": 260
+   },
+   "tamari soy sauce": {
+    "coconut aminos": 10
+   },
+   "thai curry paste red": {
+    "thai curry paste green": 8
+   },
+   "vanilla ice cream": {
+    "vanilla ice cream vegan": 279
+   },
+   "vanilla whey based protein powder containing 20 grams protein serving": {
+    "vanilla plant based protein powder containing 20 grams protein serving": 10
+   },
+   "walnuts": {
+    "pumpkin seeds": 29
+   },
+   "whole grain bread": {
+    "gluten free bread": 890
+   },
+   "whole grain buns or rolls": {
+    "gluten free buns or rolls": 427,
+    "whole grain pitas": 17
+   },
+   "whole milk": {
+    "almond milk unsweetened": 147
+   },
+   "worcestershire sauce": {
+    "balsamic vinegar": 10,
+    "coconut aminos": 28,
+    "soy sauce": 211,
+    "tamari soy sauce": 7
+   }
+  },
+  "top_pairs": [
+   {
+    "events": 2398,
+    "from": "soy sauce",
+    "recipes": 289,
+    "to": "tamari soy sauce"
+   },
+   {
+    "events": 941,
+    "from": "panko bread crumbs",
+    "recipes": 116,
+    "to": "gluten free bread crumbs"
+   },
+   {
+    "events": 890,
+    "from": "whole grain bread",
+    "recipes": 110,
+    "to": "gluten free bread"
+   },
+   {
+    "events": 838,
+    "from": "all purpose flour",
+    "recipes": 91,
+    "to": "gluten free flour"
+   },
+   {
+    "events": 924,
+    "from": "mayonnaise",
+    "recipes": 78,
+    "to": "vegan mayonnaise"
+   },
+   {
+    "events": 427,
+    "from": "whole grain buns or rolls",
+    "recipes": 54,
+    "to": "gluten free buns or rolls"
+   },
+   {
+    "events": 405,
+    "from": "rotini pasta",
+    "recipes": 44,
+    "to": "gluten free rotini pasta"
+   },
+   {
+    "events": 326,
+    "from": "penne pasta",
+    "recipes": 34,
+    "to": "gluten free penne pasta"
+   },
+   {
+    "events": 425,
+    "from": "soy sauce",
+    "recipes": 33,
+    "to": "coconut aminos"
+   },
+   {
+    "events": 272,
+    "from": "small flour tortillas",
+    "recipes": 29,
+    "to": "small corn tortillas"
+   },
+   {
+    "events": 260,
+    "from": "spaghetti pasta",
+    "recipes": 27,
+    "to": "gluten free spaghetti pasta"
+   },
+   {
+    "events": 290,
+    "from": "butter unsalted",
+    "recipes": 23,
+    "to": "virgin coconut oil"
+   },
+   {
+    "events": 186,
+    "from": "macaroni elbow pasta",
+    "recipes": 20,
+    "to": "gluten free macaroni elbow pasta"
+   },
+   {
+    "events": 211,
+    "from": "worcestershire sauce",
+    "recipes": 19,
+    "to": "soy sauce"
+   },
+   {
+    "events": 160,
+    "from": "fettuccine pasta",
+    "recipes": 16,
+    "to": "gluten free fettuccine pasta"
+   },
+   {
+    "events": 137,
+    "from": "linguine pasta",
+    "recipes": 14,
+    "to": "gluten free linguine pasta"
+   },
+   {
+    "events": 117,
+    "from": "mayonnaise",
+    "recipes": 14,
+    "to": "avocado oil mayonnaise"
+   },
+   {
+    "events": 147,
+    "from": "whole milk",
+    "recipes": 14,
+    "to": "almond milk unsweetened"
+   },
+   {
+    "events": 105,
+    "from": "fish sauce",
+    "recipes": 12,
+    "to": "soy sauce"
+   },
+   {
+    "events": 279,
+    "from": "vanilla ice cream",
+    "recipes": 12,
+    "to": "vanilla ice cream vegan"
+   },
+   {
+    "events": 12,
+    "from": "fish sauce",
+    "recipes": 10,
+    "to": "tamari soy sauce"
+   },
+   {
+    "events": 94,
+    "from": "butter unsalted",
+    "recipes": 9,
+    "to": "extra virgin olive oil"
+   },
+   {
+    "events": 87,
+    "from": "honey",
+    "recipes": 9,
+    "to": "pure maple syrup"
+   },
+   {
+    "events": 79,
+    "from": "natural peanut butter",
+    "recipes": 9,
+    "to": "natural almond butter"
+   },
+   {
+    "events": 76,
+    "from": "pork sausages",
+    "recipes": 8,
+    "to": "pre cooked vegan sausage"
+   },
+   {
+    "events": 7,
+    "from": "worcestershire sauce",
+    "recipes": 6,
+    "to": "tamari soy sauce"
+   },
+   {
+    "events": 34,
+    "from": "peanuts roasted unsalted",
+    "recipes": 4,
+    "to": "cashews roasted unsalted"
+   },
+   {
+    "events": 31,
+    "from": "sourdough bread",
+    "recipes": 4,
+    "to": "gluten free bread"
+   },
+   {
+    "events": 30,
+    "from": "linguine pasta",
+    "recipes": 3,
+    "to": "gluten free spaghetti pasta"
+   },
+   {
+    "events": 25,
+    "from": "panko bread crumbs",
+    "recipes": 3,
+    "to": "almond meal flour"
+   },
+   {
+    "events": 29,
+    "from": "walnuts",
+    "recipes": 3,
+    "to": "pumpkin seeds"
+   },
+   {
+    "events": 21,
+    "from": "granola",
+    "recipes": 2,
+    "to": "granola nut free"
+   },
+   {
+    "events": 28,
+    "from": "worcestershire sauce",
+    "recipes": 2,
+    "to": "coconut aminos"
+   },
+   {
+    "events": 10,
+    "from": "all purpose flour",
+    "recipes": 1,
+    "to": "black pepper"
+   },
+   {
+    "events": 8,
+    "from": "butter unsalted",
+    "recipes": 1,
+    "to": "neutral vegetable oil"
+   },
+   {
+    "events": 21,
+    "from": "butter unsalted",
+    "recipes": 1,
+    "to": "salt"
+   },
+   {
+    "events": 9,
+    "from": "crushed red pepper",
+    "recipes": 1,
+    "to": "black pepper"
+   },
+   {
+    "events": 7,
+    "from": "fish sauce",
+    "recipes": 1,
+    "to": "salt"
+   },
+   {
+    "events": 11,
+    "from": "gala apples",
+    "recipes": 1,
+    "to": "granny smith apples"
+   },
+   {
+    "events": 30,
+    "from": "granola",
+    "recipes": 1,
+    "to": "granola vegan"
+   }
+  ]
+ },
+ "findings": [
+  "Removal is UNION-shaped: 42.4% of the 66 pairs remove exactly the union of their singles' sets; 459 recipes across all pairs are extra removals (composition effects) and 0 are union-rule violations.",
+  "Substitution composition: 99.6% of pair swap events trace to the singles' own substitutes (both-agree 1.1%, from-a 86.5%, from-b 11.8%, a-over-b 0.0%, b-over-a 0.2%); 0.4% are pair-specific substitutes upstream only renders under the combination.",
+  "Dictionary: 28 of 39 from-ingredients have exactly ONE substitute across every payload \u2014 the swap table is largely fixed per ingredient, with 11 ingredients showing per-recipe (or per-combination) choice.",
+  "Quantities: 99.8% of swaps keep the base quantity string verbatim; 0.1% are same-unit rescales (median ratio 2.000), 0.0% change units, 0.1% are fully re-authored."
+ ],
+ "generated_by": "scripts/analyze_restriction_combinations.py",
+ "payloads": {
+  "all_free": 2692,
+  "combos": {
+   "1,10": 2131,
+   "1,11": 1119,
+   "1,12": 754,
+   "1,13": 917,
+   "1,14": 1374,
+   "1,2": 1551,
+   "1,3": 762,
+   "1,4": 584,
+   "1,5": 590,
+   "1,6": 820,
+   "1,9": 828,
+   "10,11": 2156,
+   "10,12": 2047,
+   "10,13": 2144,
+   "10,14": 2246,
+   "11,12": 931,
+   "11,13": 1005,
+   "11,14": 1441,
+   "12,13": 827,
+   "12,14": 1274,
+   "13,14": 1148,
+   "2,10": 2412,
+   "2,11": 1596,
+   "2,12": 1667,
+   "2,13": 1621,
+   "2,14": 1931,
+   "2,3": 1546,
+   "2,4": 1426,
+   "2,5": 1464,
+   "2,6": 1592,
+   "2,9": 1741,
+   "3,10": 2060,
+   "3,11": 871,
+   "3,12": 579,
+   "3,13": 734,
+   "3,14": 1229,
+   "3,4": 389,
+   "3,5": 417,
+   "3,6": 652,
+   "3,9": 760,
+   "4,10": 2003,
+   "4,11": 755,
+   "4,12": 421,
+   "4,13": 603,
+   "4,14": 1156,
+   "4,5": 226,
+   "4,6": 476,
+   "4,9": 537,
+   "5,10": 2000,
+   "5,11": 778,
+   "5,12": 403,
+   "5,13": 637,
+   "5,14": 1157,
+   "5,6": 472,
+   "5,9": 483,
+   "6,10": 2154,
+   "6,11": 986,
+   "6,12": 664,
+   "6,13": 807,
+   "6,14": 1300,
+   "6,9": 745,
+   "9,10": 2059,
+   "9,11": 1031,
+   "9,12": 545,
+   "9,13": 893,
+   "9,14": 1345
+  },
+  "none": 2759,
+  "singles": {
+   "1": 2264,
+   "10": 779,
+   "11": 2086,
+   "12": 2435,
+   "13": 2244,
+   "14": 1681,
+   "2": 1384,
+   "3": 2459,
+   "4": 2652,
+   "5": 2634,
+   "6": 2379,
+   "9": 2336
+  }
+ },
+ "quantities": {
+  "examples": {
+   "re-authored": [
+    {
+     "from": "lemon",
+     "qty_base": "1",
+     "qty_new": "2 \u00bd",
+     "to": "lemons"
+    },
+    {
+     "from": "lemon",
+     "qty_base": "1",
+     "qty_new": "2 \u00bd",
+     "to": "lemons"
+    },
+    {
+     "from": "lemon",
+     "qty_base": "1",
+     "qty_new": "2 \u00bd",
+     "to": "lemons"
+    },
+    {
+     "from": "lemon",
+     "qty_base": "1",
+     "qty_new": "2 \u00bd",
+     "to": "lemons"
+    },
+    {
+     "from": "lemon",
+     "qty_base": "1",
+     "qty_new": "2 \u00bd",
+     "to": "lemons"
+    },
+    {
+     "from": "lemon",
+     "qty_base": "1",
+     "qty_new": "2 \u00bd",
+     "to": "lemons"
+    },
+    {
+     "from": "lemon",
+     "qty_base": "1",
+     "qty_new": "2 \u00bd",
+     "to": "lemons"
+    },
+    {
+     "from": "lemon",
+     "qty_base": "1",
+     "qty_new": "2 \u00bd",
+     "to": "lemons"
+    },
+    {
+     "from": "lemon",
+     "qty_base": "1",
+     "qty_new": "2 \u00bd",
+     "to": "lemons"
+    },
+    {
+     "from": "lemon",
+     "qty_base": "1",
+     "qty_new": "2 \u00bd",
+     "to": "lemons"
+    },
+    {
+     "from": "lemon",
+     "qty_base": "1",
+     "qty_new": "2 \u00bd",
+     "to": "lemons"
+    },
+    {
+     "from": "lemon",
+     "qty_base": "1",
+     "qty_new": "2 \u00bd",
+     "to": "lemons"
+    }
+   ],
+   "scaled": [
+    {
+     "from": "shallot",
+     "qty_base": "1",
+     "qty_new": "2",
+     "to": "shallots"
+    },
+    {
+     "from": "shallot",
+     "qty_base": "1",
+     "qty_new": "2",
+     "to": "shallots"
+    },
+    {
+     "from": "shallot",
+     "qty_base": "1",
+     "qty_new": "2",
+     "to": "shallots"
+    },
+    {
+     "from": "shallot",
+     "qty_base": "1",
+     "qty_new": "2",
+     "to": "shallots"
+    },
+    {
+     "from": "shallot",
+     "qty_base": "1",
+     "qty_new": "2",
+     "to": "shallots"
+    },
+    {
+     "from": "shallot",
+     "qty_base": "1",
+     "qty_new": "2",
+     "to": "shallots"
+    },
+    {
+     "from": "shallot",
+     "qty_base": "1",
+     "qty_new": "2",
+     "to": "shallots"
+    },
+    {
+     "from": "shallot",
+     "qty_base": "1",
+     "qty_new": "2",
+     "to": "shallots"
+    }
+   ]
+  },
+  "per_from_median_ratio": {
+   "shallot": 2.0
+  },
+  "ratio_p10_p90": [
+   2.0,
+   2.0
+  ],
+  "relations": {
+   "re-authored": 13,
+   "same": 10565,
+   "scaled": 8
+  },
+  "scaled_ratio_median": 2.0,
+  "top_unit_changes": []
+ },
+ "removal": {
+  "allfree_removed": 2692,
+  "combos_inside_allfree": true,
+  "exact": 28,
+  "total_extras": 459,
+  "total_missing": 0,
+  "union_of_singles_removed": 2677
+ },
+ "removal_rows": [
+  {
+   "a": 1,
+   "all_extra_ids": [
+    373,
+    1681,
+    1770,
+    1912,
+    2229,
+    2819
+   ],
+   "b": 2,
+   "extra_ids": [
+    373,
+    1681,
+    1770,
+    1912,
+    2229,
+    2819
+   ],
+   "extras": 6,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1551,
+   "union": 1545
+  },
+  {
+   "a": 1,
+   "all_extra_ids": [
+    80,
+    2250,
+    3028,
+    3979,
+    4357
+   ],
+   "b": 3,
+   "extra_ids": [
+    80,
+    2250,
+    3028,
+    3979,
+    4357
+   ],
+   "extras": 5,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 762,
+   "union": 757
+  },
+  {
+   "a": 1,
+   "all_extra_ids": [],
+   "b": 4,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 584,
+   "union": 584
+  },
+  {
+   "a": 1,
+   "all_extra_ids": [],
+   "b": 5,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 590,
+   "union": 590
+  },
+  {
+   "a": 1,
+   "all_extra_ids": [
+    1959
+   ],
+   "b": 6,
+   "extra_ids": [
+    1959
+   ],
+   "extras": 1,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 820,
+   "union": 819
+  },
+  {
+   "a": 1,
+   "all_extra_ids": [
+    2582,
+    3139,
+    3153
+   ],
+   "b": 9,
+   "extra_ids": [
+    2582,
+    3139,
+    3153
+   ],
+   "extras": 3,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 828,
+   "union": 825
+  },
+  {
+   "a": 1,
+   "all_extra_ids": [
+    59,
+    88,
+    241,
+    270,
+    438,
+    599,
+    794,
+    803,
+    810,
+    860,
+    909,
+    955,
+    961,
+    1026,
+    1027,
+    1031,
+    1051,
+    1077,
+    1160,
+    1381,
+    1392,
+    1566,
+    1581,
+    1583,
+    1591,
+    1683,
+    1893,
+    1915,
+    2188,
+    2235,
+    2420,
+    2539,
+    2555,
+    2662,
+    2670,
+    2690,
+    2696,
+    2701,
+    3017,
+    3031,
+    3115,
+    3649,
+    3784,
+    3820,
+    3965,
+    4068,
+    4097,
+    4141,
+    4368,
+    4389
+   ],
+   "b": 10,
+   "extra_ids": [
+    59,
+    88,
+    241,
+    270,
+    438,
+    599,
+    794,
+    803
+   ],
+   "extras": 50,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 2131,
+   "union": 2081
+  },
+  {
+   "a": 1,
+   "all_extra_ids": [
+    46,
+    59,
+    67,
+    81,
+    88,
+    90,
+    108,
+    118,
+    123,
+    127,
+    129,
+    131,
+    147,
+    158,
+    180,
+    189,
+    197,
+    217,
+    221,
+    241,
+    246,
+    270,
+    378,
+    390,
+    438,
+    448,
+    482,
+    574,
+    599,
+    653,
+    675,
+    687,
+    803,
+    860,
+    865,
+    868,
+    870,
+    909,
+    951,
+    955,
+    961,
+    1017,
+    1026,
+    1027,
+    1031,
+    1035,
+    1058,
+    1069,
+    1077,
+    1088,
+    1136,
+    1138,
+    1146,
+    1160,
+    1163,
+    1171,
+    1286,
+    1299,
+    1377,
+    1381,
+    1385,
+    1391,
+    1481,
+    1495,
+    1498,
+    1513,
+    1581,
+    1583,
+    1591,
+    1670,
+    1681,
+    1771,
+    1785,
+    1801,
+    1802,
+    1879,
+    1890,
+    1919,
+    1966,
+    1979,
+    2001,
+    2073,
+    2188,
+    2217,
+    2235,
+    2250,
+    2257,
+    2299,
+    2444,
+    2502,
+    2539,
+    2549,
+    2555,
+    2565,
+    2662,
+    2690,
+    2696,
+    2701,
+    2783,
+    2819,
+    3115,
+    3198,
+    3237,
+    3328,
+    3483,
+    3649,
+    3679,
+    3693,
+    3784,
+    3965,
+    3979,
+    4054,
+    4068,
+    4074,
+    4097,
+    4141,
+    4292,
+    4304,
+    4368
+   ],
+   "b": 11,
+   "extra_ids": [
+    46,
+    59,
+    67,
+    81,
+    88,
+    90,
+    108,
+    118
+   ],
+   "extras": 119,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1119,
+   "union": 1000
+  },
+  {
+   "a": 1,
+   "all_extra_ids": [],
+   "b": 12,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 754,
+   "union": 754
+  },
+  {
+   "a": 1,
+   "all_extra_ids": [
+    1385,
+    1893,
+    2073,
+    2074
+   ],
+   "b": 13,
+   "extra_ids": [
+    1385,
+    1893,
+    2073,
+    2074
+   ],
+   "extras": 4,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 917,
+   "union": 913
+  },
+  {
+   "a": 1,
+   "all_extra_ids": [
+    80,
+    2250
+   ],
+   "b": 14,
+   "extra_ids": [
+    80,
+    2250
+   ],
+   "extras": 2,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1374,
+   "union": 1372
+  },
+  {
+   "a": 2,
+   "all_extra_ids": [
+    80,
+    3376
+   ],
+   "b": 3,
+   "extra_ids": [
+    80,
+    3376
+   ],
+   "extras": 2,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1546,
+   "union": 1544
+  },
+  {
+   "a": 2,
+   "all_extra_ids": [],
+   "b": 4,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1426,
+   "union": 1426
+  },
+  {
+   "a": 2,
+   "all_extra_ids": [
+    1614
+   ],
+   "b": 5,
+   "extra_ids": [
+    1614
+   ],
+   "extras": 1,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1464,
+   "union": 1463
+  },
+  {
+   "a": 2,
+   "all_extra_ids": [
+    110,
+    876,
+    879,
+    1019,
+    1030,
+    1157,
+    1296,
+    1472,
+    1505,
+    1593,
+    1609,
+    1611,
+    1614,
+    1686,
+    1780,
+    1908,
+    2061,
+    2082,
+    2107,
+    2123,
+    2205,
+    2380,
+    2406,
+    2416,
+    2445,
+    2672,
+    2779,
+    3008,
+    3011,
+    3140,
+    3360,
+    3379,
+    3380,
+    3588,
+    3646
+   ],
+   "b": 6,
+   "extra_ids": [
+    110,
+    876,
+    879,
+    1019,
+    1030,
+    1157,
+    1296,
+    1472
+   ],
+   "extras": 35,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1592,
+   "union": 1557
+  },
+  {
+   "a": 2,
+   "all_extra_ids": [
+    837,
+    981,
+    1061,
+    2113,
+    2198,
+    2205,
+    2222,
+    2321,
+    2380,
+    2557,
+    2575,
+    3328,
+    3331,
+    3379,
+    3380,
+    3538,
+    3588,
+    3649
+   ],
+   "b": 9,
+   "extra_ids": [
+    837,
+    981,
+    1061,
+    2113,
+    2198,
+    2205,
+    2222,
+    2321
+   ],
+   "extras": 18,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1741,
+   "union": 1723
+  },
+  {
+   "a": 2,
+   "all_extra_ids": [
+    909
+   ],
+   "b": 10,
+   "extra_ids": [
+    909
+   ],
+   "extras": 1,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 2412,
+   "union": 2411
+  },
+  {
+   "a": 2,
+   "all_extra_ids": [
+    59,
+    66,
+    157,
+    2677,
+    2725
+   ],
+   "b": 11,
+   "extra_ids": [
+    59,
+    66,
+    157,
+    2677,
+    2725
+   ],
+   "extras": 5,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1596,
+   "union": 1591
+  },
+  {
+   "a": 2,
+   "all_extra_ids": [
+    948,
+    1472,
+    1670,
+    3378
+   ],
+   "b": 12,
+   "extra_ids": [
+    948,
+    1472,
+    1670,
+    3378
+   ],
+   "extras": 4,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1667,
+   "union": 1663
+  },
+  {
+   "a": 2,
+   "all_extra_ids": [],
+   "b": 13,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1621,
+   "union": 1621
+  },
+  {
+   "a": 2,
+   "all_extra_ids": [
+    80,
+    101
+   ],
+   "b": 14,
+   "extra_ids": [
+    80,
+    101
+   ],
+   "extras": 2,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1931,
+   "union": 1929
+  },
+  {
+   "a": 3,
+   "all_extra_ids": [],
+   "b": 4,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 389,
+   "union": 389
+  },
+  {
+   "a": 3,
+   "all_extra_ids": [
+    3252,
+    4212
+   ],
+   "b": 5,
+   "extra_ids": [
+    3252,
+    4212
+   ],
+   "extras": 2,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 417,
+   "union": 415
+  },
+  {
+   "a": 3,
+   "all_extra_ids": [
+    2205,
+    2243,
+    2380,
+    2697,
+    3575
+   ],
+   "b": 6,
+   "extra_ids": [
+    2205,
+    2243,
+    2380,
+    2697,
+    3575
+   ],
+   "extras": 5,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 652,
+   "union": 647
+  },
+  {
+   "a": 3,
+   "all_extra_ids": [
+    80,
+    81,
+    118,
+    215,
+    314,
+    329,
+    672,
+    945,
+    981,
+    1458,
+    1762,
+    1766,
+    1800,
+    1826,
+    1867,
+    1881,
+    1895,
+    2079,
+    2169,
+    2205,
+    2222,
+    2250,
+    2253,
+    2256,
+    2263,
+    2307,
+    2312,
+    2322,
+    2371,
+    2380,
+    2403,
+    2479,
+    2559,
+    2687,
+    2697,
+    2722,
+    2813,
+    2909,
+    2924,
+    2942,
+    3024,
+    3028,
+    3032,
+    3038,
+    3056,
+    3153,
+    3188,
+    3194,
+    3214,
+    3217,
+    3219,
+    3246,
+    3252,
+    3265,
+    3328,
+    3335,
+    3358,
+    3361,
+    3389,
+    3430,
+    3437,
+    3475,
+    3498,
+    3563,
+    3566,
+    3575,
+    3595,
+    3691,
+    3739,
+    3788,
+    3849,
+    3932,
+    4055,
+    4119,
+    4126,
+    4134,
+    4212,
+    4221,
+    4266,
+    4271,
+    4292,
+    4305,
+    4313,
+    4357,
+    4362,
+    4391
+   ],
+   "b": 9,
+   "extra_ids": [
+    80,
+    81,
+    118,
+    215,
+    314,
+    329,
+    672,
+    945
+   ],
+   "extras": 86,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 760,
+   "union": 674
+  },
+  {
+   "a": 3,
+   "all_extra_ids": [
+    2555,
+    2722
+   ],
+   "b": 10,
+   "extra_ids": [
+    2555,
+    2722
+   ],
+   "extras": 2,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 2060,
+   "union": 2058
+  },
+  {
+   "a": 3,
+   "all_extra_ids": [
+    863,
+    3049
+   ],
+   "b": 11,
+   "extra_ids": [
+    863,
+    3049
+   ],
+   "extras": 2,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 871,
+   "union": 869
+  },
+  {
+   "a": 3,
+   "all_extra_ids": [],
+   "b": 12,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 579,
+   "union": 579
+  },
+  {
+   "a": 3,
+   "all_extra_ids": [],
+   "b": 13,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 734,
+   "union": 734
+  },
+  {
+   "a": 3,
+   "all_extra_ids": [],
+   "b": 14,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1229,
+   "union": 1229
+  },
+  {
+   "a": 4,
+   "all_extra_ids": [],
+   "b": 5,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 226,
+   "union": 226
+  },
+  {
+   "a": 4,
+   "all_extra_ids": [],
+   "b": 6,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 476,
+   "union": 476
+  },
+  {
+   "a": 4,
+   "all_extra_ids": [
+    1281,
+    2113,
+    2114,
+    2231,
+    2259,
+    2371,
+    2514,
+    2516,
+    2603,
+    3131,
+    3260,
+    3351,
+    3373,
+    3475,
+    3485,
+    3646,
+    4066,
+    4093,
+    4145
+   ],
+   "b": 9,
+   "extra_ids": [
+    1281,
+    2113,
+    2114,
+    2231,
+    2259,
+    2371,
+    2514,
+    2516
+   ],
+   "extras": 19,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 537,
+   "union": 518
+  },
+  {
+   "a": 4,
+   "all_extra_ids": [],
+   "b": 10,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 2003,
+   "union": 2003
+  },
+  {
+   "a": 4,
+   "all_extra_ids": [
+    863
+   ],
+   "b": 11,
+   "extra_ids": [
+    863
+   ],
+   "extras": 1,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 755,
+   "union": 754
+  },
+  {
+   "a": 4,
+   "all_extra_ids": [],
+   "b": 12,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 421,
+   "union": 421
+  },
+  {
+   "a": 4,
+   "all_extra_ids": [],
+   "b": 13,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 603,
+   "union": 603
+  },
+  {
+   "a": 4,
+   "all_extra_ids": [
+    1672
+   ],
+   "b": 14,
+   "extra_ids": [
+    1672
+   ],
+   "extras": 1,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1156,
+   "union": 1155
+  },
+  {
+   "a": 5,
+   "all_extra_ids": [
+    102,
+    144,
+    170,
+    188,
+    325,
+    408,
+    410,
+    1614,
+    2102,
+    3967,
+    4139
+   ],
+   "b": 6,
+   "extra_ids": [
+    102,
+    144,
+    170,
+    188,
+    325,
+    408,
+    410,
+    1614
+   ],
+   "extras": 11,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 472,
+   "union": 461
+  },
+  {
+   "a": 5,
+   "all_extra_ids": [],
+   "b": 9,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 483,
+   "union": 483
+  },
+  {
+   "a": 5,
+   "all_extra_ids": [],
+   "b": 10,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 2000,
+   "union": 2000
+  },
+  {
+   "a": 5,
+   "all_extra_ids": [
+    3252
+   ],
+   "b": 11,
+   "extra_ids": [
+    3252
+   ],
+   "extras": 1,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 778,
+   "union": 777
+  },
+  {
+   "a": 5,
+   "all_extra_ids": [],
+   "b": 12,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 403,
+   "union": 403
+  },
+  {
+   "a": 5,
+   "all_extra_ids": [],
+   "b": 13,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 637,
+   "union": 637
+  },
+  {
+   "a": 5,
+   "all_extra_ids": [],
+   "b": 14,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1157,
+   "union": 1157
+  },
+  {
+   "a": 6,
+   "all_extra_ids": [
+    2102
+   ],
+   "b": 9,
+   "extra_ids": [
+    2102
+   ],
+   "extras": 1,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 745,
+   "union": 744
+  },
+  {
+   "a": 6,
+   "all_extra_ids": [
+    2380
+   ],
+   "b": 10,
+   "extra_ids": [
+    2380
+   ],
+   "extras": 1,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 2154,
+   "union": 2153
+  },
+  {
+   "a": 6,
+   "all_extra_ids": [
+    1157,
+    1296,
+    1472,
+    1908,
+    2171,
+    2243,
+    2416
+   ],
+   "b": 11,
+   "extra_ids": [
+    1157,
+    1296,
+    1472,
+    1908,
+    2171,
+    2243,
+    2416
+   ],
+   "extras": 7,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 986,
+   "union": 979
+  },
+  {
+   "a": 6,
+   "all_extra_ids": [],
+   "b": 12,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 664,
+   "union": 664
+  },
+  {
+   "a": 6,
+   "all_extra_ids": [],
+   "b": 13,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 807,
+   "union": 807
+  },
+  {
+   "a": 6,
+   "all_extra_ids": [
+    2102,
+    2205,
+    2243,
+    2380,
+    3575
+   ],
+   "b": 14,
+   "extra_ids": [
+    2102,
+    2205,
+    2243,
+    2380,
+    3575
+   ],
+   "extras": 5,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1300,
+   "union": 1295
+  },
+  {
+   "a": 9,
+   "all_extra_ids": [
+    2380,
+    3430,
+    3595,
+    4126,
+    4313
+   ],
+   "b": 10,
+   "extra_ids": [
+    2380,
+    3430,
+    3595,
+    4126,
+    4313
+   ],
+   "extras": 5,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 2059,
+   "union": 2054
+  },
+  {
+   "a": 9,
+   "all_extra_ids": [
+    863,
+    1826,
+    1879,
+    1966,
+    2222,
+    2299,
+    2303,
+    2321,
+    2322,
+    2389,
+    2442,
+    2567,
+    2687,
+    2713,
+    3121,
+    3252,
+    3265,
+    3328,
+    3331,
+    3358,
+    3361,
+    3373,
+    3389,
+    3542,
+    3649,
+    3842,
+    4093
+   ],
+   "b": 11,
+   "extra_ids": [
+    863,
+    1826,
+    1879,
+    1966,
+    2222,
+    2299,
+    2303,
+    2321
+   ],
+   "extras": 27,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1031,
+   "union": 1004
+  },
+  {
+   "a": 9,
+   "all_extra_ids": [],
+   "b": 12,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 545,
+   "union": 545
+  },
+  {
+   "a": 9,
+   "all_extra_ids": [
+    3361,
+    4058,
+    4226
+   ],
+   "b": 13,
+   "extra_ids": [
+    3361,
+    4058,
+    4226
+   ],
+   "extras": 3,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 893,
+   "union": 890
+  },
+  {
+   "a": 9,
+   "all_extra_ids": [
+    80,
+    118,
+    215,
+    981,
+    2205,
+    2222,
+    2250,
+    2380,
+    2563,
+    3219,
+    3475,
+    3575,
+    3595,
+    4126,
+    4292,
+    4313
+   ],
+   "b": 14,
+   "extra_ids": [
+    80,
+    118,
+    215,
+    981,
+    2205,
+    2222,
+    2250,
+    2380
+   ],
+   "extras": 16,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1345,
+   "union": 1329
+  },
+  {
+   "a": 10,
+   "all_extra_ids": [
+    909,
+    2329
+   ],
+   "b": 11,
+   "extra_ids": [
+    909,
+    2329
+   ],
+   "extras": 2,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 2156,
+   "union": 2154
+  },
+  {
+   "a": 10,
+   "all_extra_ids": [],
+   "b": 12,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 2047,
+   "union": 2047
+  },
+  {
+   "a": 10,
+   "all_extra_ids": [],
+   "b": 13,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 2144,
+   "union": 2144
+  },
+  {
+   "a": 10,
+   "all_extra_ids": [
+    1772
+   ],
+   "b": 14,
+   "extra_ids": [
+    1772
+   ],
+   "extras": 1,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 2246,
+   "union": 2245
+  },
+  {
+   "a": 11,
+   "all_extra_ids": [
+    1472,
+    3378
+   ],
+   "b": 12,
+   "extra_ids": [
+    1472,
+    3378
+   ],
+   "extras": 2,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 931,
+   "union": 929
+  },
+  {
+   "a": 11,
+   "all_extra_ids": [],
+   "b": 13,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1005,
+   "union": 1005
+  },
+  {
+   "a": 11,
+   "all_extra_ids": [],
+   "b": 14,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1441,
+   "union": 1441
+  },
+  {
+   "a": 12,
+   "all_extra_ids": [],
+   "b": 13,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 827,
+   "union": 827
+  },
+  {
+   "a": 12,
+   "all_extra_ids": [],
+   "b": 14,
+   "extra_ids": [],
+   "extras": 0,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1274,
+   "union": 1274
+  },
+  {
+   "a": 13,
+   "all_extra_ids": [
+    1772
+   ],
+   "b": 14,
+   "extra_ids": [
+    1772
+   ],
+   "extras": 1,
+   "missing": 0,
+   "missing_ids": [],
+   "removed": 1148,
+   "union": 1147
+  }
+ ],
+ "swaps": {
+  "classes_total": {
+   "b-over-a": 23,
+   "both-agree": 107,
+   "from-single-a": 8092,
+   "from-single-b": 1102,
+   "pair-specific": 35
+  },
+  "dropped_single_swaps": 139,
+  "novel_recipes": 0,
+  "pair_specific_examples": {
+   "1,11": [
+    1826,
+    3361,
+    2687
+   ],
+   "1,13": [
+    3361,
+    4226,
+    4058
+   ],
+   "1,2": [
+    1361,
+    2575
+   ],
+   "1,3": [
+    81,
+    329,
+    1826
+   ],
+   "1,4": [
+    2371
+   ],
+   "1,6": [
+    2098,
+    2102,
+    1724
+   ]
+  },
+  "per_combo": {
+   "1,10": {
+    "from-single-a": 160,
+    "from-single-b": 5,
+    "union_checked": 186,
+    "union_exact": 183
+   },
+   "1,11": {
+    "b-over-a": 1,
+    "both-agree": 1,
+    "from-single-a": 495,
+    "from-single-b": 66,
+    "pair-specific": 3,
+    "union_checked": 557,
+    "union_exact": 535
+   },
+   "1,12": {
+    "from-single-a": 664,
+    "union_checked": 672,
+    "union_exact": 672
+   },
+   "1,13": {
+    "from-single-a": 727,
+    "pair-specific": 4,
+    "union_checked": 721,
+    "union_exact": 718
+   },
+   "1,14": {
+    "both-agree": 1,
+    "from-single-a": 492,
+    "from-single-b": 2,
+    "union_checked": 506,
+    "union_exact": 499
+   },
+   "1,2": {
+    "both-agree": 1,
+    "from-single-a": 477,
+    "from-single-b": 66,
+    "pair-specific": 2,
+    "union_checked": 662,
+    "union_exact": 629
+   },
+   "1,3": {
+    "both-agree": 1,
+    "from-single-a": 727,
+    "from-single-b": 17,
+    "pair-specific": 18,
+    "union_checked": 803,
+    "union_exact": 768
+   },
+   "1,4": {
+    "both-agree": 2,
+    "from-single-a": 824,
+    "pair-specific": 1,
+    "union_checked": 833,
+    "union_exact": 827
+   },
+   "1,5": {
+    "both-agree": 1,
+    "from-single-a": 796,
+    "from-single-b": 12,
+    "union_checked": 809,
+    "union_exact": 806
+   },
+   "1,6": {
+    "from-single-a": 761,
+    "from-single-b": 8,
+    "pair-specific": 7,
+    "union_checked": 800,
+    "union_exact": 786
+   },
+   "1,9": {
+    "b-over-a": 22,
+    "both-agree": 15,
+    "from-single-a": 509,
+    "from-single-b": 2,
+    "union_checked": 581,
+    "union_exact": 543
+   },
+   "10,11": {
+    "from-single-a": 2,
+    "from-single-b": 30,
+    "union_checked": 45,
+    "union_exact": 45
+   },
+   "10,12": {
+    "from-single-a": 7,
+    "union_checked": 19,
+    "union_exact": 19
+   },
+   "10,13": {
+    "from-single-a": 3,
+    "union_checked": 17,
+    "union_exact": 17
+   },
+   "10,14": {
+    "both-agree": 2,
+    "from-single-a": 1,
+    "union_checked": 17,
+    "union_exact": 15
+   },
+   "11,12": {
+    "from-single-a": 91,
+    "union_checked": 98,
+    "union_exact": 98
+   },
+   "11,13": {
+    "from-single-a": 76,
+    "union_checked": 88,
+    "union_exact": 88
+   },
+   "11,14": {
+    "both-agree": 2,
+    "from-single-a": 53,
+    "from-single-b": 9,
+    "union_checked": 92,
+    "union_exact": 90
+   },
+   "12,13": {
+    "union_checked": 3,
+    "union_exact": 3
+   },
+   "12,14": {
+    "from-single-b": 12,
+    "union_checked": 34,
+    "union_exact": 34
+   },
+   "13,14": {
+    "from-single-b": 11,
+    "union_checked": 35,
+    "union_exact": 35
+   },
+   "2,10": {
+    "from-single-a": 46,
+    "from-single-b": 4,
+    "union_checked": 105,
+    "union_exact": 105
+   },
+   "2,11": {
+    "both-agree": 41,
+    "from-single-a": 47,
+    "from-single-b": 66,
+    "union_checked": 322,
+    "union_exact": 287
+   },
+   "2,12": {
+    "from-single-a": 86,
+    "union_checked": 255,
+    "union_exact": 255
+   },
+   "2,13": {
+    "from-single-a": 70,
+    "union_checked": 221,
+    "union_exact": 221
+   },
+   "2,14": {
+    "both-agree": 2,
+    "from-single-a": 63,
+    "from-single-b": 5,
+    "union_checked": 190,
+    "union_exact": 187
+   },
+   "2,3": {
+    "both-agree": 2,
+    "from-single-a": 81,
+    "from-single-b": 32,
+    "union_checked": 351,
+    "union_exact": 348
+   },
+   "2,4": {
+    "both-agree": 1,
+    "from-single-a": 86,
+    "from-single-b": 2,
+    "union_checked": 283,
+    "union_exact": 281
+   },
+   "2,5": {
+    "from-single-a": 87,
+    "from-single-b": 11,
+    "union_checked": 279,
+    "union_exact": 279
+   },
+   "2,6": {
+    "both-agree": 2,
+    "from-single-a": 55,
+    "from-single-b": 1,
+    "union_checked": 206,
+    "union_exact": 203
+   },
+   "2,9": {
+    "both-agree": 1,
+    "from-single-a": 77,
+    "from-single-b": 33,
+    "union_checked": 277,
+    "union_exact": 276
+   },
+   "3,10": {
+    "both-agree": 3,
+    "from-single-a": 4,
+    "from-single-b": 4,
+    "union_checked": 33,
+    "union_exact": 30
+   },
+   "3,11": {
+    "both-agree": 8,
+    "from-single-a": 28,
+    "from-single-b": 99,
+    "union_checked": 221,
+    "union_exact": 214
+   },
+   "3,12": {
+    "from-single-a": 41,
+    "union_checked": 140,
+    "union_exact": 140
+   },
+   "3,13": {
+    "from-single-a": 34,
+    "union_checked": 132,
+    "union_exact": 132
+   },
+   "3,14": {
+    "both-agree": 11,
+    "from-single-a": 11,
+    "from-single-b": 1,
+    "union_checked": 99,
+    "union_exact": 88
+   },
+   "3,4": {
+    "both-agree": 3,
+    "from-single-a": 50,
+    "from-single-b": 2,
+    "union_checked": 207,
+    "union_exact": 204
+   },
+   "3,5": {
+    "from-single-a": 49,
+    "from-single-b": 16,
+    "union_checked": 170,
+    "union_exact": 170
+   },
+   "3,6": {
+    "from-single-a": 47,
+    "from-single-b": 7,
+    "union_checked": 198,
+    "union_exact": 198
+   },
+   "3,9": {
+    "from-single-a": 7,
+    "from-single-b": 31,
+    "union_checked": 84,
+    "union_exact": 83
+   },
+   "4,10": {
+    "from-single-b": 7,
+    "union_checked": 25,
+    "union_exact": 25
+   },
+   "4,11": {
+    "from-single-a": 3,
+    "from-single-b": 107,
+    "union_checked": 144,
+    "union_exact": 144
+   },
+   "4,12": {
+    "from-single-a": 5,
+    "union_checked": 33,
+    "union_exact": 33
+   },
+   "4,13": {
+    "from-single-a": 4,
+    "union_checked": 39,
+    "union_exact": 39
+   },
+   "4,14": {
+    "both-agree": 1,
+    "from-single-a": 3,
+    "from-single-b": 11,
+    "union_checked": 67,
+    "union_exact": 66
+   },
+   "4,5": {
+    "from-single-a": 4,
+    "from-single-b": 16,
+    "union_checked": 57,
+    "union_exact": 57
+   },
+   "4,6": {
+    "from-single-a": 5,
+    "from-single-b": 8,
+    "union_checked": 97,
+    "union_exact": 97
+   },
+   "4,9": {
+    "from-single-a": 1,
+    "from-single-b": 37,
+    "union_checked": 56,
+    "union_exact": 55
+   },
+   "5,10": {
+    "from-single-a": 5,
+    "from-single-b": 7,
+    "union_checked": 26,
+    "union_exact": 26
+   },
+   "5,11": {
+    "from-single-a": 16,
+    "from-single-b": 104,
+    "union_checked": 130,
+    "union_exact": 130
+   },
+   "5,12": {
+    "from-single-a": 10,
+    "union_checked": 14,
+    "union_exact": 14
+   },
+   "5,13": {
+    "from-single-a": 16,
+    "union_checked": 21,
+    "union_exact": 21
+   },
+   "5,14": {
+    "both-agree": 1,
+    "from-single-a": 15,
+    "from-single-b": 11,
+    "union_checked": 52,
+    "union_exact": 51
+   },
+   "5,6": {
+    "from-single-a": 1,
+    "from-single-b": 8,
+    "union_checked": 69,
+    "union_exact": 69
+   },
+   "5,9": {
+    "both-agree": 1,
+    "from-single-a": 7,
+    "from-single-b": 33,
+    "union_checked": 52,
+    "union_exact": 49
+   },
+   "6,10": {
+    "from-single-a": 8,
+    "from-single-b": 8,
+    "union_checked": 57,
+    "union_exact": 57
+   },
+   "6,11": {
+    "both-agree": 2,
+    "from-single-a": 6,
+    "from-single-b": 87,
+    "union_checked": 145,
+    "union_exact": 143
+   },
+   "6,12": {
+    "from-single-a": 7,
+    "union_checked": 55,
+    "union_exact": 55
+   },
+   "6,13": {
+    "from-single-a": 6,
+    "union_checked": 53,
+    "union_exact": 53
+   },
+   "6,14": {
+    "from-single-a": 4,
+    "from-single-b": 9,
+    "union_checked": 69,
+    "union_exact": 69
+   },
+   "6,9": {
+    "from-single-a": 8,
+    "from-single-b": 37,
+    "union_checked": 103,
+    "union_exact": 103
+   },
+   "9,10": {
+    "from-single-a": 15,
+    "from-single-b": 4,
+    "union_checked": 32,
+    "union_exact": 32
+   },
+   "9,11": {
+    "both-agree": 1,
+    "from-single-a": 31,
+    "from-single-b": 53,
+    "union_checked": 100,
+    "union_exact": 99
+   },
+   "9,12": {
+    "from-single-a": 14,
+    "union_checked": 19,
+    "union_exact": 19
+   },
+   "9,13": {
+    "from-single-a": 33,
+    "union_checked": 45,
+    "union_exact": 45
+   },
+   "9,14": {
+    "both-agree": 1,
+    "from-single-a": 31,
+    "from-single-b": 1,
+    "union_checked": 55,
+    "union_exact": 54
+   }
+  }
+ }
+}

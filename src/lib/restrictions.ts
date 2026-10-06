@@ -1,45 +1,573 @@
 /**
- * Dietary restrictions: the runtime half of the restriction pipeline — ADR.
+ * Dietary restrictions: the runtime half of the restriction pipeline — ADR-0059.
  *
- * The heavy lifting happened at BUILD time (scripts/build_restriction_sets.py,
- * over the live archive `archive_catalog_profiles.py --restrictions`):
- * upstream's OWN restricted rendering of every changed doc is committed in
- * `data/restriction_overlays/<slug>.json`, keyed by the stable `recipe_id`.
- * Upstream's mechanism (measured live): a restriction REMOVES recipes
- * outright (a strict subset — `removed`), and surviving recipes keep their
- * structure while ingredient names — and occasionally a step's prose — are
- * swapped to restriction-safe substitutes, chosen per recipe by upstream.
- * None of that is re-derived here: the runtime only SELECTS and DISPLAYS.
+ * The runtime consumes a SPLIT TREE under `public/data/restrictions/`:
+ *
+ *   * index.json       ~2 KB   the 12 entries {id, slug, label} + the pair file list — loaded ALWAYS
+ *   * swaps.json       ~8 KB   the from→to entries with quantityRule + the drops lists — loaded when ANY restriction is active
+ *   * removed/<slug>.json ~4 KB ×12  one restriction's removed recipe ids — loaded when THAT chip activates
+ *   * pairs/<a>-<b>.json  ~1 KB ×66  ONLY the composition extras (the 918 ids partitioned by pair) — loaded when THAT PAIR is active
+ *
+ * The ladder: `loadIndex`, `ensureSwaps`, `ensureRemoved(slug)`, `ensurePair(a, b)` —
+ * each cached, retryable, injectable fetch (the tests inject fakes).
+ * `isRemovedByRestriction` consults the loaded union (from removed/*) + pair extras
+ * (from pairs/*); `swapName` consults swaps only when loaded (pre-load behaviour:
+ * identity — no restriction is "active-looking" until its data arrives; the existing
+ * aria/loading semantics are kept).
+ *
+ * Pure lib: no Vue, no Pinia, no fetch at module scope. The async pieces
+ * (loadIndex, ensureSwaps, ensureRemoved, ensurePair) take the fetch + base URL
+ * as parameters so bun-test can exercise them without an environment.
  *
  * THE KEY/DISPLAY SPLIT (the load-bearing rule of this module):
- * the overlay is DISPLAY truth only. Every persisted or derived key — grocery
+ * the swap is DISPLAY truth only. Every persisted or derived key — grocery
  * line keys, checked-state keys, cleared-ingredient keys — stays keyed by the
  * BASE doc's nameKey, so toggling a restriction can never orphan or uncheck a
- * saved item. Concretely: `restrictedDocView` (recipe detail, cooking view,
- * measured chips) replaces `line_items`/`instructions` wholesale, while
+ * saved item. Concretely: `restrictedDocView` applies swaps to `line_items` in
+ * place (display names change, quantities stay verbatim, ids stay base), while
  * `groceryDisplayLines` builds the grocery's display rows so a row's (name,
- * quantity) pair ALWAYS co-occurs in one authoritative doc (the overlay, or
- * the base where the overlay has no counterpart) — never a cross-pair of base
- * quantity under an overlay name.
+ * quantity) pair ALWAYS co-occurs in one authoritative doc (the base doc,
+ * possibly with a swap on the name) — never a cross-pair of base quantity under
+ * a substitute name.
  *
- * WHY NOT POSITIONAL-ONLY: upstream's rework can REORDER lines within a
- * reworked doc (measured live: GF rid 224 swaps its pasta and garlic lines),
- * so pairing names by position alone once displayed `6 cloves gluten-free
- * fettuccine pasta` — a pair that appears in NEITHER doc. The pairing below
- * matches by nameKey first (the same ingredient wherever it moved), falls
- * back positionally on the leftovers, and keeps unpaired base lines verbatim.
- *
- * Pure lib: no Vue, no Pinia, no fetch at module scope. The one async piece
- * (`loadOverlay`) takes the fetch + base URL as parameters so bun-test can
- * exercise it without an environment.
+ * WHY SWAPS ARE NAME-BASED: upstream's rework can REORDER lines within a doc,
+ * so pairing by position alone once displayed `6 cloves gluten-free fettuccine
+ * pasta` — a pair in NEITHER doc. A swap table keys on the ingredient NAME:
+ * the substitute is the display, the base nameKey is the key, and the pairing
+ * is trivial (it CAN'T go wrong because the substitute name is NEVER checked
+ * state).
  */
 
 import { nameKey, type RestrictedDisplayLine } from './grocery'
-import type { LineItem, RecipeDoc, RecipeInstruction } from './types'
+import type { LineItem, RecipeDoc } from './types'
 
-/* ---------- The control plane (committed artifact) ---------- */
+/* ---------- The split-tree artifact contracts ---------- */
 
+export interface SwapEntry {
+  from: string
+  to: string
+  quantityRule: string
+  count: number
+}
+
+export interface DropEntry {
+  from: string
+  count: number
+}
+
+/**
+ * One recipe's EXACT per-restriction rework from events/<slug>.json —
+ * upstream's own (s)waps with their re-authored quantities, per-recipe
+ * (d)rops, same-name (r)equants and (a)dded lines. The events map is the
+ * per-recipe truth (1649/1649 byte-exact against upstream's docs); the
+ * swaps.json dictionary is the GLOBAL fallback for recipes without an
+ * events entry — its drops are a per-restriction UNION over all recipes,
+ * which wrongly hides e.g. garlic in a GF recipe whose own rework keeps it.
+ */
+export interface RecipeEvents {
+  /** [from, to, qty_new?] — the substitute display name + optional re-authored quantity. */
+  s?: [string, string, string?][]
+  /** Dropped ingredient display names (this recipe, this restriction). */
+  d?: string[]
+  /** [from, qty_new] — same-ingredient quantity re-authors. */
+  q?: [string, string][]
+  /** [name, qty] — lines upstream ADDS to the reworked doc. */
+  a?: [string, string][]
+}
+
+/** One restriction entry from index.json: {id, slug, label}. */
 export interface RestrictionEntry {
+  id: number
+  slug: string
+  label: string
+}
+
+/** The committed split tree, loaded by the ladder. */
+export interface LadderIndex {
+  /** The 12 entries from index.json (or the lib's RESTRICTIONS constant). */
+  restrictions: RestrictionEntry[]
+  /** From→to entries from swaps.json (null until ensureSwaps loads it). */
+  swaps: SwapEntry[] | null
+  /** Drops entries from swaps.json — keyed BY RESTRICTION id (null until ensureSwaps). */
+  drops: Record<string, DropEntry[]> | null
+  /** slug → removed recipe ids (from removed/<slug>.json). Filled per chip activation. */
+  removed: Map<string, number[]>
+  /** pairKey (a-b) → composition extras (from pairs/<a>-<b>.json). Filled per pair activation. */
+  pairs: Map<string, number[]>
+  /** slug → recipeId → the per-recipe exact rework (from events/<slug>.json). */
+  events: Map<string, Record<string, RecipeEvents>>
+}
+
+// Constants must be defined before buildLadderIndex (TDZ-safe ordering).
+
+
+/** Build an empty LadderIndex from the lib's RESTRICTIONS constant (cold start). */
+export function buildLadderIndex(): LadderIndex {
+  return {
+    restrictions: RESTRICTIONS.map((r) => ({ id: r.id, slug: r.slug, label: r.label })),
+    swaps: null,
+    drops: null,
+    removed: new Map(),
+    pairs: new Map(),
+    events: new Map(),
+  }
+}
+
+/**
+ * Load index.json via `fetchImpl`. Cached, retryable, injectable.
+ * A failed fetch resolves null — index.json ships in the bundle, so a failure
+ * is a build problem; the caller should never see null in practice.
+ */
+export async function loadIndex(
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+): Promise<LadderIndex | null> {
+  const res = await fetchImpl(`${baseUrl}data/restrictions/index.json`).catch(() => null)
+  if (!res || !res.ok) return null
+  const doc = (await res.json()) as { restrictions: RestrictionEntry[]; pairs: string[] }
+  return {
+    restrictions: doc.restrictions,
+    swaps: null,
+    drops: null,
+    removed: new Map(),
+    pairs: new Map(),
+    events: new Map(),
+  }
+}
+
+/**
+ * One ladder fetch with a bounded retry: these are local static files, so a
+ * second attempt after a short backoff recovers a transient failure under
+ * load (the parallel-worker e2e runs caught real ones). Returns null when
+ * EVERY attempt fails — callers must leave their slot UNSET. Never cache a
+ * failure: a cached empty map/list pins the degraded fallback (identity
+ * display, dictionary swaps) for the whole session with no retry path.
+ */
+async function fetchLadderJson<T>(
+  fetchImpl: typeof fetch,
+  url: string,
+  attempts = 2,
+): Promise<T | null> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 150))
+    try {
+      const res = await fetchImpl(url)
+      if (res.ok) return (await res.json()) as T
+    } catch {
+      // fall through to the next attempt
+    }
+  }
+  return null
+}
+
+/**
+ * Ensure swaps.json is loaded into the index. Cached (no-op if already loaded).
+ * A failed fetch leaves swaps as null (identity display) + is retried on the
+ * next call.
+ */
+export async function ensureSwaps(
+  index: LadderIndex,
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+): Promise<void> {
+  if (index.swaps !== null || index.drops !== null) return
+  const doc = await fetchLadderJson<{ swaps: SwapEntry[]; drops: Record<string, DropEntry[]> }>(
+    fetchImpl,
+    `${baseUrl}data/restrictions/swaps.json`,
+  )
+  if (!doc) return
+  index.swaps = doc.swaps
+  index.drops = doc.drops
+}
+
+/**
+ * Ensure removed/<slug>.json is loaded into the index. Cached (no-op if already loaded).
+ * A failed fetch leaves this slug's removed set as an empty list (identity display
+ * for that chip) + is retried on the next call.
+ */
+export async function ensureRemoved(
+  slug: string,
+  index: LadderIndex,
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+): Promise<void> {
+  if (index.removed.has(slug)) return
+  const doc = await fetchLadderJson<{ removed: number[] }>(
+    fetchImpl,
+    `${baseUrl}data/restrictions/removed/${slug}.json`,
+  )
+  // A failed fetch stays UNSET so a later ladder call retries — caching an
+  // empty set here would silently keep that chip's recipes discoverable for
+  // the whole session.
+  if (!doc) return
+  index.removed.set(slug, doc.removed ?? [])
+}
+
+/**
+ * Ensure pairs/<a>-<b>.json is loaded into the index. Cached (no-op if already loaded).
+ * The pairKey uses canonical ordering (a < b by slug string comparison).
+ * A failed fetch leaves this pair's extras as an empty list + is retried on the next call.
+ */
+export async function ensurePair(
+  a: string,
+  b: string,
+  index: LadderIndex,
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+): Promise<void> {
+  const pairKey = a < b ? `${a}-${b}` : `${b}-${a}`
+  if (index.pairs.has(pairKey)) return
+  const doc = await fetchLadderJson<{ extras: number[] }>(
+    fetchImpl,
+    `${baseUrl}data/restrictions/pairs/${pairKey}.json`,
+  )
+  // A failed fetch stays UNSET so a later ladder call retries (never cache a
+  // failure — an empty extras list would pin a wrong composition forever).
+  if (!doc) return
+  index.pairs.set(pairKey, doc.extras ?? [])
+}
+
+/**
+ * Ensure events/<slug>.json is loaded into the index. Cached (no-op if already
+ * loaded). A failed fetch leaves the slug UNSET (retried on the next ladder
+ * call — all twelve event files ship in the bundle, so a failure here is
+ * transient, never a legitimate 404).
+ */
+export async function ensureEvents(
+  slug: string,
+  index: LadderIndex,
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+): Promise<void> {
+  if (index.events.has(slug)) return
+  const doc = await fetchLadderJson<Record<string, RecipeEvents>>(
+    fetchImpl,
+    `${baseUrl}data/restrictions/events/${slug}.json`,
+  )
+  // A failed fetch stays UNSET so a later ladder call retries. Caching an
+  // empty map here would pin the dictionary's global swap/drop fallback for
+  // the session — and the global DROPS union hides ingredients a recipe's own
+  // exact rework keeps (measured: garlic under GF, the CI e2e caught it).
+  if (!doc) return
+  index.events.set(slug, doc)
+}
+
+/* ---------- Query-time consultation ---------- */
+
+/**
+ * Is this recipe removed by an active restriction?
+ *
+ * A recipe is removed if ANY active restriction's removed/<slug>.json lists it,
+ * or if ANY active pair's pairs/<a>-<b>.json lists it (the composition extras —
+ * removed by the PAIR but by NEITHER single).
+ *
+ * The union of all active restrictions' removed sets + the union of all active
+ * pairs' extras. If swaps/drops have not arrived yet (pre-load), removal is
+ * still computed from loaded removed/* and pairs/* data (those load first in
+ * the ladder). If neither has arrived, returns false.
+ */
+export function isRemovedByRestriction(
+  recipeId: number,
+  activeIds: number[],
+  index: LadderIndex,
+): boolean {
+  if (activeIds.length === 0) return false
+  // The id → slug lookup is hoisted out of the per-recipe hot path (the
+  // Recipes tab calls this once per rendered card per keystroke). removed/
+  // pairs arrays stay arrays (they arrive as JSON arrays), but membership
+  // scans run against Sets built ONCE per (index, slug) and memoized on the
+  // index object — a ~2,000-id list scanned linearly per card was the
+  // review's measured hot spot.
+  for (const id of activeIds) {
+    const removed = removedSet(id, index)
+    if (removed?.has(recipeId)) return true
+  }
+  // Check pair extras from loaded pairs/<a>-<b>.json files
+  // (only pairs where BOTH members are active)
+  for (let i = 0; i < activeIds.length; i++) {
+    for (let j = i + 1; j < activeIds.length; j++) {
+      const extras = pairExtrasSet(activeIds[i]!, activeIds[j]!, index)
+      if (extras?.has(recipeId)) return true
+    }
+  }
+  return false
+}
+
+// Memoized Set views over the index's removed/pairs arrays. The index object
+// is the memo key's owner: the Maps live alongside the arrays they shadow and
+// rebuild only when the underlying array is (re)loaded (identity change).
+const removedSetMemos = new WeakMap<LadderIndex, Map<string, Set<number>>>()
+const pairExtrasMemos = new WeakMap<LadderIndex, Map<string, Set<number>>>()
+
+function removedSet(id: number, index: LadderIndex): Set<number> | undefined {
+  const entry = index.restrictions.find((r) => r.id === id)
+  if (!entry) return undefined
+  const removed = index.removed.get(entry.slug)
+  if (!removed) return undefined
+  let bySlug = removedSetMemos.get(index)
+  if (!bySlug) { bySlug = new Map(); removedSetMemos.set(index, bySlug) }
+  let set = bySlug.get(entry.slug)
+  if (!set || set.size !== removed.length) {
+    set = new Set(removed)
+    bySlug.set(entry.slug, set)
+  }
+  return set
+}
+
+function pairExtrasSet(idA: number, idB: number, index: LadderIndex): Set<number> | undefined {
+  const aEntry = index.restrictions.find((r) => r.id === idA)
+  const bEntry = index.restrictions.find((r) => r.id === idB)
+  if (!aEntry || !bEntry) return undefined
+  const pairKey = aEntry.slug < bEntry.slug
+    ? `${aEntry.slug}-${bEntry.slug}`
+    : `${bEntry.slug}-${aEntry.slug}`
+  const extras = index.pairs.get(pairKey)
+  if (!extras) return undefined
+  let byKey = pairExtrasMemos.get(index)
+  if (!byKey) { byKey = new Map(); pairExtrasMemos.set(index, byKey) }
+  let set = byKey.get(pairKey)
+  if (!set || set.size !== extras.length) {
+    set = new Set(extras)
+    byKey.set(pairKey, set)
+  }
+  return set
+}
+
+/* ---------- Dictionary application (display truth) ---------- */
+
+/**
+ * Build the union of drop nameKeys across the given active ids from the index.
+ * Drops come from swaps.json (loaded when any chip is active). If swaps haven't
+ * loaded yet, returns an empty set (pre-load: no drops visible). Drops apply
+ * only when at least one restriction is active.
+ */
+export function activeDrops(activeIds: number[], index: LadderIndex): Set<string> {
+  const out = new Set<string>()
+  if (activeIds.length === 0 || !index.drops) return out
+  // Drops are PER RESTRICTION: only the ACTIVE restrictions' drops apply. The
+  // flat-array emission used to union every restriction's drops under any one
+  // active chip — hiding garlic under Gluten-Free alone because garlic is a
+  // Dairy/Soy drop (the CI e2e caught it on the grocery fixture).
+  for (const id of activeIds) {
+    const byId = index.drops[String(id)]
+    if (!byId) continue
+    for (const drop of byId) out.add(nameKey(drop.from))
+  }
+  return out
+}
+
+/**
+ * Is this nameKey in the drops set (union across all loaded drops)?
+ * Drops are ingredients that DISAPPEAR in kept recipes under a restriction
+ * with NO swap counterpart. Used for display-only hiding.
+ */
+export function isDropName(name: string, drops: Set<string>): boolean {
+  return drops.has(nameKey(name))
+}
+
+/**
+ * Apply the swap to a display name when a swap matches this nameKey.
+ * Returns the substitute name when a swap applies, otherwise the original
+ * name unchanged. swapName consults swaps.json ONLY when it has loaded
+ * (pre-load behaviour: identity — no restriction is "active-looking" until
+ * its data arrives; the existing aria/loading semantics are kept).
+ */
+export function swapName(name: string, index: LadderIndex): string {
+  if (!index.swaps) return name
+  const swap = index.swaps.find((s) => s.from === name || s.from === nameKey(name))
+  return swap ? swap.to : name
+}
+
+/**
+ * The recipe doc under an ACTIVE restriction, EXACT when upstream has a
+ * per-recipe events entry for it: apply the entry's swaps (+ their
+ * re-authored quantities), requants, drops and added lines verbatim — the
+ * same render that matched upstream's own docs 1649/1649. Returns null when
+ * NO active restriction carries an events entry for this recipe (the caller
+ * falls back to the dictionary's restrictedDocView).
+ *
+ * Precedence for MULTIPLE active restrictions: apply each active slug's
+ * entry in ascending id order (the smallest id's rework is the base; a
+ * later entry's `from` names are matched against the CURRENT display name,
+ * so a composed rework chains the way upstream's own combined profiles do).
+ */
+export function eventsDocView(
+  doc: RecipeDoc,
+  index: LadderIndex | null | undefined,
+  activeIds: number[],
+): RecipeDoc | null {
+  if (!index || activeIds.length === 0) return null
+  const entries: { id: number; slug: string; ev: RecipeEvents }[] = []
+  for (const id of [...activeIds].sort((a, b) => a - b)) {
+    const slug = SLUG_BY_ID.get(id)
+    if (!slug) continue
+    const byRecipe = index.events.get(slug)
+    if (!byRecipe) continue
+    const ev = byRecipe[String(doc.recipe_id)]
+    if (ev) entries.push({ id, slug, ev })
+  }
+  if (entries.length === 0) return null
+  // Apply the entries in id order; each pass matches `from` against the
+  // CURRENT line names so chained reworks compose.
+  let items: LineItem[] = doc.line_items.map((li) => ({ ...li }))
+  for (const { ev } of entries) {
+    // Drops first (display-only hiding), then swaps/requants on survivors,
+    // then additions — the same order events_for_doc emitted them from.
+    if (ev.d?.length) {
+      const dropNames = new Set(ev.d)
+      items = items.filter((li) => !dropNames.has(li.ingredient_name))
+    }
+    if (ev.s?.length) {
+      for (const [from, to, qty] of ev.s) {
+        const li = items.find((l) => l.ingredient_name === from)
+        if (!li) continue
+        li.ingredient_name = to
+        if (qty && qty !== li.quantity) li.quantity = qty
+      }
+    }
+    if (ev.q?.length) {
+      for (const [from, qty] of ev.q) {
+        const li = items.find((l) => l.ingredient_name === from)
+        if (li) li.quantity = qty
+      }
+    }
+    if (ev.a?.length) {
+      let addId = Math.max(-1, ...items.map((l) => l.id)) + 1
+      for (const [name, qty] of ev.a) {
+        items.push({
+          id: addId++,
+          quantity: qty,
+          ingredient_name: name,
+        })
+      }
+    }
+  }
+  return { ...doc, line_items: items }
+}
+
+/**
+ * The grocery's display rows for a recipe under an ACTIVE restriction with a
+ * per-recipe events entry — EXACT (each row's (name, quantity) pair comes
+ * from upstream's own reworked doc, never a cross-pair). `keyName` stays the
+ * BASE doc's nameKey for swapped/requant lines (the key/display split), and
+ * an added line keys on its own nameKey (it has no base counterpart).
+ * Returns null when NO active restriction carries an events entry — the
+ * caller falls back to groceryDisplayLines (dictionary) then the base doc.
+ */
+export function eventsDisplayLines(
+  doc: RecipeDoc,
+  index: LadderIndex | null | undefined,
+  activeIds: number[],
+): RestrictedDisplayLine[] | null {
+  const view = eventsDocView(doc, index, activeIds)
+  if (!view) return null
+  // Recover the base keys: a line whose CURRENT name equals a swap's `to`
+  // keys on the swap's `from`; everything else keys on its own name.
+  const toByFrom = new Map<string, { from: string; qty?: string }>()
+  for (const id of [...activeIds].sort((a, b) => a - b)) {
+    const slug = SLUG_BY_ID.get(id)
+    const byRecipe = slug ? index?.events.get(slug) : undefined
+    const ev = byRecipe?.[String(doc.recipe_id)]
+    for (const [from, to] of ev?.s ?? []) toByFrom.set(to, { from })
+  }
+  const rows: RestrictedDisplayLine[] = []
+  for (const li of view.line_items) {
+    const pair = toByFrom.get(li.ingredient_name)
+    const baseName = pair ? pair.from : li.ingredient_name
+    rows.push({
+      keyName: nameKey(baseName),
+      name: li.ingredient_name,
+      quantity: li.quantity,
+      keyIngredient: baseName,
+    })
+  }
+  return rows
+}
+
+/**
+ * The recipe doc as it displays under the active restrictions: swaps are
+ * applied to each line item's ingredient_name (nameKey match); the base
+ * quantity string stays verbatim; ids stay the base ids. Recipe prose (step
+ * instructions) stays AUTHENTIC — substitution only applies to ingredient
+ * names in line items (ADR-0022). A line whose nameKey is in the drops set
+ * (no swap counterpart under any active restriction) is HIDDEN from display
+ * only; the key/checked state is UNTOUCHED. `null` index returns the base doc
+ * unchanged. No swaps loaded yet = identity (pre-load behaviour).
+ */
+export function restrictedDocView(
+  doc: RecipeDoc,
+  index: LadderIndex | null | undefined,
+  activeIds: number[],
+): RecipeDoc {
+  if (!index) return doc
+  if (!index.swaps || index.swaps.length === 0) return doc
+  const drops = activeDrops(activeIds, index)
+  if (drops.size === 0 && index.swaps.length === 0) return doc
+  const line_items: LineItem[] = []
+  for (const li of doc.line_items) {
+    const lk = nameKey(li.ingredient_name)
+    const swap = index.swaps.find((s) => nameKey(s.from) === lk)
+    if (swap) {
+      // Swap applies: substitute the display name, keep everything else.
+      line_items.push({ ...li, ingredient_name: swap.to })
+    } else if (drops.has(lk)) {
+      // Drop: hide this line from display only — key/checked state untouched.
+      continue
+    } else {
+      line_items.push({ ...li })
+    }
+  }
+  return { ...doc, line_items }
+}
+
+/**
+ * The grocery's display rows for this recipe, or null when the base doc
+ * should render as-is (no active swaps and no active drops — every row's
+ * (name, quantity) pair ALWAYS co-occurs in one authoritative doc (the base
+ * doc, possibly with a swap on the name) — never a cross-pair of base
+ * quantity under a substitute name). No swaps loaded yet = null (pre-load:
+ * base doc renders as-is).
+ */
+export function groceryDisplayLines(
+  doc: RecipeDoc,
+  index: LadderIndex | null | undefined,
+  activeIds: number[],
+): RestrictedDisplayLine[] | null {
+  if (!index) return null
+  if (!index.swaps || index.swaps.length === 0) return null
+  const drops = activeDrops(activeIds, index)
+  if (drops.size === 0 && index.swaps.length === 0) return null
+  let changed = false
+  const rows: RestrictedDisplayLine[] = []
+  for (const li of doc.line_items) {
+    const lk = nameKey(li.ingredient_name)
+    const swap = index.swaps!.find((s) => nameKey(s.from) === lk)
+    if (swap) {
+      changed = true
+      rows.push({
+        keyName: lk,
+        name: swap.to,
+        quantity: li.quantity,
+        keyIngredient: li.ingredient_name,
+      })
+    } else if (drops.has(lk)) {
+      changed = true
+      continue
+    } else {
+      rows.push({
+        keyName: lk,
+        name: li.ingredient_name,
+        quantity: li.quantity,
+        keyIngredient: li.ingredient_name,
+      })
+    }
+  }
+  return changed ? rows : null
+}
+
+/* ---------- Constants ---------- */
+
+export interface RestrictionEntryFull {
   id: number
   slug: string
   label: string
@@ -50,7 +578,7 @@ export interface RestrictionEntry {
  * allergens first, lifestyle-relevant nightshades last. Ids are upstream's
  * (live-verified 2026-10-06; 7 and 8 exist upstream but are unused).
  */
-export const RESTRICTIONS: RestrictionEntry[] = [
+export const RESTRICTIONS: RestrictionEntryFull[] = [
   { id: 4, slug: 'shellfish-free', label: 'Shellfish-Free' },
   { id: 3, slug: 'fish-free', label: 'Fish-Free' },
   { id: 1, slug: 'gluten-free', label: 'Gluten-Free' },
@@ -68,39 +596,6 @@ export const RESTRICTIONS: RestrictionEntry[] = [
 const KNOWN_IDS = new Set(RESTRICTIONS.map((r) => r.id))
 export const SLUG_BY_ID = new Map(RESTRICTIONS.map((r) => [r.id, r.slug]))
 
-/** `data/restriction_sets.json` (scripts/build_restriction_sets.py). */
-export interface RestrictionSetInfo {
-  slug: string
-  label: string
-  /** Sorted recipe ids the restriction removes from the catalog. */
-  removed: number[]
-  overlay: string
-  swapped_docs: number
-}
-
-export interface RestrictionSetsFile {
-  generated_at: string
-  restrictions: Record<string, RestrictionSetInfo>
-}
-
-/** `data/restriction_overlays/<slug>.json`. */
-export interface OverlayLineItem {
-  quantity: string
-  ingredient_name: string
-}
-
-export interface OverlayDoc {
-  line_items: OverlayLineItem[]
-  instructions: RecipeInstruction[]
-}
-
-export interface RestrictionOverlay {
-  slug: string
-  docs: Record<string, OverlayDoc>
-}
-
-export type OverlaysBySlug = Partial<Record<string, RestrictionOverlay>>
-
 /**
  * Every inbound restriction-id list (backup import, a future room payload,
  * hand-edited localStorage) passes through here: unknown ids dropped, dupes
@@ -116,314 +611,4 @@ export function normalizeRestrictionIds(raw: unknown): number[] {
     else if (typeof v === 'string' && /^\d+$/.test(v) && KNOWN_IDS.has(Number(v))) out.add(Number(v))
   }
   return [...out].sort((a, b) => a - b)
-}
-
-/* ---------- O(1) lookups, built once per load ---------- */
-
-export interface RestrictionIndex {
-  /** slug -> the recipe ids it removes */
-  removedBySlug: Map<string, Set<number>>
-  /** id -> slug for the ACTIVE ids fast path */
-  slugById: Map<number, string>
-}
-
-export function buildRestrictionIndex(sets: RestrictionSetsFile | null | undefined): RestrictionIndex {
-  const removedBySlug = new Map<string, Set<number>>()
-  if (sets) {
-    for (const info of Object.values(sets.restrictions)) {
-      removedBySlug.set(info.slug, new Set(info.removed))
-    }
-  }
-  return { removedBySlug, slugById: SLUG_BY_ID }
-}
-
-/** Is this recipe removed from the catalog under the given active ids? */
-export function isRemovedByRestriction(
-  recipeId: number,
-  activeIds: number[],
-  index: RestrictionIndex,
-): boolean {
-  return activeIds.some((id) => index.removedBySlug.get(SLUG_BY_ID.get(id) ?? '')?.has(recipeId) ?? false)
-}
-
-/**
- * The reworked doc slice for this recipe under the given active ids, or null.
- *
- * When SEVERAL active restrictions rework the same doc (upstream composes
- * restrictions inside one render; we archive only the twelve singles), the
- * smallest id wins — a deterministic, documented default, not an attempt to
- * synthesize the composition upstream would render.
- */
-export function overlayDocFor(
-  recipeId: number,
-  activeIds: number[],
-  overlays: OverlaysBySlug,
-): OverlayDoc | null {
-  for (const id of [...activeIds].sort((a, b) => a - b)) {
-    const overlay = overlays[SLUG_BY_ID.get(id) ?? '']
-    const doc = overlay?.docs[String(recipeId)]
-    if (doc) return doc
-  }
-  return null
-}
-
-/* ---------- The restricted doc view (display truth) ---------- */
-
-/** One pairing input: the ingredient's nameKey plus its quantity string. */
-interface PairItem {
-  key: string
-  quantity: string
-}
-
-/**
- * Pair overlay rows to base rows:
- *
- * - pass 1 — the SAME nameKey (the same ingredient wherever upstream moved
- *   it);
- * - pass 1b — nameKey CONTAINMENT: upstream's substitutions embed the
- *   original name (`soy sauce` → `tamari soy sauce`, `fettuccine pasta` →
- *   `gluten-free fettuccine pasta`), so a leftover overlay row pairs a
- *   leftover base row when one nameKey contains the other — but only when
- *   the candidate is UNIQUE on both sides (an ambiguous containment is no
- *   evidence);
- * - pass 2 — the remaining leftovers pair IN ORDER, one constraint per
- *   pair: BOTH quantities must be unique among their own leftovers.
- *   Duplicate quantities (two `354 ml` lines, the many empty seasoning
- *   rows) cannot prove identity, and an ingredient upstream ADDED (GF rid
- *   863's `12 eggs`) must never steal a base row's key by blind order —
- *   measured live 2026-10-06: blind order pairing keyed the eggs row onto
- *   the shrimp line and the tamari row onto fish sauce.
- *
- * The return is per-overlay-row: the paired base row's index, or -1 when
- * the overlay row has no base counterpart (a split's extra line, a refused
- * ambiguous pair). An unpaired base row is absent from the restricted
- * render and the display truth never includes it.
- */
-function pairOverlayToBase(base: readonly PairItem[], ov: readonly PairItem[]): number[] {
-  const usedBase = new Set<number>()
-  const pairOf = new Array<number>(ov.length).fill(-1)
-  for (let i = 0; i < ov.length; i++) {
-    if (!ov[i].key) continue
-    const j = base.findIndex((b, idx) => !usedBase.has(idx) && b.key === ov[i].key)
-    if (j !== -1) {
-      pairOf[i] = j
-      usedBase.add(j)
-    }
-  }
-  const openOv: number[] = []
-  for (let i = 0; i < ov.length; i++) if (pairOf[i] === -1 && ov[i].key) openOv.push(i)
-  const openBase: number[] = []
-  for (let j = 0; j < base.length; j++) if (!usedBase.has(j)) openBase.push(j)
-  for (const i of openOv) {
-    const candidates = openBase.filter(
-      (j) => !usedBase.has(j) && (base[j].key.includes(ov[i].key) || ov[i].key.includes(base[j].key)),
-    )
-    if (candidates.length === 1) {
-      pairOf[i] = candidates[0]
-      usedBase.add(candidates[0])
-    }
-  }
-  const leftOv: number[] = []
-  for (let i = 0; i < ov.length; i++) if (pairOf[i] === -1 && ov[i].key) leftOv.push(i)
-  const leftBase: number[] = []
-  for (let j = 0; j < base.length; j++) if (!usedBase.has(j)) leftBase.push(j)
-  const ovQty = new Map<string, number>()
-  for (const i of leftOv) {
-    const q = ov[i].quantity.trim()
-    ovQty.set(q, (ovQty.get(q) ?? 0) + 1)
-  }
-  const baseQty = new Map<string, number>()
-  for (const j of leftBase) {
-    const q = base[j].quantity.trim()
-    baseQty.set(q, (baseQty.get(q) ?? 0) + 1)
-  }
-  for (let n = 0; n < leftOv.length && n < leftBase.length; n++) {
-    const i = leftOv[n]
-    const j = leftBase[n]
-    const qo = ov[i].quantity.trim()
-    const qb = base[j].quantity.trim()
-    if (qo === qb && (ovQty.get(qo) ?? 0) === 1 && (baseQty.get(qb) ?? 0) === 1) {
-      pairOf[i] = j
-      usedBase.add(j)
-    }
-  }
-  return pairOf
-}
-
-/**
- * The safe-positional test shared by the doc view and the grocery seam:
- * equal counts AND pairwise-equal quantities — AND every RENAMED index's
- * quantity unique within the base doc. Duplicate quantities (GF rid 224
- * carries two `354 ml` lines; many docs repeat empty seasoning rows) mean
- * an upstream REORDER of equal-quantity lines cannot be ruled out, so a
- * rename on such an index falls to the nameKey-first pairing below.
- */
-function positionalSafe(base: readonly PairItem[], ov: readonly PairItem[]): boolean {
-  if (ov.length !== base.length) return false
-  if (!ov.every((li, i) => li.quantity.trim() === base[i].quantity.trim())) return false
-  const qtyCounts = new Map<string, number>()
-  for (const b of base) {
-    const q = b.quantity.trim()
-    qtyCounts.set(q, (qtyCounts.get(q) ?? 0) + 1)
-  }
-  return ov.every(
-    (row, i) =>
-      row.key === base[i].key || (qtyCounts.get(base[i].quantity.trim()) ?? 0) === 1,
-  )
-}
-
-/**
- * The recipe doc as it displays under the active restrictions: the overlay's
- * `line_items` + `instructions` replace the base's wholesale (upstream's own
- * restricted rendering, quantities verbatim); everything else stays from the
- * base. `null` overlay returns the base doc unchanged.
- *
- * Overlay line items carry no `id` (the overlay is keyed by recipe, not by
- * line). The view synthesizes one from the BASE doc: positionally when the
- * count AND per-index quantities agree (the safe case), else by pairing the
- * ingredient to the base line it belongs to (nameKey match first, then
- * positional among the leftovers), with a negative index for an overlay line
- * that has no base counterpart.
- */
-export function restrictedDocView(doc: RecipeDoc, overlay: OverlayDoc | null): RecipeDoc {
-  if (!overlay) return doc
-  const baseIds = doc.line_items.map((li) => li.id)
-  // Upstream's rework can REORDER lines within a reworked doc (measured live:
-  // GF rid 224 swaps its pasta and garlic lines), so the base line ids are
-  // only trustworthy positionally when BOTH the count and the per-index
-  // quantity agree — the same safe-positional test the grocery seam uses.
-  // Otherwise each base id follows the ingredient it belongs to (nameKey
-  // match first, positional among the leftovers), so a measured chip and the
-  // line naming it stay the same ingredient — never base quantity with an
-  // overlay name.
-  const pairOf = positionalSafe(
-    doc.line_items.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
-    overlay.line_items.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
-  )
-    ? overlay.line_items.map((_, i) => (i < baseIds.length ? i : -1))
-    : pairOverlayToBase(
-        doc.line_items.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
-        overlay.line_items.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
-      )
-  const line_items: LineItem[] = overlay.line_items.map((li, i) => ({
-    id: pairOf[i] === -1 ? -(i + 1) : baseIds[pairOf[i]],
-    quantity: li.quantity,
-    ingredient_name: li.ingredient_name,
-  }))
-  return { ...doc, line_items, instructions: overlay.instructions }
-}
-
-/* ---------- The grocery seam (keys stay base, display follows the overlay) ---------- */
-
-/**
- * The grocery's display rows for this recipe, or null when the base doc
- * should render as-is.
- *
- * THE SAFE POSITIONAL CASE — overlay line count == base line count AND every
- * index's quantity string is equal (or both empty), with no rename sitting
- * on a duplicated quantity (see `positionalSafe`): base line i and overlay
- * line i are the same ingredient, so the row keys on the BASE nameKey,
- * displays the overlay's name and the (identical) quantity. Unchanged names
- * return null — no override, byte-identical to the base render.
- *
- * THE MISMATCH CLASS — anything else (a reorder, a substituted-away line that
- * collapsed two lines into one, a split): names are NOT overridden
- * positionally. The overlay's OWN line list is displayed instead — the
- * overlay is metric, so its quantities are correct — while each row's key
- * stays a BASE doc nameKey wherever the pairing found the row's base
- * counterpart (exact nameKey, containment, or an unambiguous in-order
- * leftover pair — see `pairOverlayToBase`); an overlay row with no base
- * counterpart (a split's extra line, an upstream addition) keys to itself.
- * A base line with no overlay counterpart is NOT appended: it is absent
- * from the restricted render, and the restricted doc is the display truth
- * (measured live: GF rid 863's base soy sauce and fish sauce used to
- * survive their own restriction in the grocery while the recipe detail
- * showed only tamari).
- *
- * The invariant this preserves: a grocery row's (name, quantity) pair always
- * co-occurs in ONE authoritative doc — never `6 cloves gluten-free fettuccine
- * pasta`, which appears in neither.
- */
-export function groceryDisplayLines(
-  doc: RecipeDoc,
-  overlay: OverlayDoc | null,
-): RestrictedDisplayLine[] | null {
-  if (!overlay) return null
-  const base = doc.line_items
-  const ov = overlay.line_items
-  if (
-    positionalSafe(
-      base.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
-      ov.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
-    )
-  ) {
-    let changed = false
-    const rows = ov.map((li, i) => {
-      if (li.ingredient_name !== base[i].ingredient_name) changed = true
-      return {
-        keyName: nameKey(base[i].ingredient_name),
-        name: li.ingredient_name,
-        quantity: base[i].quantity,
-        keyIngredient: base[i].ingredient_name,
-      }
-    })
-    return changed ? rows : null
-  }
-
-  const pairOf = pairOverlayToBase(
-    base.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
-    ov.map((li) => ({ key: nameKey(li.ingredient_name), quantity: li.quantity })),
-  )
-  return ov.map((li, i) => {
-    const j = pairOf[i]
-    if (j === -1) {
-      // An overlay row with no base counterpart keys to itself.
-      return { keyName: nameKey(li.ingredient_name), name: li.ingredient_name, quantity: li.quantity }
-    }
-    const row: RestrictedDisplayLine = {
-      keyName: nameKey(base[j].ingredient_name),
-      name: li.ingredient_name,
-      quantity: li.quantity,
-      keyIngredient: base[j].ingredient_name,
-    }
-    if (base[j].quantity.trim() !== li.quantity.trim()) row.keyQuantity = base[j].quantity
-    return row
-  })
-}
-
-/* ---------- Overlay loading (lazy, per active slug) ---------- */
-
-/**
- * Fetch one slug's overlay, cached. `fetchImpl` and `baseUrl` are injected so
- * tests run without a browser environment. A failed fetch resolves null —
- * a missing overlay DEGRADES to the base doc (the feature is display
- * enrichment; it must never take the catalog down), and is retried on the
- * next call.
- */
-export function createOverlayLoader(
-  fetchImpl: typeof fetch,
-  baseUrl: string,
-): (slug: string) => Promise<RestrictionOverlay | null> {
-  const cache = new Map<string, Promise<RestrictionOverlay | null>>()
-  return (slug) => {
-    let p = cache.get(slug)
-    if (!p) {
-      p = fetchImpl(`${baseUrl}data/restriction_overlays/${slug}.json`).then(
-        async (res) => {
-          if (!res.ok) {
-            // A failed fetch is NOT cached: the next call retries.
-            cache.delete(slug)
-            return null
-          }
-          return (await res.json()) as RestrictionOverlay
-        },
-        () => {
-          cache.delete(slug)
-          return null
-        },
-      )
-      cache.set(slug, p)
-    }
-    return p
-  }
 }

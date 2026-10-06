@@ -1,16 +1,14 @@
-import { computed, shallowRef, ref } from 'vue'
+import { computed, shallowRef, watch, triggerRef } from 'vue'
 import {
   RESTRICTIONS,
-  SLUG_BY_ID,
-  buildRestrictionIndex,
-  createOverlayLoader,
+  buildLadderIndex,
+  ensureEvents,
+  ensurePair,
+  ensureRemoved,
+  ensureSwaps,
   isRemovedByRestriction,
   normalizeRestrictionIds,
-  overlayDocFor,
-  type OverlayDoc,
-  type OverlaysBySlug,
-  type RestrictionIndex,
-  type RestrictionSetsFile,
+  type LadderIndex,
 } from '../lib/restrictions'
 import { useUiStore } from '../stores/ui'
 
@@ -18,12 +16,17 @@ import { useUiStore } from '../stores/ui'
  * Reactive singleton over the restriction artifacts (the composable seam of
  * `src/lib/restrictions.ts`, whose functions stay pure).
  *
- * `data/restriction_sets.json` (the control plane) is fetched once, lazily —
- * only when a restriction is ACTIVE, so an unrestricted install never spends
- * the request. Overlay payloads load per active slug through the injected
- * loader (a failed fetch resolves null and retries; the app degrades to the
- * base doc). Everything is OFFLINE: static assets from the bundle, never a
- * mealime.com request (the e2e suite enforces that).
+ * The runtime consumes a SPLIT TREE under `public/data/restrictions/`:
+ *   * index.json       ~2 KB   the 12 entries {id, slug, label} + the pair file list — loaded ALWAYS (or read from the lib's RESTRICTIONS constant for cold start)
+ *   * swaps.json       ~8 KB   the from→to entries with quantityRule + the drops lists — loaded when ANY restriction is active
+ *   * removed/<slug>.json ~4 KB ×12  one restriction's removed recipe ids — loaded when THAT chip activates
+ *   * pairs/<a>-<b>.json  ~1 KB ×66  ONLY the composition extras — loaded when THAT PAIR is active
+ *
+ * Cold start fires ZERO network requests beyond the bundle: index.json ships in
+ * the bundle (or is read from the lib's RESTRICTIONS constant); swaps/removed/pairs
+ * load only when a chip activates. The ladder (`ensureSwaps`, `ensureRemoved`,
+ * `ensurePair`) is cached, retryable, and takes the fetch + base URL as parameters
+ * so bun-test can exercise it without an environment.
  *
  * OUT OF SCOPE BY DECISION (the restriction ADR): the ACTIVE ids are a
  * device-local ui preference and do NOT ride the room payload — household
@@ -31,27 +34,14 @@ import { useUiStore } from '../stores/ui'
  * apply and need their own decision).
  */
 
-let setsPromise: Promise<RestrictionSetsFile | null> | null = null
-const sets = shallowRef<RestrictionSetsFile | null>(null)
-const index = shallowRef<RestrictionIndex>(buildRestrictionIndex(null))
-const overlays = shallowRef<OverlaysBySlug>({})
-const overlaysLoaded = ref(false)
+const index = shallowRef<LadderIndex>(buildLadderIndex())
 
-// ONE shared overlay loader at module scope: its per-slug cache must
-// dedupe across ALL callers (RecipesTab/RecipeDetail onMounted, the
-// grocery watch, SettingsTab's toggle each fire ensureLoaded; a per-call
-// loader re-fetched the same multi-megabyte overlay payload per caller).
-const loadOverlay = createOverlayLoader(fetch, import.meta.env.BASE_URL)
-
-async function loadSets(baseUrl: string): Promise<RestrictionSetsFile | null> {
-  try {
-    const res = await fetch(`${baseUrl}data/restriction_sets.json`)
-    if (!res.ok) return null
-    return (await res.json()) as RestrictionSetsFile
-  } catch {
-    return null
-  }
-}
+// Dedup guard: toggleRestriction (SettingsTab) and the activeIds watch both
+// call ensureLoaded on the same transition. A memoized promise ensures only
+// one ladder load runs at a time; concurrent callers await the same attempt
+// (the original dictPromise pattern). A failure clears the memo so the next
+// call retries.
+let ensureLoadedPromise: Promise<void> | null = null
 
 export function useRestrictions() {
   const ui = useUiStore()
@@ -59,65 +49,83 @@ export function useRestrictions() {
   /** The device's active restriction ids, normalized (never trusted). */
   const activeIds = computed(() => normalizeRestrictionIds(ui.dietaryRestrictionIds))
 
-  /** Slugs that still need their overlay payload. */
-  const missingSlugs = computed(() =>
-    activeIds.value
-      .map((id) => SLUG_BY_ID.get(id))
-      .filter((slug): slug is string => !!slug && !(slug in overlays.value)),
-  )
-
-  /**
-   * Idempotent: fetch the control plane, then every active slug's overlay.
-   * Fire-and-forget from consumers; a failed load leaves the feature inert
-   * (no filtering, base docs everywhere) until the next call retries.
-   */
-  async function ensureLoaded(): Promise<void> {
-    if (activeIds.value.length === 0) return
-    // loadSets appends `data/` itself (vite's SPA fallback answers a wrong
-    // path 200-with-HTML, so a double prefix would fail INERT, not loudly).
-    setsPromise ??= loadSets(import.meta.env.BASE_URL)
-    const loaded = await setsPromise
-    if (loaded) {
-      sets.value = loaded
-      index.value = buildRestrictionIndex(loaded)
-    } else {
-      // A failed load is NOT memoized: the next ensureLoaded() retries, as
-      // the documented contract says. Concurrent callers awaited the same
-      // attempt; whoever observes the failure clears the memo.
-      setsPromise = null
-    }
-    if (missingSlugs.value.length === 0) {
-      overlaysLoaded.value = true
-      return
-    }
-    await Promise.all(
-      missingSlugs.value.map(async (slug) => {
-        const overlay = await loadOverlay(slug)
-        if (overlay) overlays.value = { ...overlays.value, [slug]: overlay }
-      }),
-    )
-    overlaysLoaded.value = true
-  }
-
   /** Catalog discovery filter: is this recipe removed by an active id? */
   function isRemoved(recipeId: number): boolean {
     return isRemovedByRestriction(recipeId, activeIds.value, index.value)
   }
 
-  /** The reworked doc for this recipe, or null (base doc displays). */
-  function overlayFor(recipeId: number): OverlayDoc | null {
-    return overlayDocFor(recipeId, activeIds.value, overlays.value)
+  // Hydration race guard: pinia-plugin-persistedstate restores ui.dietaryRestrictionIds
+  // asynchronously from localStorage. onMounted in the consuming component may fire
+  // BEFORE hydration completes, leaving activeIds empty and ensureLoaded a no-op.
+  // Watching activeIds catches the transition from [] to [id] and loads the data.
+  watch(activeIds, (ids) => {
+    if (ids.length > 0) void ensureLoaded()
+  })
+
+  /**
+   * Load the split tree on demand — called only when a chip activates.
+   * Each ladder step is cached and retryable: a failed fetch degrades to
+   * identity (pre-load behaviour: no restriction is "active-looking" until
+   * its data arrives) and is retried on the next activation.
+   */
+  async function ensureLoaded(): Promise<void> {
+    // Dedup: if a load is already in progress, await it instead of starting a
+    // duplicate — then re-check: the active set may have GROWN while the load
+    // ran (a chip toggled mid-load), and the memoized run captured a smaller
+    // id list. The ladder steps are cached, so the second pass only fetches
+    // what the first missed (the new slug's removed/events + the new pairs).
+    while (true) {
+      if (ensureLoadedPromise) await ensureLoadedPromise
+      const ids = activeIds.value
+      if (ids.length === 0) return
+      const baseUrl = import.meta.env.BASE_URL
+      const run = (async () => {
+        // swaps.json covers swaps AND drops (loaded when ANY chip is active).
+        await ensureSwaps(index.value, fetch, baseUrl)
+        // events/<slug>.json — the PER-RECIPE exact rework (loaded per chip;
+        // takes precedence over the dictionary's global swap/drop union).
+        const eventPromises = ids.map((id) => {
+          const slug = RESTRICTIONS.find((r) => r.id === id)?.slug
+          return slug ? ensureEvents(slug, index.value, fetch, baseUrl) : Promise.resolve()
+        })
+        await Promise.all(eventPromises)
+        // removed/<slug>.json for each active restriction.
+        const slugPromises = ids.map((id) => {
+          const slug = RESTRICTIONS.find((r) => r.id === id)?.slug
+          return slug ? ensureRemoved(slug, index.value, fetch, baseUrl) : Promise.resolve()
+        })
+        await Promise.all(slugPromises)
+        // pairs/<a>-<b>.json for every active pair (3+ chip composition extras).
+        const pairPromises: Promise<void>[] = []
+        for (let i = 0; i < ids.length; i++) {
+          for (let j = i + 1; j < ids.length; j++) {
+            const a = RESTRICTIONS.find((r) => r.id === ids[i])?.slug
+            const b = RESTRICTIONS.find((r) => r.id === ids[j])?.slug
+            if (a && b) pairPromises.push(ensurePair(a, b, index.value, fetch, baseUrl))
+          }
+        }
+        await Promise.all(pairPromises)
+        // Nested mutations of index (swaps, drops, removed, pairs) don't trigger
+        // shallowRef reactivity. triggerRef notifies Vue so dependents (grocery
+        // displayLines, recipe detail views) recompute with the fresh data.
+        triggerRef(index)
+      })()
+      ensureLoadedPromise = run
+      await run.finally(() => { ensureLoadedPromise = null })
+      // Loop again when the active set grew during the load (the second pass
+      // is near-free: cached steps no-op). Exit when a full pass saw the
+      // CURRENT active set — or another caller chained a newer load, which
+      // the next `if (ensureLoadedPromise)` handles.
+      const after = activeIds.value
+      if (after.length === ids.length && after.every((id) => ids.includes(id))) return
+    }
   }
 
   return {
     restrictions: RESTRICTIONS,
     activeIds,
-    sets,
     index,
-    overlays,
-    overlaysLoaded,
     ensureLoaded,
     isRemoved,
-    overlayFor,
   }
 }

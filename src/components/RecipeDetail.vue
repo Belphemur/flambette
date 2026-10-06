@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
 import TooltipBubble from './TooltipBubble.vue'
-import { restrictedDocView } from '../lib/restrictions'
+import { eventsDocView, restrictedDocView } from '../lib/restrictions'
 import { useRestrictions } from '../composables/useRestrictions'
 import { imageSrc, onImgError } from '../lib/images'
 import { measuredQuantity } from '../lib/measuredAmounts'
@@ -59,7 +59,14 @@ const restrictionPrefs = useRestrictions()
 const doc = computed<RecipeDoc | null>(() => {
   const base = loadedDoc.value
   if (!base) return null
-  return restrictedDocView(base, restrictionPrefs.overlayFor(base.recipe_id))
+  // The per-recipe events map wins when upstream has an exact rework for
+  // this (restriction, recipe) — the dictionary's global swap/drop union is
+  // only the fallback (it wrongly hides e.g. garlic in GF recipes whose own
+  // rework keeps it).
+  return (
+    eventsDocView(base, restrictionPrefs.index.value, restrictionPrefs.activeIds.value) ??
+    restrictedDocView(base, restrictionPrefs.index.value, restrictionPrefs.activeIds.value)
+  )
 })
 const loading = ref(false)
 const loadError = ref<string | null>(null)

@@ -5,7 +5,7 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**63 records.** One file per decision (`ADR-NNNN-slug.md`),
+**64 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
@@ -66,9 +66,9 @@ architecture is shaped the way it is.
 | [0053](ADR-0053-generated-adr-index.md) | the ADR index is generated, and AGENTS.md links it | 2026-10-05 |
 | [0054](ADR-0054-user-recipes-and-source-filter.md) | User recipes live in the catalog, and "source" replaces the PRO filter _(supersedes ADR-0027)_ | 2026-10-05 |
 | [0055](ADR-0055-one-tooltip-component-and-tap-reveal.md) | one tooltip component + mobile tap-reveal on the recipe detail view _(supersedes ADR-0049)_ | 2026-10-06 |
-| [0056](ADR-0056-dietary-restrictions.md) | dietary restrictions: upstream's own reworks, committed offline; filter is discovery-only | 2026-10-06 |
 | [0057](ADR-0057-catalog-profiles-units-and-servings.md) | catalog profiles: units × servings are ACCOUNT settings, not per-recipe variants | 2026-10-06 |
 | [0058](ADR-0058-mealime-favourites-import.md) | Mealime favourites import via bookmarklet (recipe_id-first matching) | 2026-10-06 |
+| [0059](ADR-0059-split-restriction-artifacts.md) | dietary restriction artifacts are SPLIT and loaded ON DEMAND _(supersedes ADR-0056)_ | 2026-10-07 |
 
 ## Not in force
 
@@ -89,6 +89,7 @@ understand why the current shape is the shape.
 | [0047](ADR-0047-unit-system.md) | Unit system (dual/metric/imperial) with display-time conversion | proposed | 2026-10-02 |
 | [0048](ADR-0048-spa-prerender-seo.md) | SPA SEO: Unhead on the client, prerendered recipe heads at build | proposed | 2026-10-03 |
 | [0049](ADR-0049-household-join-ux-and-peer-count.md) | Household join UX, the live peer count, and the relay protocol | proposed | 2026-10-04 |
+| [0056](ADR-0056-dietary-restrictions.md) | dietary restrictions: a committed substitution dictionary, runtime-applied | accepted (superseded in part) | 2026-10-06 |
 
 ## Known numbering collisions
 
@@ -104,8 +105,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0059**). Do not count the files -- that is how the
-   collisions above happened (63 files share 58 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0060**). Do not count the files -- that is how the
+   collisions above happened (64 files share 59 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.

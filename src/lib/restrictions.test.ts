@@ -1,60 +1,75 @@
 import { describe, expect, test } from 'bun:test'
 import {
   RESTRICTIONS,
-  buildRestrictionIndex,
-  createOverlayLoader,
+  activeDrops,
+  buildLadderIndex,
+  ensurePair,
+  ensureRemoved,
+  ensureSwaps,
   groceryDisplayLines,
+  isDropName,
   isRemovedByRestriction,
   normalizeRestrictionIds,
-  overlayDocFor,
   restrictedDocView,
-  type RestrictionSetsFile,
-  type RecipeDoc,
+  swapName,
 } from './restrictions'
 import { nameKey } from './grocery'
-import gfOverlay from '../../public/data/restriction_overlays/gluten-free.json'
 
-const sets: RestrictionSetsFile = {
-  generated_at: '2026-10-06T00:00:00Z',
-  restrictions: {
-    '1': {
-      slug: 'gluten-free',
-      label: 'Gluten-Free',
-      removed: [50, 60, 195],
-      overlay: 'restriction_overlays/gluten-free.json',
-      swapped_docs: 2,
-    },
-    '10': {
-      slug: 'nightshade-free',
-      label: 'Nightshade-Free',
-      removed: [70],
-      overlay: 'restriction_overlays/nightshade-free.json',
-      swapped_docs: 1,
-    },
-  },
+/* ---------- Constants & test data ---------- */
+
+const GF_ID = 1
+const DF_ID = 2
+const PAIR_KEY = 'dairy-free-gluten-free'
+
+/** A minimal LadderIndex with swaps and drops loaded (from swaps.json shape). */
+function indexWithSwaps(swaps: typeof import('./restrictions').SwapEntry[], drops: typeof import('./restrictions').DropEntry[]) {
+  const idx = buildLadderIndex()
+  idx.swaps = swaps
+  idx.drops = drops
+  return idx
 }
 
-const index = buildRestrictionIndex(sets)
+/** A LadderIndex with removed data loaded for specific slugs. */
+function indexWithRemoved(removedData: Record<string, number[]>) {
+  const idx = buildLadderIndex()
+  for (const [slug, ids] of Object.entries(removedData)) {
+    idx.removed.set(slug, ids)
+  }
+  return idx
+}
 
-const baseDoc: RecipeDoc = {
-  id: 40001,
-  recipe_id: 400,
-  serving_count: 6,
-  cooking_minutes: 20,
-  name: 'Test Bowl',
-  slug: 'test-bowl',
-  units: 'Metric',
-  thumbnail_image_url: '',
-  presentation_image_url: '',
-  cookwares: [],
-  instructions: [{ id: 1, primary_message: 'Boil the rotini pasta.', secondary_message: null }],
-  line_items: [
-    { id: 11, quantity: '15 oz', ingredient_name: 'rotini pasta' },
-    { id: 12, quantity: '2 tbsp', ingredient_name: 'soy sauce' },
-    { id: 13, quantity: '300 g', ingredient_name: 'broccoli' },
+/** A LadderIndex with pair extras loaded for specific pair keys. */
+function indexWithPairs(pairData: Record<string, number[]>) {
+  const idx = buildLadderIndex()
+  for (const [key, ids] of Object.entries(pairData)) {
+    idx.pairs.set(key, ids)
+  }
+  return idx
+}
+
+const sampleSwaps = [
+  { from: 'soy sauce', to: 'tamari soy sauce', quantityRule: 'verbatim', count: 283 },
+  { from: 'rotini pasta', to: 'gluten free rotini pasta', quantityRule: 'verbatim', count: 43 },
+  { from: 'fettuccine pasta', to: 'gluten free fettuccine pasta', quantityRule: 'verbatim', count: 16 },
+  { from: 'butter, unsalted', to: 'virgin coconut oil', quantityRule: 'verbatim', count: 5 },
+  { from: 'mayonnaise', to: 'avocado oil mayonnaise', quantityRule: 'verbatim', count: 3 },
+]
+
+// Drops are PER RESTRICTION (ADR-0059): keyed by restriction id. The sample
+// puts feta under Dairy-Free only — garlic under GF must NOT be hidden (the
+// flat-array regression the CI e2e caught).
+const sampleDrops = {
+  [String(DF_ID)]: [
+    { from: 'crumbled feta cheese', count: 41 },
+    { from: 'butter, unsalted', count: 63 },
   ],
-  nutrition: { energy: 0, carbs: 0, fiber: 0, sugars: 0, fat: 0, protein: 0, sodium: 0 },
 }
+
+const sampleRemovedGF = [50, 60, 195, 224, 863] // GF removes these recipe ids
+const sampleRemovedDF = []
+const sampleExtras110 = [70] // Pair GF+DF removes rid 70 (extra beyond singles)
+
+/* ---------- RESTRICTIONS ---------- */
 
 describe('RESTRICTIONS', () => {
   test('twelve entries in display order, unique ids and slugs', () => {
@@ -67,6 +82,8 @@ describe('RESTRICTIONS', () => {
     expect(new Set(RESTRICTIONS.map((r) => r.id)).size).toBe(12)
   })
 })
+
+/* ---------- normalizeRestrictionIds ---------- */
 
 describe('normalizeRestrictionIds', () => {
   test('drops unknown ids, dedupes, sorts ascending', () => {
@@ -83,346 +100,400 @@ describe('normalizeRestrictionIds', () => {
   })
 })
 
-describe('isRemovedByRestriction (O(1) index)', () => {
+/* ---------- buildLadderIndex ---------- */
+
+describe('buildLadderIndex', () => {
+  test('returns empty index with null swaps and drops', () => {
+    const idx = buildLadderIndex()
+    expect(idx.swaps).toBeNull()
+    expect(idx.drops).toBeNull()
+    expect(idx.removed.size).toBe(0)
+    expect(idx.pairs.size).toBe(0)
+    expect(idx.restrictions).toHaveLength(12)
+  })
+})
+
+/* ---------- ensureSwaps (ladder) ---------- */
+
+describe('ensureSwaps (ladder)', () => {
+  test('loads swaps and drops from injected fetch', async () => {
+    const idx = buildLadderIndex()
+    const fetchImpl = async (_url: string) =>
+      new Response(JSON.stringify({ swaps: sampleSwaps, drops: sampleDrops }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    await ensureSwaps(idx, fetchImpl, '/base/')
+    expect(idx.swaps).toHaveLength(5)
+    expect(Object.keys(idx.drops ?? {})).toHaveLength(1)
+    expect(idx.swaps![0].from).toBe('soy sauce')
+  })
+  test('is cached (no second fetch on re-call)', async () => {
+    const idx = buildLadderIndex()
+    let calls = 0
+    const fetchImpl = async () => {
+      calls++
+      return new Response(JSON.stringify({ swaps: sampleSwaps, drops: sampleDrops }), { status: 200 })
+    }
+    await ensureSwaps(idx, fetchImpl, '/base/')
+    await ensureSwaps(idx, fetchImpl, '/base/')
+    expect(calls).toBe(1)
+  })
+  test('failed fetch leaves swaps null (identity display)', async () => {
+    const idx = buildLadderIndex()
+    const fetchImpl = async () => new Response('nope', { status: 404 })
+    await ensureSwaps(idx, fetchImpl, '/')
+    expect(idx.swaps).toBeNull()
+    expect(idx.drops).toBeNull()
+  })
+  test('a failed fetch is retried IN the call and populates on success', async () => {
+    const idx = buildLadderIndex()
+    let calls = 0
+    const fetchImpl = async () => {
+      calls++
+      if (calls < 2) return new Response('nope', { status: 404 })
+      return new Response(JSON.stringify({ swaps: sampleSwaps, drops: sampleDrops }), { status: 200 })
+    }
+    await ensureSwaps(idx, fetchImpl, '/')
+    expect(calls).toBe(2)
+    expect(idx.swaps).not.toBeNull()
+    expect(idx.swaps!.length).toBe(5)
+  })
+})
+
+/* ---------- ensureRemoved (ladder) ---------- */
+
+describe('ensureRemoved (ladder)', () => {
+  test('loads removed ids for a slug from injected fetch', async () => {
+    const idx = buildLadderIndex()
+    const fetchImpl = async (_url: string) =>
+      new Response(JSON.stringify({ removed: sampleRemovedGF }), { status: 200 })
+    await ensureRemoved('gluten-free', idx, fetchImpl, '/base/')
+    expect(idx.removed.get('gluten-free')).toEqual(sampleRemovedGF)
+  })
+  test('is cached (no second fetch on re-call)', async () => {
+    const idx = buildLadderIndex()
+    let calls = 0
+    const fetchImpl = async () => {
+      calls++
+      return new Response(JSON.stringify({ removed: [1, 2, 3] }), { status: 200 })
+    }
+    await ensureRemoved('gluten-free', idx, fetchImpl, '/base/')
+    await ensureRemoved('gluten-free', idx, fetchImpl, '/base/')
+    expect(calls).toBe(1)
+  })
+  test('a failed fetch is retried IN the call and populates on success', async () => {
+    const idx = buildLadderIndex()
+    let calls = 0
+    const fetchImpl = async () => {
+      calls++
+      if (calls < 2) return new Response('nope', { status: 404 })
+      return new Response(JSON.stringify({ removed: sampleRemovedGF }), { status: 200 })
+    }
+    await ensureRemoved('gluten-free', idx, fetchImpl, '/')
+    expect(calls).toBe(2)
+    expect(idx.removed.get('gluten-free')).toEqual(sampleRemovedGF)
+  })
+  test('a permanently failed fetch stays UNSET (a later call retries)', async () => {
+    const idx = buildLadderIndex()
+    let calls = 0
+    const fetchImpl = async () => {
+      calls++
+      return new Response('nope', { status: 404 })
+    }
+    await ensureRemoved('gluten-free', idx, fetchImpl, '/')
+    // NOT cached as empty: a cached empty set would keep the chip's removed
+    // recipes discoverable for the whole session with no retry path.
+    expect(idx.removed.has('gluten-free')).toBe(false)
+    await ensureRemoved('gluten-free', idx, fetchImpl, '/')
+    expect(calls).toBe(4) // 2 attempts per call
+  })
+})
+
+/* ---------- ensurePair (ladder) ---------- */
+
+describe('ensurePair (ladder)', () => {
+  test('loads pair extras from injected fetch', async () => {
+    const idx = buildLadderIndex()
+    const fetchImpl = async (_url: string) =>
+      new Response(JSON.stringify({ extras: sampleExtras110 }), { status: 200 })
+    await ensurePair('gluten-free', 'dairy-free', idx, fetchImpl, '/base/')
+    expect(idx.pairs.get(PAIR_KEY)).toEqual(sampleExtras110)
+  })
+  test('pair key is canonical (a < b ordering)', async () => {
+    const idx = buildLadderIndex()
+    const fetchImpl = async () => new Response(JSON.stringify({ extras: [1, 2] }), { status: 200 })
+    // REVERSE order — should still store under canonical key (dairy-free-gluten-free)
+    await ensurePair('gluten-free', 'dairy-free', idx, fetchImpl, '/base/')
+    expect(idx.pairs.get(PAIR_KEY)).toEqual([1, 2])
+    expect(idx.pairs.has('dairy-free-gluten-free')).toBe(true)
+    expect(idx.pairs.has('gluten-free-dairy-free')).toBe(false)
+  })
+  test('is cached (no second fetch on re-call)', async () => {
+    const idx = buildLadderIndex()
+    let calls = 0
+    const fetchImpl = async () => {
+      calls++
+      return new Response(JSON.stringify({ extras: [1] }), { status: 200 })
+    }
+    await ensurePair('gluten-free', 'dairy-free', idx, fetchImpl, '/base/')
+    await ensurePair('gluten-free', 'dairy-free', idx, fetchImpl, '/base/')
+    expect(calls).toBe(1)
+  })
+  test('a permanently failed fetch stays UNSET (a later call retries)', async () => {
+    const idx = buildLadderIndex()
+    let calls = 0
+    const fetchImpl = async () => {
+      calls++
+      return new Response('nope', { status: 404 })
+    }
+    await ensurePair('dairy-free', 'gluten-free', idx, fetchImpl, '/')
+    expect(idx.pairs.has(PAIR_KEY)).toBe(false)
+    await ensurePair('dairy-free', 'gluten-free', idx, fetchImpl, '/')
+    expect(calls).toBe(4) // 2 attempts per call
+  })
+})
+
+/* ---------- isRemovedByRestriction (ladder) ---------- */
+
+describe('isRemovedByRestriction (ladder)', () => {
   test('a removed id under an active restriction is gone', () => {
-    expect(isRemovedByRestriction(50, [1], index)).toBe(true)
-    expect(isRemovedByRestriction(50, [], index)).toBe(false)
-    expect(isRemovedByRestriction(50, [2], index)).toBe(false)
+    const idx = indexWithRemoved({ 'gluten-free': sampleRemovedGF })
+    expect(isRemovedByRestriction(50, [GF_ID], idx)).toBe(true)
+    expect(isRemovedByRestriction(50, [], idx)).toBe(false)
+    expect(isRemovedByRestriction(50, [DF_ID], idx)).toBe(false)
+  })
+  test('pair extras remove when the pair is active', () => {
+    const idx = indexWithRemoved({ 'gluten-free': [], 'dairy-free': [] })
+    idx.pairs.set(PAIR_KEY, sampleExtras110)
+    expect(isRemovedByRestriction(70, [GF_ID, DF_ID], idx)).toBe(true)
+    // Only one of the pair is NOT enough
+    expect(isRemovedByRestriction(70, [GF_ID], idx)).toBe(false)
+    expect(isRemovedByRestriction(70, [DF_ID], idx)).toBe(false)
   })
   test('the union over several active ids removes if ANY does', () => {
-    expect(isRemovedByRestriction(70, [1, 10], index)).toBe(true)
-    expect(isRemovedByRestriction(60, [1, 10], index)).toBe(true)
-    expect(isRemovedByRestriction(80, [1, 10], index)).toBe(false)
+    const idx = indexWithRemoved({ 'gluten-free': [60] })
+    expect(isRemovedByRestriction(60, [GF_ID, DF_ID], idx)).toBe(true)
+    expect(isRemovedByRestriction(80, [GF_ID, DF_ID], idx)).toBe(false)
   })
   test('unknown ids and absent sets never remove', () => {
-    expect(isRemovedByRestriction(50, [7], index)).toBe(false)
+    const idx = buildLadderIndex()
+    expect(isRemovedByRestriction(50, [7], idx)).toBe(false)
   })
-  test('an empty/absent sets file never removes', () => {
-    const empty = buildRestrictionIndex(undefined)
-    expect(isRemovedByRestriction(50, [1], empty)).toBe(false)
-  })
-})
-
-describe('overlayDocFor', () => {
-  const overlays = {
-    'gluten-free': {
-      slug: 'gluten-free',
-      docs: { 400: { line_items: [{ quantity: 'a', ingredient_name: 'gf' }], instructions: [] } },
-    },
-    'nightshade-free': {
-      slug: 'nightshade-free',
-      docs: { 400: { line_items: [{ quantity: 'b', ingredient_name: 'ns' }], instructions: [] } },
-    },
-  }
-  test('picks the reworked doc for an active slug', () => {
-    expect(overlayDocFor(400, [1], overlays)).not.toBeNull()
-    expect(overlayDocFor(401, [1], overlays)).toBeNull()
-    expect(overlayDocFor(400, [], overlays)).toBeNull()
-  })
-  test('several active restrictions: the smallest id wins deterministically', () => {
-    // both active ids have a rework for 400; ascending order must pick id 1.
-    expect(overlayDocFor(400, [10, 1], overlays)!.line_items[0].ingredient_name).toBe('gf')
-    expect(overlayDocFor(400, [1, 10], overlays)!.line_items[0].ingredient_name).toBe('gf')
+  test('empty index never removes', () => {
+    expect(isRemovedByRestriction(50, [1], buildLadderIndex())).toBe(false)
   })
 })
 
-describe('restrictedDocView (display truth)', () => {
-  const overlay = {
+/* ---------- swapName (ladder) ---------- */
+
+describe('swapName (ladder)', () => {
+  test('returns the substitute when a swap matches the nameKey', () => {
+    const idx = indexWithSwaps(sampleSwaps, sampleDrops)
+    expect(swapName('soy sauce', idx)).toBe('tamari soy sauce')
+    expect(swapName('rotini pasta', idx)).toBe('gluten free rotini pasta')
+    expect(swapName('fettuccine pasta', idx)).toBe('gluten free fettuccine pasta')
+    expect(swapName('butter, unsalted', idx)).toBe('virgin coconut oil')
+  })
+  test('returns the original when no swap matches', () => {
+    const idx = indexWithSwaps(sampleSwaps, sampleDrops)
+    expect(swapName('broccoli', idx)).toBe('broccoli')
+    expect(swapName('garlic', idx)).toBe('garlic')
+  })
+  test('nameKey matching is case-insensitive', () => {
+    const idx = indexWithSwaps(sampleSwaps, sampleDrops)
+    expect(swapName('SOY SAUCE', idx)).toBe('tamari soy sauce')
+  })
+  test('pre-load: returns original when swaps not loaded', () => {
+    const idx = buildLadderIndex() // swaps is null
+    expect(swapName('soy sauce', idx)).toBe('soy sauce')
+  })
+})
+
+/* ---------- isDropName ---------- */
+
+describe('isDropName', () => {
+  test('returns true for nameKeys in the drops set', () => {
+    const drops = activeDrops([DF_ID], indexWithSwaps(sampleSwaps, sampleDrops))
+    expect(isDropName('crumbled feta cheese', drops)).toBe(true)
+  })
+  test('returns false for nameKeys not in the drops set', () => {
+    const drops = activeDrops([DF_ID], indexWithSwaps(sampleSwaps, sampleDrops))
+    expect(isDropName('broccoli', drops)).toBe(false)
+  })
+})
+
+/* ---------- activeDrops (ladder) ---------- */
+
+describe('activeDrops (ladder)', () => {
+  test('returns empty set when no restrictions are active', () => {
+    const idx = indexWithSwaps(sampleSwaps, sampleDrops)
+    expect(activeDrops([], idx).size).toBe(0)
+  })
+  test('returns union of drops across active restrictions', () => {
+    const idx = indexWithSwaps(sampleSwaps, sampleDrops)
+    const drops = activeDrops([DF_ID], idx)
+    expect(drops.has(nameKey('crumbled feta cheese'))).toBe(true)
+  })
+  test('empty drops list returns empty set', () => {
+    const idx = buildLadderIndex() // drops is null
+    expect(activeDrops([GF_ID], idx).size).toBe(0)
+  })
+})
+
+/* ---------- restrictedDocView (ladder) ---------- */
+
+describe('restrictedDocView (ladder)', () => {
+  const baseDoc = {
+    id: 40001,
+    recipe_id: 400,
+    serving_count: 6,
+    cooking_minutes: 20,
+    name: 'Test Bowl',
+    slug: 'test-bowl',
+    units: 'Metric',
+    thumbnail_image_url: '',
+    presentation_image_url: '',
+    cookwares: [],
+    instructions: [{ id: 1, primary_message: 'Boil the rotini pasta.', secondary_message: null }],
     line_items: [
-      { quantity: '15 oz', ingredient_name: 'gluten-free rotini pasta' },
-      { quantity: '2 tbsp', ingredient_name: 'tamari soy sauce' },
-      { quantity: '300 g', ingredient_name: 'broccoli' },
+      { id: 11, quantity: '15 oz', ingredient_name: 'rotini pasta' },
+      { id: 12, quantity: '2 tbsp', ingredient_name: 'soy sauce' },
+      { id: 13, quantity: '300 g', ingredient_name: 'broccoli' },
     ],
-    instructions: [{ id: 1, primary_message: 'Boil the gluten-free rotini pasta.', secondary_message: null }],
+    nutrition: { energy: 0, carbs: 0, fiber: 0, sugars: 0, fat: 0, protein: 0, sodium: 0 },
   }
-  test('replaces line_items and instructions wholesale, keeps the rest', () => {
-    const view = restrictedDocView(baseDoc, overlay)
+
+  test('applies swaps to ingredient names, keeps base quantities and ids', () => {
+    const view = restrictedDocView(baseDoc, indexWithSwaps(sampleSwaps, sampleDrops), [GF_ID])
     expect(view.line_items.map((l) => l.ingredient_name)).toEqual([
-      'gluten-free rotini pasta', 'tamari soy sauce', 'broccoli',
+      'gluten free rotini pasta', 'tamari soy sauce', 'broccoli',
     ])
-    expect(view.instructions).toEqual(overlay.instructions)
-    expect(view.name).toBe(baseDoc.name)
-    expect(view.serving_count).toBe(baseDoc.serving_count)
-    expect(view.nutrition).toBe(baseDoc.nutrition)
-  })
-  test('line ids stay the BASE ids positionally', () => {
-    const view = restrictedDocView(baseDoc, overlay)
+    expect(view.line_items.map((l) => l.quantity)).toEqual(['15 oz', '2 tbsp', '300 g'])
     expect(view.line_items.map((l) => l.id)).toEqual([11, 12, 13])
   })
-  test('a count-changing rework keeps base ids then synthesizes negatives', () => {
-    const shorter = { line_items: overlay.line_items.slice(0, 2), instructions: [] }
-    const view = restrictedDocView(baseDoc, shorter)
-    expect(view.line_items.map((l) => l.id)).toEqual([11, 12])
-    const longer = { line_items: [...overlay.line_items, { quantity: '1', ingredient_name: 'x' }], instructions: [] }
-    expect(restrictedDocView(baseDoc, longer).line_items.map((l) => l.id)).toEqual([11, 12, 13, -4])
+  test('recipe prose stays AUTHENTIC — no substitution in instructions', () => {
+    const view = restrictedDocView(baseDoc, indexWithSwaps(sampleSwaps, sampleDrops), [GF_ID])
+    expect(view.instructions[0].primary_message).toBe('Boil the rotini pasta.')
   })
-  test('null overlay returns the base doc unchanged (same reference)', () => {
-    expect(restrictedDocView(baseDoc, null)).toBe(baseDoc)
+  test('null index returns the base doc unchanged (same reference)', () => {
+    expect(restrictedDocView(baseDoc, null, [])).toBe(baseDoc)
+    expect(restrictedDocView(baseDoc, buildLadderIndex(), [])).toBe(baseDoc)
+  })
+  test('no swaps loaded yet = identity (pre-load)', () => {
+    const view = restrictedDocView(baseDoc, buildLadderIndex(), [GF_ID])
+    expect(view.line_items.map((l) => l.ingredient_name)).toEqual([
+      'rotini pasta', 'soy sauce', 'broccoli',
+    ])
+  })
+  test('drops hide lines from display only (no swap, no key change)', () => {
+    const dfDoc = {
+      ...baseDoc,
+      line_items: [
+        { id: 11, quantity: '1 ½ (113 g) pkgs', ingredient_name: 'crumbled feta cheese' },
+        { id: 12, quantity: '2 tbsp', ingredient_name: 'broccoli' },
+      ],
+    }
+    const view = restrictedDocView(dfDoc, indexWithSwaps(sampleSwaps, sampleDrops), [DF_ID])
+    expect(view.line_items.map((l) => l.ingredient_name)).toEqual(['broccoli'])
+  })
+  test('drops and swaps coexist — swap wins over drop for same from-ingredient', () => {
+    const dfDoc = {
+      ...baseDoc,
+      line_items: [
+        { id: 11, quantity: '2 tbsp', ingredient_name: 'butter, unsalted' },
+        { id: 12, quantity: '1 ½ (113 g) pkgs', ingredient_name: 'crumbled feta cheese' },
+      ],
+    }
+    const view = restrictedDocView(dfDoc, indexWithSwaps(sampleSwaps, sampleDrops), [DF_ID])
+    expect(view.line_items.map((l) => l.ingredient_name)).toContain('virgin coconut oil')
+    expect(view.line_items.map((l) => l.ingredient_name)).not.toContain('crumbled feta cheese')
   })
 })
 
-describe('groceryDisplayLines (key/display split)', () => {
-  const overlay = {
-    line_items: [
-      { quantity: '15 oz', ingredient_name: 'gluten-free rotini pasta' },
-      { quantity: '2 tbsp', ingredient_name: 'tamari soy sauce' },
-      { quantity: '300 g', ingredient_name: 'broccoli' },
-    ],
+/* ---------- groceryDisplayLines (ladder) ---------- */
+
+describe('groceryDisplayLines (ladder)', () => {
+  const baseDoc = {
+    id: 40001,
+    recipe_id: 400,
+    serving_count: 6,
+    cooking_minutes: 20,
+    name: 'Test Bowl',
+    slug: 'test-bowl',
+    units: 'Metric',
+    thumbnail_image_url: '',
+    presentation_image_url: '',
+    cookwares: [],
     instructions: [],
+    line_items: [
+      { id: 11, quantity: '15 oz', ingredient_name: 'rotini pasta' },
+      { id: 12, quantity: '2 tbsp', ingredient_name: 'soy sauce' },
+      { id: 13, quantity: '300 g', ingredient_name: 'broccoli' },
+    ],
+    nutrition: { energy: 0, carbs: 0, fiber: 0, sugars: 0, fat: 0, protein: 0, sodium: 0 },
   }
-  test('the safe positional case: the overlay name on the base line, base quantity', () => {
-    expect(groceryDisplayLines(baseDoc, overlay)).toEqual([
-      { keyName: 'rotini pasta', name: 'gluten-free rotini pasta', quantity: '15 oz', keyIngredient: 'rotini pasta' },
-      { keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '2 tbsp', keyIngredient: 'soy sauce' },
-      { keyName: 'broccoli', name: 'broccoli', quantity: '300 g', keyIngredient: 'broccoli' },
-    ])
-  })
-  test('an unchanged doc yields null (no override)', () => {
-    const same = { line_items: baseDoc.line_items.map((l) => ({ quantity: l.quantity, ingredient_name: l.ingredient_name })), instructions: [] }
-    expect(groceryDisplayLines(baseDoc, same)).toBeNull()
-  })
-  test('equal counts but UNEQUAL quantities are the mismatch class — no positional override', () => {
-    // GF rid 224's reorder: base lines 2/3 are pasta/garlic, the overlay's
-    // are garlic/pasta. Pairing names by position alone once displayed
-    // `6 cloves gluten-free fettuccine pasta` — a pair in NEITHER doc.
-    const reordered = {
-      line_items: [
-        { quantity: '15 oz', ingredient_name: 'gluten-free rotini pasta' },
-        { quantity: '2 tbsp', ingredient_name: 'tamari soy sauce' },
-        { quantity: '300 g', ingredient_name: 'broccoli' },
-      ],
-      instructions: [],
-    }
-    const swappedBase: RecipeDoc = {
-      ...baseDoc,
-      line_items: [
-        baseDoc.line_items[0],
-        { id: 13, quantity: '300 g', ingredient_name: 'broccoli' },
-        { id: 12, quantity: '2 tbsp', ingredient_name: 'soy sauce' },
-      ],
-    }
-    const rows = groceryDisplayLines(swappedBase, reordered)!
-    // Every row's (name, quantity) pair co-occurs in the OVERLAY doc.
-    expect(rows.map((r) => `${r.quantity} ${r.name}`)).toEqual(
-      reordered.line_items.map((li) => `${li.quantity} ${li.ingredient_name}`),
-    )
-    // Keys follow the base ingredient each row BELONGS to (nameKey match
-    // first): the pasta row keys 'rotini pasta', the substituted soy row
-    // pairs the leftover base line positionally ('soy sauce'), and the
-    // broccoli row keys 'broccoli' wherever it moved.
-    expect(rows.map((r) => r.keyName)).toEqual(['rotini pasta', 'soy sauce', 'broccoli'])
-  })
-  test('a count-changing rework displays the overlay list; keys stay base where a counterpart exists', () => {
-    // Collapse: two base lines merged into one overlay line (GF rid 863's
-    // class). The unpaired base line is NOT appended — the restricted doc
-    // is the display truth, and an ingredient upstream removed from the
-    // restricted render must not reappear in the grocery (measured live:
-    // GF rid 863's base soy sauce used to survive its own restriction).
-    const collapsed = {
-      line_items: [
-        { quantity: '15 oz', ingredient_name: 'gluten-free rotini pasta' },
-        { quantity: '3 tbsp', ingredient_name: 'tamari soy sauce' },
-      ],
-      instructions: [],
-    }
-    const rows = groceryDisplayLines(baseDoc, collapsed)!
+
+  test('the swap case: the substitute name on the base line, base quantity, base key', () => {
+    const rows = groceryDisplayLines(baseDoc, indexWithSwaps(sampleSwaps, sampleDrops), [GF_ID])
     expect(rows).toEqual([
-      // rotini pairs the leftover base line via nameKey containment (its
-      // substituted name embeds the original)…
-      { keyName: 'rotini pasta', name: 'gluten-free rotini pasta', quantity: '15 oz', keyIngredient: 'rotini pasta' },
-      // …so does the tamari line (keyName from the base 'soy sauce' line,
-      // and the re-authored amount keys the base spelling)…
-      { keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '3 tbsp', keyQuantity: '2 tbsp', keyIngredient: 'soy sauce' },
-      // …and broccoli has no overlay counterpart: dropped, exactly as the
-      // restricted doc displays the recipe.
+      expect.objectContaining({ keyName: 'rotini pasta', name: 'gluten free rotini pasta', quantity: '15 oz' }),
+      expect.objectContaining({ keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '2 tbsp' }),
+      expect.objectContaining({ keyName: 'broccoli', name: 'broccoli', quantity: '300 g' }),
     ])
   })
-  test('a rename on a DUPLICATED quantity never pairs positionally (kody: dup-qty reorder)', () => {
-    // Two base lines share the empty quantity; a rename on one of them
-    // must fall to the nameKey-first pairing instead of trusting position.
-    const dupQtyBase: RecipeDoc = {
+  test('drops remove lines from display only (key/checked state untouched)', () => {
+    const dfDoc = {
       ...baseDoc,
       line_items: [
-        baseDoc.line_items[0],
-        baseDoc.line_items[1],
-        baseDoc.line_items[2],
-        { id: 14, quantity: '', ingredient_name: 'black pepper' },
-        { id: 15, quantity: '', ingredient_name: 'salt' },
+        { id: 11, quantity: '1 ½ (113 g) pkgs', ingredient_name: 'crumbled feta cheese' },
+        { id: 12, quantity: '2 tbsp', ingredient_name: 'broccoli' },
       ],
     }
-    const renamedDup = {
-      line_items: [
-        { quantity: '15 oz', ingredient_name: 'gluten-free rotini pasta' },
-        { quantity: '2 tbsp', ingredient_name: 'tamari soy sauce' },
-        { quantity: '300 g', ingredient_name: 'broccoli' },
-        { quantity: '', ingredient_name: 'salt' },
-        { quantity: '', ingredient_name: 'black pepper' },
-      ],
-      instructions: [],
-    }
-    const rows = groceryDisplayLines(dupQtyBase, renamedDup)!
-    // The two swapped empty-quantity seasonings pair by NAME (pass 1),
-    // never by position: position is exactly what upstream moved.
-    const pepper = rows.find((r) => r.name === 'black pepper')!
-    const salt = rows.find((r) => r.name === 'salt')!
-    expect(pepper.keyName).toBe('black pepper')
-    expect(salt.keyName).toBe('salt')
+    const rows = groceryDisplayLines(dfDoc, indexWithSwaps(sampleSwaps, sampleDrops), [DF_ID])
+    expect(rows).not.toBeNull()
+    expect(rows!.map((r) => r.name)).not.toContain('crumbled feta cheese')
+    expect(rows!.map((r) => r.name)).toContain('broccoli')
   })
-  test('a split (overlay longer than base): the extra overlay row keys to itself', () => {
-    const split = {
-      line_items: [
-        { quantity: '15 oz', ingredient_name: 'gluten-free rotini pasta' },
-        { quantity: '2 tbsp', ingredient_name: 'tamari soy sauce' },
-        { quantity: '300 g', ingredient_name: 'broccoli' },
-        { quantity: '1 head', ingredient_name: 'butter lettuce' },
-      ],
-      instructions: [],
-    }
-    const rows = groceryDisplayLines(baseDoc, split)!
-    expect(rows[3]).toEqual({ keyName: 'butter lettuce', name: 'butter lettuce', quantity: '1 head' })
-    expect(rows).toHaveLength(4)
+  test('null index returns null (pre-load: base doc renders as-is)', () => {
+    expect(groceryDisplayLines(baseDoc, null, [])).toBeNull()
+    expect(groceryDisplayLines(baseDoc, buildLadderIndex(), [])).toBeNull()
   })
-  test('keys computed from the base line NEVER see the override', () => {
-    // The contract: the grocery group key is nameKey(BASE name); the display
-    // name is the overlay's. Line i's key and display stay a pair.
-    const rows = groceryDisplayLines(baseDoc, overlay)!
-    expect(nameKey(baseDoc.line_items[0].ingredient_name)).toBe(nameKey('rotini pasta'))
-    expect(rows[0].name).toBe('gluten-free rotini pasta')
-    expect(rows[0].name).not.toBe(baseDoc.line_items[0].ingredient_name)
-    expect(rows[0].keyName).toBe(nameKey('rotini pasta'))
+  test('no swaps loaded yet = null (pre-load)', () => {
+    expect(groceryDisplayLines(baseDoc, buildLadderIndex(), [GF_ID])).toBeNull()
   })
 })
 
-describe('groceryDisplayLines against the committed GF overlay (the fettuccine regression)', () => {
-  // GF rid 224 (Fettuccine Alfredo with Asparagus): upstream's metric rework
-  // swaps pasta and garlic lines. The bug shipped `6 cloves gluten-free
-  // fettuccine pasta` — base quantity under an overlay name, a pair in
-  // NEITHER doc.
-  const rid224 = (gfOverlay as { docs: Record<string, { line_items: { quantity: string; ingredient_name: string }[] }> }).docs['224']
-  const base224: RecipeDoc = {
-    ...baseDoc,
-    line_items: [
-      { id: 1, quantity: '3 small bunches', ingredient_name: 'asparagus' },
-      { id: 2, quantity: '354 ml', ingredient_name: 'chicken or vegetable broth' },
-      { id: 3, quantity: '510 g', ingredient_name: 'fettuccine pasta' },
-      { id: 4, quantity: '6 cloves', ingredient_name: 'garlic' },
-      { id: 5, quantity: '84 g', ingredient_name: 'Parmesan cheese' },
-      { id: 6, quantity: '354 ml', ingredient_name: 'whole milk' },
-      { id: 7, quantity: '', ingredient_name: 'all-purpose flour' },
-      { id: 8, quantity: '', ingredient_name: 'black pepper' },
-      { id: 9, quantity: '', ingredient_name: 'butter, unsalted' },
-      { id: 10, quantity: '', ingredient_name: 'salt' },
-    ],
-  }
+/* ---------- loadRestrictionDict compatibility ---------- */
 
-  test('the overlay itself is metric (no imperial quantity token survives)', () => {
-    // The parenthesised container annotation is exempt: upstream authors
-    // physical package sizes there even in metric renders — the base metric
-    // doc carries `1 ½ (3 oz) pkgs` alfalfa sprouts verbatim.
-    const annotation = /\([^)]*\)/g
-    for (const doc of Object.values((gfOverlay as { docs: Record<string, { line_items: { quantity: string }[] }> }).docs)) {
-      for (const li of doc.line_items) {
-        expect(li.quantity.replace(annotation, ' ')).not.toMatch(/\b(?:fl oz|oz|lbs?|pounds?)\b/)
+describe('loadIndex (ladder)', () => {
+  test('loads index.json via injected fetch (cold start: nothing beyond index)', async () => {
+    const { loadIndex } = await import('./restrictions')
+    const baseUrl = '/base/'
+    const fetchImpl = async (url: string) => {
+      const fs = require('fs')
+      const path = require('path')
+      const relativePath = url.replace(baseUrl, '')
+      const fullPath = path.resolve(process.cwd(), 'public', relativePath)
+      if (!fs.existsSync(fullPath)) {
+        return new Response('not found', { status: 404 })
       }
+      const data = fs.readFileSync(fullPath, 'utf-8')
+      return new Response(data, { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    const idx = await loadIndex(fetchImpl, baseUrl)
+    expect(idx).not.toBeNull()
+    const loaded = idx as import('./restrictions').LadderIndex
+    expect(loaded.restrictions).toHaveLength(12)
+    // Cold start: swaps, drops, removed, pairs are NOT loaded — only index.json
+    expect(loaded.swaps).toBeNull()
+    expect(loaded.drops).toBeNull()
+    expect(loaded.removed.size).toBe(0)
+    expect(loaded.pairs.size).toBe(0)
   })
-
-  test('the pasta row shows the substituted name with the METRIC quantity from the same doc', () => {
-    const rows = groceryDisplayLines(base224, rid224)!
-    const pasta = rows.find((r) => r.name === 'gluten-free fettuccine pasta')!
-    expect(pasta).toBeDefined()
-    expect(pasta.quantity).toBe('510 g')
-    // `6 cloves gluten-free fettuccine pasta` must never reappear.
-    expect(rows.some((r) => r.name.includes('fettuccine') && r.quantity === '6 cloves')).toBe(false)
-    // The garlic row is garlic, with garlic's own quantity.
-    const garlic = rows.find((r) => r.name === 'garlic')!
-    expect(garlic.quantity).toBe('6 cloves')
-  })
-
-  test('the checked key stays the BASE nameKey', () => {
-    const rows = groceryDisplayLines(base224, rid224)!
-    const pasta = rows.find((r) => r.name === 'gluten-free fettuccine pasta')!
-    expect(pasta.keyName).toBe(nameKey('fettuccine pasta'))
-    const garlic = rows.find((r) => r.name === 'garlic')!
-    expect(garlic.keyName).toBe(nameKey('garlic'))
-  })
-})
-
-describe('groceryDisplayLines against the committed GF overlay (rid 863: addition + collapse)', () => {
-  // GF rid 863: upstream's gluten-free rework REMOVES the shrimp and fish
-  // sauce lines, RENAMES soy sauce to tamari, and ADDS a `12 eggs` line —
-  // the pairing regression shipped `1.02 kg` (the shrimp's quantity) as the
-  // eggs row's keyQuantity and re-displayed the base `soy sauce` verbatim.
-  const rid863 = (gfOverlay as { docs: Record<string, { line_items: { quantity: string; ingredient_name: string }[] }> }).docs['863']
-  const base863: RecipeDoc = {
-    ...baseDoc,
-    line_items: [
-      { id: 1, quantity: '1 ½ small bunches', ingredient_name: 'cilantro' },
-      { id: 2, quantity: '9 cloves', ingredient_name: 'garlic' },
-      { id: 3, quantity: '1 ½ small bunches', ingredient_name: 'green onions (scallions)' },
-      { id: 4, quantity: '3', ingredient_name: 'limes' },
-      { id: 5, quantity: '0.375 cup', ingredient_name: 'peanuts, roasted unsalted' },
-      { id: 6, quantity: '1.02 kg', ingredient_name: 'raw peeled shrimp, fresh or frozen' },
-      { id: 7, quantity: '3', ingredient_name: 'shallots' },
-      { id: 8, quantity: '3 medium', ingredient_name: 'spaghetti squash' },
-      { id: 9, quantity: '', ingredient_name: 'black pepper' },
-      { id: 10, quantity: '', ingredient_name: 'cayenne pepper' },
-      { id: 11, quantity: '', ingredient_name: 'extra virgin olive oil' },
-      { id: 12, quantity: '', ingredient_name: 'fish sauce' },
-      { id: 13, quantity: '', ingredient_name: 'pure maple syrup' },
-      { id: 14, quantity: '', ingredient_name: 'rice vinegar' },
-      { id: 15, quantity: '', ingredient_name: 'salt' },
-      { id: 16, quantity: '', ingredient_name: 'soy sauce' },
-    ],
-  }
-
-  test('the ADDED eggs row keys to itself, never onto a base row', () => {
-    const rows = groceryDisplayLines(base863, rid863)!
-    const eggs = rows.find((r) => r.name === 'eggs')!
-    expect(eggs.keyName).toBe(nameKey('eggs'))
-    expect(eggs.keyQuantity).toBeUndefined()
-  })
-
-  test('the renamed soy line keeps the base soy-sauce key (containment pairing)', () => {
-    const rows = groceryDisplayLines(base863, rid863)!
-    const tamari = rows.find((r) => r.name === 'tamari soy sauce')!
-    expect(tamari.keyName).toBe(nameKey('soy sauce'))
-    // Quantities are both empty — the base spelling IS the display's.
-    expect(tamari.keyQuantity).toBeUndefined()
-  })
-
-  test('ingredients upstream removed never re-display (the restricted doc is the truth)', () => {
-    const rows = groceryDisplayLines(base863, rid863)!
-    const names = rows.map((r) => r.name)
-    // Exactly the overlay's own 15 lines — no appended base lines.
-    expect(rows).toHaveLength(rid863.line_items.length)
-    for (const gone of ['raw peeled shrimp, fresh or frozen', 'fish sauce', 'soy sauce']) {
-      expect(names).not.toContain(gone)
-    }
-  })
-})
-
-describe('createOverlayLoader', () => {
-  test('fetches per slug and caches successes', async () => {
-    const urls: string[] = []
-    const fetchImpl = (async (url: string) => {
-      urls.push(url)
-      return new Response(JSON.stringify({ slug: 'gluten-free', docs: {} }), { status: 200 })
-    }) as typeof fetch
-    const load = createOverlayLoader(fetchImpl, '/base/')
-    expect(await load('gluten-free')).toEqual({ slug: 'gluten-free', docs: {} })
-    expect(await load('gluten-free')).toEqual({ slug: 'gluten-free', docs: {} })
-    expect(urls).toEqual(['/base/data/restriction_overlays/gluten-free.json'])
-  })
-  test('a failed fetch resolves null and is retried, not cached', async () => {
-    let calls = 0
-    const fetchImpl = (async () => {
-      calls += 1
-      return new Response('nope', { status: 404 })
-    }) as typeof fetch
-    const load = createOverlayLoader(fetchImpl, '/')
-    expect(await load('dairy-free')).toBeNull()
-    expect(await load('dairy-free')).toBeNull()
-    expect(calls).toBe(2)
+  test('failed index fetch resolves null', async () => {
+    const { loadIndex } = await import('./restrictions')
+    const idx = await loadIndex(async () => new Response('nope', { status: 404 }), '/')
+    expect(idx).toBeNull()
   })
 })

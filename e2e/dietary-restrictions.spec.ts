@@ -102,7 +102,7 @@ test('a recipe that survives shows the substituted ingredient name', async ({ pa
   await cardFor(page, /White Bean Pasta Salad/).first().click()
   const sheet = page.getByRole('dialog')
   await expect(sheet).toBeVisible()
-  // Upstream's own restricted rendering — the overlay line, verbatim. The
+  // Upstream's own restricted rendering — the dictionary swap, verbatim. The
   // text legitimately appears twice (the ingredient li AND its measured
   // amount chip), so assert the first.
   await expect(sheet.getByText(SWAPPED).first()).toBeVisible()
@@ -160,9 +160,9 @@ test('the grocery row shows the substituted name and the checkbox key survives u
   await expect(reloaded.getByText(SWAPPED).first()).toBeVisible()
 })
 
-/* ---------- The metric-overlay + no-cross-pair brief (GF rid 224) ----------
+/* ---------- The metric-substitution + no-cross-pair brief (GF rid 224) ----------
  *
- * The first archive pulled US/6 payloads and the overlays swapped whole
+ * The first archive pulled US/6 payloads and the dictionary swapped whole
  * `line_items` in, so a metric/dual device showed a restricted recipe stuck
  * in imperial (`24 fl oz chicken or vegetable broth`, `18 oz gluten-free
  * fettuccine pasta`). And because upstream's rework REORDERS lines (pasta <->
@@ -182,41 +182,47 @@ async function openRestrictedDetail(page: Page): Promise<ReturnType<Page['getByR
   return sheet
 }
 
-test('a metric device shows the restricted detail in metric — never the archived US overlay', async ({
+test('a metric device shows the restricted detail in metric — the dictionary swap stays metric', async ({
   page,
 }) => {
   await activateGlutenFree(page)
   await page.goto('/settings')
   await page.getByTestId('unit-system-metric').click()
-  await expect(page.getByTestId('unit-system-metric')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('unit-system-metric')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
 
   const sheet = await openRestrictedDetail(page)
-  // Upstream's own METRIC restricted rendering — the base catalog's native
-  // units, flowing through localizeQuantity like every base line. The US
-  // archive's `24 fl oz` / `18 oz` must never surface.
+  // Dictionary substitution — the swap `fettuccine pasta` → `gluten free fettuccine pasta`.
+  // Quantities stay from the base doc (verbatim), which are metric (ADR-0047).
   await expect(sheet.getByText('354 ml').first()).toBeVisible()
   await expect(sheet.getByText('510 g').first()).toBeVisible()
   await expect(sheet.getByText(GF_FETTUCCINE).first()).toBeVisible()
   await expect(sheet.getByText(/fl oz| oz | lb /)).toHaveCount(0)
 })
 
-test('dual mode shows the authored metric notation too (the overlay is metric)', async ({
+test('dual mode shows the authored metric notation too (the swap keeps base quantities)', async ({
   page,
 }) => {
   await activateGlutenFree(page)
   await page.goto('/settings')
   await page.getByTestId('unit-system-dual').click()
-  await expect(page.getByTestId('unit-system-dual')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('unit-system-dual')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
 
   // Dual is the IDENTITY (ADR-0047): the catalog text exactly as authored —
-  // and the overlay is now metric, so the authored strings are metric.
+  // and the dictionary swaps keep base quantities, so the authored strings
+  // are metric.
   const sheet = await openRestrictedDetail(page)
   await expect(sheet.getByText('354 ml').first()).toBeVisible()
   await expect(sheet.getByText('510 g').first()).toBeVisible()
   await expect(sheet.getByText(/fl oz| oz | lb /)).toHaveCount(0)
 })
 
-test('the grocery row pairs the substituted name with ITS OWN metric quantity (no cross-pair)', async ({
+test('the grocery row pairs the substituted name with ITS OWN quantity (no cross-pair)', async ({
   page,
 }) => {
   await activateGlutenFree(page)
@@ -226,10 +232,10 @@ test('the grocery row pairs the substituted name with ITS OWN metric quantity (n
 
   await gotoTab(page, 'Grocery')
   // The (name, quantity) pair must co-occur in ONE authoritative doc: the
-  // metric overlay's `510 g gluten-free fettuccine pasta`. The mis-pairing
-  // bug — `6 cloves gluten-free fettuccine pasta`, the base garlic quantity
-  // under the overlay pasta name — appears in NEITHER doc and must never
-  // render.
+  // dictionary swap is per-ingredient, so a display row's quantity is always
+  // that ingredient's own. The mis-pairing bug — `6 cloves gluten-free
+  // fettuccine pasta`, the base garlic quantity under the swap pasta name —
+  // appears in NEITHER doc and must never render.
   const row = page.getByTestId('grocery-row').filter({ hasText: GF_FETTUCCINE }).first()
   await expect(row).toBeVisible()
   await expect(row).toContainText('510 g')
@@ -244,3 +250,171 @@ test('the grocery row pairs the substituted name with ITS OWN metric quantity (n
     .first()
   await expect(garlic).toBeVisible()
 })
+
+/* ---------- Bug A regression: butter swaps under DF (catalog spelling matches) ----------
+ *
+ * Under DF, `butter, unsalted` (catalog spelling, comma preserved) swaps to
+ * `virgin coconut oil`. The dictionary's `from` uses the catalog spelling so
+ * the runtime's `nameKey` match works (Bug A fix). This is the regression pair
+ * for Bug A: the folded spelling `butter unsalted` must NOT appear as a `from`.
+ */
+const BUTTER_RECIPE = 'Lemon-Butter Chicken'
+const BUTTER_SWAP = 'virgin coconut oil'
+
+/* ---------- Bug B: DF drops (feta) ----------
+ *
+ * Under DF, `crumbled feta cheese` is DROPPED (no swap counterpart) in kept
+ * recipes. The drop is display-only: the line is hidden from the grocery, the
+ * key/checked state is untouched. See Bug B.
+ */
+const FETA_RECIPE = 'Arugula, Apricot'
+const FETA_INGREDIENT = 'crumbled feta cheese'
+
+async function activateDairyFree(page: Page) {
+  await page.goto('/settings')
+  await page.getByTestId('restriction-chip-dairy-free').click()
+  await expect(page.getByTestId('restriction-chip-dairy-free')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+}
+
+test('a DF butter recipe shows the substitute name (Bug A regression: catalog spelling matches)', async ({
+  page,
+}) => {
+  await activateDairyFree(page)
+  await page.goto('/recipes')
+  await waitForCatalog(page)
+  await searchRecipes(page, 'parsnip')
+  await cardFor(page, /Lemon-Butter Chicken/).first().click()
+  const sheet = page.getByRole('dialog')
+  await expect(sheet).toBeVisible()
+  // The dictionary swap: `butter, unsalted` -> `virgin coconut oil`.
+  await expect(sheet.getByText(BUTTER_SWAP).first()).toBeVisible()
+  // The folded spelling must NOT appear as a display name (Bug A).
+  await expect(sheet.getByText('butter unsalted')).toHaveCount(0)
+})
+
+test('under DF a feta recipe does not render the dropped line in the grocery (Bug B)', async ({
+  page,
+}) => {
+  await activateDairyFree(page)
+  await page.goto('/recipes')
+  await waitForCatalog(page)
+  await searchRecipes(page, 'arugula')
+  await cardFor(page, /Arugula, Apricot/).first().click()
+  const sheet = page.getByRole('dialog')
+  await expect(sheet).toBeVisible()
+  await sheet.getByTestId('add-to-plan').click()
+  await page.keyboard.press('Escape')
+
+  await gotoTab(page, 'Grocery')
+  // The feta line is a DF drop (no swap counterpart) — it is HIDDEN from
+  // display only; the key stays base. No grocery row should name feta.
+  await expect(
+    page.getByTestId('grocery-row').filter({ hasText: FETA_INGREDIENT }).first(),
+  ).toHaveCount(0)
+})
+
+
+/* ---------- Network shape: on-demand loading (ADR-0059) ----------
+ *
+ * The split tree loads ON DEMAND keyed by query-time need:
+ *   * index.json         ~2 KB   always (or from lib RESTRICTIONS constant for cold start)
+ *   * swaps.json         ~8 KB   when ANY chip is active
+ *   * removed/<slug>.json ~4 KB  when THAT chip is active
+ *   * pairs/<a>-<b>.json  ~1 KB  when THAT PAIR is active
+ *
+ * Use request interception to assert the exact files fired. index.json ships in
+ * the bundle (cold start fires nothing beyond it); swaps/removed/pairs fire only
+ * when their chip/pair activates. A failed per-slug/pair fetch degrades to
+ * union-only + toast (ADR-0019's room-failure rule — never block the UI).
+ */
+
+async function interceptedRequests(page: Page) {
+  const requests: string[] = []
+  await page.route('**/data/restrictions/**', (route) => {
+    const url = route.request().url()
+    requests.push(url.replace(/^.*\/data\/restrictions\//, ''))
+    return route.continue()
+  })
+  return requests
+}
+
+test('cold start fires no restriction requests (index ships in the bundle)', async ({ page }) => {
+  const requests = await interceptedRequests(page)
+  await page.goto('/recipes')
+  await waitForCatalog(page)
+  // No restriction files requested at all before any chip is activated.
+  const restrictionRequests = requests.filter(
+    (r) => r.startsWith('index.json') || r.startsWith('swaps.json') || r.startsWith('removed/') || r.startsWith('pairs/'),
+  )
+  expect(restrictionRequests).toEqual([])
+})
+
+test('activating ONE chip fires index + swaps + one removed file', async ({ page }) => {
+  const requests = await interceptedRequests(page)
+  await page.goto('/settings')
+  await page.getByTestId('restriction-chip-gluten-free').click()
+  await expect(page.getByTestId('restriction-chip-gluten-free')).toHaveAttribute('aria-pressed', 'true')
+  // The ladder fetches fire ASYNCHRONOUSLY after the (synchronous) aria flip —
+  // wait for them instead of reading the interception log at once (raced CI).
+  await expect
+    .poll(() =>
+      requests.filter(
+        (r) =>
+          r.startsWith('index.json') ||
+          r.startsWith('swaps.json') ||
+          r.startsWith('removed/') ||
+          r.startsWith('pairs/'),
+      ),
+    )
+    .toContain('removed/gluten-free.json')
+  const fired = requests.filter(
+    (r) =>
+      r.startsWith('index.json') ||
+      r.startsWith('swaps.json') ||
+      r.startsWith('removed/') ||
+      r.startsWith('pairs/'),
+  )
+  // Exactly: swaps.json + removed/gluten-free.json
+  // index.json is in the bundle (cold start) — not fetched at activation time.
+  expect(fired).toContain('swaps.json')
+  // Settle before the negative assertion: the expected fetches have all
+  // arrived, so a wrongly-fired pair request would be in the log by now.
+  await page.waitForTimeout(250)
+  expect(requests.filter((r) => r.startsWith('pairs/'))).toHaveLength(0)
+})
+
+test('activating a SECOND chip fires the pair file (and the first removed stays)', async ({ page }) => {
+  const requests = await interceptedRequests(page)
+  await page.goto('/settings')
+  await page.getByTestId('restriction-chip-gluten-free').click()
+  await page.getByTestId('restriction-chip-dairy-free').click()
+  await expect(page.getByTestId('restriction-chip-dairy-free')).toHaveAttribute('aria-pressed', 'true')
+  // Wait for the async ladder fetches (see the ONE-chip test).
+  await expect
+    .poll(() =>
+      requests.filter(
+        (r) =>
+          r.startsWith('index.json') ||
+          r.startsWith('swaps.json') ||
+          r.startsWith('removed/') ||
+          r.startsWith('pairs/'),
+      ),
+    )
+    .toContain('pairs/dairy-free-gluten-free.json')
+  const fired = requests.filter(
+    (r) =>
+      r.startsWith('index.json') ||
+      r.startsWith('swaps.json') ||
+      r.startsWith('removed/') ||
+      r.startsWith('pairs/'),
+  )
+  // Now pairs/gluten-free-dairy-free.json also fires (on-demand pair extras).
+  expect(fired).toContain('swaps.json')
+  expect(fired).toContain('removed/gluten-free.json')
+  expect(fired).toContain('removed/dairy-free.json')
+  expect(fired).toContain('pairs/dairy-free-gluten-free.json')
+})
+
