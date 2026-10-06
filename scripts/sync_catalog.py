@@ -97,27 +97,49 @@ def fetch_bytes(url, timeout=60):
 
 
 def merge_builder(fresh):
-    """Add what is new, keep what we have.
+    """Add what is new, keep what we have — keyed by the STABLE recipe_id.
 
-    Existing entries are NOT overwritten: their popularity/rating snapshots are
-    referenced by pinned e2e values and by the Auto-Plan golden packs, so a
-    routine catalog sync must not silently move them. A deliberate refresh of
-    those numbers is its own change.
+    `variant_meta[].id` (the variant id) and `published_recipe_uuid` are
+    re-issued on EVERY `get_builder_data` call — two identical pulls share
+    zero variant ids; only `recipe_id` is stable (ADR-0055, measured). A
+    merge keyed by variant id therefore sees every existing recipe as "new"
+    on the next sync and doubles the catalog. Keying by `recipe_id` keeps
+    each committed entry (and its doc file name `<variantId>.json`, which
+    the app resolves through builder_data) exactly as-is; genuinely new
+    recipes — recipe_ids we have never shipped — join with their fresh ids.
+
+    Existing entries are NOT overwritten: their popularity/rating snapshots
+    are referenced by pinned e2e values and by the Auto-Plan golden packs,
+    so a routine catalog sync must not silently move them. A deliberate
+    refresh of those numbers is its own change.
     """
     with open(BUILDER_PATH) as f:
         cur = json.load(f)
 
+    def rid_of(meta):
+        rid = meta.get("recipe_id")
+        if rid is None:
+            raise ValueError("variant_meta entry without recipe_id: %r" % (meta.get("id"),))
+        return int(rid)
+
+    have_by_recipe = {rid_of(m): m for m in cur["variant_meta"]}
     have_meta = {m["id"]: m for m in cur["variant_meta"]}
     have_data = dict(cur["variant_data"])
     fresh_meta = {m["id"]: m for m in fresh["variant_meta"]}
 
     added, skipped_nonfeasible = [], 0
+    feasible = set(fresh["feasible_variants"])
     for vid, meta in fresh_meta.items():
+        if rid_of(meta) in have_by_recipe:
+            # Known recipe under a re-issued id: keep OUR entry (its id is
+            # what the committed docs, images and pins are named after).
+            continue
         if vid in have_meta:
             continue
-        if vid not in set(fresh["feasible_variants"]):
+        if vid not in feasible:
             skipped_nonfeasible += 1
             continue
+        have_by_recipe[rid_of(meta)] = meta
         have_meta[vid] = meta
         data = fresh["variant_data"].get(str(vid))
         if data is not None:

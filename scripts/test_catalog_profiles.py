@@ -326,6 +326,43 @@ class ConversionParityTest(unittest.TestCase):
         return {t: got for t, got in json.loads(r.stdout.strip().splitlines()[-1])}
 
 
+class MergeKeyTest(unittest.TestCase):
+    """The archive is a FIXTURE for sync_catalog's merge, too.
+
+    `variant_meta[].id` is re-issued on every pull (two identical pulls share
+    ZERO variant ids — proven by VariantIdInstabilityTest), so `merge_builder`
+    must key the merge on the stable `recipe_id`, not the variant id. This
+    feeds a whole archived profile through the REAL `merge_builder` against
+    the committed builder_data and asserts it adds nothing: with the old
+    variant-id keying every recipe re-added (catalog 2,759 -> 5,518).
+    """
+
+    def test_reissued_pull_merges_as_no_op(self):
+        sys.path.insert(0, HERE)
+        import sync_catalog  # noqa: E402  (needs repo root; argv guarded below)
+
+        if not os.path.exists(sync_catalog.BUILDER_PATH):
+            self.skipTest("committed builder_data.json not present")
+        label = "us-6"
+        payload_path = os.path.join(DEFAULT_ARCHIVE, label, "builder_data.json")
+        if not os.path.exists(payload_path):
+            self.skipTest("no %s builder payload in the archive" % label)
+
+        with open(payload_path) as f:
+            fresh = json.load(f)
+        merged, added, skipped, total, missing_docs = sync_catalog.merge_builder(fresh)
+
+        have = json.load(open(sync_catalog.BUILDER_PATH))
+        self.assertEqual(
+            total, len(have["feasible_variants"]),
+            "a re-issued pull changed the catalog size — merge_builder is "
+            "keying on the re-issued variant id, not recipe_id")
+        self.assertEqual(added, [],
+                         "a re-issued pull re-added recipes we already ship")
+        self.assertEqual(missing_docs, [],
+                         "kept entries must keep their committed docs")
+
+
 def main():
     global DEFAULT_ARCHIVE
     ap = argparse.ArgumentParser()

@@ -1,4 +1,4 @@
-import { humanizeAmount, parseQuantity } from './quantity'
+import { formatMetricAmount, parseQuantity, scaleMetricAmount } from './quantity'
 import type { RecipeDoc } from './types'
 
 /** One instruction step, scaled to the target servings. */
@@ -160,12 +160,16 @@ export function scaleQuantity(
 function scaleStepLine(line: string, base: number, target: number, factor: number): string {
   const parsed = parseQuantity(line)
   if (!parsed || factor === 1) return line
-  const amount = scaleQuantity(parsed.amount, base, target, isSeasoning(line), line)
-  // The scaled line goes to a HUMAN: counts round half-down to whole pieces
-  // (2.25 eggs -> "2"), everything else keeps formatAmount's grain. The
-  // rounding must not crawl back into the math: scaleQuantity stays exact
-  // because measured-amount chips and the grocery merge read its numbers.
-  const rendered = humanizeAmount(amount, parsed.unit)
+  // ADR-0055: ONE scaling vocabulary on every surface. The line, the chip
+  // under it (measuredAmounts) and the grocery sum all use the same model —
+  // seasonings keep `scaleQuantity`'s sub-linear rule, everything else
+  // scales through `scaleMetricAmount`'s quantized grammar — and the render
+  // is `formatMetricAmount` (unicode fraction glyphs, integer g/ml), so
+  // `2129 ml ×⅔` reads `1420 ml` here too, never `1419 ml`.
+  const amount = isSeasoning(line)
+    ? scaleQuantity(parsed.amount, base, target, true, line)
+    : scaleMetricAmount(parsed.amount, factor, parsed.unit)
+  const rendered = formatMetricAmount(amount, parsed.unit)
   return parsed.unit ? `${rendered} ${parsed.unit}` : rendered
 }
 
