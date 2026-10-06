@@ -314,6 +314,27 @@ describe('aggregateGroceries displayLines (the restriction ADR)', () => {
     expect(egg.lines[0].display).toBe('6')
   })
 
+  test('a colliding raw row with a REAL display re-namespaces instead of being dropped', () => {
+    // The dedupe only swallows a BLANK colliding display: a raw row whose
+    // key source parses but whose display carries real text coexists with
+    // the by-unit line under the raw|| namespace — no contribution lost.
+    const a = doc('Restricted Quiche', 6, [['6', 'eggs']])
+    const b = doc('Plain Omelette', 6, [['6', 'eggs']])
+    const agg = aggregateGroceries([
+      {
+        ...input(a, 1),
+        displayLines: [
+          { keyName: 'egg', name: 'egg', quantity: 'a pinch', keyQuantity: '6', keyIngredient: 'eggs' },
+        ],
+      },
+      input(b, 1),
+    ])
+    const egg = agg.find((i) => i.normalized === 'egg')!
+    expect(egg.lines).toHaveLength(2)
+    expect(egg.lines.map((l) => l.key)).toEqual(['egg||6', 'egg||raw||6'])
+    expect(egg.lines.map((l) => l.display)).toEqual(['6', 'a pinch'])
+  })
+
   test('divergent substitutes label the merged group with EVERY name', () => {
     // Two planned meals, the same BASE ingredient, different substitutes —
     // a first-seen-only label would claim the whole summed quantity for one

@@ -399,22 +399,23 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       return na - nb
     })
     for (const [raw, keyBasis] of group.raw) {
-      lines.push({ key: `${normalized}||${keyBasis}`, display: raw })
+      // Line keys stay unique (the checked map IS keyed by them). A raw
+      // row whose key source PARSES spells the parsed grammar — which a
+      // by-unit line may already have emitted for the same base quantity
+      // (the by-unit line is pushed FIRST and carries the real summed
+      // display). The colliding raw row is DROPPED when its display is
+      // blank (the overlay's blanked quantity: the real line already
+      // renders the amount), and re-namespaced under `raw||` when it
+      // carries a real, distinct text, so both lines coexist under
+      // distinct checkbox keys. A keyBasis already in the `raw||`
+      // namespace (an unparseable key source) can never collide.
+      const key = `${normalized}||${keyBasis}`
+      if (!lines.some((l) => l.key === key)) {
+        lines.push({ key, display: raw })
+      } else if (raw !== '') {
+        lines.push({ key: `${normalized}||raw||${keyBasis}`, display: raw })
+      }
     }
-    // Line keys stay unique (the checked map IS keyed by them): a
-    // raw-display row whose key source PARSES keys under the parsed
-    // grammar, and another contributor may already have emitted that same
-    // basis as a real by-unit line. The parsed line is pushed FIRST and
-    // carries a real display, so the colliding raw line — whose display is
-    // typically the overlay's blanked quantity — is dropped.
-    const seenKeys = new Set<string>()
-    const unique = lines.filter((l) => {
-      if (seenKeys.has(l.key)) return false
-      seenKeys.add(l.key)
-      return true
-    })
-    lines.length = 0
-    lines.push(...unique)
     // When the group's display names DIVERGE (different substitutes for the
     // same base ingredient, or a restricted meal plus an unrestricted one),
     // the label names them ALL — a first-seen-only label would silently
