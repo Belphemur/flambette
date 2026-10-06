@@ -3,7 +3,7 @@ import {
   RESTRICTIONS,
   buildRestrictionIndex,
   createOverlayLoader,
-  groceryDisplayNames,
+  groceryDisplayLines,
   isRemovedByRestriction,
   normalizeRestrictionIds,
   overlayDocFor,
@@ -12,6 +12,7 @@ import {
   type RecipeDoc,
 } from './restrictions'
 import { nameKey } from './grocery'
+import gfOverlay from '../../public/data/restriction_overlays/gluten-free.json'
 
 const sets: RestrictionSetsFile = {
   generated_at: '2026-10-06T00:00:00Z',
@@ -160,7 +161,7 @@ describe('restrictedDocView (display truth)', () => {
   })
 })
 
-describe('groceryDisplayNames (key/display split)', () => {
+describe('groceryDisplayLines (key/display split)', () => {
   const overlay = {
     line_items: [
       { quantity: '15 oz', ingredient_name: 'gluten-free rotini pasta' },
@@ -169,26 +170,147 @@ describe('groceryDisplayNames (key/display split)', () => {
     ],
     instructions: [],
   }
-  test('only changed lines are overridden; base names otherwise', () => {
-    expect(groceryDisplayNames(baseDoc, overlay)).toEqual([
-      'gluten-free rotini pasta', 'tamari soy sauce', 'broccoli',
+  test('the safe positional case: the overlay name on the base line, base quantity', () => {
+    expect(groceryDisplayLines(baseDoc, overlay)).toEqual([
+      { keyName: 'rotini pasta', name: 'gluten-free rotini pasta', quantity: '15 oz' },
+      { keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '2 tbsp' },
+      { keyName: 'broccoli', name: 'broccoli', quantity: '300 g' },
     ])
   })
   test('an unchanged doc yields null (no override)', () => {
     const same = { line_items: baseDoc.line_items.map((l) => ({ quantity: l.quantity, ingredient_name: l.ingredient_name })), instructions: [] }
-    expect(groceryDisplayNames(baseDoc, same)).toBeNull()
+    expect(groceryDisplayLines(baseDoc, same)).toBeNull()
   })
-  test('a count-changing rework yields null — the base doc stays the grocery truth', () => {
-    const shorter = { line_items: overlay.line_items.slice(0, 2), instructions: [] }
-    expect(groceryDisplayNames(baseDoc, shorter)).toBeNull()
+  test('equal counts but UNEQUAL quantities are the mismatch class — no positional override', () => {
+    // GF rid 224's reorder: base lines 2/3 are pasta/garlic, the overlay's
+    // are garlic/pasta. Pairing names by position alone once displayed
+    // `6 cloves gluten-free fettuccine pasta` — a pair in NEITHER doc.
+    const reordered = {
+      line_items: [
+        { quantity: '15 oz', ingredient_name: 'gluten-free rotini pasta' },
+        { quantity: '2 tbsp', ingredient_name: 'tamari soy sauce' },
+        { quantity: '300 g', ingredient_name: 'broccoli' },
+      ],
+      instructions: [],
+    }
+    const swappedBase: RecipeDoc = {
+      ...baseDoc,
+      line_items: [
+        baseDoc.line_items[0],
+        { id: 13, quantity: '300 g', ingredient_name: 'broccoli' },
+        { id: 12, quantity: '2 tbsp', ingredient_name: 'soy sauce' },
+      ],
+    }
+    const rows = groceryDisplayLines(swappedBase, reordered)!
+    // Every row's (name, quantity) pair co-occurs in the OVERLAY doc.
+    expect(rows.map((r) => `${r.quantity} ${r.name}`)).toEqual(
+      reordered.line_items.map((li) => `${li.quantity} ${li.ingredient_name}`),
+    )
+    // Keys follow the base ingredient each row BELONGS to (nameKey match
+    // first): the pasta row keys 'rotini pasta', the substituted soy row
+    // pairs the leftover base line positionally ('soy sauce'), and the
+    // broccoli row keys 'broccoli' wherever it moved.
+    expect(rows.map((r) => r.keyName)).toEqual(['rotini pasta', 'soy sauce', 'broccoli'])
+  })
+  test('a count-changing rework displays the overlay list; keys stay base where a counterpart exists', () => {
+    // Collapse: two base lines merged into one overlay line (GF rid 863's
+    // class). The unpaired base line is appended verbatim.
+    const collapsed = {
+      line_items: [
+        { quantity: '15 oz', ingredient_name: 'gluten-free rotini pasta' },
+        { quantity: '3 tbsp', ingredient_name: 'tamari soy sauce' },
+      ],
+      instructions: [],
+    }
+    const rows = groceryDisplayLines(baseDoc, collapsed)!
+    expect(rows).toEqual([
+      // rotini pairs the leftover base line positionally (its substituted
+      // name never matches a base nameKey)…
+      { keyName: 'rotini pasta', name: 'gluten-free rotini pasta', quantity: '15 oz' },
+      // …so does the tamari line (keyName from the base 'soy sauce' line,
+      // and the re-authored amount keys the base spelling)…
+      { keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '3 tbsp', keyQuantity: '2 tbsp' },
+      // …and broccoli has no overlay counterpart: base text verbatim.
+      { keyName: 'broccoli', name: 'broccoli', quantity: '300 g' },
+    ])
+  })
+  test('a split (overlay longer than base): the extra overlay row keys to itself', () => {
+    const split = {
+      line_items: [
+        { quantity: '15 oz', ingredient_name: 'gluten-free rotini pasta' },
+        { quantity: '2 tbsp', ingredient_name: 'tamari soy sauce' },
+        { quantity: '300 g', ingredient_name: 'broccoli' },
+        { quantity: '1 head', ingredient_name: 'butter lettuce' },
+      ],
+      instructions: [],
+    }
+    const rows = groceryDisplayLines(baseDoc, split)!
+    expect(rows[3]).toEqual({ keyName: 'butter lettuce', name: 'butter lettuce', quantity: '1 head' })
+    expect(rows).toHaveLength(4)
   })
   test('keys computed from the base line NEVER see the override', () => {
     // The contract: the grocery group key is nameKey(BASE name); the display
     // name is the overlay's. Line i's key and display stay a pair.
-    const names = groceryDisplayNames(baseDoc, overlay)!
+    const rows = groceryDisplayLines(baseDoc, overlay)!
     expect(nameKey(baseDoc.line_items[0].ingredient_name)).toBe(nameKey('rotini pasta'))
-    expect(names[0]).toBe('gluten-free rotini pasta')
-    expect(names[0]).not.toBe(baseDoc.line_items[0].ingredient_name)
+    expect(rows[0].name).toBe('gluten-free rotini pasta')
+    expect(rows[0].name).not.toBe(baseDoc.line_items[0].ingredient_name)
+    expect(rows[0].keyName).toBe(nameKey('rotini pasta'))
+  })
+})
+
+describe('groceryDisplayLines against the committed GF overlay (the fettuccine regression)', () => {
+  // GF rid 224 (Fettuccine Alfredo with Asparagus): upstream's metric rework
+  // swaps pasta and garlic lines. The bug shipped `6 cloves gluten-free
+  // fettuccine pasta` — base quantity under an overlay name, a pair in
+  // NEITHER doc.
+  const rid224 = (gfOverlay as { docs: Record<string, { line_items: { quantity: string; ingredient_name: string }[] }> }).docs['224']
+  const base224: RecipeDoc = {
+    ...baseDoc,
+    line_items: [
+      { id: 1, quantity: '3 small bunches', ingredient_name: 'asparagus' },
+      { id: 2, quantity: '354 ml', ingredient_name: 'chicken or vegetable broth' },
+      { id: 3, quantity: '510 g', ingredient_name: 'fettuccine pasta' },
+      { id: 4, quantity: '6 cloves', ingredient_name: 'garlic' },
+      { id: 5, quantity: '84 g', ingredient_name: 'Parmesan cheese' },
+      { id: 6, quantity: '354 ml', ingredient_name: 'whole milk' },
+      { id: 7, quantity: '', ingredient_name: 'all-purpose flour' },
+      { id: 8, quantity: '', ingredient_name: 'black pepper' },
+      { id: 9, quantity: '', ingredient_name: 'butter, unsalted' },
+      { id: 10, quantity: '', ingredient_name: 'salt' },
+    ],
+  }
+
+  test('the overlay itself is metric (no imperial quantity token survives)', () => {
+    // The parenthesised container annotation is exempt: upstream authors
+    // physical package sizes there even in metric renders — the base metric
+    // doc carries `1 ½ (3 oz) pkgs` alfalfa sprouts verbatim.
+    const annotation = /\([^)]*\)/g
+    for (const doc of Object.values((gfOverlay as { docs: Record<string, { line_items: { quantity: string }[] }> }).docs)) {
+      for (const li of doc.line_items) {
+        expect(li.quantity.replace(annotation, ' ')).not.toMatch(/\b(?:fl oz|oz|lbs?|pounds?)\b/)
+      }
+    }
+  })
+
+  test('the pasta row shows the substituted name with the METRIC quantity from the same doc', () => {
+    const rows = groceryDisplayLines(base224, rid224)!
+    const pasta = rows.find((r) => r.name === 'gluten-free fettuccine pasta')!
+    expect(pasta).toBeDefined()
+    expect(pasta.quantity).toBe('510 g')
+    // `6 cloves gluten-free fettuccine pasta` must never reappear.
+    expect(rows.some((r) => r.name.includes('fettuccine') && r.quantity === '6 cloves')).toBe(false)
+    // The garlic row is garlic, with garlic's own quantity.
+    const garlic = rows.find((r) => r.name === 'garlic')!
+    expect(garlic.quantity).toBe('6 cloves')
+  })
+
+  test('the checked key stays the BASE nameKey', () => {
+    const rows = groceryDisplayLines(base224, rid224)!
+    const pasta = rows.find((r) => r.name === 'gluten-free fettuccine pasta')!
+    expect(pasta.keyName).toBe(nameKey('fettuccine pasta'))
+    const garlic = rows.find((r) => r.name === 'garlic')!
+    expect(garlic.keyName).toBe(nameKey('garlic'))
   })
 })
 

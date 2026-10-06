@@ -95,6 +95,13 @@ interface UnitSum {
   /** First-seen unit spelling, used for display. */
   unit: string
   amount: number
+  /**
+   * The KEY spelling's parallel sum: the accumulation of every row's
+   * KEY quantity (the base doc's when the restriction seam supplied one).
+   * Equal to `amount` unless a re-authored overlay amount diverged — the
+   * checkbox key spells THIS, never the display sum.
+   */
+  keyAmount: number
 }
 
 /** Sum of container-unit contributions for one (container, annotation). */
@@ -111,6 +118,10 @@ interface ContainerSum {
    * is the only contributor — keeps `½ (142 g) pkg` authentic.
    */
   verbatim?: string
+  /** The KEY spelling's parallel sum/verbatim — see UnitSum.keyAmount. */
+  keyAmount: number
+  keyContributions: number
+  keyVerbatim?: string
 }
 
 interface Group {
@@ -134,14 +145,36 @@ export interface AggregateInput {
   /** nameKey-normalized ingredient keys hidden for THIS meal only. */
   cleared?: Set<string>
   /**
-   * Per-line display-name overrides (the restriction ADR), parallel to
-   * `doc.line_items`. ONLY the group's display name comes from here — the
-   * group key (`nameKey(item.ingredient_name)`), the quantities and the
-   * seasoning rule all stay the BASE line's, so a restriction toggle can
-   * never re-key checked state. Omitted (or per-line undefined) renders
-   * the base name.
+   * The restriction's display rows (the restriction ADR): when present, the
+   * grocery displays THESE instead of `doc.line_items` — each row's (name,
+   * quantity) pair co-occurs in ONE authoritative doc (the overlay, or the
+   * base where the overlay has no counterpart), so a display row is never a
+   * cross-pair of base quantity + overlay name. The group key stays the
+   * row's `keyName` — a BASE doc nameKey wherever a base counterpart was
+   * found — so a restriction toggle can never re-key checked state.
+   * Omitted renders the base doc as-is.
    */
-  displayNames?: (string | undefined)[]
+  displayLines?: RestrictedDisplayLine[]
+}
+
+/**
+ * One grocery display row (the restriction seam). `keyName` is already a
+ * `nameKey` — the aggregation key and the checked-key's name half. `name`
+ * and `quantity` come from the SAME source doc.
+ *
+ * `keyQuantity` carries the paired BASE line's quantity, present ONLY when
+ * upstream's rework re-authored the amount (the display quantity is the
+ * overlay's). The checkbox key's amount spelling derives from THIS — the
+ * base doc — so toggling the restriction re-renders the base quantity under
+ * the SAME key and a checked line survives the toggle. Absent (the common
+ * case): the key spelling follows `quantity`, exactly as the base render
+ * would spell it.
+ */
+export interface RestrictedDisplayLine {
+  keyName: string
+  name: string
+  quantity: string
+  keyQuantity?: string
 }
 
 /**
@@ -162,14 +195,22 @@ export interface AggregateInput {
 export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   const groups = new Map<string, Group>()
 
-  for (const { doc, factor, recipeName, cleared, displayNames } of inputs) {
+  for (const { doc, factor, recipeName, cleared, displayLines } of inputs) {
     // ADR-0009: seasonings scale sub-linearly against the recipe's own
     // authored serving count, so keep base/target, not just the ratio.
     const base = doc.serving_count
     const target = base * factor
-    for (let lineIndex = 0; lineIndex < doc.line_items.length; lineIndex++) {
-      const item = doc.line_items[lineIndex]
-      const normalized = nameKey(item.ingredient_name)
+    // The rows the grocery displays: the restriction's display rows when the
+    // overlay is active for this doc, else the base doc's own lines. Either
+    // way a row's (name, quantity) pair co-occurs in ONE authoritative doc.
+    const rows: readonly RestrictedDisplayLine[] = displayLines ??
+      doc.line_items.map((li) => ({
+        keyName: nameKey(li.ingredient_name),
+        name: li.ingredient_name,
+        quantity: li.quantity,
+      }))
+    for (const row of rows) {
+      const normalized = row.keyName
       if (!normalized) continue
       // Hidden for this meal (cleared from the grocery list) — skipped
       // entirely, other meals' contributions are aggregated separately.
@@ -177,7 +218,7 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       let group = groups.get(normalized)
       if (!group) {
         group = {
-          name: (displayNames?.[lineIndex] ?? item.ingredient_name).trim(),
+          name: row.name.trim(),
           byUnit: new Map(),
           containers: new Map(),
           raw: new Set(),
@@ -186,19 +227,38 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
         groups.set(normalized, group)
       }
       group.recipes.add(recipeName)
+      // The KEY spelling's own parse: the paired BASE quantity when the
+      // restriction seam re-authored the display amount, else the same
+      // string — so absent keyQuantity the two accumulations are identical
+      // and every key is byte-identical to the pre-restriction render.
+      const keySource = row.keyQuantity ?? row.quantity
+      const keyContainer = parseContainerQuantity(keySource)
       // ADR-0017: container units are bought whole — aggregate them before
       // the linear path so a serving bump rounds UP to a purchasable
       // container instead of inventing 1.7 packages.
-      const container = parseContainerQuantity(item.quantity)
+      const container = parseContainerQuantity(row.quantity)
       if (container) {
         const key = containerKey(container.container, container.annotation)
         const contribution = containerContribution(container.count, factor)
+        // The key side accumulates the BASE container when it is the same
+        // (container, annotation) — measured: every re-authored container
+        // amount keeps the upstream annotation — else it follows display.
+        const keyCount = keyContainer && containerKey(keyContainer.container, keyContainer.annotation) === key
+          ? keyContainer.count
+          : container.count
+        const keyRaw = keyContainer && containerKey(keyContainer.container, keyContainer.annotation) === key
+          ? keyContainer.raw
+          : container.raw
+        const keyContribution = containerContribution(keyCount, factor)
         const current = group.containers.get(key)
         if (current) {
           current.amount += contribution
           current.contributions += 1
           // A second contributor (or a scaled single one) drops verbatim text.
           current.verbatim = undefined
+          current.keyAmount += keyContribution
+          current.keyContributions += 1
+          current.keyVerbatim = undefined
         } else {
           group.containers.set(key, {
             container: container.container,
@@ -206,34 +266,51 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
             amount: contribution,
             contributions: 1,
             verbatim: contribution === container.count ? container.raw : undefined,
+            keyAmount: keyContribution,
+            keyContributions: 1,
+            keyVerbatim: keyContribution === keyCount ? keyRaw : undefined,
           })
         }
         continue
       }
-      const parsed = parseQuantity(item.quantity)
+      const parsed = parseQuantity(row.quantity)
       if (parsed) {
         const key = unitKey(parsed.unit)
+        const keyParsed = keyContainer ? null : parseQuantity(keySource)
         // ADR-0054: non-seasonings scale through the QUANTIZED grammar
         // (`scaleMetricAmount` — the same vocabulary recipe detail uses), so
         // the grocery sum and the recipe-detail chip can never disagree:
         // `2129 ml ×⅔` renders `1420 ml` on BOTH surfaces. Summing two
         // ½-quanta yields integers, so the aggregate keeps the vocabulary;
         // seasonings keep `recipe.scaleQuantity`'s sub-linear rule.
-        const scaled = isSeasoning(item.ingredient_name)
+        const scaled = isSeasoning(row.name)
           ? // ADR-0055: the sub-linear intermediate joins the same spoon
             // vocabulary as everywhere else — upstream never authors a
             // decimal spoon (`2.523 tsp` reads `2 ½ tsp`).
             quantizeSpoons(
-              scaleQuantity(parsed.amount, base, target, true, item.ingredient_name),
+              scaleQuantity(parsed.amount, base, target, true, row.name),
               parsed.unit,
             )
           : scaleMetricAmount(parsed.amount, factor, parsed.unit)
+        // The key side runs the SAME scale rule on the key source's amount.
+        // A key source that parses to a DIFFERENT unit follows the display
+        // unit (the parallel sums live under the display line's unit key).
+        const keyScaled = keyParsed && unitKey(keyParsed.unit) === key
+          ? isSeasoning(row.name)
+            ? quantizeSpoons(
+                scaleQuantity(keyParsed.amount, base, target, true, row.name),
+                keyParsed.unit,
+              )
+            : scaleMetricAmount(keyParsed.amount, factor, keyParsed.unit)
+          : scaled
         const current = group.byUnit.get(key)
-        if (current) current.amount += scaled
-        else group.byUnit.set(key, { unit: parsed.unit, amount: scaled })
+        if (current) {
+          current.amount += scaled
+          current.keyAmount += keyScaled
+        } else group.byUnit.set(key, { unit: parsed.unit, amount: scaled, keyAmount: keyScaled })
       } else {
         // Unparseable or empty quantity — pass through verbatim (may be '').
-        group.raw.add(item.quantity.trim())
+        group.raw.add(row.quantity.trim())
       }
     }
   }
@@ -241,22 +318,32 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   const items: GroceryItem[] = []
   for (const [normalized, group] of groups) {
     const lines: GroceryLine[] = []
-    for (const { unit, amount } of group.byUnit.values()) {
+    for (const { unit, amount, keyAmount } of group.byUnit.values()) {
       // ADR-0057: unit-aware rendering — integer ml/g, fraction glyphs.
       const display = unit
         ? `${formatMetricAmount(amount, unit)} ${unit}`
         : formatMetricAmount(amount, '')
       // The KEY stays on formatAmount's decimal spelling — the spelling
       // every persisted `checked` key already uses — so the glyph render
-      // never re-keys a fractional line (`67.5 ml` vs `67 ½ ml`).
-      lines.push({ key: `${normalized}||${lineKeyBasis(amount, unit)}`, display })
+      // never re-keys a fractional line (`67.5 ml` vs `67 ½ ml`). The
+      // spelling is the KEY sum's (the base doc's when the restriction seam
+      // re-authored the amount), never the display sum's.
+      lines.push({ key: `${normalized}||${lineKeyBasis(keyAmount, unit)}`, display })
     }
-    for (const { container, annotation, amount, verbatim } of group.containers.values()) {
+    for (const {
+      container,
+      annotation,
+      amount,
+      verbatim,
+      keyAmount,
+      keyVerbatim,
+    } of group.containers.values()) {
       // A single meal at its authored servings keeps the recipe's own text
       // (`½ (142 g) pkg`); every other case renders the merged count, whole
       // (`1 (142 g) pkg`, `2 (142 g) pkgs`) or fractional (`3/2 small bunch`).
       const display = verbatim ?? formatContainerQuantity(amount, container, annotation)
-      lines.push({ key: `${normalized}||${display}`, display })
+      const keyBasis = keyVerbatim ?? formatContainerQuantity(keyAmount, container, annotation)
+      lines.push({ key: `${normalized}||${keyBasis}`, display })
     }
     // Sort summed lines numerically for stable, readable output.
     lines.sort((a, b) => {

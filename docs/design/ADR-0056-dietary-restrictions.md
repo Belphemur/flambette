@@ -25,7 +25,7 @@ The restriction archive (ADR-0055's machinery, extended by
 | restriction id map | 1 Gluten · 2 Dairy · 3 Fish · 4 Shellfish · 5 Peanut · 6 Tree Nut · 9 Soy · 10 Nightshade · 11 Egg · 12 Sesame · 13 Mustard · 14 Sulfite (7, 8 exist upstream, are unused, and `set_profile` **404s** on them) |
 | shared recipes | line-item structure mostly survives, and the rework is upstream's own: names swap per recipe (`rotini pasta` → `gluten-free rotini pasta`; `soy sauce` → `tamari soy sauce` in one doc, `coconut aminos` in another), step prose changes only where it names the swap |
 | line-item COUNTS are NOT invariant under a rework | 444 of 1,649 changed docs moved the count: a protein substituted away vanishes (GF rid 863: shrimp → *eggs*, fish sauce + soy sauce → one `tamari soy sauce`, 16 → 15 lines) and one line can split into two (GF rid 1292: flour tortilla → avocados + butter lettuce, 15 → 16) |
-| line ORDER is stable | 99.91% positional name agreement between the US and metric renders of the same recipe (34,832 lines); zero pure reorders |
+| line ORDER is stable | 99.91% positional name agreement between the US and metric renders of the same recipe (34,832 lines); zero pure reorders *(CORRECTED 2026-10-07 — the metric archive found pure reorders: GF rids 224, 235 and 2195 swap their pasta/garlic/tomato lines. See the change note.)* |
 | changed-doc detection needs no fetch | the payload's `ingredient_names` differ from the unrestricted baseline iff the doc was reworked |
 
 Also measured the hard way: `set_profile` applies ASYNC — a fetch 2 s
@@ -134,6 +134,41 @@ raced payload fails the build loudly instead of shipping a wrong
 * The archived US/6 renders and the committed metric catalog can drift as
   upstream publishes: rerunning the archiver + builder refreshes both,
   and the `all-free`/`none` baselines re-pull with them.
+
+## Change note (2026-10-07, PR #54 fixes)
+
+Two owner-reported bugs corrected the record above without changing the
+architecture:
+
+1. **The overlays are now the METRIC family (Decision 9 corrected).** The
+   first archive pulled US/6 payloads, and the runtime swapped whole
+   `line_items` in — so a metric/dual device displayed a restricted recipe
+   stuck in imperial (`24 fl oz chicken or vegetable broth`). The archiver
+   re-pulled every restriction profile with `unit_family_id: 1` (Metric),
+   `serving_count: 6` (`<slug>-m6.json`; the `-us6` payloads stay on disk),
+   and the build consumes them: overlay quantities are upstream's own metric
+   renderings (`425 g`, was `15 oz`) and flow through `localizeQuantity`
+   exactly like base lines. The `removed` sets are IDENTICAL between the two
+   unit families (measured 12/12) — units don't change feasibility — and a
+   golden pins that. No imperial measurement token survives in any overlay
+   quantity; the parenthesised container annotation is exempt (upstream
+   authors physical package sizes there even in metric renders — the base
+   metric doc says `1 ½ (3 oz) pkgs` alfalfa sprouts verbatim).
+
+2. **Positional-only grocery pairing is gone (Decision 3 refined).** The
+   "zero pure reorders" measurement above was wrong: reworks can REORDER
+   lines, and pairing the overlay NAME positionally onto base lines once
+   displayed `6 cloves gluten-free fettuccine pasta` — a (name, quantity)
+   pair that appears in NEITHER doc. `groceryDisplayLines` replaces
+   `groceryDisplayNames`: the SAFE case (counts equal AND per-index
+   quantities equal) keeps the positional name override; the MISMATCH class
+   displays the overlay's OWN line list (name + quantity from one doc — the
+   invariant), keys staying BASE-derived: nameKey match first, positional
+   among the leftovers, self-keyed for a split's extra line, base-verbatim
+   for a collapse. When upstream re-authored the AMOUNT of a matched pair
+   (measured: 211 matched-pair quantity diffs), the row carries the base
+   `keyQuantity` so the checkbox key's amount spelling stays the base doc's
+   and a check survives the toggle.
 
 ## Alternatives considered
 

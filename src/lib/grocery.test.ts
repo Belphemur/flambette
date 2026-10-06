@@ -128,14 +128,17 @@ describe('grocery key basis — ADR-0055 glyphs never re-key a checked line', ()
 
 /* ---------- Dietary restrictions: the key/display split ---------- */
 
-describe('aggregateGroceries displayNames (the restriction ADR)', () => {
+describe('aggregateGroceries displayLines (the restriction ADR)', () => {
   const gfDoc = doc('Pasta Night', 6, [['15 oz', 'rotini pasta'], ['2 tbsp', 'soy sauce']])
 
   test('a swapped ingredient groups under the ORIGINAL nameKey but renders the substituted name', () => {
     const inputs: AggregateInput[] = [
       {
         ...input(gfDoc, 1),
-        displayNames: ['gluten-free rotini pasta', 'tamari soy sauce'],
+        displayLines: [
+          { keyName: 'rotini pasta', name: 'gluten-free rotini pasta', quantity: '15 oz' },
+          { keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '2 tbsp' },
+        ],
       },
     ]
     const items = aggregateGroceries(inputs)
@@ -150,7 +153,13 @@ describe('aggregateGroceries displayNames (the restriction ADR)', () => {
   test('a substituted line still MERGES with the same base ingredient from another meal', () => {
     const plainDoc = doc('Stir Fry', 6, [['2 tbsp', 'soy sauce']])
     const inputs: AggregateInput[] = [
-      { ...input(gfDoc, 1), displayNames: ['gluten-free rotini pasta', 'tamari soy sauce'] },
+      {
+        ...input(gfDoc, 1),
+        displayLines: [
+          { keyName: 'rotini pasta', name: 'gluten-free rotini pasta', quantity: '15 oz' },
+          { keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '2 tbsp' },
+        ],
+      },
       input(plainDoc, 1),
     ]
     const soy = aggregateGroceries(inputs).find((i) => i.normalized === 'soy sauce')
@@ -163,7 +172,10 @@ describe('aggregateGroceries displayNames (the restriction ADR)', () => {
     const inputs: AggregateInput[] = [
       {
         ...input(gfDoc, 1),
-        displayNames: ['gluten-free rotini pasta', 'tamari soy sauce'],
+        displayLines: [
+          { keyName: 'rotini pasta', name: 'gluten-free rotini pasta', quantity: '15 oz' },
+          { keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '2 tbsp' },
+        ],
         cleared: new Set(['soy sauce']),
       },
     ]
@@ -177,5 +189,68 @@ describe('aggregateGroceries displayNames (the restriction ADR)', () => {
     expect(displays([input(gfDoc, 1)], 'rotini pasta')).toEqual(['15 oz'])
     const items = aggregateGroceries([input(gfDoc, 1)])
     expect(items.find((i) => i.normalized === 'rotini pasta')?.name).toBe('rotini pasta')
+  })
+
+  test('a display row is NEVER a cross-pair: its name and quantity come from one doc', () => {
+    // The mis-pairing bug class: `6 cloves gluten-free fettuccine pasta`
+    // (base quantity under an overlay name). A display row carries BOTH from
+    // the same source, so the aggregation can only ever render pairs that
+    // co-occur in one authoritative doc.
+    const inputs: AggregateInput[] = [
+      {
+        ...input(gfDoc, 1),
+        displayLines: [
+          { keyName: 'rotini pasta', name: 'gluten-free rotini pasta', quantity: '425 g' },
+          { keyName: 'soy sauce', name: 'tamari soy sauce', quantity: '2 tbsp' },
+        ],
+      },
+    ]
+    const pasta = aggregateGroceries(inputs).find((i) => i.normalized === 'rotini pasta')
+    expect(pasta?.name).toBe('gluten-free rotini pasta')
+    expect(displays(inputs, 'rotini pasta')).toEqual(['425 g'])
+  })
+
+  test('a re-authored overlay amount DISPLAYS the overlay quantity but KEYS the base spelling', () => {
+    // Upstream re-authors amounts too (GF rid 1155: `6` eggs -> `12` eggs).
+    // The display follows the overlay; the checkbox key derives from the
+    // BASE line, so toggling the restriction renders the base quantity under
+    // the SAME key and the check survives.
+    const inputs: AggregateInput[] = [
+      {
+        ...input(gfDoc, 1),
+        displayLines: [
+          { keyName: 'egg', name: 'eggs', quantity: '12', keyQuantity: '6' },
+        ],
+      },
+    ]
+    const agg = aggregateGroceries(inputs)
+    expect(agg.find((i) => i.normalized === 'egg')?.lines[0].display).toBe('12')
+    // The base render's own key, derived independently:
+    const baseInputs: AggregateInput[] = [input(doc('Plain', 6, [['6', 'eggs']]), 1)]
+    const baseKey = aggregateGroceries(baseInputs).find((i) => i.normalized === 'egg')!.lines[0].key
+    expect(agg.find((i) => i.normalized === 'egg')?.lines[0].key).toBe(baseKey)
+  })
+
+  test('a re-authored container amount keys on the base container spelling', () => {
+    const inputs: AggregateInput[] = [
+      {
+        ...input(gfDoc, 1),
+        displayLines: [
+          {
+            keyName: 'mozzarella cheese',
+            name: 'mozzarella cheese',
+            quantity: '1 ½ (227 g) blocks',
+            keyQuantity: '1 (227 g) block',
+          },
+        ],
+      },
+    ]
+    const agg = aggregateGroceries(inputs)
+    expect(agg.find((i) => i.normalized === 'mozzarella cheese')?.lines[0].display).toBe(
+      '1 ½ (227 g) blocks',
+    )
+    const baseInputs: AggregateInput[] = [input(doc('Plain', 6, [['1 (227 g) block', 'mozzarella cheese']]), 1)]
+    const baseKey = aggregateGroceries(baseInputs).find((i) => i.normalized === 'mozzarella cheese')!.lines[0].key
+    expect(agg.find((i) => i.normalized === 'mozzarella cheese')?.lines[0].key).toBe(baseKey)
   })
 })

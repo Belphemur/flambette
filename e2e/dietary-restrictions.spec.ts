@@ -159,3 +159,88 @@ test('the grocery row shows the substituted name and the checkbox key survives u
   // The substituted name survives the reload too.
   await expect(reloaded.getByText(SWAPPED).first()).toBeVisible()
 })
+
+/* ---------- The metric-overlay + no-cross-pair brief (GF rid 224) ----------
+ *
+ * The first archive pulled US/6 payloads and the overlays swapped whole
+ * `line_items` in, so a metric/dual device showed a restricted recipe stuck
+ * in imperial (`24 fl oz chicken or vegetable broth`, `18 oz gluten-free
+ * fettuccine pasta`). And because upstream's rework REORDERS lines (pasta <->
+ * garlic), the grocery once displayed `6 cloves gluten-free fettuccine
+ * pasta` — a (name, quantity) pair that appears in NEITHER doc.
+ */
+const FETTUCCINE = /Fettuccine Alfredo with Asparagus/
+const GF_FETTUCCINE = 'gluten-free fettuccine pasta'
+
+async function openRestrictedDetail(page: Page): Promise<ReturnType<Page['getByRole']>> {
+  await page.goto('/recipes')
+  await waitForCatalog(page)
+  await searchRecipes(page, 'alfredo')
+  await cardFor(page, FETTUCCINE).first().click()
+  const sheet = page.getByRole('dialog')
+  await expect(sheet).toBeVisible()
+  return sheet
+}
+
+test('a metric device shows the restricted detail in metric — never the archived US overlay', async ({
+  page,
+}) => {
+  await activateGlutenFree(page)
+  await page.goto('/settings')
+  await page.getByTestId('unit-system-metric').click()
+  await expect(page.getByTestId('unit-system-metric')).toHaveAttribute('aria-pressed', 'true')
+
+  const sheet = await openRestrictedDetail(page)
+  // Upstream's own METRIC restricted rendering — the base catalog's native
+  // units, flowing through localizeQuantity like every base line. The US
+  // archive's `24 fl oz` / `18 oz` must never surface.
+  await expect(sheet.getByText('354 ml').first()).toBeVisible()
+  await expect(sheet.getByText('510 g').first()).toBeVisible()
+  await expect(sheet.getByText(GF_FETTUCCINE).first()).toBeVisible()
+  await expect(sheet.getByText(/fl oz| oz | lb /)).toHaveCount(0)
+})
+
+test('dual mode shows the authored metric notation too (the overlay is metric)', async ({
+  page,
+}) => {
+  await activateGlutenFree(page)
+  await page.goto('/settings')
+  await page.getByTestId('unit-system-dual').click()
+  await expect(page.getByTestId('unit-system-dual')).toHaveAttribute('aria-pressed', 'true')
+
+  // Dual is the IDENTITY (ADR-0047): the catalog text exactly as authored —
+  // and the overlay is now metric, so the authored strings are metric.
+  const sheet = await openRestrictedDetail(page)
+  await expect(sheet.getByText('354 ml').first()).toBeVisible()
+  await expect(sheet.getByText('510 g').first()).toBeVisible()
+  await expect(sheet.getByText(/fl oz| oz | lb /)).toHaveCount(0)
+})
+
+test('the grocery row pairs the substituted name with ITS OWN metric quantity (no cross-pair)', async ({
+  page,
+}) => {
+  await activateGlutenFree(page)
+  const sheet = await openRestrictedDetail(page)
+  await sheet.getByTestId('add-to-plan').click()
+  await page.keyboard.press('Escape')
+
+  await gotoTab(page, 'Grocery')
+  // The (name, quantity) pair must co-occur in ONE authoritative doc: the
+  // metric overlay's `510 g gluten-free fettuccine pasta`. The mis-pairing
+  // bug — `6 cloves gluten-free fettuccine pasta`, the base garlic quantity
+  // under the overlay pasta name — appears in NEITHER doc and must never
+  // render.
+  const row = page.getByTestId('grocery-row').filter({ hasText: GF_FETTUCCINE }).first()
+  await expect(row).toBeVisible()
+  await expect(row).toContainText('510 g')
+  await expect(page.getByTestId('grocery-row').filter({ hasText: /6 cloves.*fettuccine/ })).toHaveCount(0)
+  // The garlic row is garlic, with garlic's own quantity. (The quantity and
+  // name are separate flex spans: the row's innerText has NO space between
+  // them — '6 clovesgarlic' — so filter on both substrings.)
+  const garlic = page
+    .getByTestId('grocery-row')
+    .filter({ hasText: '6 cloves' })
+    .filter({ hasText: 'garlic' })
+    .first()
+  await expect(garlic).toBeVisible()
+})

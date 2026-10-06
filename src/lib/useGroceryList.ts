@@ -16,7 +16,7 @@ import {
 import { usePlanStore } from '../stores/plan'
 import { useGroceryStore } from '../stores/grocery'
 import { useUiStore } from '../stores/ui'
-import { groceryDisplayNames } from './restrictions'
+import { groceryDisplayLines } from './restrictions'
 import { useRestrictions } from '../composables/useRestrictions'
 
 /**
@@ -29,8 +29,9 @@ export function useGroceryList() {
   const checked = useGroceryStore()
   const ui = useUiStore()
   // Dietary restrictions (the restriction ADR): the grocery list shows the
-  // substituted ingredient NAME when upstream's rework kept the line count,
-  // while keys/quantities stay the base doc's (the key/display split).
+  // substituted ingredient names AND quantities from the same source doc
+  // (the metric overlay), while every key stays the base doc's (the
+  // key/display split).
   const restrictionPrefs = useRestrictions()
   watch(
     () => restrictionPrefs.activeIds.value,
@@ -62,7 +63,7 @@ export function useGroceryList() {
           factor: entryServings(meta.id) / doc.serving_count,
           recipeName: meta.name,
           cleared: cleared?.length ? new Set(cleared) : undefined,
-          displayNames: groceryDisplayNames(doc, restrictionPrefs.overlayFor(doc.recipe_id))
+          displayLines: groceryDisplayLines(doc, restrictionPrefs.overlayFor(doc.recipe_id))
             ?? undefined,
         },
       ]

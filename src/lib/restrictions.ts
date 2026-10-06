@@ -17,14 +17,24 @@
  * BASE doc's nameKey, so toggling a restriction can never orphan or uncheck a
  * saved item. Concretely: `restrictedDocView` (recipe detail, cooking view,
  * measured chips) replaces `line_items`/`instructions` wholesale, while
- * `groceryDisplayNames` keeps the base line as the key/quantity basis and
- * overrides ONLY the group's display name, positionally.
+ * `groceryDisplayLines` builds the grocery's display rows so a row's (name,
+ * quantity) pair ALWAYS co-occurs in one authoritative doc (the overlay, or
+ * the base where the overlay has no counterpart) — never a cross-pair of base
+ * quantity under an overlay name.
+ *
+ * WHY NOT POSITIONAL-ONLY: upstream's rework can REORDER lines within a
+ * reworked doc (measured live: GF rid 224 swaps its pasta and garlic lines),
+ * so pairing names by position alone once displayed `6 cloves gluten-free
+ * fettuccine pasta` — a pair that appears in NEITHER doc. The pairing below
+ * matches by nameKey first (the same ingredient wherever it moved), falls
+ * back positionally on the leftovers, and keeps unpaired base lines verbatim.
  *
  * Pure lib: no Vue, no Pinia, no fetch at module scope. The one async piece
  * (`loadOverlay`) takes the fetch + base URL as parameters so bun-test can
  * exercise it without an environment.
  */
 
+import { nameKey, type RestrictedDisplayLine } from './grocery'
 import type { LineItem, RecipeDoc, RecipeInstruction } from './types'
 
 /* ---------- The control plane (committed artifact) ---------- */
@@ -160,52 +170,143 @@ export function overlayDocFor(
 /* ---------- The restricted doc view (display truth) ---------- */
 
 /**
+ * Pair overlay rows to base rows by INDEX: pass 1 matches the SAME nameKey
+ * (the same ingredient wherever upstream moved it), pass 2 pairs the
+ * leftover overlay rows positionally with the leftover base rows in order.
+ * The return is per-overlay-row: the paired base row's index, or -1 when the
+ * overlay row has no base counterpart (a split's extra line).
+ */
+function pairOverlayToBase(baseKeys: readonly string[], ovKeys: readonly string[]): number[] {
+  const usedBase = new Set<number>()
+  const pairOf = new Array<number>(ovKeys.length).fill(-1)
+  for (let i = 0; i < ovKeys.length; i++) {
+    if (!ovKeys[i]) continue
+    const j = baseKeys.findIndex((k, idx) => !usedBase.has(idx) && k === ovKeys[i])
+    if (j !== -1) {
+      pairOf[i] = j
+      usedBase.add(j)
+    }
+  }
+  const leftover = baseKeys.map((_, j) => j).filter((j) => !usedBase.has(j))
+  let next = 0
+  for (let i = 0; i < ovKeys.length; i++) {
+    if (pairOf[i] !== -1 || next >= leftover.length) continue
+    pairOf[i] = leftover[next]
+    usedBase.add(leftover[next])
+    next += 1
+  }
+  return pairOf
+}
+
+/**
  * The recipe doc as it displays under the active restrictions: the overlay's
  * `line_items` + `instructions` replace the base's wholesale (upstream's own
  * restricted rendering, quantities verbatim); everything else stays from the
  * base. `null` overlay returns the base doc unchanged.
  *
  * Overlay line items carry no `id` (the overlay is keyed by recipe, not by
- * line). The view synthesizes one from the BASE line positionally — line
- * order is stable across upstream's renders (measured: 99.91% positional
- * name agreement between the US and metric renders) — falling back to a
- * negative index for the rare reworked doc whose line count changed.
+ * line). The view synthesizes one from the BASE doc: positionally when the
+ * count AND per-index quantities agree (the safe case), else by pairing the
+ * ingredient to the base line it belongs to (nameKey match first, then
+ * positional among the leftovers), with a negative index for an overlay line
+ * that has no base counterpart.
  */
 export function restrictedDocView(doc: RecipeDoc, overlay: OverlayDoc | null): RecipeDoc {
   if (!overlay) return doc
   const baseIds = doc.line_items.map((li) => li.id)
+  // Upstream's rework can REORDER lines within a reworked doc (measured live:
+  // GF rid 224 swaps its pasta and garlic lines), so the base line ids are
+  // only trustworthy positionally when BOTH the count and the per-index
+  // quantity agree — the same safe-positional test the grocery seam uses.
+  // Otherwise each base id follows the ingredient it belongs to (nameKey
+  // match first, positional among the leftovers), so a measured chip and the
+  // line naming it stay the same ingredient — never base quantity with an
+  // overlay name.
+  const positional =
+    overlay.line_items.length === baseIds.length &&
+    overlay.line_items.every(
+      (li, i) => li.quantity.trim() === doc.line_items[i].quantity.trim(),
+    )
+  const pairOf = positional
+    ? overlay.line_items.map((_, i) => (i < baseIds.length ? i : -1))
+    : pairOverlayToBase(
+        doc.line_items.map((li) => nameKey(li.ingredient_name)),
+        overlay.line_items.map((li) => nameKey(li.ingredient_name)),
+      )
   const line_items: LineItem[] = overlay.line_items.map((li, i) => ({
-    id: i < baseIds.length ? baseIds[i] : -(i + 1),
+    id: pairOf[i] === -1 ? -(i + 1) : baseIds[pairOf[i]],
     quantity: li.quantity,
     ingredient_name: li.ingredient_name,
   }))
   return { ...doc, line_items, instructions: overlay.instructions }
 }
 
-/* ---------- The grocery seam (keys stay base, names may swap) ---------- */
+/* ---------- The grocery seam (keys stay base, display follows the overlay) ---------- */
 
 /**
- * Per-line DISPLAY names for the grocery aggregation, or null when the base
- * doc should render as-is.
+ * The grocery's display rows for this recipe, or null when the base doc
+ * should render as-is.
  *
- * Only a doc whose rework kept the line COUNT is substituted here: line order
- * is stable across renders, so base line i and overlay line i are the same
- * ingredient. A rework that moved the count (a protein substituted away, one
- * line split into two — measured on real docs) has no trustworthy line
- * mapping, so the grocery list keeps the base text for that doc; the recipe
- * detail and cooking view still show upstream's full rework. Keeping this
- * conservative is what makes the KEY half of the split unconditional: keys
- * are computed from the base line, always.
+ * THE SAFE POSITIONAL CASE — overlay line count == base line count AND every
+ * index's quantity string is equal (or both empty): base line i and overlay
+ * line i are the same ingredient, so the row keys on the BASE nameKey,
+ * displays the overlay's name and the (identical) quantity. Unchanged names
+ * return null — no override, byte-identical to the base render.
+ *
+ * THE MISMATCH CLASS — anything else (a reorder, a substituted-away line that
+ * collapsed two lines into one, a split): names are NOT overridden
+ * positionally. The overlay's OWN line list is displayed instead — the
+ * overlay is metric, so its quantities are correct — while each row's key
+ * stays a BASE doc nameKey: pass 1 pairs overlay rows to base rows with the
+ * SAME nameKey (the same ingredient wherever it moved), pass 2 pairs the
+ * leftovers positionally in order, and an overlay row with no base
+ * counterpart (a split's extra line) keys to itself. A base line with no
+ * overlay counterpart (a collapse) is appended verbatim.
+ *
+ * The invariant this preserves: a grocery row's (name, quantity) pair always
+ * co-occurs in ONE authoritative doc — never `6 cloves gluten-free fettuccine
+ * pasta`, which appears in neither.
  */
-export function groceryDisplayNames(doc: RecipeDoc, overlay: OverlayDoc | null): string[] | null {
-  if (!overlay || overlay.line_items.length !== doc.line_items.length) return null
-  let changed = false
-  const names = overlay.line_items.map((li, i) => {
-    const base = doc.line_items[i]
-    if (li.ingredient_name !== base.ingredient_name) changed = true
-    return li.ingredient_name
+export function groceryDisplayLines(
+  doc: RecipeDoc,
+  overlay: OverlayDoc | null,
+): RestrictedDisplayLine[] | null {
+  if (!overlay) return null
+  const base = doc.line_items
+  const ov = overlay.line_items
+  if (
+    ov.length === base.length &&
+    ov.every((li, i) => li.quantity.trim() === base[i].quantity.trim())
+  ) {
+    let changed = false
+    const rows = ov.map((li, i) => {
+      if (li.ingredient_name !== base[i].ingredient_name) changed = true
+      return { keyName: nameKey(base[i].ingredient_name), name: li.ingredient_name, quantity: base[i].quantity }
+    })
+    return changed ? rows : null
+  }
+
+  const baseKeys = base.map((li) => nameKey(li.ingredient_name))
+  const ovKeys = ov.map((li) => nameKey(li.ingredient_name))
+  const pairOf = pairOverlayToBase(baseKeys, ovKeys)
+  const rows = ov.map((li, i) => {
+    const j = pairOf[i]
+    if (j === -1) {
+      // An overlay row with no base counterpart keys to itself.
+      return { keyName: ovKeys[i], name: li.ingredient_name, quantity: li.quantity }
+    }
+    const keyQuantity =
+      base[j].quantity.trim() === li.quantity.trim() ? undefined : base[j].quantity
+    return { keyName: baseKeys[j], name: li.ingredient_name, quantity: li.quantity, keyQuantity }
   })
-  return changed ? names : null
+  // Base lines with no overlay counterpart keep the base text verbatim.
+  const usedBase = new Set(pairOf.filter((j) => j !== -1))
+  for (let j = 0; j < base.length; j++) {
+    if (!usedBase.has(j)) {
+      rows.push({ keyName: baseKeys[j], name: base[j].ingredient_name, quantity: base[j].quantity })
+    }
+  }
+  return rows
 }
 
 /* ---------- Overlay loading (lazy, per active slug) ---------- */
