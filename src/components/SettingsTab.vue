@@ -354,7 +354,17 @@ async function importMealimeFavourites(): Promise<void> {
     ui.showToast(`Couldn't import — ${parsed.error}`, { kind: 'error', duration: 6000 })
     return
   }
-  const catalog = await getCatalog()
+  let catalog
+  try {
+    catalog = await getCatalog()
+  } catch {
+    // The catalog failed to load — say so; an import is not possible yet.
+    ui.showToast("Couldn't import — the recipe catalog failed to load. Try again once you're online.", {
+      kind: 'error',
+      duration: 6000,
+    })
+    return
+  }
   // Mealime-catalog entries ONLY: a Mealime favourite must never star the
   // household's own recipes (ADR-0054, ids at or above USER_RECIPE_ID_BASE),
   // and a household recipe sharing a name must not make a Mealime name
