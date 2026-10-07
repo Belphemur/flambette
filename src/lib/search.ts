@@ -451,9 +451,14 @@ export async function searchWithIndex(
   }
 
   // Bare query: AND primary + OR fallback
-  const primary = await searchCombine(idx, ast, 'AND', getDocs)
+  // The primary is a LITERAL AND (prefix ok, fuzzy OFF): with fuzzy 0.2 a
+  // 4-letter term tolerates 1 edit, so "pork" matched "york" ("New York
+  // strip") and beef recipes surfaced for "rice pork". Forgiveness lives
+  // in the OR fallback below the divider, where it cannot masquerade as
+  // an all-words match.
+  const primary = await searchCombine(idx, ast, 'AND', getDocs, true)
   if (primary.length < DISPLAY_WINDOW) {
-    const orIds = await searchCombine(idx, ast, 'OR', getDocs)
+    const orIds = await searchCombine(idx, ast, 'OR', getDocs, false)
     const fallback = orIds.filter((id) => !primary.includes(id))
     return { primary, fallback }
   }
@@ -616,6 +621,7 @@ async function searchCombine<T>(
   ast: SearchAst,
   combine: 'AND' | 'OR',
   _getDocs: () => SearchDoc[],
+  exactTerms = false,
 ): Promise<number[]> {
   const positiveTexts: string[] = []
   const negativeTexts: string[] = []
@@ -639,7 +645,9 @@ async function searchCombine<T>(
     fields: SEARCH_FIELDS,
     combineWith: combine,
     prefix: true,
-    fuzzy: 0.2,
+    // exactTerms (the AND-primary pass) keeps word identity: fuzzy 0.2 on
+    // a 4-letter term tolerates 1 edit and "pork" matched "york".
+    fuzzy: exactTerms ? false : 0.2,
     boost: { name: 2 },
   })
   const results = allResults.map((r) => r.id as number)

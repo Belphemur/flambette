@@ -586,4 +586,22 @@ describe('review fixes: negation, groups, adjacency scope', () => {
     const result = await searchWithIndex(index, '"tomato soup"', docs)
     expect(result.primary).toContain(1)
   })
+
+  test('bare AND primary is literal: "pork" does not fuzzy-match "york"', async () => {
+    const docs = [
+      // has "rice" (jasmine rice) and "york" — NO pork token
+      buildSearchDoc(makeMeta(1, 'Baked Sesame Beef with Broccoli & Rice', [
+        'broccoli', 'jasmine rice', 'striploin (New York strip) steak', 'sesame seeds',
+      ])),
+      buildSearchDoc(makeMeta(2, 'Pork & Rice Bowl', ['pork', 'jasmine rice'])),
+    ]
+    const index = makeIndex(docs)
+    const result = await searchWithIndex(index, 'rice pork', docs)
+    expect(result.primary).toContain(2)
+    // "york" is within fuzzy 0.2 of "pork" (1 edit on 4 letters) — the
+    // AND primary must not accept it; the fuzzy match may only appear
+    // in the OR fallback below the divider.
+    expect(result.primary).not.toContain(1)
+    expect(result.fallback).toContain(1)
+  })
 })
