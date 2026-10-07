@@ -78,6 +78,15 @@ function tokenize(query: string): { tokens: string[]; balanced: boolean } {
       continue
     }
 
+    // `+`/`-` sign directly in front of a quoted phrase: capture it so
+    // `-`"garlic bread"` tokenizes as one token instead of a bare `-`
+    // followed by a positive phrase.
+    let sign = ''
+    if ((query[i] === '-' || query[i] === '+') && query[i + 1] === '"') {
+      sign = query[i]!
+      i++
+    }
+
     // Double-quoted phrase
     if (query[i] === '"') {
       i++
@@ -87,15 +96,16 @@ function tokenize(query: string): { tokens: string[]; balanced: boolean } {
         i++
       }
       if (i >= n) {
-        tokens.push('"' + phrase)
+        tokens.push(sign + '"' + phrase)
         return { tokens, balanced: false }
       }
       i++
-      if (phrase.length > 0) tokens.push('"' + phrase + '"')
+      if (phrase.length > 0) tokens.push(sign + '"' + phrase + '"')
       continue
     }
 
     if (query[i] === '(' || query[i] === ')') {
+      if (sign) tokens.push(sign)
       tokens.push(query[i]!)
       i++
       continue
@@ -138,7 +148,7 @@ function tokenize(query: string): { tokens: string[]; balanced: boolean } {
  *   term       := '"phrase"' | '+' term | '-' term | term '*' | term
  *
  * Unbalanced quotes/parens degrade to literal terms (never throws).
- * `-term` at the very start of the query behaves as an ordinary term.
+ * A query that is ONLY negations subtracts from the whole catalog.
  */
 export function parseSearchQuery(query: string): SearchAst {
   if (!query.trim()) return []
@@ -151,9 +161,13 @@ export function parseSearchQuery(query: string): SearchAst {
   }
 
   let pos = 0
-  const firstToken = tokens[0]!
 
-  function parseOrClause(): SearchClause {
+  /**
+   * One OR-separated clause sequence. `inGroup` stops the scan at `)`
+   * (the group's own loop consumes it); at the top level a stray `)` is
+   * an unexpected token the caller handles.
+   */
+  function parseOrClause(inGroup: boolean): SearchClause {
     const andClauses = [parseAndClause()]
     let hadExplicitAnd = false
     while (pos < tokens.length) {
@@ -162,6 +176,8 @@ export function parseSearchQuery(query: string): SearchAst {
         pos++
         andClauses.push(parseAndClause())
       } else if (tokens[pos] === 'OR') {
+        break
+      } else if (tokens[pos] === ')' && inGroup) {
         break
       } else {
         // Implicit AND between adjacent terms (no explicit operator)
@@ -179,16 +195,17 @@ export function parseSearchQuery(query: string): SearchAst {
 
     if (tokens[pos] === '(') {
       pos++ // consume '('
-      // Parse inner clauses with a ')' stop condition. Inside parens, clauses
-      // are OR'd by default (lentil OR soup) — this is the standard behavior.
-      const inner: SearchClause[] = [parseInnerAnd()]
+      // Inside parens the SAME grammar applies (ADR-0060: nested groups
+      // with the same operators): explicit AND/OR are honored, adjacent
+      // terms are implicit AND, and top-level ORs separate clauses. The
+      // group's combine is OR only when the user actually typed OR.
+      const inner: SearchClause[] = [parseOrClause(true)]
       while (pos < tokens.length && tokens[pos] !== ')') {
         if (tokens[pos] === 'OR') {
           pos++ // consume OR
-          inner.push(parseInnerAnd())
+          inner.push(parseOrClause(true))
         } else {
-          // Implicit AND or explicit AND inside parens
-          inner.push(parseInnerAnd())
+          break // defensive: parseOrClause consumed everything it could
         }
       }
       if (pos < tokens.length && tokens[pos] === ')') pos++ // consume ')'
@@ -196,17 +213,13 @@ export function parseSearchQuery(query: string): SearchAst {
       return { type: 'group', combine: 'OR', explicit: true, clauses: inner }
     }
 
-    return { type: 'term', term: parseTerm() }
-  }
-
-  /** Parse a clause inside parentheses (handles nested parens via parseAndClause). */
-  function parseInnerAnd(): SearchClause {
-    if (pos >= tokens.length) {
+    if (tokens[pos] === ')') {
+      // Encountered by inGroup=false only (the group loop consumes its
+      // own); treat as a literal so the parser never throws.
+      pos++
       return { type: 'term', term: literalTerm('') }
     }
-    if (tokens[pos] === '(') {
-      return parseAndClause()
-    }
+
     return { type: 'term', term: parseTerm() }
   }
 
@@ -222,35 +235,34 @@ export function parseSearchQuery(query: string): SearchAst {
     let exact = false
     let negate = false
 
-    if (raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2) {
-      text = raw.slice(1, -1)
+    // Sign modifiers come first (+term / -term), then quotes or wildcard
+    // on what remains — so `-`"garlic bread"` is a negated exact phrase.
+    if (text.startsWith('+')) {
       exact = true
-    } else if (raw.startsWith('+')) {
-      text = raw.slice(1)
-      exact = true
-    } else if (raw.startsWith('-')) {
-      text = raw.slice(1)
+      text = text.slice(1)
+    } else if (text.startsWith('-') && text.length > 1) {
       negate = true
       exact = true
-    } else if (raw.endsWith('*') && raw.length > 1) {
-      text = raw.slice(0, -1)
+      text = text.slice(1)
+    }
+    if (text.startsWith('"') && text.endsWith('"') && text.length >= 2) {
+      exact = true
+      text = text.slice(1, -1)
+    } else if (!exact && text.endsWith('*') && text.length > 1) {
       prefix = true
+      text = text.slice(0, -1)
     }
 
-    // `-term` at the very start → ordinary term (nothing to subtract from)
-    if (negate && raw === firstToken) {
-      negate = false
-      exact = false
-    }
-
+    // Negation is negation everywhere: a leading `-soup` subtracts soup
+    // from the whole catalog rather than searching FOR soup.
     return { text, prefix, exact, negate }
   }
 
-  const ast: SearchClause[] = [parseOrClause()]
+  const ast: SearchClause[] = [parseOrClause(false)]
   while (pos < tokens.length) {
     if (tokens[pos] === 'OR') {
       pos++
-      ast.push(parseOrClause())
+      ast.push(parseOrClause(false))
     } else {
       // Unexpected token — treat as a literal term
       ast.push({ type: 'term', term: literalTerm(tokens[pos]!) })
@@ -268,11 +280,17 @@ function literalTerm(text: string): SearchTerm {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function phraseTokens(termText: string): string[] {
-  return termText.toLowerCase().split(/\s+/).filter(Boolean)
+  // Punctuation is not a token boundary in prose but IS in MiniSearch's
+  // tokenizer — match it, so "Tomato Soup, Basil" yields the token
+  // "soup" and the phrase "tomato soup" stays adjacent.
+  return termText
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
 }
 
 function docTokens(text: string): string[] {
-  return text.toLowerCase().split(/\s+/).filter(Boolean)
+  return phraseTokens(text)
 }
 
 function containsConsecutive(haystack: string[], needles: string[]): boolean {
@@ -295,51 +313,76 @@ function isPhraseAdjacent(doc: SearchDoc, phraseTokensArr: string[]): boolean {
   if (phraseTokensArr.length <= 1) return true
   const nameTokens = docTokens(doc.name)
   if (containsConsecutive(nameTokens, phraseTokensArr)) return true
-  const ingredientTokens = doc.ingredients.toLowerCase().split(/\s+/).filter(Boolean)
+  const ingredientTokens = docTokens(doc.ingredients)
   return containsConsecutive(ingredientTokens, phraseTokensArr)
 }
 
 function hasExplicitOperator(ast: SearchAst): boolean {
   // More than one top-level clause means there was a top-level OR (explicit)
   if (ast.length > 1) return true
-  // Single top-level clause
-  const clause = ast[0]!
-  if (clause.type === 'group') {
-    // explicit=true → typed AND/OR; explicit=false → implicit AND (bare terms)
-    return clause.explicit
-  }
+  return clauseHasOperator(ast[0]!)
+}
+
+/**
+ * Recurse over the whole clause tree: a phrase, `+term`, `term*` or `-term`
+ * ANYWHERE (nested in an implicit-AND group, inside parens) means the user
+ * typed an operator and the explicit evaluator must own the query — not the
+ * fuzzy bare path, which would flatten it to plain terms.
+ */
+function clauseHasOperator(clause: SearchClause): boolean {
   if (clause.type === 'term') {
-    if (clause.term.exact || clause.term.prefix || clause.term.negate) return true
+    return clause.term.exact || clause.term.prefix || clause.term.negate
   }
-  return false
+  if (clause.explicit) return true
+  return clause.clauses.some(clauseHasOperator)
 }
 
 // ── Index ───────────────────────────────────────────────────────────────────
 
 let index: MiniSearch<SearchDoc> | null = null
+let indexPromise: Promise<MiniSearch<SearchDoc> | null> | null = null
 
 export async function getSearchIndex(): Promise<MiniSearch<SearchDoc> | null> {
   if (index) return index
-  const c = catalog.value
-  if (!c) return null
+  if (!catalog.value) return null
+  // Cache the IN-FLIGHT promise, not just the result: the suggest (150 ms)
+  // and search (200 ms) watchers both call this before the first fetch
+  // finishes, and without the promise guard each call downloads and parses
+  // the whole index again.
+  if (!indexPromise) {
+    indexPromise = loadSearchIndex().then((loaded) => {
+      index = loaded
+      return loaded
+    })
+  }
+  try {
+    return await indexPromise
+  } catch {
+    // Reset so the next call can retry a failed load.
+    indexPromise = null
+    return null
+  }
+}
 
+async function loadSearchIndex(): Promise<MiniSearch<SearchDoc>> {
+  const c = catalog.value
+  if (!c) throw new Error('catalog not loaded')
   try {
     const res = await fetch(`${import.meta.env.BASE_URL}data/search_index.json`)
     if (!res.ok) throw new Error(`search index HTTP ${res.status}`)
     const json = await res.text()
-    index = MiniSearch.loadJSON<SearchDoc>(json, INDEX_OPTIONS)
+    return MiniSearch.loadJSON<SearchDoc>(json, INDEX_OPTIONS)
   } catch {
-    index = new MiniSearch<SearchDoc>(INDEX_OPTIONS)
-    index.addAll(
+    const fallback = new MiniSearch<SearchDoc>(INDEX_OPTIONS)
+    fallback.addAll(
       c.variantMeta.map((meta) => ({
         id: meta.id,
         name: meta.name,
         ingredients: meta.ingredient_names.join(' '),
       })),
     )
+    return fallback
   }
-
-  return index
 }
 
 // ── Suggest (autoSuggest) ────────────────────────────────────────────────────
@@ -373,35 +416,44 @@ export async function searchVariantIds(query: string): Promise<SearchResults> {
   if (!idx) return { primary: [], fallback: [] }
   if (!query.trim()) return { primary: [], fallback: [] }
 
-  // Collect docs for adjacency checking
-  const c = catalog.value
-  const docs = c
-    ? c.variantMeta.map((meta) => buildSearchDoc(meta))
-    : []
+  // Docs (for phrase adjacency) are built LAZILY: only the explicit
+  // evaluator uses them, and building means ~2.8k objects per keystroke
+  // when done eagerly. The catalog is frozen per session, so one memo
+  // covers every later call.
+  let docsMemo: SearchDoc[] | null = null
+  const getDocs = (): SearchDoc[] => {
+    if (!docsMemo) {
+      const c = catalog.value
+      docsMemo = c ? c.variantMeta.map((meta) => buildSearchDoc(meta)) : []
+    }
+    return docsMemo
+  }
 
-  return searchWithIndex(idx, query, docs)
+  return searchWithIndex(idx, query, getDocs)
 }
 
 /** Core search logic, testable with an arbitrary index and doc set. */
 export async function searchWithIndex(
   idx: MiniSearch<SearchDoc>,
   query: string,
-  docs: SearchDoc[],
+  docs: SearchDoc[] | (() => SearchDoc[]),
 ): Promise<SearchResults> {
   if (!query.trim()) return { primary: [], fallback: [] }
 
   const ast = parseSearchQuery(query)
   if (ast.length === 0) return { primary: [], fallback: [] }
 
+  const getDocs = (): SearchDoc[] => (typeof docs === 'function' ? docs() : docs)
+
   if (hasExplicitOperator(ast)) {
-    const ids = await evaluateExplicit(idx, ast, docs)
+    const ids = await evaluateExplicit(idx, ast, getDocs)
     return { primary: ids, fallback: [] }
   }
 
   // Bare query: AND primary + OR fallback
-  const primary = await searchCombine(idx, ast, 'AND', docs)
+  const primary = await searchCombine(idx, ast, 'AND', getDocs)
   if (primary.length < DISPLAY_WINDOW) {
-    const orIds = await searchCombine(idx, ast, 'OR', docs)
+    const orIds = await searchCombine(idx, ast, 'OR', getDocs)
     const fallback = orIds.filter((id) => !primary.includes(id))
     return { primary, fallback }
   }
@@ -414,62 +466,57 @@ export async function searchWithIndex(
 async function evaluateExplicit(
   idx: MiniSearch<SearchDoc>,
   ast: SearchAst,
-  docs: SearchDoc[],
+  getDocs: () => SearchDoc[],
 ): Promise<number[]> {
-  const phraseTexts: string[][] = []
-  const allIds = new Set<number>()
+  const positiveIds = new Set<number>()
+  const negativeIds = new Set<number>()
+  let sawPositive = false
 
   for (const clause of ast) {
     if (clause.type === 'group') {
-      const ids = await evaluateGroup(idx, clause, docs)
-      for (const id of ids) allIds.add(id)
+      const ids = await evaluateGroup(idx, clause, getDocs)
+      for (const id of ids) positiveIds.add(id)
+      sawPositive = true
     } else if (clause.type === 'term') {
       if (clause.term.negate) {
-        // -term as a standalone top-level clause → nothing to subtract from
-        continue
-      }
-      const ids = await searchTermIds(idx, clause.term)
-      for (const id of ids) allIds.add(id)
-      if (clause.term.exact && !clause.term.prefix) {
-        const tokens = phraseTokens(clause.term.text)
-        if (tokens.length > 1) phraseTexts.push(tokens)
+        for (const id of await searchTermIds(idx, clause.term, getDocs)) negativeIds.add(id)
+      } else {
+        const ids = await searchTermIds(idx, clause.term, getDocs)
+        for (const id of ids) positiveIds.add(id)
+        // Presence of a positive CLAUSE, not of matches: a phrase whose
+        // adjacency filter emptied the set is still a positive query —
+        // falling back to "all docs" here would return the whole catalog.
+        sawPositive = true
       }
     }
   }
 
-  let result = [...allIds]
+  // A query that is ONLY negations subtracts from the whole catalog —
+  // `-soup` means "everything but soup", never "search for soup".
+  const base = sawPositive
+    ? [...positiveIds]
+    : getDocs().map((d) => d.id)
 
-  // Apply phrase adjacency filter
-  if (phraseTexts.length > 0) {
-    const docMap = new Map(docs.map((d) => [d.id, d]))
-    result = result.filter((id) => {
-      const doc = docMap.get(id)
-      if (!doc) return false
-      for (const phrase of phraseTexts) {
-        if (!isPhraseAdjacent(doc, phrase)) return false
-      }
-      return true
-    })
-  }
-
-  return result
+  if (negativeIds.size === 0) return base
+  const negSet = new Set(negativeIds)
+  return base.filter((id) => !negSet.has(id))
 }
 
 async function evaluateGroup(
   idx: MiniSearch<SearchDoc>,
   group: { type: 'group'; combine: 'AND' | 'OR'; explicit: boolean; clauses: SearchClause[] },
-  docs: SearchDoc[],
+  getDocs: () => SearchDoc[],
 ): Promise<number[]> {
   const positiveSets: number[][] = []
   let negativeIds: number[] = []
 
   for (const clause of group.clauses) {
     if (clause.type === 'term' && clause.term.negate) {
-      negativeIds.push(...(await searchTermIds(idx, clause.term)))
+      negativeIds.push(...(await searchTermIds(idx, clause.term, getDocs)))
     } else if (clause.type === 'term') {
-      positiveSets.push(await searchTermIds(idx, clause.term))
+      positiveSets.push(await searchTermIds(idx, clause.term, getDocs))
     } else if (clause.type === 'group') {
-      positiveSets.push(await evaluateGroup(idx, clause, docs))
+      positiveSets.push(await evaluateGroup(idx, clause, getDocs))
     }
   }
 
@@ -504,6 +551,7 @@ async function evaluateGroup(
 async function searchTermIds(
   idx: MiniSearch<SearchDoc>,
   term: SearchTerm,
+  getDocs: () => SearchDoc[],
 ): Promise<number[]> {
   const text = term.text
   if (!text) return []
@@ -513,7 +561,10 @@ async function searchTermIds(
     boost: { name: 2 },
   }
 
-  if (term.exact && !term.negate) {
+  // Exact (+term, "phrase") and NEGATED terms are literal per the ADR:
+  // `-pea` must never sweep away "peanut", "pear" or "peach" through
+  // prefix/fuzzy backdoors.
+  if (term.exact || term.negate) {
     options.prefix = false
     options.fuzzy = false
   } else if (term.prefix) {
@@ -524,19 +575,38 @@ async function searchTermIds(
     options.fuzzy = 0.2
   }
 
-  // For exact multi-term phrases (quoted), AND the individual tokens
-  if (term.exact && !term.prefix && !term.negate) {
+  // For exact multi-term phrases (quoted — including negated ones), AND
+  // the individual tokens
+  let ids: number[]
+  if ((term.exact || term.negate) && !term.prefix) {
     const tokens = phraseTokens(text)
     if (tokens.length === 0) return []
     if (tokens.length === 1) {
-      return idx.search(tokens[0]!, options).map((r) => r.id as number)
+      ids = idx.search(tokens[0]!, options).map((r) => r.id as number)
+    } else {
+      ids = idx
+        .search(tokens.join(' '), { ...options, combineWith: 'AND' })
+        .map((r) => r.id as number)
     }
-    return idx
-      .search(tokens.join(' '), { ...options, combineWith: 'AND' })
-      .map((r) => r.id as number)
+  } else {
+    ids = idx.search(text, options).map((r) => r.id as number)
   }
 
-  return idx.search(text, options).map((r) => r.id as number)
+  // Phrase adjacency is checked PER TERM, here: every clause — top-level
+  // or nested in a group — filters its OWN matches, so `("garlic bread"
+  // AND soup)` requires the consecutive phrase, and `"garlic bread" OR
+  // soup` lets plain soup matches through.
+  const tokens = phraseTokens(text)
+  if (term.exact && !term.prefix && tokens.length > 1) {
+    const docArr = getDocs()
+    const docMap = new Map(docArr.map((d) => [d.id, d]))
+    ids = ids.filter((id) => {
+      const doc = docMap.get(id)
+      return doc !== undefined && isPhraseAdjacent(doc, tokens)
+    })
+  }
+
+  return ids
 }
 
 // ── Bare query evaluation ────────────────────────────────────────────────────
@@ -545,30 +615,22 @@ async function searchCombine<T>(
   idx: MiniSearch<T>,
   ast: SearchAst,
   combine: 'AND' | 'OR',
-  _docs: SearchDoc[],
+  _getDocs: () => SearchDoc[],
 ): Promise<number[]> {
   const positiveTexts: string[] = []
   const negativeTexts: string[] = []
 
-  for (const clause of ast) {
+  // Flatten recursively: a bare query can still CONTAIN groups (implicit
+  // AND of plain terms), and nested ones must not be dropped.
+  function collect(clause: SearchClause): void {
     if (clause.type === 'term') {
-      if (clause.term.negate) {
-        negativeTexts.push(clause.term.text)
-      } else {
-        positiveTexts.push(clause.term.text)
-      }
-    } else if (clause.type === 'group') {
-      for (const sub of clause.clauses) {
-        if (sub.type === 'term') {
-          if (sub.term.negate) {
-            negativeTexts.push(sub.term.text)
-          } else {
-            positiveTexts.push(sub.term.text)
-          }
-        }
-      }
+      if (clause.term.negate) negativeTexts.push(clause.term.text)
+      else positiveTexts.push(clause.term.text)
+    } else {
+      for (const sub of clause.clauses) collect(sub)
     }
   }
+  for (const clause of ast) collect(clause)
 
   if (positiveTexts.length === 0) return []
 
@@ -583,11 +645,14 @@ async function searchCombine<T>(
   const results = allResults.map((r) => r.id as number)
 
   if (negativeTexts.length > 0) {
+    // Negated terms are literal (no prefix, no fuzzy) — `-pea` must not
+    // remove "peanut" or "pear".
     const negResults = idx
       .search(negativeTexts.join(' '), {
         fields: SEARCH_FIELDS,
-        prefix: true,
-        fuzzy: 0.2,
+        prefix: false,
+        fuzzy: false,
+        combineWith: 'OR',
       })
       .map((r) => r.id as number)
     const negSet = new Set(negResults)
