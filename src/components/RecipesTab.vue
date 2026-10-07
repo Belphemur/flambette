@@ -277,6 +277,12 @@ const DIET_ICONS: Record<DietId, { icon: Component; cls: string }> = Object.from
 
 /** Async search results: null means no active search (show all). */
 const searchResults = ref<{ primary: number[]; fallback: number[] } | null>(null)
+/** True while a debounced search is in flight — hides the empty state so
+ *  a new query never flashes "No recipes match" before results land. */
+const searchPending = ref(false)
+/** Set after committing a suggestion so the suggest watcher skips its
+ *  next fetch — otherwise the dropdown pops back up over the results. */
+let suppressNextSuggest = false
 /** Search-tips disclosure: closed by default, user-toggled. The toggle
  *  state is device-local (never a household preference — ADR-0027). The
  *  panel starts closed so first paint shows results, not help, on mobile. */
@@ -287,10 +293,19 @@ watch(query, (q) => {
   const trimmed = q.trim()
   if (!trimmed) {
     searchResults.value = null
+    searchPending.value = false
     return
   }
+  searchPending.value = true
   searchTimer = setTimeout(async () => {
-    searchResults.value = await searchVariantIds(trimmed).catch((e) => { void e; return null })
+    // Guard the async boundary: an earlier request (including the cold
+    // index fetch) finishing after the query changed must never
+    // overwrite the newer state.
+    const current = trimmed
+    const r = await searchVariantIds(current).catch((e) => { void e; return null })
+    if (query.value.trim() !== current) return
+    searchResults.value = r
+    searchPending.value = false
   }, 200)
 })
 
@@ -312,8 +327,8 @@ function getSortComparator(sortBy: SortBy): (a: VariantMeta, b: VariantMeta) => 
   }
 }
 
-/** Primary result ids (for separator rendering). */
-const primaryCount = computed(() => searchResults.value?.primary.length ?? 0)
+/** Primary result count AFTER facet filtering (drives the divider). */
+const primaryCount = computed(() => results.value.primaryLength)
 
 /** AutoSuggest dropdown state. */
 const suggestions = ref<string[]>([])
@@ -327,8 +342,19 @@ watch(query, (q) => {
     suggestSelected.value = -1
     return
   }
+  // The user just committed a suggestion: the query is already the full
+  // text they chose, so offering completions of it again only pops the
+  // dropdown back up over the results.
+  if (suppressNextSuggest) {
+    suppressNextSuggest = false
+    suggestions.value = []
+    suggestSelected.value = -1
+    return
+  }
   suggestTimer = setTimeout(async () => {
-    const results = await suggest(trimmed)
+    const current = trimmed
+    const results = await suggest(current)
+    if (query.value.trim() !== current) return // stale response
     // When the typed query IS a word the index knows (e.g. "rice"), the
     // suggester answers with the word itself plus fuzzy neighbours
     // ("rich", "ice"). Offering the word back is a no-op, and the
@@ -336,7 +362,7 @@ watch(query, (q) => {
     // So once an exact match exists the dropdown offers only LONGER
     // completions of the query and hides itself when none remain
     // (case-insensitive: the suggester's casing is its own).
-    const key = trimmed.toLowerCase()
+    const key = current.toLowerCase()
     suggestions.value = results.some((s) => s.toLowerCase() === key)
       ? results.filter((s) => s.toLowerCase().startsWith(key) && s.toLowerCase() !== key)
       : results
@@ -357,7 +383,8 @@ function onSuggestKey(e: KeyboardEvent) {
   break
   case 'Enter':
   if (suggestSelected.value >= 0) {
-  query.value = suggestions.value[suggestSelected.value]
+  suppressNextSuggest = true
+  query.value = suggestions.value[suggestSelected.value]!
   suggestions.value = []
   suggestSelected.value = -1
   }
@@ -370,14 +397,15 @@ function onSuggestKey(e: KeyboardEvent) {
 }
 
 function selectSuggestion(s: string) {
+  suppressNextSuggest = true
   query.value = s
   suggestions.value = []
   suggestSelected.value = -1
 }
 
-const results = computed<VariantMeta[]>(() => {
+const results = computed<{ list: VariantMeta[]; primaryLength: number }>(() => {
   const c = catalog.value
-  if (!c) return []
+  if (!c) return { list: [], primaryLength: 0 }
   const f = filters.value
   const q = query.value.trim()
   const diets = f.diets
@@ -405,6 +433,7 @@ const results = computed<VariantMeta[]>(() => {
   }
 
   let list: VariantMeta[]
+  let primaryLength: number
   if (q) {
   // Indexed fuzzy/prefix search over name + ingredients, intersected with
   // the active facet filters. Primary AND matches first, OR-fallback after.
@@ -424,9 +453,14 @@ const results = computed<VariantMeta[]>(() => {
   // Sort primary and fallback separately so primary always comes first.
   primary.sort(getSortComparator(f.sortBy))
   fallback.sort(getSortComparator(f.sortBy))
+  // The split point is the FILTERED primary length — using the raw id
+  // count would label facet-passing fallback cards as primary and
+  // misplace the "More results" divider.
+  primaryLength = primary.length
   list = [...primary, ...fallback]
   } else {
   list = []
+  primaryLength = 0
   }
   } else {
   list = c.variantMeta.filter(facets)
@@ -434,8 +468,9 @@ const results = computed<VariantMeta[]>(() => {
   // dropdown is dead whenever the search box is empty (a regression the
   // search rewrite introduced — main sorted every list).
   list.sort(getSortComparator(f.sortBy))
+  primaryLength = list.length
   }
-  return list
+  return { list, primaryLength }
 })
 
 const filtersActive = computed(() => query.value !== '' || hasActiveFilters(filters.value))
@@ -450,16 +485,16 @@ function clearFilters() {
 /** Cards rendered per batch; the rest load in as the sentinel scrolls in. */
 const BATCH_SIZE = 60
 const visibleCount = ref(BATCH_SIZE)
-const visibleResults = computed(() => results.value.slice(0, visibleCount.value))
+const visibleResults = computed(() => results.value.list.slice(0, visibleCount.value))
 const visiblePrimaryResults = computed(() => {
   if (!searchResults.value) return visibleResults.value
-  return results.value.slice(0, Math.min(visibleCount.value, primaryCount.value))
+  return results.value.list.slice(0, Math.min(visibleCount.value, primaryCount.value))
 })
 const visibleFallbackResults = computed(() => {
   if (!searchResults.value) return []
-  return results.value.slice(primaryCount.value, visibleCount.value)
+  return results.value.list.slice(primaryCount.value, visibleCount.value)
 })
-const hasMore = computed(() => visibleCount.value < results.value.length)
+const hasMore = computed(() => visibleCount.value < results.value.list.length)
 
 // New filter/search/sort results reset the window back to the first batch.
 watch(results, () => {
@@ -477,7 +512,7 @@ onMounted(() => {
   observer = new IntersectionObserver(
   (entries) => {
   if (entries.some((e) => e.isIntersecting) && hasMore.value) {
-  visibleCount.value = Math.min(visibleCount.value + BATCH_SIZE, results.value.length)
+  visibleCount.value = Math.min(visibleCount.value + BATCH_SIZE, results.value.list.length)
   }
   },
   { rootMargin: '800px' },
@@ -528,7 +563,7 @@ onUnmounted(() => observer?.disconnect())
   :aria-selected="i === suggestSelected"
   :aria-label="s"
   class="cursor-pointer px-4 py-2 text-sm"
-  :class="i === suggestSelected ? 'bg-brand text-brand-text' : ''"
+  :class="i === suggestSelected ? 'bg-brand-tint text-brand-text' : ''"
   @click="selectSuggestion(s)"
   >
   {{ s }}
@@ -739,7 +774,7 @@ onUnmounted(() => observer?.disconnect())
   </div>
 
   <p class="text-xs text-text-muted">
-  {{ results.length }} recipe{{ results.length === 1 ? '' : 's' }}
+  {{ results.list.length }} recipe{{ results.list.length === 1 ? '' : 's' }}
   <button
   v-if="filtersActive"
   class="ml-2 text-brand-text underline"
@@ -792,7 +827,7 @@ onUnmounted(() => observer?.disconnect())
   Loading more recipes…
   </div>
 
-  <div v-if="results.length === 0" class="py-16 text-center text-text-muted">
+  <div v-if="results.list.length === 0 && !searchPending" class="py-16 text-center text-text-muted">
   <SearchX :size="40" class="mx-auto" aria-hidden="true" />
   <p class="mt-2 font-medium">No recipes match your filters</p>
   <p v-if="query.trim()" data-test="search-empty-tip" class="mt-2 text-sm">
