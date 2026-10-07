@@ -99,6 +99,38 @@ test('suggest dropdown opens, navigates and commits', async ({ page }) => {
   expect(value).not.toBe('Pad')
 })
 
+test('search tips disclosure, one-shot expand, and empty-state hint', async ({ page }) => {
+  // First visit: panel is visible without interaction (one-shot auto-expand).
+  await expect(page.getByTestId('search-tips-panel')).toBeVisible()
+  const toggle = page.getByTestId('search-tips-toggle')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+
+  // Click toggle → hidden + aria-expanded=false
+  await toggle.click()
+  await expect(page.getByTestId('search-tips-panel')).toBeHidden()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+  // Click again → visible
+  await toggle.click()
+  await expect(page.getByTestId('search-tips-panel')).toBeVisible()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+
+  // Reload: one-shot latched → panel HIDDEN
+  await page.reload()
+  await waitForCatalog(page)
+  await expect(page.getByTestId('search-tips-panel')).toBeHidden()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+  // Click toggle → visible again
+  await toggle.click()
+  await expect(page.getByTestId('search-tips-panel')).toBeVisible()
+
+  // Empty-state tip: gibberish query shows the hint
+  await page.getByRole('searchbox', { name: 'Search recipes or ingredients' }).fill('zzzzqqqqwwww')
+  await page.waitForTimeout(500)
+  await expect(page.getByTestId('search-empty-tip')).toBeVisible()
+})
+
 test('detail sheet shows ingredients and instructions from the local JSON', async ({ page }) => {
   const firstName = await recipeCards(page).first().getByRole('heading').textContent()
   await openRecipeDetail(page, firstName!.trim())

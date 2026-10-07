@@ -103,6 +103,12 @@ MiniSearch results. Zero new dependencies.
    no new runtime dependencies; no request to any non-app host
    (ADR-0001). Search results still return raw variant ids with no facet
    knowledge.
+6. **Search-tips disclosure and empty-state hint** (ADR-0022 pattern):
+   five one-line operator examples render under the search box, open on
+   the first visit, then a device-local one-shot flag
+   (`ui.searchTipsSeen`) closes them for every later visit; a visible
+   toggle re-opens them. The empty state gains a hint paragraph when the
+   query is non-empty.
 
 ## Consequences
 
@@ -119,10 +125,14 @@ MiniSearch results. Zero new dependencies.
   prefix+fuzzy for forgiveness; `*`-suffixed terms are prefix-only;
   quoted phrases and `+`/`-` terms are exact. Ranking keeps the existing
   name-boost.
-- e2e gains cases for: title query returning one result, `-exclusion`,
-  phrase, suggest dropdown, and the OR-fallback separator. Existing
-  catalog-search specs may pin new result orders — those pins are
-  UPDATED, not weakened.
+- The search-tips disclosure (ADR-0022 pattern) renders the query
+  language as five one-line examples under the search box. It is open on
+  the very first visit, then a device-local one-shot flag
+  (`ui.searchTipsSeen`, same slice as `historyShareDefaultMigrated`, not
+  backed up) latches it closed — every later visit starts collapsed even
+  if the user never touched the toggle. A visible toggle lets the user
+  re-open it. The empty state gains a hint line when the query is
+  non-empty.
 
 ## Alternatives considered
 

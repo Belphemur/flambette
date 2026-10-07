@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { ArrowUpDown, Clock, Crown, Heart, Layers, SearchX, Sparkles, UserRound } from 'lucide-vue-next'
+import { ArrowUpDown, ChevronDown, Clock, Crown, Heart, Layers, SearchX, Sparkles, UserRound } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { catalog } from '../lib/catalog'
 import { useRestrictions } from '../composables/useRestrictions'
@@ -277,6 +277,9 @@ const DIET_ICONS: Record<DietId, { icon: Component; cls: string }> = Object.from
 
 /** Async search results: null means no active search (show all). */
 const searchResults = ref<{ primary: number[]; fallback: number[] } | null>(null)
+/** Search-tips disclosure: open on first visit, then one-shot latched
+ *  (ADR-0060). Toggled by the user, persisted via ui.searchTipsSeen. */
+const showTips = ref(false)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 watch(query, (q) => {
   if (searchTimer) clearTimeout(searchTimer)
@@ -456,6 +459,13 @@ onMounted(() => {
   // removal filter and any swapped names are ready when needed. No-op when
   // no restriction is active.
   void restrictions.ensureLoaded()
+  // ADR-0060: search tips are open on the very first visit, then the
+  // one-shot flag latches so they stay closed afterwards even if the
+  // user never touches the toggle.
+  if (!ui.searchTipsSeen) {
+    showTips.value = true
+    ui.searchTipsSeen = true
+  }
   observer = new IntersectionObserver(
   (entries) => {
   if (entries.some((e) => e.isIntersecting) && hasMore.value) {
@@ -505,6 +515,33 @@ onUnmounted(() => observer?.disconnect())
   {{ s }}
   </div>
   </div>
+  </div>
+
+  <div class="flex w-full justify-end">
+  <button
+    data-test="search-tips-toggle"
+    :aria-expanded="showTips"
+    aria-controls="search-tips-panel"
+    class="flex items-center gap-1 py-2 text-xs text-text-muted transition-transform"
+    :class="showTips ? 'rotate-180' : ''"
+    @click="showTips = !showTips"
+  >
+    Search tips
+    <ChevronDown :size="14" aria-hidden="true" class="transition-transform" />
+  </button>
+  </div>
+
+  <div
+    v-if="showTips"
+    id="search-tips-panel"
+    data-test="search-tips-panel"
+    class="rounded-xl border bg-surface-raised px-4 py-3 text-xs text-text-muted space-y-1"
+  >
+    <div><code>word word</code> — all words</div>
+    <div><code>"tomato soup"</code> — exact phrase</div>
+    <div><code>-word</code> — exclude</div>
+    <div><code>word*</code> — starts with</div>
+    <div><code>(soup OR stew) -cream</code> — combine</div>
   </div>
 
   <!-- WS1: a 2-column GRID on phones, a wrapping flex row from `sm` up.
@@ -739,6 +776,9 @@ onUnmounted(() => observer?.disconnect())
   <div v-if="results.length === 0" class="py-16 text-center text-text-muted">
   <SearchX :size="40" class="mx-auto" aria-hidden="true" />
   <p class="mt-2 font-medium">No recipes match your filters</p>
+  <p v-if="query.trim()" data-test="search-empty-tip" class="mt-2 text-sm">
+    Tip: try fewer words, or "exact phrase", or -word to exclude.
+  </p>
   </div>
   </section>
 </template>
