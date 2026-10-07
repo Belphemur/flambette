@@ -80,7 +80,9 @@ test('-exclusion removes results from the list', async ({ page }) => {
 
 test('suggest dropdown opens, navigates and commits', async ({ page }) => {
   const searchbox = page.getByRole('searchbox', { name: 'Search recipes or ingredients' })
-  await searchbox.fill('Pad')
+  // A PREFIX with completions, not a complete word: a complete word
+  // ("rice", "pad") hides the dropdown — offering the word back is noise.
+  await searchbox.fill('chick')
   await page.waitForTimeout(400) // debounce settles
   // Dropdown opens
   await expect(page.getByTestId('search-suggest')).toBeVisible()
@@ -96,26 +98,21 @@ test('suggest dropdown opens, navigates and commits', async ({ page }) => {
   await page.waitForTimeout(500)
   // The search box now contains the selected suggestion
   const value = await searchbox.inputValue()
-  expect(value).not.toBe('Pad')
+  expect(value).not.toBe('chick')
 })
 
-test('suggest dropdown drops the item that equals the query', async ({ page }) => {
+test('suggest dropdown hides for a complete word with no completions', async ({ page }) => {
   const searchbox = page.getByRole('searchbox', { name: 'Search recipes or ingredients' })
-  await searchbox.fill('Pad')
-  await page.waitForTimeout(400) // debounce settles
-  const dropdown = page.getByTestId('search-suggest')
-  await expect(dropdown).toBeVisible()
-  // Type the FULL suggestion: it is no longer an offer, it is the query —
-  // the redundant item disappears from the list (the dropdown stays for
-  // any remaining LONGER completions, and would hide if none remained).
-  const first = (await page.getByTestId('search-suggest-item').first().textContent())!.trim()
-  await searchbox.fill(first)
+  // "rice" is a word the index knows: the suggester would answer with the
+  // word itself + fuzzy neighbours ("rich", "ice"). None of that is a
+  // completion, so the dropdown must hide itself — and the RESULTS for
+  // "rice" must still appear (the dropdown is an aid, never a gate).
+  await searchbox.fill('rice')
   await page.waitForTimeout(400)
-  const items = page.getByTestId('search-suggest-item')
-  const count = await items.count()
-  for (let i = 0; i < count; i++) {
-    expect((await items.nth(i).textContent())!.trim().toLowerCase()).not.toBe(first.toLowerCase())
-  }
+  await expect(page.getByTestId('search-suggest')).toBeHidden()
+  await expect(page.getByTestId('recipe-grid')).toBeVisible()
+  const cards = page.getByTestId('recipe-grid').getByRole('article')
+  expect(await cards.count()).toBeGreaterThan(0)
 })
 
 test('search tips disclosure starts closed and toggles; empty-state hint', async ({ page }) => {

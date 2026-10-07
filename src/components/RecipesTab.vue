@@ -329,12 +329,17 @@ watch(query, (q) => {
   }
   suggestTimer = setTimeout(async () => {
     const results = await suggest(trimmed)
-    // A suggestion that IS the query is noise: the user already typed
-    // that text, so offering it back is a no-op. Drop it from the list —
-    // the dropdown hides itself only when nothing else remains
+    // When the typed query IS a word the index knows (e.g. "rice"), the
+    // suggester answers with the word itself plus fuzzy neighbours
+    // ("rich", "ice"). Offering the word back is a no-op, and the
+    // neighbours are noise — they read as "you must mean rich or ice".
+    // So once an exact match exists the dropdown offers only LONGER
+    // completions of the query and hides itself when none remain
     // (case-insensitive: the suggester's casing is its own).
     const key = trimmed.toLowerCase()
-    suggestions.value = results.filter((s) => s.toLowerCase() !== key)
+    suggestions.value = results.some((s) => s.toLowerCase() === key)
+      ? results.filter((s) => s.toLowerCase().startsWith(key) && s.toLowerCase() !== key)
+      : results
     suggestSelected.value = -1
   }, 150)
 })
@@ -425,6 +430,10 @@ const results = computed<VariantMeta[]>(() => {
   }
   } else {
   list = c.variantMeta.filter(facets)
+  // The browse path sorts like the search path: without this the sort
+  // dropdown is dead whenever the search box is empty (a regression the
+  // search rewrite introduced — main sorted every list).
+  list.sort(getSortComparator(f.sortBy))
   }
   return list
 })
