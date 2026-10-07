@@ -65,6 +65,11 @@ jobs:
       # Secrets: RELEASER_APP_ID + RELEASER_PRIVATE_KEY (the app's .pem).
       - name: Generate the RELEASER app token
         id: releaser
+        # Only when there is something to commit: on the idempotent retry
+        # path (state == 'skipped') minting a token is wasted work, and a
+        # missing/broken credential would fail the job — blocking the
+        # dependent web/deploy builds — even with nothing to push.
+        if: steps.state.outputs.state == 'pending'
         uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.RELEASER_APP_ID }}
