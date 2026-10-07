@@ -339,18 +339,6 @@ export async function getSearchIndex(): Promise<MiniSearch<SearchDoc> | null> {
     )
   }
 
-  // Add user-recipe docs (not in the pre-built index, by design ADR-0052)
-  const userMetas = c.variantMeta.filter((m) => c.userRecipeIds.has(m.id))
-  if (userMetas.length > 0 && index) {
-    index.addAll(
-      userMetas.map((meta) => ({
-        id: meta.id,
-        name: meta.name,
-        ingredients: meta.ingredient_names.join(' '),
-      })),
-    )
-  }
-
   return index
 }
 

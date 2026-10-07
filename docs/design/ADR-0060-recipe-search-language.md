@@ -83,11 +83,15 @@ MiniSearch results. Zero new dependencies.
      `verify_pack_index_parity.ts`.
    - The runtime replaces `addAll` with `MiniSearch.loadJSON` (same
      options object); zero client-side indexing.
-   - **User recipes are NOT in the prebuilt index.** They are added at
-     runtime with `add()` after `loadJSON` (ADR-0052 merges them into
-     `catalog.variantMeta` anyway; they are few, and keeping them out
-     means editing `user_recipes.json` never risks a stale committed
-     index).
+   - **User recipes ARE included in the prebuilt index.** The generator
+     reads `public/data/user_recipes.json`, merges it into
+     `catalog.variantMeta` via the REAL catalog pipeline (`buildCatalog` +
+     `parseUserRecipes` from `src/lib/catalog`, the same code the app uses
+     at runtime — never copied), then indexes `catalog.variantMeta`.
+     This guarantees the index and the app see identical user-recipe data
+     (lockstep, not a hand-maintained copy). **Every change to
+     `user_recipes.json` requires re-running `bun run data:search`** —
+     the prebuilt index is stale otherwise.
    - Gates: `bun run data:search` regenerates; the script's `--check`
      mode rebuilds in memory and fails on drift from the committed file,
      wired into `bun run test:data` like every other generated artifact;

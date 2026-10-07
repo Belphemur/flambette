@@ -10,8 +10,9 @@
  *   bun scripts/build_search_index.ts       — build and write the index
  *   bun scripts/build_search_index.ts --check — exit 1 on drift from committed file
  */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, existsSync, writeFileSync } from 'node:fs'
 import MiniSearch from 'minisearch'
+import { buildCatalog, parseUserRecipes } from '../src/lib/catalog'
 import { buildSearchDoc, INDEX_OPTIONS } from '../src/lib/search'
 import type { VariantMeta } from '../src/lib/types'
 import type { BuilderData } from '../src/lib/types'
@@ -24,9 +25,22 @@ function loadBuilderData(): BuilderData {
   return JSON.parse(raw) as BuilderData
 }
 
-function buildIndex(data: BuilderData): MiniSearch<SearchDoc> {
+function loadUserRecipes(): import('../src/lib/catalog').UserRecipeEntry[] {
+  const path = `${BASE}/user_recipes.json`
+  if (!existsSync(path)) return []
+  try {
+    const raw = JSON.parse(readFileSync(path, 'utf8'))
+    return parseUserRecipes(raw)
+  } catch {
+    console.warn('[build_search_index] user_recipes.json parse failed; continuing without it')
+    return []
+  }
+}
+
+function buildIndex(data: BuilderData, users: import('../src/lib/catalog').UserRecipeEntry[]): MiniSearch<SearchDoc> {
+  const catalog = buildCatalog(data, users)
   const index = new MiniSearch<SearchDoc>(INDEX_OPTIONS)
-  index.addAll(data.variant_meta.map((meta: VariantMeta) => buildSearchDoc(meta)))
+  index.addAll(catalog.variantMeta.map((meta: VariantMeta) => buildSearchDoc(meta)))
   return index
 }
 
@@ -63,7 +77,8 @@ function checkDrift(index: MiniSearch<SearchDoc>): boolean {
 function main() {
   const checkOnly = process.argv.includes('--check')
   const data = loadBuilderData()
-  const index = buildIndex(data)
+  const users = loadUserRecipes()
+  const index = buildIndex(data, users)
 
   if (checkOnly) {
     if (checkDrift(index)) {
@@ -77,7 +92,7 @@ function main() {
 
   const json = JSON.stringify(index.toJSON())
   writeFileSync(`${BASE}/search_index.json`, json)
-  console.log(`search index: wrote ${BASE}/search_index.json (${(json.length / 1024).toFixed(0)} KB)`)
+  console.log(`search index: wrote ${BASE}/search_index.json (${(json.length / 1024).toFixed(0)} KB) with ${users.length} user recipe(s)`)
 }
 
 main()
