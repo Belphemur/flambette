@@ -19,6 +19,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -45,22 +46,6 @@ class ChangelogGoldens(unittest.TestCase):
         with open(OUT) as f:
             cls.doc = json.load(f)
         cls.fresh = build()
-
-    @classmethod
-    def tearDownClass(cls):
-        # Ensure the committed file is restored even if a test corrupted it.
-        try:
-            with open(OUT) as f:
-                doc = json.load(f)
-            if any(v.get("version") == "v0.0.0" for v in doc.get("versions", [])):
-                fresh = build()
-                fresh.pop("generatedAt", None)
-                doc.pop("generatedAt", None)
-                with open(OUT, "w") as f:
-                    json.dump(fresh, f, indent=2)
-                    f.write("\n")
-        except Exception:
-            pass
 
     # ── Parser goldens ───────────────────────────────────────────────────
 
@@ -212,32 +197,93 @@ class ChangelogGoldens(unittest.TestCase):
     # ── Stale --check goldens ─────────────────────────────────────────────
 
     def test_check_exits_1_on_stale(self):
-        """The --check flag detects a committed artifact that lags a fresh
-        derivation."""
+        """The --check flag detects a stale artifact — against a TEMP COPY,
+        never the tracked file (the test must leave the worktree clean)."""
         result = subprocess.run(
             [sys.executable, os.path.join(HERE, "build_changelog.py"), "--check"],
             capture_output=True, text=True, cwd=ROOT,
         )
-        # Fresh file passes. Now prove staleness is detected by temporarily
-        # corrupting and restoring in a try/finally.
         self.assertEqual(result.returncode, 0, "--check should pass on a fresh artifact")
-        with open(OUT) as f:
-            original = json.load(f)
-        corrupted = {"versions": [{"version": "v0.0.0", "date": "", "title": "TAMPERED"}]}
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+            tmp_path = tmp.name
         try:
-            with open(OUT, "w") as f:
-                json.dump(corrupted, f)
+            with open(OUT) as f:
+                original = json.load(f)
+            with open(tmp_path, "w") as f:
+                json.dump(original, f)
+            tampered = {"versions": [{"version": "v0.0.0", "date": "", "title": "TAMPERED"}]}
+            with open(tmp_path, "w") as f:
+                json.dump(tampered, f)
             stale = subprocess.run(
-                [sys.executable, os.path.join(HERE, "build_changelog.py"), "--check"],
+                [sys.executable, os.path.join(HERE, "build_changelog.py"),
+                 "--check", "--out", tmp_path],
                 capture_output=True, text=True, cwd=ROOT,
             )
             self.assertNotEqual(stale.returncode, 0,
                                 "--check must exit 1 on stale artifact")
             self.assertIn("stale", (stale.stderr + stale.stdout).lower())
+            # The tracked artifact must be byte-identical to what we read
+            # (the test never writes OUT).
+            with open(OUT) as f:
+                self.assertEqual(json.load(f), original, "OUT was modified by the test")
         finally:
-            with open(OUT, "w") as f:
-                json.dump(original, f, indent=2)
-                f.write("\n")
+            os.unlink(tmp_path)
+
+    def test_breaking_marker_subjects_parse(self):
+        """Conventional `feat!:` and `feat(scope)!:` subjects parse — the
+        SUBJECT_RE carries the `!?` marker between scope and colon (a
+        rebuttal-with-evidence for the 'breaking changes drop out' review
+        finding)."""
+        for subject in (
+            "feat!: drop the one-time share link",
+            "feat(units)!: measured rounding vocabulary (ADR-0054) (#51)",
+        ):
+            parsed = _build_changelog.parse_subject(subject)
+            self.assertIsNotNone(parsed, subject)
+            self.assertEqual(parsed["type"], "feat")
+            self.assertNotIn("!", parsed["text"])
+
+    # ── Upcoming-candidate + sort goldens ─────────────────────────────────
+
+    def test_semver_sort_key_prerelease_ordering(self):
+        """A prerelease sorts between the previous release and its own
+        release (ADR-0060 §2)."""
+        key = _build_changelog.semver_sort_key
+        self.assertLess(key("v2.2.0"), key("v2.3.0-rc1"))
+        self.assertLess(key("v2.3.0-rc1"), key("v2.3.0"))
+        self.assertLess(key("v2.3.0-rc1"), key("v2.3.0-rc2"))
+        self.assertLess(key("v2.2.0"), key("v2.2.1"))
+
+    def test_upcoming_candidate_prepends(self):
+        """build(upcoming=...) emits ONE extra candidate entry for untagged
+        HEAD (range newest-tag..HEAD), newest-first; build() without the
+        flag never contains it."""
+        fresh = build()
+        self.assertFalse(
+            any(v["version"] == "v99.0.0" for v in fresh["versions"]),
+            "the candidate leaked into the plain build",
+        )
+        with_upcoming = build(upcoming="v99.0.0")
+        self.assertEqual(with_upcoming["versions"][0]["version"], "v99.0.0")
+        self.assertEqual(
+            len(with_upcoming["versions"]), len(fresh["versions"]) + 1
+        )
+        # Without an authored title the candidate derives one from its
+        # range — never empty.
+        self.assertTrue(len(with_upcoming["versions"][0]["title"]) > 3)
+
+    def test_authored_titles_cover_all_tags(self):
+        """Every v* tag in the repo has an authored title (ADR-0060 §3); the
+        derived fallback exists for FUTURE tags, not for today's."""
+        tags = set(
+            subprocess.check_output(["git", "tag", "-l", "v*"], encoding="utf8").split()
+        )
+        missing = sorted(tags - set(_build_changelog.AUTHORED_TITLES))
+        self.assertEqual(missing, [], "tags without an authored title: %s" % missing)
+        for tag, title in _build_changelog.AUTHORED_TITLES.items():
+            self.assertTrue(len(title) > 3, "%s: title too short" % tag)
+            self.assertFalse(title.startswith("v"), "%s: title starts with v" % tag)
+            self.assertNotIn(": ", title, "%s: title looks like a commit subject" % tag)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,16 @@ Status: accepted (2026-10-07)
 > `v-if`-gated like every other modal. §5's mechanics are unchanged — the
 > machinery they describe simply lives in one place now.
 
+> **Change note (2026-10-07, review round 2):** the release procedure (§7)
+> was REWRITTEN — the old "regenerate BEFORE tagging, let `--check` catch a
+> stale artifact" sequencing was itself the defect the reviewers caught
+> (qodo High): the tag adds a NEW version range the committed artifact
+> cannot contain, so a freshly tagged release shipped with a failing gate
+> and a changelog missing its own entry. The generator now includes the
+> tag AT HEAD and takes `--upcoming vX.Y.Z` for the pre-tag run. Prerelease
+> tags sort between releases (§2), and the authored-title table covers ALL
+> existing tags (§3).
+
 ## Context
 
 The header shows the build-time app version (`__APP_VERSION__`, ADR-0039;
@@ -50,8 +60,11 @@ Constraints that shape the design:
    committed-artifact stance as every `public/data/*.json` in the repo.
 
 2. **Source of truth: `git tag` + conventional-commit subjects between
-   tags.** For each `v*` tag, `git log <prev>..<tag>` (repo start for the
-   first tag) is partitioned by the conventional type: `feat` →
+   tags.** Tags sort semver, prerelease-aware (`v2.3.0-rc1` between
+   `v2.2.0` and `v2.3.0`; a release sorts after its own rc — prerelease
+   identifiers compare as a string, which covers the `rc.N` house style).
+   For each `v*` tag, `git log <prev>..<tag>` (repo start for the first)
+   is partitioned by the conventional type: `feat` →
    `features`, `fix` → `fixes`. Merge commits are skipped (squash merges
    carry the subject already). `chore`/`docs`/`refactor`/`test`/`ci` are
    EXCLUDED — the changelog is user-facing, and dependency bumps and
@@ -63,12 +76,12 @@ Constraints that shape the design:
 
 3. **Each version has an AUTHORED title; derivation is only the fallback.**
    A title table inside the generator carries the editorial title per
-   version ("Import favourites from Mealime" for v2.2.0, …). Prepopulated
-   for all 34 existing tags in the same change that adds the generator.
-   An unlisted version falls back to the first `feat` subject (first
-   `fix` when there is no feat, "Maintenance release" when neither) — a
-   fallback is a placeholder the next release procedure replaces, never
-   an override (authored > derived, the repo's standing precedence).
+   version ("Import favourites from Mealime" for v2.2.0, …). The table
+   covers ALL existing tags; the fallback (first `feat` subject, first
+   `fix` when there is no feat, "Maintenance release" when neither) exists
+   for FUTURE tags a release has not authored yet — a fallback is a
+   placeholder the release procedure replaces, never an override (authored
+   > derived, the repo's standing precedence).
 
 4. **Artifact shape is additive and validated at the edge.**
 
@@ -119,11 +132,18 @@ Constraints that shape the design:
      fresh derivation, and joins the CI staleness block in `ci.yml`
      beside `extract_ingredients.py --check`. CI checks out
      `fetch-depth: 0`, so the gate always has the real tag space.
-   - The release procedure gains one step: after a release PR
-     squash-merges, run `bun run data:changelog` BEFORE tagging — the new
-     tag makes the committed artifact stale, and `--check` on the next
-     main build fails until it is regenerated. The gate is the forcing
-     function; the ADR is the reminder.
+   - The release procedure gains one step, and its ORDER is the fix for
+     the defect the old sequencing carried: the changelog entry must be IN
+     the commit the tag points at, because a tagged build documents
+     ITSELF (the generator includes the tag at HEAD).
+     1. Add the authored title line for the new tag to the generator's
+        table.
+     2. Run `python3 scripts/build_changelog.py --upcoming vX.Y.Z` — it
+        emits the candidate entry for untagged HEAD (range
+        newest-tag..HEAD) — and commit BOTH.
+     3. Tag THAT commit `vX.Y.Z` the same day and push. The tagged build
+        then includes the tag itself and reproduces the committed artifact
+        byte for byte, so post-tag `--check` passes.
 
 8. **No new runtime dependencies; nothing persisted** — no store slice, no
    `STORE_SLICES` entry, no pinia key.

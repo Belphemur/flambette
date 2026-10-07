@@ -335,10 +335,18 @@ const showBanner = computed(() => bannerState.value === 'stale' && !bannerDismis
 let checkInterval: ReturnType<typeof setInterval> | null = null
 let visibilityHandler: (() => void) | null = null
 
+let checkSeq = 0
+
 async function checkBannerVersion() {
   // Dismissed this session: keep the answer, never re-surface the banner.
   if (bannerDismissed.value) return
+  // Race guard: a visibilitychange and the interval can overlap, and the
+  // fetches may resolve out of order. Only the NEWEST in-flight check may
+  // write the state — a stale response landing late would flap the banner
+  // between fresh and stale one round early.
+  const seq = ++checkSeq
   const result = await checkVersion({ running: appVersion })
+  if (seq !== checkSeq) return
   bannerState.value = result.state
 }
 
@@ -401,9 +409,9 @@ onBeforeUnmount(() => {
     v-if="showBanner"
     data-test="version-banner"
     role="status"
-    class="fixed top-0 inset-x-0 z-40 h-12 flex flex-nowrap items-center justify-center gap-1 bg-brand px-3 text-sm font-medium text-on-brand"
+    class="fixed top-0 inset-x-0 z-40 h-12 flex flex-nowrap items-center justify-center gap-1 overflow-hidden bg-brand px-3 text-sm font-medium text-on-brand"
   >
-    <span data-test="version-banner-text" class="whitespace-nowrap">A new version of Flambette is available</span>
+    <span data-test="version-banner-text" class="min-w-0 truncate whitespace-nowrap">A new version of Flambette is available</span>
     <button
       type="button"
       data-test="version-refresh"

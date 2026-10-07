@@ -40,13 +40,14 @@ test('version.json version matches the header version', async ({ page }) => {
 
 test('banner is hidden when running version matches version.json', async ({ page }) => {
   await page.waitForSelector('[data-test="app-version"]')
-  // Same version → same state → banner hidden (v-if, not just CSS)
-  await expect(page.locator('[data-test="version-banner"]')).not.toBeVisible()
+  // Same version → same state → banner absent (v-if, not CSS-hidden: the
+  // node must not exist at all).
+  await expect(page.locator('[data-test="version-banner"]')).toHaveCount(0)
 })
 
 test('banner markup is present in DOM when shown (v-if, not display:none)', async ({ page }) => {
   // The banner uses v-if so it is absent from the DOM when hidden.
-  await expect(page.locator('[data-test="version-banner"]')).not.toBeVisible()
+  await expect(page.locator('[data-test="version-banner"]')).toHaveCount(0)
 })
 
 // --- changelog modal (ADR-0060) ----------------------------------------------

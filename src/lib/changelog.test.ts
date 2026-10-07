@@ -120,6 +120,47 @@ describe('parseChangelog', () => {
     expect(result!.versions.map((v) => v.version)).toEqual(['v2.0.0', 'v1.0.0', 'v0.1.0'])
   })
 
+  test('prerelease versions are accepted and sort between releases (ADR-0060 §2)', () => {
+    const result = parseChangelog(
+      doc({
+        versions: [
+          { version: 'v2.3.0-rc1', date: '', title: 'rc', features: [], fixes: [] },
+          { version: 'v2.2.0', date: '', title: 'prev', features: [], fixes: [] },
+          { version: 'v2.3.0', date: '', title: 'final', features: [], fixes: [] },
+        ],
+      }),
+    )
+    expect(result).not.toBeNull()
+    // The release sorts above its own prerelease, which sorts above the
+    // previous release.
+    expect(result!.versions.map((v) => v.version)).toEqual([
+      'v2.3.0',
+      'v2.3.0-rc1',
+      'v2.2.0',
+    ])
+  })
+
+  test('two prereleases of the same triple sort by identifier', () => {
+    const result = parseChangelog(
+      doc({
+        versions: [
+          { version: 'v2.3.0-rc2', date: '', title: 'rc2', features: [], fixes: [] },
+          { version: 'v2.3.0-rc1', date: '', title: 'rc1', features: [], fixes: [] },
+        ],
+      }),
+    )
+    expect(result!.versions.map((v) => v.version)).toEqual(['v2.3.0-rc2', 'v2.3.0-rc1'])
+  })
+
+  test('build-metadata versions are still rejected', () => {
+    expect(
+      parseChangelog({
+        ...BASE,
+        versions: [{ version: 'v1.0.0+build.5', date: '', title: 't' }],
+      }),
+    ).toBeNull()
+  })
+
   test('missing title falls back to version string', () => {
     const result = parseChangelog(
       doc({

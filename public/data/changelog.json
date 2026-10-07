@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-06T23:52:45Z",
+  "generatedAt": "2026-10-07T01:18:32Z",
   "versions": [
     {
       "version": "v2.3.0",
@@ -187,7 +187,7 @@
     {
       "version": "v0.15.0",
       "date": "2026-10-01",
-      "title": "Rebuild Mealime as a kitchen companion",
+      "title": "Rebuilt as a kitchen companion",
       "features": [
         {
           "text": "rebuild Mealime as a kitchen companion",
@@ -232,7 +232,7 @@
     {
       "version": "v0.14.1",
       "date": "2026-10-01",
-      "title": "A Regenerate press must roll the seed",
+      "title": "Auto-Plan Regenerate seed fix",
       "fixes": [
         {
           "text": "a Regenerate press must roll the seed",
@@ -245,7 +245,7 @@
     {
       "version": "v0.14.0",
       "date": "2026-10-01",
-      "title": "Share cooked history with the household by default",
+      "title": "Cooked history shared by default",
       "features": [
         {
           "text": "share cooked history with the household by default",
@@ -258,7 +258,7 @@
     {
       "version": "v0.13.0",
       "date": "2026-09-30",
-      "title": "Share favourites + per-recipe ratings",
+      "title": "Household favourites and ratings",
       "features": [
         {
           "text": "share favourites + per-recipe ratings",
@@ -271,7 +271,7 @@
     {
       "version": "v0.12.0",
       "date": "2026-09-30",
-      "title": "Variety-aware completion planning",
+      "title": "Auto-Plan and unified quick filters",
       "features": [
         {
           "text": "variety-aware completion planning",
@@ -298,7 +298,7 @@
     {
       "version": "v0.11.1",
       "date": "2026-09-29",
-      "title": "Copy throttle.mjs into the image; smoke-run images in CI",
+      "title": "Relay image and CI smoke-test fixes",
       "fixes": [
         {
           "text": "copy throttle.mjs into the image; smoke-run images in CI",
@@ -311,7 +311,7 @@
     {
       "version": "v0.11.0",
       "date": "2026-09-29",
-      "title": "Waste-aware grocery, diet filter, household rooms, cooking timers, 3-word room codes+share link (ADR-0017..0023)",
+      "title": "Waste-aware grocery, diet filters, and cooking timers",
       "features": [
         {
           "text": "waste-aware grocery, diet filter, household rooms, cooking timers, 3-word room codes+share link (ADR-0017..0023)",
@@ -332,7 +332,7 @@
     {
       "version": "v0.10.1",
       "date": "2026-09-28",
-      "title": "Spacing between Browse recipes button and add input in grocery empty state",
+      "title": "Grocery empty-state spacing fix",
       "fixes": [
         {
           "text": "spacing between Browse recipes button and add input in grocery empty state",
@@ -345,7 +345,7 @@
     {
       "version": "v0.10.0",
       "date": "2026-09-28",
-      "title": "Settings tab, EXTRA ITEMS with category tags, ShopView auto-collapse",
+      "title": "A Settings tab and categorized extra items",
       "features": [
         {
           "text": "Settings tab, EXTRA ITEMS with category tags, ShopView auto-collapse",
@@ -358,7 +358,7 @@
     {
       "version": "v0.9.0",
       "date": "2026-09-28",
-      "title": "Bulk add flow for groceries",
+      "title": "Bulk-add groceries",
       "features": [
         {
           "text": "bulk add flow for groceries",
@@ -371,7 +371,7 @@
     {
       "version": "v0.8.0",
       "date": "2026-09-28",
-      "title": "Backup & restore (zip) + room payload customs + history opt-in sharing",
+      "title": "Backup and restore, plus richer room sync",
       "features": [
         {
           "text": "backup & restore (zip) + room payload customs + history opt-in sharing",
@@ -384,7 +384,7 @@
     {
       "version": "v0.7.0",
       "date": "2026-09-27",
-      "title": "Grocery add-item autocomplete backed by an extracted ingredient index",
+      "title": "Autocomplete for grocery add-item",
       "features": [
         {
           "text": "grocery add-item autocomplete backed by an extracted ingredient index",
@@ -397,7 +397,7 @@
     {
       "version": "v0.6.0",
       "date": "2026-09-27",
-      "title": "Surface personal cooked history (detail line + /history tab)",
+      "title": "Your cooked history, with its own tab",
       "features": [
         {
           "text": "surface personal cooked history (detail line + /history tab)",
@@ -410,7 +410,7 @@
     {
       "version": "v0.5.0",
       "date": "2026-09-27",
-      "title": "Sub-linear seasoning scaling + Meanwhile concurrent step pairs",
+      "title": "Smarter seasoning scaling and concurrent cooking steps",
       "features": [
         {
           "text": "sub-linear seasoning scaling + Meanwhile concurrent step pairs",
@@ -423,7 +423,7 @@
     {
       "version": "v0.4.1",
       "date": "2026-09-24",
-      "title": "Grocery UI polish \u2014 tooltip layout + auto-collapse done categories",
+      "title": "Grocery tooltip and auto-collapse polish",
       "fixes": [
         {
           "text": "grocery UI polish \u2014 tooltip layout + auto-collapse done categories",
@@ -436,7 +436,7 @@
     {
       "version": "v0.4.0",
       "date": "2026-09-24",
-      "title": "Clear grocery list removes ingredients until meals are cooked",
+      "title": "Grocery clearing now follows cooked meals",
       "features": [
         {
           "text": "clear grocery list removes ingredients until meals are cooked",
@@ -449,12 +449,12 @@
     {
       "version": "v0.3.2",
       "date": "2026-09-23",
-      "title": "Maintenance release"
+      "title": "Smaller docker images on the Bun runtime"
     },
     {
       "version": "v0.3.1",
       "date": "2026-09-24",
-      "title": "Review findings on clear-grocery workflow",
+      "title": "Review fixes for the clear-grocery workflow",
       "fixes": [
         {
           "text": "review findings on clear-grocery workflow",
@@ -467,7 +467,7 @@
     {
       "version": "v0.3.0",
       "date": "2026-09-22",
-      "title": "Clear-grocery workflow + mark-cooked entry points",
+      "title": "Clear the grocery list as you cook",
       "features": [
         {
           "text": "clear-grocery workflow + mark-cooked entry points",
@@ -486,7 +486,7 @@
     {
       "version": "v0.2.3",
       "date": "2026-09-18",
-      "title": "Maintenance release"
+      "title": "Publish the relay image to GHCR"
     },
     {
       "version": "v0.2.2",
@@ -496,12 +496,12 @@
     {
       "version": "v0.2.1",
       "date": "2026-09-16",
-      "title": "Maintenance release"
+      "title": "Keep the containers on current Node LTS"
     },
     {
       "version": "v0.2.0",
       "date": "2026-09-16",
-      "title": "E2e coverage for live rooms + shopping mode; relay as Playwright webServer; docs",
+      "title": "Full-screen shopping mode and the live room sync client",
       "features": [
         {
           "text": "e2e coverage for live rooms + shopping mode; relay as Playwright webServer; docs",
@@ -582,7 +582,7 @@
     {
       "version": "v0.1.0",
       "date": "2026-09-15",
-      "title": "Docker image (multi-stage nginx)",
+      "title": "Indexed fuzzy search and the first docker image",
       "features": [
         {
           "text": "docker image (multi-stage nginx)",

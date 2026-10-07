@@ -36,7 +36,11 @@ async function load() {
     const res = await fetch('/data/changelog.json')
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const json = (await res.json()) as ChangelogDoc
-    const parsed = parseChangelog(json)
+    // A null parse means "no valid versions" (empty/malformed artifact) —
+    // render the modal's empty state, not a blank panel; cache it too so a
+    // reopen doesn't re-fetch a document we already judged unusable.
+    const parsed =
+      parseChangelog(json) ?? { generatedAt: '', versions: [] }
     cache = parsed
     data.value = parsed
   } catch (e) {

@@ -34,7 +34,10 @@ export interface NormalizedVersion {
   fixes: ChangelogEntry[]
 }
 
-const VALID_VERSION_RE = /^v\d+\.\d+\.\d+$/
+/** Accepts `vMAJOR.MINOR.PATCH` plus an optional prerelease suffix
+ * (`v2.3.0-rc1`); the generator sorts those between releases (ADR-0060 §2).
+ * Build metadata (`+…`) is NOT accepted — tags carry none in this repo. */
+const VALID_VERSION_RE = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
 
 function normalizeEntry(raw: unknown): ChangelogEntry | null {
   if (raw === null || typeof raw !== 'object') return null
@@ -79,17 +82,23 @@ export function parseChangelog(raw: unknown): ChangelogDoc | null {
         .filter((v): v is NormalizedVersion => v !== null)
     : []
   if (versions.length === 0) return null
-  // Enforce newest-first; sort by semver descending.
-  const semver = (t: string): [number, number, number] => {
-    const m = t.match(/^v(\d+)\.(\d+)\.(\d+)$/)
-    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : [0, 0, 0]
+  // Enforce newest-first; prerelease-aware semver descending (ADR-0060 §2):
+  // a release sorts ABOVE its own prerelease (`v2.3.0` > `v2.3.0-rc1`), and
+  // two prereleases of the same triple compare by identifier string.
+  const semver = (t: string): [number, number, number, number, string] => {
+    const m = t.match(/^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/)
+    if (!m) return [0, 0, 0, 0, '']
+    const pre = m[4] ?? ''
+    return [Number(m[1]), Number(m[2]), Number(m[3]), pre ? 0 : 1, pre]
   }
   versions.sort((a, b) => {
-    const sa = semver(a.version)
-    const sb = semver(b.version)
-    for (let i = 0; i < 3; i++) {
-      if (sa[i] !== sb[i]) return sb[i] - sa[i]
-    }
+    const [amaj, amin, apat, apren, aid] = semver(a.version)
+    const [bmaj, bmin, bpat, bpren, bid] = semver(b.version)
+    if (amaj !== bmaj) return bmaj - amaj
+    if (amin !== bmin) return bmin - amin
+    if (apat !== bpat) return bpat - apat
+    if (apren !== bpren) return bpren - apren
+    if (aid !== bid) return aid < bid ? 1 : -1
     return 0
   })
   return {

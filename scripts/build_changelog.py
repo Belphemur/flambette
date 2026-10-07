@@ -96,19 +96,31 @@ def git(*args):
     return subprocess.check_output(["git"] + list(args), encoding="utf8").strip()
 
 
+TAG_SEMVER_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$")
+
+
+def semver_sort_key(tag: str):
+    """Prerelease-aware semver key (ADR-0060 §2).
+
+    `v2.3.0-rc1` sorts BETWEEN `v2.2.0` and `v2.3.0`: a release sorts after
+    its own prerelease (the 4th element: a prerelease carries 0, a release
+    1). Prerelease identifiers compare as a plain string — enough for the
+    `rc.N` house style. Unparseable tags sort first (0,0,0) and never
+    crash the generator.
+    """
+    m = TAG_SEMVER_RE.match(tag)
+    if not m:
+        return (0, 0, 0, 0, "")
+    major, minor, patch, pre = m.groups()
+    return (int(major), int(minor), int(patch), 0 if pre else 1, pre or "")
+
+
 def get_tags_sorted():
     raw = git("tag", "-l", "v*")
     if not raw:
         return []
     tags = raw.split()
-
-    def semver_key(t):
-        m = re.match(r"v(\d+)\.(\d+)\.(\d+)$", t)
-        if m:
-            return tuple(int(x) for x in m.groups())
-        return (0, 0, 0)
-
-    tags.sort(key=semver_key)
+    tags.sort(key=semver_sort_key)
     return tags
 
 
@@ -152,65 +164,105 @@ AUTHORED_TITLES: dict[str, str] = {
     "v1.2.0": "Cloudflare deployment and app version in the header",
     "v1.1.0": "Live room sync client",
     "v1.0.0": "Full local recipe catalog with indexed fuzzy search",
+    "v0.15.0": "Rebuilt as a kitchen companion",
+    "v0.14.1": "Auto-Plan Regenerate seed fix",
+    "v0.14.0": "Cooked history shared by default",
+    "v0.13.0": "Household favourites and ratings",
+    "v0.12.0": "Auto-Plan and unified quick filters",
+    "v0.11.1": "Relay image and CI smoke-test fixes",
+    "v0.11.0": "Waste-aware grocery, diet filters, and cooking timers",
+    "v0.10.1": "Grocery empty-state spacing fix",
+    "v0.10.0": "A Settings tab and categorized extra items",
+    "v0.9.0": "Bulk-add groceries",
+    "v0.8.0": "Backup and restore, plus richer room sync",
+    "v0.7.0": "Autocomplete for grocery add-item",
+    "v0.6.0": "Your cooked history, with its own tab",
+    "v0.5.0": "Smarter seasoning scaling and concurrent cooking steps",
+    "v0.4.1": "Grocery tooltip and auto-collapse polish",
+    "v0.4.0": "Grocery clearing now follows cooked meals",
+    "v0.3.2": "Smaller docker images on the Bun runtime",
+    "v0.3.1": "Review fixes for the clear-grocery workflow",
+    "v0.3.0": "Clear the grocery list as you cook",
+    "v0.2.3": "Publish the relay image to GHCR",
+    "v0.2.2": "Maintenance release",
+    "v0.2.1": "Keep the containers on current Node LTS",
+    "v0.2.0": "Full-screen shopping mode and the live room sync client",
+    "v0.1.0": "Indexed fuzzy search and the first docker image",
 }
 
 
-def build() -> dict:
+def partition_subjects(raw_subjects: list[str]) -> tuple[list, list]:
+    """Split commit subjects into (features, fixes) per ADR-0060 §2."""
+    features: list = []
+    fixes: list = []
+    for subject in raw_subjects:
+        parsed = parse_subject(subject)
+        if parsed is None:
+            continue  # merges / non-conventional: naturally skipped
+        if parsed["type"] in USER_TYPES:
+            entry = {
+                "text": parsed["text"],
+                "scope": parsed["scope"],
+                "pr": parsed["pr"],
+                "adr": parsed["adr"],
+            }
+            if parsed["type"] == "feat":
+                features.append(entry)
+            elif parsed["type"] == "fix":
+                fixes.append(entry)
+    return features, fixes
+
+
+def build(upcoming: str | None = None) -> dict:
     tags = get_tags_sorted()
-    # Exclude the tag at HEAD: the changelog documents released versions,
-    # not the in-progress build (ADR-0060 §4).
-    try:
-        head_tag = git("describe", "--tags", "--exact-match", "HEAD")
-        tags = [t for t in tags if t != head_tag]
-    except subprocess.CalledProcessError:
-        pass
     versions = []
 
     for i, tag in enumerate(tags):
         prev = tags[i - 1] if i > 0 else None
         raw_subjects = get_commits_between(prev, tag)
-
-        features = []
-        fixes = []
-        skipped = 0
-
-        for subject in raw_subjects:
-            # Skip merge commits (empty subject lines, or detected by parent
-            # count — we use the subject format here: merges show as
-            # "Merge branch ..." which the regex won't match, so they are
-            # naturally skipped by parse_subject returning None).
-            parsed = parse_subject(subject)
-            if parsed is None:
-                skipped += 1
-                continue
-            if parsed["type"] in USER_TYPES:
-                entry = {
-                    "text": parsed["text"],
-                    "scope": parsed["scope"],
-                    "pr": parsed["pr"],
-                    "adr": parsed["adr"],
-                }
-                if parsed["type"] == "feat":
-                    features.append(entry)
-                elif parsed["type"] == "fix":
-                    fixes.append(entry)
-            elif parsed["type"] in EXCLUDED_TYPES:
-                skipped += 1
-            else:
-                # Unknown type: skip, don't invent a bucket (ADR-0060 §2).
-                skipped += 1
+        features, fixes = partition_subjects(raw_subjects)
 
         title = html.unescape(AUTHORED_TITLES.get(tag, derive_title(features, fixes)))
 
         # Tag commit date (ISO date, YYYY-MM-DD).
         date = git("log", "-1", "--format=%ci", tag).split(" ")[0]
 
-        version = {"version": tag, "date": date, "title": title}
+        version: dict[str, object] = {"version": tag, "date": date, "title": title}
         if features:
             version["features"] = features
         if fixes:
             version["fixes"] = fixes
         # Note: versions are already in semver ascending order, so we prepend.
+        versions.insert(0, version)
+
+    # The --upcoming candidate (ADR-0060 §7): an UNTAGGED HEAD documented as
+    # the NEXT release, so the pre-tag generated artifact is byte-identical
+    # to the post-tag build. Range is newest tag..HEAD; the candidate's date
+    # is HEAD's commit date (the release procedure tags that same commit the
+    # same day). Never combined with --check.
+    if upcoming:
+        if not TAG_SEMVER_RE.match(upcoming):
+            print(
+                f"FAIL: --upcoming {upcoming!r} is not a vMAJOR.MINOR.PATCH tag",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        range_start = tags[-1] if tags else None
+        raw_subjects = (
+            get_commits_between(range_start, "HEAD")
+            if range_start
+            else git("log", "--format=%s", "HEAD").split("\n")
+        )
+        features, fixes = partition_subjects(raw_subjects)
+        title = html.unescape(
+            AUTHORED_TITLES.get(upcoming) or derive_title(features, fixes)
+        )
+        date = git("log", "-1", "--format=%ci", "HEAD").split(" ")[0]
+        version: dict[str, object] = {"version": upcoming, "date": date, "title": title}
+        if features:
+            version["features"] = features
+        if fixes:
+            version["fixes"] = fixes
         versions.insert(0, version)
 
     return {"generatedAt": _now_iso(), "versions": versions}
@@ -229,11 +281,38 @@ GOLDEN_TITLE = "Import favourites from Mealime"
 
 
 if __name__ == "__main__":
-    if "--check" in sys.argv:
-        committed = json.load(open(OUT)) if os.path.exists(OUT) else None
+    # Flag parsing is positional-tolerant but explicit: `--check` never
+    # combines with `--upcoming` (a staleness check compares RELEASED
+    # history), `--out` exists so the golden tests tamper a COPY instead of
+    # the tracked artifact (ADR-0060 §7).
+    args = sys.argv[1:]
+    upcoming: str | None = None
+    out_path = OUT
+
+    def _pop(flag: str) -> str | None:
+        if flag not in args:
+            return None
+        i = args.index(flag)
+        if i + 1 >= len(args):
+            print(f"FAIL: {flag} needs a value", file=sys.stderr)
+            sys.exit(2)
+        value = args[i + 1]
+        del args[i : i + 2]
+        return value
+
+    upcoming = _pop("--upcoming")
+    out_arg = _pop("--out")
+    if out_arg:
+        out_path = out_arg
+
+    if "--check" in args:
+        if upcoming:
+            print("FAIL: --check never takes --upcoming", file=sys.stderr)
+            sys.exit(2)
+        committed = json.load(open(out_path)) if os.path.exists(out_path) else None
         fresh = build()
         if committed is None:
-            print(f"FAIL: {OUT} does not exist — run `python3 {__file__}`", file=sys.stderr)
+            print(f"FAIL: {out_path} does not exist — run `python3 {__file__}`", file=sys.stderr)
             sys.exit(1)
         c = {k: v for k, v in committed.items() if k != "generatedAt"}
         f = {k: v for k, v in fresh.items() if k != "generatedAt"}
@@ -243,9 +322,9 @@ if __name__ == "__main__":
         print("OK: changelog.json is up to date")
         sys.exit(0)
     else:
-        doc = build()
-        os.makedirs(os.path.dirname(OUT), exist_ok=True)
-        with open(OUT, "w") as fh:
+        doc = build(upcoming=upcoming)
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, "w") as fh:
             json.dump(doc, fh, indent=2)
             fh.write("\n")
-        print(f"Wrote {OUT} ({len(doc['versions'])} versions)")
+        print(f"Wrote {out_path} ({len(doc['versions'])} versions)")
