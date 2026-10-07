@@ -90,7 +90,7 @@ it is exactly the fabrication ADR-0054 forbids.
    `bun run test:unit` → `bun run data:search` → `bun run data:verify` → `bun run test:data` → `bun run build`. A failing generator
    golden is DRIFT, not flake: update the pin only when the new number is
    correct, with the reason in the commit body.
-   Completion criterion: all four green.
+   Completion criterion: all five green (four gates + the data:search generator).
 8. **Commit by explicit path** (never `git add -A` at repo root: scrape
    scripts/raw archives sit gitignored in the workdir). One commit per
    recipe incl. artifacts + images. Push, let the PR's preview deploy for

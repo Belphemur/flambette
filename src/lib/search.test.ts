@@ -103,12 +103,38 @@ describe('parseSearchQuery', () => {
     expect(neg.term.exact).toBe(true)
   })
 
-  test('-term at very start → ordinary term', () => {
+  test('-term at very start → negated (subtracts from whole catalog)', () => {
     const ast = parseSearchQuery('-lentil')
     const t = (ast[0]! as SearchClause & { term: SearchTerm }).term
     expect(t.text).toBe('lentil')
-    expect(t.negate).toBe(false)
-    expect(t.exact).toBe(false)
+    expect(t.negate).toBe(true)
+    expect(t.exact).toBe(true)
+  })
+
+  test('-"phrase" → negated exact phrase (sign sticks to the quotes)', () => {
+    const ast = parseSearchQuery('soup -"garlic bread"')
+    const g = ast[0]! as SearchClause & { type: 'group'; clauses: SearchClause[] }
+    const neg = (g.clauses[1]! as SearchClause & { term: SearchTerm }).term
+    expect(neg.negate).toBe(true)
+    expect(neg.exact).toBe(true)
+    expect(neg.text).toBe('garlic bread')
+  })
+
+  test('(lentil AND soup) → AND group, AND not a literal term', () => {
+    const ast = parseSearchQuery('(lentil AND soup)')
+    const g = ast[0]! as SearchClause & { type: 'group'; combine: 'AND' | 'OR'; explicit: boolean; clauses: SearchClause[] }
+    expect(g.combine).toBe('AND')
+    expect(g.explicit).toBe(true)
+    expect(g.clauses).toHaveLength(2)
+    expect((g.clauses[0]! as SearchClause & { term: SearchTerm }).term.text).toBe('lentil')
+    expect((g.clauses[1]! as SearchClause & { term: SearchTerm }).term.text).toBe('soup')
+  })
+
+  test('(lentil soup) → implicit AND inside parens (same grammar)', () => {
+    const ast = parseSearchQuery('(lentil soup)')
+    const g = ast[0]! as SearchClause & { type: 'group'; combine: 'AND' | 'OR'; explicit: boolean }
+    expect(g.combine).toBe('AND')
+    expect(g.explicit).toBe(false)
   })
 
   test('-term not at start → negate', () => {
@@ -431,3 +457,230 @@ describe('suggest', () => {
 })
 
 // ── Helper to make MiniSearch work with bun:test ────────────────────────────
+
+// ── Review-fix behaviours (PR #58 follow-up) ────────────────────────────────
+
+describe('review fixes: negation, groups, adjacency scope', () => {
+  function makeIndex(docs: SearchDoc[]): MiniSearch<SearchDoc> {
+    const index = new MiniSearch<SearchDoc>(INDEX_OPTIONS)
+    index.addAll(docs)
+    return index
+  }
+
+  test('negated term is exact: -pea does not remove peanut/pear', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Chicken & Pea Stew', ['chicken', 'pea'])),
+      // Both contain "chicken" TOO — so the AND admits them and only the
+      // negation decides; a fuzzy `-pea` regression would remove them and
+      // the test would catch it (docs without "chicken" are excluded by
+      // the positive term regardless, which proves nothing).
+      buildSearchDoc(makeMeta(2, 'Chicken Peanut Noodles', ['chicken', 'peanut'])),
+      buildSearchDoc(makeMeta(3, 'Chicken Pear Salad', ['chicken', 'pear'])),
+      buildSearchDoc(makeMeta(4, 'Plain Chicken', ['chicken'])),
+    ]
+    const index = makeIndex(docs)
+    const result = await searchWithIndex(index, 'chicken -pea', docs)
+    expect(result.primary).toContain(4)
+    expect(result.primary).not.toContain(1) // pea excluded (exact)
+    expect(result.primary).toContain(2) // peanut NOT excluded by -pea
+    expect(result.primary).toContain(3) // pear NOT excluded by -pea
+  })
+
+  test('query that is only negations → whole catalog minus the negation', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Garlic Soup', ['garlic'])),
+      buildSearchDoc(makeMeta(2, 'Garlic Bread', ['garlic', 'bread'])),
+    ]
+    const index = makeIndex(docs)
+    const result = await searchWithIndex(index, '-bread', docs)
+    expect(result.primary).toContain(1)
+    expect(result.primary).not.toContain(2)
+  })
+
+  test('leading -soup excludes soups instead of searching for them', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Tomato Soup', ['tomato'])),
+      buildSearchDoc(makeMeta(2, 'Tomato Salad', ['tomato'])),
+    ]
+    const index = makeIndex(docs)
+    const result = await searchWithIndex(index, '-soup', docs)
+    expect(result.primary).toContain(2)
+    expect(result.primary).not.toContain(1)
+  })
+
+  test('AND inside parentheses is an operator, not a fuzzy term', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Lentil Soup', ['lentil', 'broth'])),
+      buildSearchDoc(makeMeta(2, 'Lentil Salad', ['lentil'])),
+      buildSearchDoc(makeMeta(3, 'Mushroom Soup', ['mushroom', 'broth'])),
+    ]
+    const index = makeIndex(docs)
+    const result = await searchWithIndex(index, '(lentil AND soup)', docs)
+    expect(result.primary).toContain(1)
+    expect(result.primary).not.toContain(2) // lentil only
+    expect(result.primary).not.toContain(3) // soup only
+  })
+
+  test('phrase inside a group requires adjacency', async () => {
+    const docs = [
+      // garlic and bread present but NOT adjacent; soup absent
+      buildSearchDoc(makeMeta(1, 'Bread and Garlic', ['garlic', 'bread'])),
+      buildSearchDoc(makeMeta(2, 'Garlic Bread & Soup', ['garlic', 'bread', 'soup'])),
+    ]
+    const index = makeIndex(docs)
+    const result = await searchWithIndex(index, '"garlic bread" AND soup', docs)
+    expect(result.primary).toContain(2)
+    expect(result.primary).not.toContain(1)
+  })
+
+  test('phrase OR term does not filter the other branch by the phrase', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Garlic Bread', ['garlic', 'bread'])),
+      buildSearchDoc(makeMeta(2, 'Tomato Soup', ['tomato'])), // soup only
+    ]
+    const index = makeIndex(docs)
+    const result = await searchWithIndex(index, '"garlic bread" OR soup', docs)
+    expect(result.primary).toContain(1)
+    expect(result.primary).toContain(2)
+  })
+
+  test('phrase next to a bare term takes the explicit path (exact, adjacent)', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Garlic Bread Soup', ['garlic', 'bread', 'broth'])),
+      // all three words present but the phrase is adjacent in NEITHER the
+      // name nor the ingredients
+      buildSearchDoc(makeMeta(2, 'Bread, Garlic, and Soup', ['tomato', 'garlic', 'onion'])),
+    ]
+    const index = makeIndex(docs)
+    const result = await searchWithIndex(index, '"garlic bread" soup', docs)
+    expect(result.primary).toContain(1)
+    expect(result.primary).not.toContain(2)
+  })
+
+  test('+term next to a bare term keeps its exact flag', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Lentil Soup', ['lentil'])),
+      // fuzzy neighbour of "lentil" — must NOT match +lentil
+      buildSearchDoc(makeMeta(2, 'Lentilz Loaf', ['lentilz'])),
+    ]
+    const index = makeIndex(docs)
+    const result = await searchWithIndex(index, '+lentil soup', docs)
+    expect(result.primary).toContain(1)
+    expect(result.primary).not.toContain(2)
+  })
+
+  test('term* next to a bare term is prefix-only (no fuzzy)', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Lentil Soup', ['lentil'])),
+      buildSearchDoc(makeMeta(2, 'Lentilz Loaf', ['lentilz'])),
+    ]
+    const index = makeIndex(docs)
+    const result = await searchWithIndex(index, 'lentil* soup', docs)
+    // lentil* is prefix-only: matches both 1 (prefix) — 2 matches the
+    // prefix too, but its "loaf" has no soup → AND with soup keeps only 1
+    expect(result.primary).toContain(1)
+    expect(result.primary).not.toContain(2)
+  })
+
+  test('adjacency ignores punctuation (Tomato Soup, Basil)', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Tomato Soup, Basil', ['tomato', 'basil'])),
+    ]
+    const index = makeIndex(docs)
+    const result = await searchWithIndex(index, '"tomato soup"', docs)
+    expect(result.primary).toContain(1)
+  })
+
+  test('negated OR branch: soup OR -bread keeps soup recipes with bread', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Tomato Soup with Bread', ['tomato', 'bread'])),
+      buildSearchDoc(makeMeta(2, 'Tomato Soup', ['tomato'])),
+      buildSearchDoc(makeMeta(3, 'Plain Bread', ['bread'])),
+    ]
+    const index = makeIndex(docs)
+    // Branch 1: soup matches (1, 2). Branch 2: catalog minus bread (2).
+    // A global subtraction would drop 1 — wrong: its soup branch qualifies.
+    const result = await searchWithIndex(index, 'soup OR -bread', docs)
+    expect(result.primary).toContain(1)
+    expect(result.primary).toContain(2)
+    expect(result.primary).not.toContain(3)
+  })
+
+  test('-soup -bread: multiple negations subtract from the catalog', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Tomato Soup', ['tomato'])),
+      buildSearchDoc(makeMeta(2, 'Plain Bread', ['bread'])),
+      buildSearchDoc(makeMeta(3, 'Tomato Salad', ['tomato'])),
+    ]
+    const index = makeIndex(docs)
+    // Implicit-AND group of two negations: positive-LESS group contributes
+    // catalog minus both, not [].
+    const result = await searchWithIndex(index, '-soup -bread', docs)
+    expect(result.primary).toContain(3)
+    expect(result.primary).not.toContain(1)
+    expect(result.primary).not.toContain(2)
+  })
+
+  test('soup (-onion OR -garlic): OR negations keep single-ingredient hits', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Onion Soup', ['onion'])), // no garlic → kept
+      buildSearchDoc(makeMeta(2, 'Onion & Garlic Soup', ['onion', 'garlic'])),
+      buildSearchDoc(makeMeta(3, 'Garlic Bread', ['garlic'])), // no soup
+    ]
+    const index = makeIndex(docs)
+    // OR(-onion -garlic) = complement(onion ∩ garlic): a doc is dropped
+    // only when BOTH negations hit it. AND semantics over-excluded doc 1.
+    const result = await searchWithIndex(index, 'soup (-onion OR -garlic)', docs)
+    expect(result.primary).toContain(1)
+    expect(result.primary).not.toContain(2)
+  })
+
+  test('soup (-onion -garlic): positive-less subgroup does not collapse the AND', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Leek Soup', ['leek'])),
+      buildSearchDoc(makeMeta(2, 'Onion Soup', ['onion'])),
+      buildSearchDoc(makeMeta(3, 'Garlic Bread', ['garlic', 'bread'])),
+    ]
+    const index = makeIndex(docs)
+    // The subgroup (-onion -garlic) has no positives: it yields catalog
+    // minus {2,3}; intersecting with soup keeps 1 — returning [] there
+    // zeroed the whole query.
+    const result = await searchWithIndex(index, 'soup (-onion -garlic)', docs)
+    expect(result.primary).toContain(1)
+    expect(result.primary).not.toContain(2)
+    expect(result.primary).not.toContain(3)
+  })
+
+  test('grouped (soup OR -bread) matches top-level branch semantics', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Tomato Soup with Bread', ['tomato', 'bread'])),
+      buildSearchDoc(makeMeta(2, 'Tomato Soup', ['tomato'])),
+      buildSearchDoc(makeMeta(3, 'Plain Bread', ['bread'])),
+    ]
+    const index = makeIndex(docs)
+    // In-group OR: the negated member is its own complement branch —
+    // soup ∪ (catalog minus bread). A subtraction here dropped doc 1.
+    const result = await searchWithIndex(index, '(soup OR -bread)', docs)
+    expect(result.primary).toContain(1)
+    expect(result.primary).toContain(2)
+    expect(result.primary).not.toContain(3)
+  })
+
+  test('bare AND primary is literal: "pork" does not fuzzy-match "york"', async () => {
+    const docs = [
+      // has "rice" (jasmine rice) and "york" — NO pork token
+      buildSearchDoc(makeMeta(1, 'Baked Sesame Beef with Broccoli & Rice', [
+        'broccoli', 'jasmine rice', 'striploin (New York strip) steak', 'sesame seeds',
+      ])),
+      buildSearchDoc(makeMeta(2, 'Pork & Rice Bowl', ['pork', 'jasmine rice'])),
+    ]
+    const index = makeIndex(docs)
+    const result = await searchWithIndex(index, 'rice pork', docs)
+    expect(result.primary).toContain(2)
+    // "york" is within fuzzy 0.2 of "pork" (1 edit on 4 letters) — the
+    // AND primary must not accept it; the fuzzy match may only appear
+    // in the OR fallback below the divider.
+    expect(result.primary).not.toContain(1)
+    expect(result.fallback).toContain(1)
+  })
+})
