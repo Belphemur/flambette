@@ -40,7 +40,7 @@ jobs:
           python3 scripts/test_build_changelog.py
 
       - name: Upload the artifact for the image/worker builds
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: changelog
           path: public/data/changelog.json
@@ -110,7 +110,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: changelog
           path: public/data
@@ -196,7 +196,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: changelog
           path: public/data
