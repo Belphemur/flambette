@@ -470,16 +470,20 @@ describe('review fixes: negation, groups, adjacency scope', () => {
   test('negated term is exact: -pea does not remove peanut/pear', async () => {
     const docs = [
       buildSearchDoc(makeMeta(1, 'Chicken & Pea Stew', ['chicken', 'pea'])),
-      buildSearchDoc(makeMeta(2, 'Peanut Noodles', ['peanut', 'noodles'])),
-      buildSearchDoc(makeMeta(3, 'Pear Salad', ['pear', 'lettuce'])),
+      // Both contain "chicken" TOO — so the AND admits them and only the
+      // negation decides; a fuzzy `-pea` regression would remove them and
+      // the test would catch it (docs without "chicken" are excluded by
+      // the positive term regardless, which proves nothing).
+      buildSearchDoc(makeMeta(2, 'Chicken Peanut Noodles', ['chicken', 'peanut'])),
+      buildSearchDoc(makeMeta(3, 'Chicken Pear Salad', ['chicken', 'pear'])),
       buildSearchDoc(makeMeta(4, 'Plain Chicken', ['chicken'])),
     ]
     const index = makeIndex(docs)
     const result = await searchWithIndex(index, 'chicken -pea', docs)
     expect(result.primary).toContain(4)
-    expect(result.primary).not.toContain(1) // peas excluded (exact)
-    expect(result.primary).not.toContain(2) // peanut NOT excluded by -pea
-    expect(result.primary).not.toContain(3) // pear NOT excluded by -pea
+    expect(result.primary).not.toContain(1) // pea excluded (exact)
+    expect(result.primary).toContain(2) // peanut NOT excluded by -pea
+    expect(result.primary).toContain(3) // pear NOT excluded by -pea
   })
 
   test('query that is only negations → whole catalog minus the negation', async () => {
@@ -585,6 +589,52 @@ describe('review fixes: negation, groups, adjacency scope', () => {
     const index = makeIndex(docs)
     const result = await searchWithIndex(index, '"tomato soup"', docs)
     expect(result.primary).toContain(1)
+  })
+
+  test('negated OR branch: soup OR -bread keeps soup recipes with bread', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Tomato Soup with Bread', ['tomato', 'bread'])),
+      buildSearchDoc(makeMeta(2, 'Tomato Soup', ['tomato'])),
+      buildSearchDoc(makeMeta(3, 'Plain Bread', ['bread'])),
+    ]
+    const index = makeIndex(docs)
+    // Branch 1: soup matches (1, 2). Branch 2: catalog minus bread (2).
+    // A global subtraction would drop 1 — wrong: its soup branch qualifies.
+    const result = await searchWithIndex(index, 'soup OR -bread', docs)
+    expect(result.primary).toContain(1)
+    expect(result.primary).toContain(2)
+    expect(result.primary).not.toContain(3)
+  })
+
+  test('-soup -bread: multiple negations subtract from the catalog', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Tomato Soup', ['tomato'])),
+      buildSearchDoc(makeMeta(2, 'Plain Bread', ['bread'])),
+      buildSearchDoc(makeMeta(3, 'Tomato Salad', ['tomato'])),
+    ]
+    const index = makeIndex(docs)
+    // Implicit-AND group of two negations: positive-LESS group contributes
+    // catalog minus both, not [].
+    const result = await searchWithIndex(index, '-soup -bread', docs)
+    expect(result.primary).toContain(3)
+    expect(result.primary).not.toContain(1)
+    expect(result.primary).not.toContain(2)
+  })
+
+  test('soup (-onion -garlic): positive-less subgroup does not collapse the AND', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Leek Soup', ['leek'])),
+      buildSearchDoc(makeMeta(2, 'Onion Soup', ['onion'])),
+      buildSearchDoc(makeMeta(3, 'Garlic Bread', ['garlic', 'bread'])),
+    ]
+    const index = makeIndex(docs)
+    // The subgroup (-onion -garlic) has no positives: it yields catalog
+    // minus {2,3}; intersecting with soup keeps 1 — returning [] there
+    // zeroed the whole query.
+    const result = await searchWithIndex(index, 'soup (-onion -garlic)', docs)
+    expect(result.primary).toContain(1)
+    expect(result.primary).not.toContain(2)
+    expect(result.primary).not.toContain(3)
   })
 
   test('bare AND primary is literal: "pork" does not fuzzy-match "york"', async () => {

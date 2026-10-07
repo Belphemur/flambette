@@ -416,20 +416,25 @@ export async function searchVariantIds(query: string): Promise<SearchResults> {
   if (!idx) return { primary: [], fallback: [] }
   if (!query.trim()) return { primary: [], fallback: [] }
 
-  // Docs (for phrase adjacency) are built LAZILY: only the explicit
-  // evaluator uses them, and building means ~2.8k objects per keystroke
-  // when done eagerly. The catalog is frozen per session, so one memo
-  // covers every later call.
-  let docsMemo: SearchDoc[] | null = null
-  const getDocs = (): SearchDoc[] => {
-    if (!docsMemo) {
-      const c = catalog.value
-      docsMemo = c ? c.variantMeta.map((meta) => buildSearchDoc(meta)) : []
-    }
-    return docsMemo
-  }
+  // Docs (for phrase adjacency) are built LAZILY and memoized at MODULE
+  // level: the catalog is frozen per session, so the memo survives across
+  // calls — a per-call memo rebuilt ~2.8k docs on every phrase search.
+  const getDocs = getDocsFactory()
 
   return searchWithIndex(idx, query, getDocs)
+}
+
+let docsCache: { for: unknown; docs: SearchDoc[] } | null = null
+
+/** Memoized adjacency docs for the current catalog (module-level). */
+function getDocsFactory(): () => SearchDoc[] {
+  return () => {
+    const c = catalog.value
+    if (!docsCache || docsCache.for !== c) {
+      docsCache = { for: c, docs: c ? c.variantMeta.map((meta) => buildSearchDoc(meta)) : [] }
+    }
+    return docsCache.docs
+  }
 }
 
 /** Core search logic, testable with an arbitrary index and doc set. */
@@ -473,38 +478,29 @@ async function evaluateExplicit(
   ast: SearchAst,
   getDocs: () => SearchDoc[],
 ): Promise<number[]> {
-  const positiveIds = new Set<number>()
-  const negativeIds = new Set<number>()
-  let sawPositive = false
+  // The top level is a UNION of OR branches; each branch computes its own
+  // set, and a negated branch means "everything except X" — NOT a global
+  // subtraction (soup OR -bread must keep soup recipes containing bread:
+  // the soup branch alone satisfies the query for them).
+  const branches: number[][] = []
 
   for (const clause of ast) {
     if (clause.type === 'group') {
-      const ids = await evaluateGroup(idx, clause, getDocs)
-      for (const id of ids) positiveIds.add(id)
-      sawPositive = true
-    } else if (clause.type === 'term') {
-      if (clause.term.negate) {
-        for (const id of await searchTermIds(idx, clause.term, getDocs)) negativeIds.add(id)
-      } else {
-        const ids = await searchTermIds(idx, clause.term, getDocs)
-        for (const id of ids) positiveIds.add(id)
-        // Presence of a positive CLAUSE, not of matches: a phrase whose
-        // adjacency filter emptied the set is still a positive query —
-        // falling back to "all docs" here would return the whole catalog.
-        sawPositive = true
-      }
+      branches.push(await evaluateGroup(idx, clause, getDocs))
+    } else if (clause.term.negate) {
+      // Standalone negated OR branch: catalog minus the negated matches.
+      const hits = new Set(await searchTermIds(idx, clause.term, getDocs))
+      branches.push(getDocs().map((d) => d.id).filter((id) => !hits.has(id)))
+    } else {
+      branches.push(await searchTermIds(idx, clause.term, getDocs))
     }
   }
 
-  // A query that is ONLY negations subtracts from the whole catalog —
-  // `-soup` means "everything but soup", never "search for soup".
-  const base = sawPositive
-    ? [...positiveIds]
-    : getDocs().map((d) => d.id)
-
-  if (negativeIds.size === 0) return base
-  const negSet = new Set(negativeIds)
-  return base.filter((id) => !negSet.has(id))
+  const result = new Set<number>()
+  for (const ids of branches) {
+    for (const id of ids) result.add(id)
+  }
+  return [...result]
 }
 
 async function evaluateGroup(
@@ -525,7 +521,14 @@ async function evaluateGroup(
     }
   }
 
-  if (positiveSets.length === 0) return []
+  if (positiveSets.length === 0) {
+    // A positive-LESS group (-soup -bread, or a nested (-cream) inside an
+    // AND) is still meaningful: it contributes "everything except the
+    // negated matches". Returning [] here collapsed `soup (-onion
+    // -garlic)` to zero results — the parent AND intersected with nothing.
+    const hits = new Set(negativeIds)
+    return getDocs().map((d) => d.id).filter((id) => !hits.has(id))
+  }
 
   if (group.combine === 'AND') {
     // Intersect all positive sets

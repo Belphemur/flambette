@@ -383,8 +383,13 @@ function onSuggestKey(e: KeyboardEvent) {
   break
   case 'Enter':
   if (suggestSelected.value >= 0) {
-  suppressNextSuggest = true
-  query.value = suggestions.value[suggestSelected.value]!
+  const picked = suggestions.value[suggestSelected.value]!
+  // Same no-op guard as selectSuggestion: a flag set on an unchanged
+  // query would kill the next real edit's suggestions.
+  if (query.value !== picked) {
+    suppressNextSuggest = true
+    query.value = picked
+  }
   suggestions.value = []
   suggestSelected.value = -1
   }
@@ -397,8 +402,13 @@ function onSuggestKey(e: KeyboardEvent) {
 }
 
 function selectSuggestion(s: string) {
-  suppressNextSuggest = true
-  query.value = s
+  // Only suppress when the assignment actually CHANGES the query: picking
+  // a suggestion equal to the current text never fires the watcher, and a
+  // stale flag would silently swallow the user's NEXT real edit.
+  if (query.value !== s) {
+    suppressNextSuggest = true
+    query.value = s
+  }
   suggestions.value = []
   suggestSelected.value = -1
 }
