@@ -1,6 +1,33 @@
 {
-  "generatedAt": "2026-10-07T01:18:32Z",
+  "generatedAt": "2026-10-07T20:38:55Z",
   "versions": [
+    {
+      "version": "v2.4.0",
+      "date": "2026-10-07",
+      "title": "Smarter recipe search \u2014 type less, find more",
+      "features": [
+        {
+          "text": "smarter recipe search \u2014 type less, find more",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "build-time changelog module + stale-version refresh banner",
+          "scope": "changelog",
+          "pr": 57,
+          "adr": null
+        }
+      ],
+      "fixes": [
+        {
+          "text": "search refinements from review \u2014 operators behave exactly as typed",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
     {
       "version": "v2.3.0",
       "date": "2026-10-06",
