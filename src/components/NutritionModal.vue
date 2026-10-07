@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { ChevronDown, ChevronRight, X } from 'lucide-vue-next'
+import AppModal from './AppModal.vue'
 import {
   ENERGY_ROW,
   formatNutritionValue,
@@ -33,84 +34,16 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: [] }>()
 
-const panel = ref<HTMLElement | null>(null)
-
-/**
- * Focus MANAGEMENT, not just focus placement (a11y: `aria-modal="true"`
- * is a promise). Three rules, all on this component because RecipeDetail
- * mounts it `v-if`-gated so one mount == one open:
- *
- *  1. remember the trigger (`document.activeElement`) before focus moves
- *     in, and restore it on EVERY close path — unmount covers the close
- *     button, Escape, the scrim and a parent-driven close alike;
- *  2. TRAP Tab inside the panel: the modal is teleported to `body`, so
- *     without this Tab walks into the still-mounted recipe detail behind
- *     the backdrop;
- *  3. keep the panel itself focusable as the last stop, so Shift+Tab from
- *     the first control wraps to the end instead of escaping.
- */
-let restoreFocusTo: HTMLElement | null = null
-
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-
-function focusables(): HTMLElement[] {
-  return panel.value
-    ? Array.from(panel.value.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-        (el) => el.offsetParent !== null || el === document.activeElement,
-      )
-    : []
-}
-
-function trapTab(e: KeyboardEvent): void {
-  if (e.key !== 'Tab' || !panel.value) return
-  const items = [...focusables(), panel.value]
-  if (items.length === 0) return
-  const first = items[0]
-  const last = items[items.length - 1]
-  const active = document.activeElement
-  if (!active || !panel.value.contains(active)) {
-    e.preventDefault()
-    ;(e.shiftKey ? last : first).focus()
-    return
-  }
-  if (!e.shiftKey && active === last) {
-    e.preventDefault()
-    first.focus()
-  } else if (e.shiftKey && active === first) {
-    e.preventDefault()
-    last.focus()
-  }
-}
-
 function close() {
   emit('close')
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') {
-    e.stopPropagation()
-    close()
-    return
-  }
-  trapTab(e)
-}
-
-onMounted(() => {
-  restoreFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
-  window.addEventListener('keydown', onKey)
-  void nextTick(() => panel.value?.focus())
-})
-onUnmounted(() => {
-  window.removeEventListener('keydown', onKey)
-  const target = restoreFocusTo
-  restoreFocusTo = null
-  if (!target) return
-  void nextTick(() => {
-    if (document.contains(target)) target.focus()
-    else document.body.focus?.()
-  })
-})
+/**
+ * Focus management, focus trap and focus restore are AppModal's — the ONE
+ * shared machinery every modal mounts (this component used to carry its own
+ * copy; the copies had drifted). The panel gains Teleport-to-body through
+ * AppModal, which is what this file's original doc comment already claimed.
+ */
 
 /** Per serving, never scaled (ADR-0004). */
 const energy = computed(() =>
@@ -190,18 +123,12 @@ const energyDisplay = computed(() =>
 </script>
 
 <template>
-  <div
-  class="fixed inset-0 z-50 flex items-end justify-center bg-surface-dark/50 sm:items-center"
-  @click.self="close"
-  >
-  <div
-  ref="panel"
-  tabindex="-1"
-  class="max-h-[85vh] w-full max-w-app overflow-y-auto rounded-t-2xl bg-surface-raised p-4 shadow-xl outline-none sm:rounded-2xl"
-  role="dialog"
-  aria-modal="true"
-  aria-label="Nutrition facts"
-  data-test="nutrition-modal"
+  <AppModal
+    dialog-label="Nutrition facts"
+    overlay-class="z-50 flex items-end justify-center bg-surface-dark/50 sm:items-center"
+    panel-class="max-h-[85vh] w-full max-w-app overflow-y-auto rounded-t-2xl bg-surface-raised p-4 shadow-xl sm:rounded-2xl"
+    panel-test="nutrition-modal"
+    @close="close"
   >
   <div class="flex items-start justify-between gap-3">
   <div>
@@ -317,6 +244,5 @@ const energyDisplay = computed(() =>
   Per serving. Totals for the number of servings you cook scale; the facts
   above do not.
   </p>
-  </div>
-  </div>
+  </AppModal>
 </template>

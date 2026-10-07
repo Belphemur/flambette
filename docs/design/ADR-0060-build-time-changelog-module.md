@@ -2,6 +2,13 @@
 
 Status: accepted (2026-10-07)
 
+> **Change note (2026-10-07, review round):** the modal surface is now the
+> shared `AppModal` component (teleport, focus trap, focus restore, Escape +
+> scrim dismissal owned ONCE — coding-philosophy DRY directive; the four
+> modals' copied machinery had already drifted). `ChangelogModal` is mounted
+> `v-if`-gated like every other modal. §5's mechanics are unchanged — the
+> machinery they describe simply lives in one place now.
+
 ## Context
 
 The header shows the build-time app version (`__APP_VERSION__`, ADR-0039;

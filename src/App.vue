@@ -322,48 +322,24 @@ function openChangelog() {
 
 /**
  * Stale-version banner (ADR-0061): shown when a newer bundle is deployed.
- * Dismissal persists for 24 hours (localStorage, key 'bannerDismissedUntil'):
- * while the deployed version remains newer, a dismissal silences the banner
- * for a day so the five-minute poll cannot re-surface it. After 24h the
- * check runs again, so a delayed rollout is still noticed.
+ * Dismissal is SESSION-ONLY (ADR-0061 §3): component state, never persisted —
+ * the next page load re-checks fresh, so an update can be deferred to a
+ * moment the user chooses, never permanently silenced. (The first
+ * implementation persisted a 24h timestamp in localStorage, which contradicted
+ * the ADR it cited; the ADR is the contract.)
  * The banner lives ABOVE the sticky header and never overlaps the bottom nav.
  */
-const showBanner = ref(false)
+const bannerDismissed = ref(false)
 const bannerState = ref<VersionState | null>(null)
+const showBanner = computed(() => bannerState.value === 'stale' && !bannerDismissed.value)
 let checkInterval: ReturnType<typeof setInterval> | null = null
 let visibilityHandler: (() => void) | null = null
 
-const BANNER_DISMISS_KEY = 'bannerDismissedUntil'
-
-function getDismissedUntil(): number | null {
-  try {
-    const raw = localStorage.getItem(BANNER_DISMISS_KEY)
-    if (!raw) return null
-    const ts = Number(raw)
-    return Number.isFinite(ts) && ts > Date.now() ? ts : null
-  } catch {
-    return null
-  }
-}
-
-function setDismissedUntil(): void {
-  try {
-    localStorage.setItem(BANNER_DISMISS_KEY, String(Date.now() + 24 * 60 * 60 * 1000))
-  } catch {
-    // localStorage may be unavailable (private mode) — dismissal is best-effort.
-  }
-}
-
 async function checkBannerVersion() {
-  // If the user dismissed the banner within the last 24h, stay hidden.
-  if (getDismissedUntil()) {
-    showBanner.value = false
-    bannerState.value = null
-    return
-  }
+  // Dismissed this session: keep the answer, never re-surface the banner.
+  if (bannerDismissed.value) return
   const result = await checkVersion({ running: appVersion })
   bannerState.value = result.state
-  showBanner.value = result.state === 'stale'
 }
 
 function startBannerChecks() {
@@ -441,7 +417,7 @@ onBeforeUnmount(() => {
       data-test="version-banner-dismiss"
       class="ml-2 inline-flex size-6 items-center justify-center rounded-full hover:bg-on-brand/20"
       aria-label="Dismiss version notice"
-      @click="setDismissedUntil(); showBanner = false"
+      @click="bannerDismissed = true"
       ><X :size="14" aria-hidden="true" /></button
     >
   </div>
@@ -654,5 +630,5 @@ onBeforeUnmount(() => {
   :peers="congratsPeers"
   @dismiss="congratsCode = null"
   />
-  <ChangelogModal :open="changelogOpen" @close="changelogOpen = false" />
+  <ChangelogModal v-if="changelogOpen" @close="changelogOpen = false" />
 </template>
