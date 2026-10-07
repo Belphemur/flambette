@@ -56,20 +56,24 @@ jobs:
 
       # The commit-back needs an actor that (a) BYPASSES the main-protection
       # ruleset's pull_request gate and (b) still lands a SIGNED commit (the
-      # ruleset also requires signatures). On a user-owned repo NO
-      # integration can be a bypass actor (GitHub rejects it: "must be part
-      # of the ruleset source or owner organization"), so GITHUB_TOKEN alone
-      # can never push main here. RELEASE_PAT is a fine-grained PAT scoped
-      # to this repo (Contents: Read/Write) belonging to the owner — the
-      # admin role carries the bypass, and a CreateCommitOnBranch commit is
-      # signed by GitHub server-side (verified: true, reason: valid),
-      # satisfying required_signatures. GITHUB_TOKEN stays as the fallback
-      # for an org-owned future (where the integration can be granted
-      # bypass + signature exemption).
+      # ruleset also requires signatures). The RELEASER GitHub App covers
+      # both: it is a ruleset bypass actor (Integration, the one actor type
+      # a user-owned repo CAN grant — the official github-actions app is
+      # rejected because it belongs to GitHub, not the repo owner), and a
+      # CreateCommitOnBranch commit made with its installation token is
+      # signed by GitHub server-side (verified: true, reason: valid).
+      # Secrets: RELEASER_APP_ID + RELEASER_PRIVATE_KEY (the app's .pem).
+      - name: Generate the RELEASER app token
+        id: releaser
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.RELEASER_APP_ID }}
+          private-key: ${{ secrets.RELEASER_PRIVATE_KEY }}
+
       - name: Commit to main (GitHub-signed)
         if: steps.state.outputs.state == 'pending'
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.releaser.outputs.token }}
         run: |
           CONTENT=$(base64 -w0 public/data/changelog.json)
           OWNER="${GITHUB_REPOSITORY%%/*}"
