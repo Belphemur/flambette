@@ -99,6 +99,25 @@ test('suggest dropdown opens, navigates and commits', async ({ page }) => {
   expect(value).not.toBe('Pad')
 })
 
+test('suggest dropdown drops the item that equals the query', async ({ page }) => {
+  const searchbox = page.getByRole('searchbox', { name: 'Search recipes or ingredients' })
+  await searchbox.fill('Pad')
+  await page.waitForTimeout(400) // debounce settles
+  const dropdown = page.getByTestId('search-suggest')
+  await expect(dropdown).toBeVisible()
+  // Type the FULL suggestion: it is no longer an offer, it is the query —
+  // the redundant item disappears from the list (the dropdown stays for
+  // any remaining LONGER completions, and would hide if none remained).
+  const first = (await page.getByTestId('search-suggest-item').first().textContent())!.trim()
+  await searchbox.fill(first)
+  await page.waitForTimeout(400)
+  const items = page.getByTestId('search-suggest-item')
+  const count = await items.count()
+  for (let i = 0; i < count; i++) {
+    expect((await items.nth(i).textContent())!.trim().toLowerCase()).not.toBe(first.toLowerCase())
+  }
+})
+
 test('search tips disclosure starts closed and toggles; empty-state hint', async ({ page }) => {
   // First visit: the panel is CLOSED — first paint shows results, not help.
   await expect(page.getByTestId('search-tips-panel')).toBeHidden()

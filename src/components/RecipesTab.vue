@@ -329,7 +329,12 @@ watch(query, (q) => {
   }
   suggestTimer = setTimeout(async () => {
     const results = await suggest(trimmed)
-    suggestions.value = results
+    // A suggestion that IS the query is noise: the user already typed
+    // that text, so offering it back is a no-op. Drop it from the list —
+    // the dropdown hides itself only when nothing else remains
+    // (case-insensitive: the suggester's casing is its own).
+    const key = trimmed.toLowerCase()
+    suggestions.value = results.filter((s) => s.toLowerCase() !== key)
     suggestSelected.value = -1
   }, 150)
 })
