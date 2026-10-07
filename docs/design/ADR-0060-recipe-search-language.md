@@ -104,10 +104,9 @@ MiniSearch results. Zero new dependencies.
    (ADR-0001). Search results still return raw variant ids with no facet
    knowledge.
 6. **Search-tips disclosure and empty-state hint** (ADR-0022 pattern):
-   five one-line operator examples render under the search box, open on
-   the first visit, then a device-local one-shot flag
-   (`ui.searchTipsSeen`) closes them for every later visit; a visible
-   toggle re-opens them. The empty state gains a hint paragraph when the
+   five one-line operator examples render under the search box, CLOSED by
+   default — first paint shows results, not help; the user opens them via
+   a visible toggle. The empty state gains a hint paragraph when the
    query is non-empty.
 
 ## Consequences
@@ -126,13 +125,12 @@ MiniSearch results. Zero new dependencies.
   quoted phrases and `+`/`-` terms are exact. Ranking keeps the existing
   name-boost.
 - The search-tips disclosure (ADR-0022 pattern) renders the query
-  language as five one-line examples under the search box. It is open on
-  the very first visit, then a device-local one-shot flag
-  (`ui.searchTipsSeen`, same slice as `historyShareDefaultMigrated`, not
-  backed up) latches it closed — every later visit starts collapsed even
-  if the user never touched the toggle. A visible toggle lets the user
-  re-open it. The empty state gains a hint line when the query is
-  non-empty.
+  language as five one-line examples under the search box. It starts
+  CLOSED on every visit — an auto-expanded panel taxed the mobile first
+  paint for a feature most sessions never need — and is opened only by
+  its visible toggle. It is pure component state: nothing is persisted,
+  no store slice grows. The empty state gains a hint line when the query
+  is non-empty.
 
 ## Alternatives considered
 

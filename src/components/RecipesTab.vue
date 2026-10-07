@@ -277,8 +277,9 @@ const DIET_ICONS: Record<DietId, { icon: Component; cls: string }> = Object.from
 
 /** Async search results: null means no active search (show all). */
 const searchResults = ref<{ primary: number[]; fallback: number[] } | null>(null)
-/** Search-tips disclosure: open on first visit, then one-shot latched
- *  (ADR-0060). Toggled by the user, persisted via ui.searchTipsSeen. */
+/** Search-tips disclosure: closed by default, user-toggled. The toggle
+ *  state is device-local (never a household preference — ADR-0027). The
+ *  panel starts closed so first paint shows results, not help, on mobile. */
 const showTips = ref(false)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 watch(query, (q) => {
@@ -459,13 +460,6 @@ onMounted(() => {
   // removal filter and any swapped names are ready when needed. No-op when
   // no restriction is active.
   void restrictions.ensureLoaded()
-  // ADR-0060: search tips are open on the very first visit, then the
-  // one-shot flag latches so they stay closed afterwards even if the
-  // user never touches the toggle.
-  if (!ui.searchTipsSeen) {
-    showTips.value = true
-    ui.searchTipsSeen = true
-  }
   observer = new IntersectionObserver(
   (entries) => {
   if (entries.some((e) => e.isIntersecting) && hasMore.value) {

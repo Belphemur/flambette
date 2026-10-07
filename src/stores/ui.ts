@@ -123,13 +123,6 @@ export const useUiStore = defineStore(
      * no later default change may override.
      */
     const historyShareDefaultMigrated = ref(false)
-    /**
-     * Device-local one-shot (ADR-0060): the search-tips panel is open on
-     * the very first visit, then this flag latches true. Not backed up —
-     * a missing key reads as false, correct for fresh installs and
-     * existing users alike.
-     */
-    const searchTipsSeen = ref(false)
     /** Auto-Plan settings (ADR-0027): last ruleset choice + mode, and the
      *  rotating seed generation. It advances at TWO points (ADR-0033):
      *  on every successful apply, and on every Regenerate press. All
@@ -626,7 +619,6 @@ export const useUiStore = defineStore(
       cookingStepIndex,
       shareCookedHistory,
       historyShareDefaultMigrated,
-      searchTipsSeen,
       quickFilters,
       householdRoom,
       stepTimers,
@@ -680,11 +672,6 @@ export const useUiStore = defineStore(
         // legacy blob and never has its toggle reset back to the default
         // (issue: opt-out on a fresh install was re-enabled after reload).
         'historyShareDefaultMigrated',
-        // Device-local one-shot (ADR-0060): the search-tips panel is open
-        // on the very first visit, then this flag latches true. Not in
-        // backups — a missing key reads as false, which is correct for
-        // both fresh installs and existing users.
-        'searchTipsSeen',
         'quickFilters',
         'householdRoom',
         'stepTimers',
