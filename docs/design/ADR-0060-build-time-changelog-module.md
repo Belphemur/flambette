@@ -34,10 +34,16 @@ Status: accepted (2026-10-07)
 > "Maintenance release"); the authored table is a GRANDFATHERED override for
 > pre-automation tags only, and the golden that demanded coverage for every
 > tag is replaced by one that demands the table reference only real tags.
-> Commit-back mechanics: on a user-owned repo no integration can be a
-> ruleset bypass actor, so the job uses `RELEASE_PAT` (fine-grained,
-> flambette-only, Contents: RW) — the owner's admin role carries the
-> pull_request-gate bypass while the API commit stays verified.
+> Commit-back mechanics (final form): the RELEASER GitHub App
+> (`RELEASER_APP_ID` / `RELEASER_PRIVATE_KEY` secrets) authenticates via
+> `actions/create-github-app-token`, and its installation is a ruleset
+> bypass actor (Integration — the one bypass type a user-owned repo CAN
+> grant; the official github-actions app is rejected because it belongs
+> to GitHub, not the owner). An earlier draft used a `RELEASE_PAT`; the
+> app replaces it — same bypass, same Verified commit, no long-lived
+> secret beyond the app's key. Proven live: an app-token
+> `CreateCommitOnBranch` commit landed on main authored
+> `releasing-app[bot]`, `verified: true, reason: valid`.
 
 ## Context
 
