@@ -123,6 +123,13 @@ export const useUiStore = defineStore(
      * no later default change may override.
      */
     const historyShareDefaultMigrated = ref(false)
+    /** Search-tips disclosure (ADR-0022 pattern + one-shot auto-expand):
+     *  device-local, never a household preference — not backed up, not
+     *  shared, restored as false on every fresh install. First visit
+     *  auto-expands the panel; once the user has seen it (or dismissed
+     *  it) the flag latches true and it stays closed thereafter.
+     */
+    const searchTipsSeen = ref(false)
     /** Auto-Plan settings (ADR-0027): last ruleset choice + mode, and the
      *  rotating seed generation. It advances at TWO points (ADR-0033):
      *  on every successful apply, and on every Regenerate press. All
@@ -652,6 +659,7 @@ export const useUiStore = defineStore(
       repairUnitSystem,
       repairDietaryRestrictionIds,
       setHouseholdRoom,
+      searchTipsSeen,
       showToast,
       dismissToast,
     }
@@ -687,6 +695,11 @@ export const useUiStore = defineStore(
         // The device's dietary restrictions: device-local (household sync
         // deliberately deferred), restored on the next launch.
         'dietaryRestrictionIds',
+        // The search-tips one-shot (ADR-0022): device-local, like the
+        // default servings — never a household preference, so it neither
+        // travels in backups nor gates sync. A missing key reads false,
+        // which is correct for both fresh installs and existing users.
+        'searchTipsSeen',
       ],
       // Hydration has already run when this fires, so a v0.12 blob (which
       // has no `quickFilters` and therefore patched nothing) can still be

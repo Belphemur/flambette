@@ -99,29 +99,35 @@ test('suggest dropdown opens, navigates and commits', async ({ page }) => {
   expect(value).not.toBe('Pad')
 })
 
-test('search tips disclosure starts closed and toggles; empty-state hint', async ({ page }) => {
-  // First visit: the panel is CLOSED — first paint shows results, not help.
-  await expect(page.getByTestId('search-tips-panel')).toBeHidden()
+test('search tips auto-expands on first visit, toggles, latches after reload', async ({ page }) => {
+  // First visit: the panel is VISIBLE — one-shot auto-expand (ADR-0022).
+  await expect(page.getByTestId('search-tips-panel')).toBeVisible()
   const toggle = page.getByTestId('search-tips-toggle')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+
+  // Click toggle → hidden + aria-expanded=false
+  await toggle.click()
+  await expect(page.getByTestId('search-tips-panel')).toBeHidden()
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
 
-  // Click toggle → visible + aria-expanded=true
+  // Click again → visible
   await toggle.click()
   await expect(page.getByTestId('search-tips-panel')).toBeVisible()
   await expect(toggle).toHaveAttribute('aria-expanded', 'true')
 
-  // Click again → hidden
-  await toggle.click()
-  await expect(page.getByTestId('search-tips-panel')).toBeHidden()
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
-
-  // Reload: still closed by default (the panel is pure user-toggle state).
+  // Reload: panel is HIDDEN — the one-shot latched true on first visit.
   await page.reload()
   await waitForCatalog(page)
   await expect(page.getByTestId('search-tips-panel')).toBeHidden()
   await expect(toggle).toHaveAttribute('aria-expanded', 'false')
 
-  // Empty-state tip: gibberish query shows the hint
+  // Click toggle → visible again (user re-opens at will)
+  await toggle.click()
+  await expect(page.getByTestId('search-tips-panel')).toBeVisible()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+})
+
+test('gibberish query surfaces the empty-state search tip', async ({ page }) => {
   await page.getByRole('searchbox', { name: 'Search recipes or ingredients' }).fill('zzzzqqqqwwww')
   await page.waitForTimeout(500)
   await expect(page.getByTestId('search-empty-tip')).toBeVisible()
