@@ -1,0 +1,187 @@
+# ADR-0060: Build-time changelog module — git-derived, committed artifact, header modal
+
+Status: accepted (2026-10-07)
+
+> **Change note (2026-10-07, review round):** the modal surface is now the
+> shared `AppModal` component (teleport, focus trap, focus restore, Escape +
+> scrim dismissal owned ONCE — coding-philosophy DRY directive; the four
+> modals' copied machinery had already drifted). `ChangelogModal` is mounted
+> `v-if`-gated like every other modal. §5's mechanics are unchanged — the
+> machinery they describe simply lives in one place now.
+
+> **Change note (2026-10-07, review round 2):** the release procedure (§7)
+> was REWRITTEN — the old "regenerate BEFORE tagging, let `--check` catch a
+> stale artifact" sequencing was itself the defect the reviewers caught
+> (qodo High): the tag adds a NEW version range the committed artifact
+> cannot contain, so a freshly tagged release shipped with a failing gate
+> and a changelog missing its own entry. The generator now includes the
+> tag AT HEAD and takes `--upcoming vX.Y.Z` for the pre-tag run. Prerelease
+> tags sort between releases (§2), and the authored-title table covers ALL
+> existing tags (§3).
+
+## Context
+
+The header shows the build-time app version (`__APP_VERSION__`, ADR-0039;
+`data-test="app-version"` in `src/App.vue`), but nothing tells a user WHAT
+changed between the version they run and the one before it. The repo's release
+model gives us everything a changelog needs, in one place:
+
+- **A `v*` tag IS the release** — no GitHub Release objects exist, so the
+  tag list is the complete version space (census 2026-10-07: **34 tags**,
+  `v0.1.0` … `v2.2.0`).
+- **Conventional Commits are the house style**, and squash-merged PRs land
+  as single conventional subjects carrying their own provenance:
+  `feat(favourites): import from Mealime via bookmarklet (ADR-0058) (#53)`,
+  `feat(units): measured rounding vocabulary — proper fractions, linear
+  seasonings, mm conversion (ADR-0054) (#51)`. The trailing `(#NN)` is the
+  PR, `(ADR-NNNN)` the design record; both are parseable from the subject.
+
+Constraints that shape the design:
+
+- **The app is offline-first and e2e-enforces zero external requests.** Any
+  runtime source must be same-origin and shipped in the repo.
+- **The Docker build context has NO git metadata.** The release image is
+  built from a tarball context where the only version fact is the
+  `APP_VERSION` build-arg (ADR-0039, review #7) — a changelog derived from
+  git AT BUILD TIME would be EMPTY in every self-hosted image while working
+  in the CI/Cloudflare builds. That asymmetry, not convenience, decides
+  where the artifact lives.
+- The changelog is read rarely (a modal open), not on every launch — so
+  payload should be lazy-loaded, not bundled into the JS.
+
+## Decision
+
+1. **The changelog artifact is COMMITTED and generated, not derived at
+   build time.** `public/data/changelog.json` is produced by
+   `scripts/build_changelog.py` (stdlib-only, house generator style) from
+   the repo's git history. The Docker path (no `.git` in context) serves
+   the committed file unchanged, so a self-hosted user and a
+   flambette.app user see the same changelog. This is the same
+   committed-artifact stance as every `public/data/*.json` in the repo.
+
+2. **Source of truth: `git tag` + conventional-commit subjects between
+   tags.** Tags sort semver, prerelease-aware (`v2.3.0-rc1` between
+   `v2.2.0` and `v2.3.0`; a release sorts after its own rc — prerelease
+   identifiers compare as a string, which covers the `rc.N` house style).
+   For each `v*` tag, `git log <prev>..<tag>` (repo start for the first)
+   is partitioned by the conventional type: `feat` →
+   `features`, `fix` → `fixes`. Merge commits are skipped (squash merges
+   carry the subject already). `chore`/`docs`/`refactor`/`test`/`ci` are
+   EXCLUDED — the changelog is user-facing, and dependency bumps and
+   compose-version bumps are not what a household opens a changelog for.
+   Subject post-processing extracts, into separate fields: the scope
+   (`feat(units): …`), trailing `(ADR-NNNN)` references, and the trailing
+   `(#NN)` PR reference — leaving the human-readable text. A subject that
+   parses to no entry type is skipped, not invented into a bucket.
+
+3. **Each version has an AUTHORED title; derivation is only the fallback.**
+   A title table inside the generator carries the editorial title per
+   version ("Import favourites from Mealime" for v2.2.0, …). The table
+   covers ALL existing tags; the fallback (first `feat` subject, first
+   `fix` when there is no feat, "Maintenance release" when neither) exists
+   for FUTURE tags a release has not authored yet — a fallback is a
+   placeholder the release procedure replaces, never an override (authored
+   > derived, the repo's standing precedence).
+
+4. **Artifact shape is additive and validated at the edge.**
+
+   ```json
+   {
+     "generatedAt": "2026-10-07T…",
+     "versions": [
+       {
+         "version": "v2.2.0",
+         "date": "2026-10-06",
+         "title": "Import favourites from Mealime",
+         "features": [{"text": "…", "scope": "favourites", "pr": 53, "adr": "ADR-0058"}],
+         "fixes": [{"text": "…", "scope": null, "pr": 52, "adr": null}]
+       }
+     ]
+   }
+   ```
+
+   Newest first; `date` is the tag's commit date; `pr`/`adr`/`scope` are
+   optional. `src/lib/changelog.ts` validates and normalizes the fetched
+   JSON defensively (same stance as backup import: an artifact is untrusted
+   input), unit-tested in `src/lib/changelog.test.ts`.
+
+5. **The header version becomes the trigger.** The version span
+   (`data-test="app-version"`) becomes a `<button>` that opens
+   `ChangelogModal.vue`. The modal follows the NutritionModal pattern
+   (ADR-0039-nutrition-facts-modal): teleported to `body`, focus trap,
+   Escape closes, scrim click closes, focus restored to the trigger on
+   every close path. The ADR-0055 hover tooltip on the version survives —
+   the button hosts the same `TooltipBubble`, so keyboard and pointer
+   affordances stack instead of replacing each other.
+
+6. **Data is lazy-fetched same-origin on first open and cached in memory
+   for the session.** `fetch('/data/changelog.json')` — covered by the
+   catalog's own cache rule (`/data/*` `max-age=300, must-revalidate` in
+   `public/_headers`, "content-addressed per release, revalidated not
+   pinned"). A fetch failure renders an error state INSIDE the modal
+   (retry affordance), never a toast loop and never a crash — the app
+   works offline, and the changelog is the least critical surface in it.
+
+7. **Gates, wired where the other generated artifacts' gates live.**
+
+   - `bun run data:changelog` regenerates the artifact (package.json).
+   - `scripts/test_build_changelog.py` — goldens on parsing (feat/fix
+     split, scope/PR/ADR extraction, chore exclusion, merge skipping) —
+     joins `bun run test:data`.
+   - `--check` exits 1 when the committed artifact is stale against a
+     fresh derivation, and joins the CI staleness block in `ci.yml`
+     beside `extract_ingredients.py --check`. CI checks out
+     `fetch-depth: 0`, so the gate always has the real tag space.
+   - The release procedure gains one step, and its ORDER is the fix for
+     the defect the old sequencing carried: the changelog entry must be IN
+     the commit the tag points at, because a tagged build documents
+     ITSELF (the generator includes the tag at HEAD).
+     1. Add the authored title line for the new tag to the generator's
+        table.
+     2. Run `python3 scripts/build_changelog.py --upcoming vX.Y.Z` — it
+        emits the candidate entry for untagged HEAD (range
+        newest-tag..HEAD) — and commit BOTH.
+     3. Tag THAT commit `vX.Y.Z` the same day and push. The tagged build
+        then includes the tag itself and reproduces the committed artifact
+        byte for byte, so post-tag `--check` passes.
+
+8. **No new runtime dependencies; nothing persisted** — no store slice, no
+   `STORE_SLICES` entry, no pinia key.
+
+## Consequences
+
+- Every self-hosted image and the Cloudflare worker ship an identical,
+  reviewable changelog; a release forgetting to regenerate is caught by
+  CI, not by a user noticing a missing entry.
+- The artifact grows one small entry per release (34 versions ≈ a few KB
+  gzipped) and is fetched once per session at most, only when the user
+  opens the modal — no bundle growth, no startup cost.
+- A version's title is editorial work done at release time (one line in
+  the generator's table), which is the point: the title says what the
+  release MEANT, which no commit parser can derive.
+- Changelog entries can only describe what git history records — a
+  deliberately invisible fix (never committed with `fix:`) is invisible
+  here too. That is the same "the generator emits what the corpus
+  contains" honesty the other derived artifacts live by.
+
+## Alternatives considered
+
+- **Derive at vite build from git (CI/preview only).** Breaks the Docker
+  self-host image (no `.git` — empty changelog) and makes PR preview
+  builds advertise unreleased entries. Rejected on the asymmetry.
+- **Bundle the JSON into the app via `import`.** Cost every visitor their
+  whole changelog on every load for a surface most sessions never open.
+  The catalog already established lazy same-origin fetch for rarely-read
+  bulk data; the modal follows it.
+- **GitHub Releases API.** No release objects exist (a `v*` tag IS the
+  release), and a runtime call to github.com would violate the offline
+  enforcement outright.
+- **Hand-maintained `CHANGELOG.md`.** The generated-list rule (ADR-0053's
+  lesson): a prose file enumerating per-release entries drifts the first
+  time someone forgets to edit it. Git + conventional commits are the
+  single source; the artifact is derived from it, and the goldens keep
+  the parser honest.
+- **Auto-generated titles from the dominant commit.** A title is an
+  editorial claim ("what this release meant"), not a summary of the
+  largest diff. Authored table with a derived fallback keeps the intent
+  and still never blocks a release.

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDark, useToggle } from '@vueuse/core'
-import { CircleAlert, Moon, Sun } from 'lucide-vue-next'
+import { CircleAlert, Moon, Sun, X } from 'lucide-vue-next'
+import ChangelogModal from './components/ChangelogModal.vue'
+import { checkVersion, type VersionState } from './lib/versionCheck'
 import { TABS, useUiStore } from './stores/ui'
 import { getCatalog } from './lib/catalog'
 import { useShareRoomLink } from './composables/useShareRoomLink'
@@ -308,6 +310,73 @@ watch(
   },
 )
 
+/**
+ * The changelog modal (ADR-0060): opened from the header version button.
+ * State lives here, NOT in a store — it's a transient UI surface, not
+ * household data (no STORE_SLICES entry, no persisted slice).
+ */
+const changelogOpen = ref(false)
+function openChangelog() {
+  changelogOpen.value = true
+}
+
+/**
+ * Stale-version banner (ADR-0061): shown when a newer bundle is deployed.
+ * Dismissal is SESSION-ONLY (ADR-0061 §3): component state, never persisted —
+ * the next page load re-checks fresh, so an update can be deferred to a
+ * moment the user chooses, never permanently silenced. (The first
+ * implementation persisted a 24h timestamp in localStorage, which contradicted
+ * the ADR it cited; the ADR is the contract.)
+ * The banner lives ABOVE the sticky header and never overlaps the bottom nav.
+ */
+const bannerDismissed = ref(false)
+const bannerState = ref<VersionState | null>(null)
+const showBanner = computed(() => bannerState.value === 'stale' && !bannerDismissed.value)
+let checkInterval: ReturnType<typeof setInterval> | null = null
+let visibilityHandler: (() => void) | null = null
+
+let checkSeq = 0
+
+async function checkBannerVersion() {
+  // Dismissed this session: keep the answer, never re-surface the banner.
+  if (bannerDismissed.value) return
+  // Race guard: a visibilitychange and the interval can overlap, and the
+  // fetches may resolve out of order. Only the NEWEST in-flight check may
+  // write the state — a stale response landing late would flap the banner
+  // between fresh and stale one round early.
+  const seq = ++checkSeq
+  const result = await checkVersion({ running: appVersion })
+  if (seq !== checkSeq) return
+  bannerState.value = result.state
+}
+
+function startBannerChecks() {
+  // One check after mount (already called from onMounted).
+  // Then on every visibilitychange → visible.
+  visibilityHandler = () => {
+    if (document.visibilityState === 'visible') {
+      void checkBannerVersion()
+    }
+  }
+  document.addEventListener('visibilitychange', visibilityHandler)
+  // Then every 5 minutes while open.
+  checkInterval = setInterval(() => {
+    void checkBannerVersion()
+  }, 5 * 60 * 1000)
+}
+
+function stopBannerChecks() {
+  if (checkInterval !== null) {
+    clearInterval(checkInterval)
+    checkInterval = null
+  }
+  if (visibilityHandler !== null) {
+    document.removeEventListener('visibilitychange', visibilityHandler)
+    visibilityHandler = null
+  }
+}
+
+
 onMounted(async () => {
   await router.isReady()
   // Resume a room from a previous page load; a fresh ?room= link wins.
@@ -323,14 +392,49 @@ onMounted(async () => {
   // Config is loaded: re-join the household room unless this launch is
   // already in one (session resume / ?room= link).
   autoJoinHousehold()
+  // Stale-version banner: one check after mount, then on a schedule.
+  startBannerChecks()
+  void checkBannerVersion()
+})
+onBeforeUnmount(() => {
+  stopBannerChecks()
 })
 </script>
-
 <template>
   <div class="mx-auto flex min-h-dvh max-w-app flex-col" data-test="app-shell">
+  <!-- Stale-version banner (ADR-0061): fixed above the sticky header,
+       never covering or shifting the bottom nav. role="status" so it is
+       announced without interrupting. Session-only dismissal. -->
+  <div
+    v-if="showBanner"
+    data-test="version-banner"
+    role="status"
+    class="fixed top-0 inset-x-0 z-40 h-12 flex flex-nowrap items-center justify-center gap-1 overflow-hidden bg-brand px-3 text-sm font-medium text-on-brand"
+  >
+    <span data-test="version-banner-text" class="min-w-0 truncate whitespace-nowrap">A new version of Flambette is available</span>
+    <button
+      type="button"
+      data-test="version-refresh"
+      class="ml-2 rounded-lg bg-on-brand px-3 py-0.5 text-xs font-bold text-brand"
+      aria-label="Refresh to the new version"
+      @click="reload()"
+      >Refresh</button
+    >
+    <button
+      type="button"
+      data-test="version-banner-dismiss"
+      class="ml-2 inline-flex size-6 items-center justify-center rounded-full hover:bg-on-brand/20"
+      aria-label="Dismiss version notice"
+      @click="bannerDismissed = true"
+      ><X :size="14" aria-hidden="true" /></button
+    >
+  </div>
+
   <header
   v-if="!isFullscreenMode"
-  class="sticky top-0 z-20 border-b border-border bg-surface-raised"
+  class="sticky z-20 border-b border-border bg-surface-raised"
+  :class="showBanner ? 'mt-12' : ''"
+  :style="{ top: showBanner ? '48px' : '0px' }"  
   >
   <div class="flex items-center justify-between px-4 py-2">
   <button
@@ -344,9 +448,12 @@ onMounted(async () => {
   Flambette
   </button>
   <div class="flex items-center gap-2">
-  <span
+  <button
+  type="button"
   data-test="app-version"
   class="group relative max-w-28 min-w-0"
+  :aria-label="`What's new in version ${appVersion}`"
+  @click="openChangelog()"
   ><span class="block truncate text-xs text-text-muted">{{ appVersion }}</span>
   <!-- ADR-0055: the OS `title` becomes the one bubble; a span is not
   focusable, so this reveals on hover only — the parity native `title`
@@ -357,7 +464,7 @@ onMounted(async () => {
   wrapper carries `group relative`, the inner span carries `truncate` —
   its `overflow: hidden` would clip a child bubble (coderabbit r1). -->
   <TooltipBubble :text="`Version ${appVersion}`" placement="below-right" />
-  </span>
+  </button>
   <span
   v-if="roomChip"
   class="group relative flex shrink-0 cursor-help items-center gap-1.5 rounded-full bg-surface-sunken px-2.5 py-1.5 text-xs font-medium"
@@ -531,4 +638,5 @@ onMounted(async () => {
   :peers="congratsPeers"
   @dismiss="congratsCode = null"
   />
+  <ChangelogModal v-if="changelogOpen" @close="changelogOpen = false" />
 </template>

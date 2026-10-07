@@ -96,6 +96,13 @@ jobs:
         # generated index exists to remove.
         run: python3 scripts/build_adr_index.py --check
 
+      - name: Committed changelog is not stale
+        # The changelog is a committed artifact (ADR-0060). A release PR
+        # squash-merge adds a tag that makes the committed file stale —
+        # `bun run data:changelog` BEFORE tagging is the release procedure,
+        # and --check is the forcing function.
+        run: python3 scripts/build_changelog.py --check
+
   # The Cloudflare relay (ADR-0038): type-check the worker against the
   # generated runtime types, then drive the Room Durable Object in real
   # workerd. Without this job a worker type error or a failing DO spec

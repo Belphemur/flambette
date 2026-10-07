@@ -1,0 +1,330 @@
+#!/usr/bin/env python3
+"""Build public/data/changelog.json from git history (ADR-0060).
+
+The changelog is a COMMITTED artifact, not a build-time derivation: the
+Docker build context carries no `.git`, so a runtime-derived changelog
+would be EMPTY in every self-hosted image while working in CI. A committed
+file (the same stance as ingredients.json, pack_index.json, …) gives a
+self-hosted user and a flambette.app user the same changelog.
+
+Parsing rules mirror the release model: a `v*` tag IS the release, and
+squash-merged PRs land as single conventional-commit subjects. The generator:
+
+  1. Sorts all `v*` tags semver, prerelease-aware (`v2.3.0-rc1` sorts
+     between `v2.2.0` and `v2.3.0`; a release sorts after its own rc).
+  2. For each tag, runs `git log <prev>..<tag>` (repo start for the first).
+     The tag AT HEAD is INCLUDED: a release build documents itself (its
+     entry was committed by the `--upcoming` pre-tag run below — see the
+     release procedure in ADR-0060 §7).
+  3. Partitions commits by conventional type: `feat` → features, `fix` →
+     fixes. Merge commits are skipped (squash merges carry the subject).
+  4. EXCLUDES `chore`/`docs`/`refactor`/test`/`ci` — the changelog is
+     user-facing, and dependency bumps are not what a household opens it for.
+  5. Extracts per-entry fields into separate values: scope, trailing
+     `(ADR-NNNN)` reference, trailing `(#NN)` PR reference — leaving the
+     human-readable text.
+  6. Titles come from an AUTHORED TABLE inside this script (editorial
+     claim per version); a tag without an entry falls back to the first
+     feat subject (then first fix, then "Maintenance release") — authored
+     takes precedence over derived (ADR-0060 §3).
+
+The output is idempotent: re-running twice produces an empty diff modulo
+the `generatedAt` timestamp (a fresh ISO stamp by design).
+
+    python3 scripts/build_changelog.py              # write public/data/changelog.json
+    python3 scripts/build_changelog.py --check      # exit 1 if stale (never writes)
+"""
+
+import html
+import json
+import os
+import re
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(ROOT, "public", "data", "changelog.json")
+
+# Conventional commit types that make it into the changelog (user-facing).
+USER_TYPES = {"feat", "fix"}
+
+# Types that are excluded: the changelog is for households, not dependency
+# audits (ADR-0060 §2).
+EXCLUDED_TYPES = {"chore", "docs", "refactor", "test", "ci", "build"}
+
+# Parse a conventional subject into its parts. Returns None if the subject
+# is not a parseable conventional commit (those are skipped, not invented
+# into a bucket — ADR-0060 §2).
+SUBJECT_RE = re.compile(
+    r"^(?P<type>[a-z]+)"
+    r"(?:\((?P<scope>[^)]+)\))?"
+    r"!?"
+    r":\s+(?P<text>.+)$"
+)
+ADR_RE = re.compile(r"\((ADR-\d+)\)")
+PR_RE = re.compile(r"\(#(\d+)\)")
+
+
+def parse_subject(subject: str):
+    m = SUBJECT_RE.match(subject)
+    if not m:
+        return None
+    text = m.group("text")
+    text = re.sub(r"^!", "", text)
+    adr = None
+    adr_matches = ADR_RE.findall(text)
+    if adr_matches:
+        adr = adr_matches[-1]  # trailing ADR ref is the canonical one
+        text = ADR_RE.sub("", text)
+    pr = None
+    pr_match = PR_RE.search(text)
+    if pr_match:
+        pr = int(pr_match.group(1))
+        text = text[: pr_match.start()] + text[pr_match.end():]
+    text = re.sub(r"\s+", " ", text).strip()
+    text = html.unescape(text)
+    return {
+        "type": m.group("type"),
+        "scope": m.group("scope"),
+        "text": text,
+        "adr": adr,
+        "pr": pr,
+    }
+
+
+def git(*args):
+    return subprocess.check_output(["git"] + list(args), encoding="utf8").strip()
+
+
+TAG_SEMVER_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$")
+
+
+def semver_sort_key(tag: str):
+    """Prerelease-aware semver key (ADR-0060 §2).
+
+    `v2.3.0-rc1` sorts BETWEEN `v2.2.0` and `v2.3.0`: a release sorts after
+    its own prerelease (the 4th element: a prerelease carries 0, a release
+    1). Prerelease identifiers compare as a plain string — enough for the
+    `rc.N` house style. Unparseable tags sort first (0,0,0) and never
+    crash the generator.
+    """
+    m = TAG_SEMVER_RE.match(tag)
+    if not m:
+        return (0, 0, 0, 0, "")
+    major, minor, patch, pre = m.groups()
+    return (int(major), int(minor), int(patch), 0 if pre else 1, pre or "")
+
+
+def get_tags_sorted():
+    raw = git("tag", "-l", "v*")
+    if not raw:
+        return []
+    tags = raw.split()
+    tags.sort(key=semver_sort_key)
+    return tags
+
+
+def get_commits_between(prev_tag: str | None, tag: str) -> list[str]:
+    """Return commit subjects in `prev_tag..tag` (or `tag` for the first)."""
+    if prev_tag:
+        return git("log", "--format=%s", f"{prev_tag}..{tag}").split("\n")
+    return git("log", "--format=%s", tag).split("\n")
+
+
+def derive_title(features: list, fixes: list) -> str:
+    """Fallback title from the first feat, then first fix, then default."""
+    if features:
+        return clean_title(features[0]["text"])
+    if fixes:
+        return clean_title(fixes[0]["text"])
+    return "Maintenance release"
+
+
+def clean_title(text: str) -> str:
+    """Make a commit subject into a short, user-facing title."""
+    # Strip scope prefix like "feat(units): " → already gone after parse,
+    # but be defensive.
+    return text[0].upper() + text[1:] if text else "Maintenance release"
+
+
+# Authored titles per tag (ADR-0060 §3). Editorial claims — what the
+# release MEANT — not summaries of the largest diff. Entries keyed by tag
+# name. Every existing tag has an entry; the generator still calls
+# derive_title() as the fallback for any tag missing from this table, so
+# a new tag without an authored title never blocks the generator.
+AUTHORED_TITLES: dict[str, str] = {
+    "v2.3.0": "Upstream-exact restriction rendering",
+    "v2.2.0": "Import favourites from Mealime",
+    "v2.1.0": "One tooltip component, tap-reveal, and a nutrition facts modal",
+    "v2.0.0": "Rooms are the only way to share",
+    "v1.5.0": "Household room UX and live peer count",
+    "v1.4.1": "Header logo navigates to recipes list",
+    "v1.4.0": "Full TypeScript relay core and web worker observability",
+    "v1.3.0": "Metric and imperial unit system",
+    "v1.2.0": "Cloudflare deployment and app version in the header",
+    "v1.1.0": "Live room sync client",
+    "v1.0.0": "Full local recipe catalog with indexed fuzzy search",
+    "v0.15.0": "Rebuilt as a kitchen companion",
+    "v0.14.1": "Auto-Plan Regenerate seed fix",
+    "v0.14.0": "Cooked history shared by default",
+    "v0.13.0": "Household favourites and ratings",
+    "v0.12.0": "Auto-Plan and unified quick filters",
+    "v0.11.1": "Relay image and CI smoke-test fixes",
+    "v0.11.0": "Waste-aware grocery, diet filters, and cooking timers",
+    "v0.10.1": "Grocery empty-state spacing fix",
+    "v0.10.0": "A Settings tab and categorized extra items",
+    "v0.9.0": "Bulk-add groceries",
+    "v0.8.0": "Backup and restore, plus richer room sync",
+    "v0.7.0": "Autocomplete for grocery add-item",
+    "v0.6.0": "Your cooked history, with its own tab",
+    "v0.5.0": "Smarter seasoning scaling and concurrent cooking steps",
+    "v0.4.1": "Grocery tooltip and auto-collapse polish",
+    "v0.4.0": "Grocery clearing now follows cooked meals",
+    "v0.3.2": "Smaller docker images on the Bun runtime",
+    "v0.3.1": "Review fixes for the clear-grocery workflow",
+    "v0.3.0": "Clear the grocery list as you cook",
+    "v0.2.3": "Publish the relay image to GHCR",
+    "v0.2.2": "Maintenance release",
+    "v0.2.1": "Keep the containers on current Node LTS",
+    "v0.2.0": "Full-screen shopping mode and the live room sync client",
+    "v0.1.0": "Indexed fuzzy search and the first docker image",
+}
+
+
+def partition_subjects(raw_subjects: list[str]) -> tuple[list, list]:
+    """Split commit subjects into (features, fixes) per ADR-0060 §2."""
+    features: list = []
+    fixes: list = []
+    for subject in raw_subjects:
+        parsed = parse_subject(subject)
+        if parsed is None:
+            continue  # merges / non-conventional: naturally skipped
+        if parsed["type"] in USER_TYPES:
+            entry = {
+                "text": parsed["text"],
+                "scope": parsed["scope"],
+                "pr": parsed["pr"],
+                "adr": parsed["adr"],
+            }
+            if parsed["type"] == "feat":
+                features.append(entry)
+            elif parsed["type"] == "fix":
+                fixes.append(entry)
+    return features, fixes
+
+
+def build(upcoming: str | None = None) -> dict:
+    tags = get_tags_sorted()
+    versions = []
+
+    for i, tag in enumerate(tags):
+        prev = tags[i - 1] if i > 0 else None
+        raw_subjects = get_commits_between(prev, tag)
+        features, fixes = partition_subjects(raw_subjects)
+
+        title = html.unescape(AUTHORED_TITLES.get(tag, derive_title(features, fixes)))
+
+        # Tag commit date (ISO date, YYYY-MM-DD).
+        date = git("log", "-1", "--format=%ci", tag).split(" ")[0]
+
+        version: dict[str, object] = {"version": tag, "date": date, "title": title}
+        if features:
+            version["features"] = features
+        if fixes:
+            version["fixes"] = fixes
+        # Note: versions are already in semver ascending order, so we prepend.
+        versions.insert(0, version)
+
+    # The --upcoming candidate (ADR-0060 §7): an UNTAGGED HEAD documented as
+    # the NEXT release, so the pre-tag generated artifact is byte-identical
+    # to the post-tag build. Range is newest tag..HEAD; the candidate's date
+    # is HEAD's commit date (the release procedure tags that same commit the
+    # same day). Never combined with --check.
+    if upcoming:
+        if not TAG_SEMVER_RE.match(upcoming):
+            print(
+                f"FAIL: --upcoming {upcoming!r} is not a vMAJOR.MINOR.PATCH tag",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        range_start = tags[-1] if tags else None
+        raw_subjects = (
+            get_commits_between(range_start, "HEAD")
+            if range_start
+            else git("log", "--format=%s", "HEAD").split("\n")
+        )
+        features, fixes = partition_subjects(raw_subjects)
+        title = html.unescape(
+            AUTHORED_TITLES.get(upcoming) or derive_title(features, fixes)
+        )
+        date = git("log", "-1", "--format=%ci", "HEAD").split(" ")[0]
+        version: dict[str, object] = {"version": upcoming, "date": date, "title": title}
+        if features:
+            version["features"] = features
+        if fixes:
+            version["fixes"] = fixes
+        versions.insert(0, version)
+
+    return {"generatedAt": _now_iso(), "versions": versions}
+
+
+def _now_iso() -> str:
+    return subprocess.check_output(
+        ["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"], encoding="utf8"
+    ).strip()
+
+
+
+GOLDEN_TAG = "v2.2.0"
+GOLDEN_TITLE = "Import favourites from Mealime"
+
+
+
+if __name__ == "__main__":
+    # Flag parsing is positional-tolerant but explicit: `--check` never
+    # combines with `--upcoming` (a staleness check compares RELEASED
+    # history), `--out` exists so the golden tests tamper a COPY instead of
+    # the tracked artifact (ADR-0060 §7).
+    args = sys.argv[1:]
+    upcoming: str | None = None
+    out_path = OUT
+
+    def _pop(flag: str) -> str | None:
+        if flag not in args:
+            return None
+        i = args.index(flag)
+        if i + 1 >= len(args):
+            print(f"FAIL: {flag} needs a value", file=sys.stderr)
+            sys.exit(2)
+        value = args[i + 1]
+        del args[i : i + 2]
+        return value
+
+    upcoming = _pop("--upcoming")
+    out_arg = _pop("--out")
+    if out_arg:
+        out_path = out_arg
+
+    if "--check" in args:
+        if upcoming:
+            print("FAIL: --check never takes --upcoming", file=sys.stderr)
+            sys.exit(2)
+        committed = json.load(open(out_path)) if os.path.exists(out_path) else None
+        fresh = build()
+        if committed is None:
+            print(f"FAIL: {out_path} does not exist — run `python3 {__file__}`", file=sys.stderr)
+            sys.exit(1)
+        c = {k: v for k, v in committed.items() if k != "generatedAt"}
+        f = {k: v for k, v in fresh.items() if k != "generatedAt"}
+        if c != f:
+            print("FAIL: committed changelog.json is stale", file=sys.stderr)
+            sys.exit(1)
+        print("OK: changelog.json is up to date")
+        sys.exit(0)
+    else:
+        doc = build(upcoming=upcoming)
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, "w") as fh:
+            json.dump(doc, fh, indent=2)
+            fh.write("\n")
+        print(f"Wrote {out_path} ({len(doc['versions'])} versions)")
