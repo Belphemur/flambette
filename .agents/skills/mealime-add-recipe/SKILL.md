@@ -87,8 +87,7 @@ it is exactly the fabrication ADR-0054 forbids.
    verbatim; `metric`/`imperial` each show exactly ONE temperature per
    same-temperature mention.
 7. **Gates, in order, and never report one you did not run:**
-   `bun run test:unit` → `bun run data:verify` → `bun run test:data` →
-   `bun run build` (pages = 2759 + user recipes). A failing generator
+   `bun run test:unit` → `bun run data:search` → `bun run data:verify` → `bun run test:data` → `bun run build`. A failing generator
    golden is DRIFT, not flake: update the pin only when the new number is
    correct, with the reason in the commit body.
    Completion criterion: all four green.

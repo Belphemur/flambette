@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { ArrowUpDown, Clock, Crown, Heart, Layers, SearchX, Sparkles, UserRound } from 'lucide-vue-next'
+import { ArrowUpDown, ChevronDown, Clock, Crown, Heart, Layers, SearchX, Sparkles, UserRound, X } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { catalog } from '../lib/catalog'
 import { useRestrictions } from '../composables/useRestrictions'
@@ -40,7 +40,7 @@ import {
   roleGlyph,
   type IconRole,
 } from '../lib/palette'
-import { searchVariantIds } from '../lib/search'
+import { searchVariantIds, suggest } from '../lib/search'
 import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
 import { useUiStore } from '../stores/ui'
@@ -275,6 +275,106 @@ const DIET_ICONS: Record<DietId, { icon: Component; cls: string }> = Object.from
 
 /* ---------- Result pipeline ---------- */
 
+/** Async search results: null means no active search (show all). */
+const searchResults = ref<{ primary: number[]; fallback: number[] } | null>(null)
+/** Search-tips disclosure: closed by default, user-toggled. The toggle
+ *  state is device-local (never a household preference — ADR-0027). The
+ *  panel starts closed so first paint shows results, not help, on mobile. */
+const showTips = ref(false)
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(query, (q) => {
+  if (searchTimer) clearTimeout(searchTimer)
+  const trimmed = q.trim()
+  if (!trimmed) {
+    searchResults.value = null
+    return
+  }
+  searchTimer = setTimeout(async () => {
+    searchResults.value = await searchVariantIds(trimmed).catch((e) => { void e; return null })
+  }, 200)
+})
+
+/** Comparator for the current sortBy selection, used to sort primary and fallback separately. */
+function getSortComparator(sortBy: SortBy): (a: VariantMeta, b: VariantMeta) => number {
+  switch (sortBy) {
+  case 'rating':
+  return (a, b) => b.rating - a.rating || b.rating_count - a.rating_count
+  case 'time':
+  return (a, b) => a.cooking_minutes - b.cooking_minutes
+  case 'calories':
+  return (a, b) => a.calories - b.calories
+  case 'popularity':
+  return (a, b) => popularityScore(b.popularity) - popularityScore(a.popularity)
+  case 'latest':
+  return (a, b) => (b.first_published_at ?? 0) - (a.first_published_at ?? 0)
+  default:
+  return () => 0
+  }
+}
+
+/** Primary result ids (for separator rendering). */
+const primaryCount = computed(() => searchResults.value?.primary.length ?? 0)
+
+/** AutoSuggest dropdown state. */
+const suggestions = ref<string[]>([])
+const suggestSelected = ref(-1)
+let suggestTimer: ReturnType<typeof setTimeout> | null = null
+watch(query, (q) => {
+  if (suggestTimer) clearTimeout(suggestTimer)
+  const trimmed = q.trim()
+  if (!trimmed) {
+    suggestions.value = []
+    suggestSelected.value = -1
+    return
+  }
+  suggestTimer = setTimeout(async () => {
+    const results = await suggest(trimmed)
+    // When the typed query IS a word the index knows (e.g. "rice"), the
+    // suggester answers with the word itself plus fuzzy neighbours
+    // ("rich", "ice"). Offering the word back is a no-op, and the
+    // neighbours are noise — they read as "you must mean rich or ice".
+    // So once an exact match exists the dropdown offers only LONGER
+    // completions of the query and hides itself when none remain
+    // (case-insensitive: the suggester's casing is its own).
+    const key = trimmed.toLowerCase()
+    suggestions.value = results.some((s) => s.toLowerCase() === key)
+      ? results.filter((s) => s.toLowerCase().startsWith(key) && s.toLowerCase() !== key)
+      : results
+    suggestSelected.value = -1
+  }, 150)
+})
+
+function onSuggestKey(e: KeyboardEvent) {
+  if (suggestions.value.length === 0) return
+  switch (e.key) {
+  case 'ArrowDown':
+  e.preventDefault()
+  suggestSelected.value = Math.min(suggestSelected.value + 1, suggestions.value.length - 1)
+  break
+  case 'ArrowUp':
+  e.preventDefault()
+  suggestSelected.value = Math.max(suggestSelected.value - 1, 0)
+  break
+  case 'Enter':
+  if (suggestSelected.value >= 0) {
+  query.value = suggestions.value[suggestSelected.value]
+  suggestions.value = []
+  suggestSelected.value = -1
+  }
+  break
+  case 'Escape':
+  suggestions.value = []
+  suggestSelected.value = -1
+  break
+  }
+}
+
+function selectSuggestion(s: string) {
+  query.value = s
+  suggestions.value = []
+  suggestSelected.value = -1
+}
+
 const results = computed<VariantMeta[]>(() => {
   const c = catalog.value
   if (!c) return []
@@ -307,33 +407,33 @@ const results = computed<VariantMeta[]>(() => {
   let list: VariantMeta[]
   if (q) {
   // Indexed fuzzy/prefix search over name + ingredients, intersected with
-  // the active facet filters.
-  const matched = new Set(searchVariantIds(q))
-  list = c.variantMeta.filter((meta) => matched.has(meta.id) && facets(meta))
+  // the active facet filters. Primary AND matches first, OR-fallback after.
+  const r = searchResults.value
+  if (r) {
+  const primarySet = new Set(r.primary)
+  const fallbackSet = new Set(r.fallback)
+  const primary = c.variantMeta.filter((meta) => {
+  if (primarySet.has(meta.id)) return facets(meta)
+  return false
+  })
+  const fallback = c.variantMeta.filter((meta) => {
+  if (primarySet.has(meta.id)) return false
+  if (!fallbackSet.has(meta.id)) return false
+  return facets(meta)
+  })
+  // Sort primary and fallback separately so primary always comes first.
+  primary.sort(getSortComparator(f.sortBy))
+  fallback.sort(getSortComparator(f.sortBy))
+  list = [...primary, ...fallback]
+  } else {
+  list = []
+  }
   } else {
   list = c.variantMeta.filter(facets)
-  }
-
-  list = [...list]
-  switch (f.sortBy) {
-  case 'rating':
-  list.sort(
-  (a, b) => b.rating - a.rating || b.rating_count - a.rating_count,
-  )
-  break
-  case 'time':
-  list.sort((a, b) => a.cooking_minutes - b.cooking_minutes)
-  break
-  case 'calories':
-  list.sort((a, b) => a.calories - b.calories)
-  break
-  case 'popularity':
-  list.sort((a, b) => popularityScore(b.popularity) - popularityScore(a.popularity))
-  break
-  case 'latest':
-  // Newest creations first; missing timestamps sink to the bottom.
-  list.sort((a, b) => (b.first_published_at ?? 0) - (a.first_published_at ?? 0))
-  break
+  // The browse path sorts like the search path: without this the sort
+  // dropdown is dead whenever the search box is empty (a regression the
+  // search rewrite introduced — main sorted every list).
+  list.sort(getSortComparator(f.sortBy))
   }
   return list
 })
@@ -351,6 +451,14 @@ function clearFilters() {
 const BATCH_SIZE = 60
 const visibleCount = ref(BATCH_SIZE)
 const visibleResults = computed(() => results.value.slice(0, visibleCount.value))
+const visiblePrimaryResults = computed(() => {
+  if (!searchResults.value) return visibleResults.value
+  return results.value.slice(0, Math.min(visibleCount.value, primaryCount.value))
+})
+const visibleFallbackResults = computed(() => {
+  if (!searchResults.value) return []
+  return results.value.slice(primaryCount.value, visibleCount.value)
+})
 const hasMore = computed(() => visibleCount.value < results.value.length)
 
 // New filter/search/sort results reset the window back to the first batch.
@@ -381,13 +489,79 @@ onUnmounted(() => observer?.disconnect())
 
 <template>
   <section class="space-y-3">
+  <div class="relative">
   <input
   v-model="query"
   type="search"
   placeholder="Search recipes or ingredients…"
-  class="h-11 w-full rounded-xl border px-4 text-sm outline-none focus:border-brand-text"
+  class="h-11 w-full rounded-xl border px-4 pr-10 text-sm outline-none focus:border-brand-text"
   aria-label="Search recipes or ingredients"
+  :aria-expanded="suggestions.length > 0"
+  :aria-controls="'search-suggest'"
+  :aria-activedescendant="suggestSelected >= 0 ? 'search-suggest-item-' + suggestSelected : undefined"
+  @keydown="onSuggestKey"
   />
+  <button
+  v-if="query"
+  type="button"
+  data-test="search-clear"
+  :aria-label="`Clear search (${query.length} characters)`"
+  class="absolute inset-y-0 right-0 mx-2 flex h-11 w-6 items-center justify-center text-text-muted hover:text-text"
+  @click.stop="() => (query = '')"
+  @keydown.stop
+  >
+  <X :size="16" aria-hidden="true" />
+  </button>
+  <div
+  v-if="suggestions.length > 0"
+  id="search-suggest"
+  data-test="search-suggest"
+  role="listbox"
+  class="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl border bg-surface-raised shadow-lg"
+  >
+  <div
+  v-for="(s, i) in suggestions"
+  :key="s"
+  :id="'search-suggest-item-' + i"
+  :data-test="'search-suggest-item'"
+  role="option"
+  :aria-selected="i === suggestSelected"
+  :aria-label="s"
+  class="cursor-pointer px-4 py-2 text-sm"
+  :class="i === suggestSelected ? 'bg-brand text-brand-text' : ''"
+  @click="selectSuggestion(s)"
+  >
+  {{ s }}
+  </div>
+  </div>
+  </div>
+
+  <div class="flex w-full justify-end">
+  <button
+    data-test="search-tips-toggle"
+    :aria-expanded="showTips"
+    aria-controls="search-tips-panel"
+    class="flex items-center gap-1 py-2 text-xs text-text-muted transition-transform"
+    :class="showTips ? 'rotate-180' : ''"
+    @click="showTips = !showTips"
+  >
+    Search tips
+    <ChevronDown :size="14" aria-hidden="true" class="transition-transform" />
+  </button>
+  </div>
+
+  <div
+    v-if="showTips"
+    id="search-tips-panel"
+    data-test="search-tips-panel"
+    class="rounded-xl border bg-surface-raised px-4 py-3 text-xs text-text-muted space-y-1"
+  >
+    <div><code>word word</code> — all words</div>
+    <div><code>"tomato soup"</code> — exact phrase</div>
+    <div><code>-word</code> — exclude</div>
+    <div><code>word*</code> — starts with</div>
+    <div><code>(soup OR stew) -cream</code> — combine</div>
+  </div>
 
   <!-- WS1: a 2-column GRID on phones, a wrapping flex row from `sm` up.
   Grid cells never orphan a control on a line of its own, which is
@@ -583,8 +757,30 @@ onUnmounted(() => observer?.disconnect())
   <div
   class="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 min-[720px]:grid-cols-3 min-[1024px]:grid-cols-4 min-[1024px]:gap-5"
   data-test="recipe-grid"
+
   >
+  <template v-if="searchResults">
+  <RecipeCard
+  v-for="meta in visiblePrimaryResults"
+  :key="meta.id"
+  :meta="meta"
+  />
+  <div
+  v-if="visibleFallbackResults.length > 0"
+  data-test="more-results"
+  class="col-span-full py-2 text-center text-xs text-text-muted"
+  >
+  More results
+  </div>
+  <RecipeCard
+  v-for="meta in visibleFallbackResults"
+  :key="meta.id"
+  :meta="meta"
+  />
+  </template>
+  <template v-else>
   <RecipeCard v-for="meta in visibleResults" :key="meta.id" :meta="meta" />
+  </template>
   </div>
 
   <div
@@ -599,6 +795,9 @@ onUnmounted(() => observer?.disconnect())
   <div v-if="results.length === 0" class="py-16 text-center text-text-muted">
   <SearchX :size="40" class="mx-auto" aria-hidden="true" />
   <p class="mt-2 font-medium">No recipes match your filters</p>
+  <p v-if="query.trim()" data-test="search-empty-tip" class="mt-2 text-sm">
+    Tip: try fewer words, or "exact phrase", or -word to exclude.
+  </p>
   </div>
   </section>
 </template>
