@@ -456,14 +456,6 @@ const sentinel = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
 
 onMounted(() => {
-  // One-shot auto-expand (ADR-0022): the first visit opens the tips
-  // panel so the operator help is immediately available; every later
-  // visit starts closed. A missing persisted key reads false — correct
-  // for fresh installs and existing users alike. No migration needed.
-  if (!ui.searchTipsSeen) {
-    showTips.value = true
-    ui.searchTipsSeen = true
-  }
   // Warm the restriction artifacts (control plane + overlays) so the
   // removal filter and any swapped names are ready when needed. No-op when
   // no restriction is active.

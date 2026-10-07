@@ -103,14 +103,11 @@ MiniSearch results. Zero new dependencies.
    no new runtime dependencies; no request to any non-app host
    (ADR-0001). Search results still return raw variant ids with no facet
    knowledge.
-6. **Search-tips disclosure, one-shot auto-expand, and empty-state hint** (ADR-0022 pattern):
-   five one-line operator examples render under the search box, opened by
-   a visible toggle. On the very first visit the panel auto-expands so
-   the operator help is immediately available; that visit records a
-   device-local `searchTipsSeen` flag (persisted in the existing
-   `mealime-planner:v1:ui` slice, no new store slice, not backed up,
-   never shared) so every subsequent visit starts closed. The empty state
-   gains a hint paragraph when the query is non-empty.
+6. **Search-tips disclosure and empty-state hint** (ADR-0022 pattern):
+   five one-line operator examples render under the search box, CLOSED by
+   default — first paint shows results, not help; the user opens them via
+   a visible toggle. The empty state gains a hint paragraph when the
+   query is non-empty.
 
 ## Consequences
 
@@ -128,13 +125,12 @@ MiniSearch results. Zero new dependencies.
   quoted phrases and `+`/`-` terms are exact. Ranking keeps the existing
   name-boost.
 - The search-tips disclosure (ADR-0022 pattern) renders the query
-  language as five one-line examples under the search box. It auto-expands
-  on the first visit (one-shot, latched via `searchTipsSeen` in the existing
-  ui slice), then stays closed until the user toggles it open — the panel
-  itself is pure component state, the one-shot flag is the only persisted
-  part, no new store slice is added, nothing travels in backups, and the
-  flag is never re-shown or re-triggered. The empty state gains a hint
-  line when the query is non-empty.
+  language as five one-line examples under the search box. It starts
+  CLOSED on every visit — an auto-expanded panel taxed the mobile first
+  paint for a feature most sessions never need — and is opened only by
+  its visible toggle. It is pure component state: nothing is persisted,
+  no store slice grows. The empty state gains a hint line when the query
+  is non-empty.
 
 ## Alternatives considered
 
