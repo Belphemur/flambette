@@ -10,8 +10,12 @@ self-hosted user and a flambette.app user the same changelog.
 Parsing rules mirror the release model: a `v*` tag IS the release, and
 squash-merged PRs land as single conventional-commit subjects. The generator:
 
-  1. Sorts all `v*` tags semver (newest first).
+  1. Sorts all `v*` tags semver, prerelease-aware (`v2.3.0-rc1` sorts
+     between `v2.2.0` and `v2.3.0`; a release sorts after its own rc).
   2. For each tag, runs `git log <prev>..<tag>` (repo start for the first).
+     The tag AT HEAD is INCLUDED: a release build documents itself (its
+     entry was committed by the `--upcoming` pre-tag run below — see the
+     release procedure in ADR-0060 §7).
   3. Partitions commits by conventional type: `feat` → features, `fix` →
      fixes. Merge commits are skipped (squash merges carry the subject).
   4. EXCLUDES `chore`/`docs`/`refactor`/test`/`ci` — the changelog is
