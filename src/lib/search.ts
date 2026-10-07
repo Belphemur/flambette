@@ -523,11 +523,25 @@ async function evaluateGroup(
 
   if (positiveSets.length === 0) {
     // A positive-LESS group (-soup -bread, or a nested (-cream) inside an
-    // AND) is still meaningful: it contributes "everything except the
-    // negated matches". Returning [] here collapsed `soup (-onion
-    // -garlic)` to zero results — the parent AND intersected with nothing.
+    // AND) is still meaningful: it contributes a complement. The combinator
+    // matters (De Morgan): AND(-a -b) = complement(a ∪ b), while
+    // OR(-a -b) = complement(a ∩ b) — a doc is kept when AT LEAST ONE
+    // negation misses it. Returning the AND complement for an OR group
+    // over-excluded (soup (-onion OR -garlic) dropped an onion-only soup).
+    const docIds = getDocs().map((d) => d.id)
+    if (group.combine === 'OR') {
+      // negativeIds is a flat id array (all negated matches); chunk it back
+      // per negation so each has its own set.
+      const perNegation: Set<number>[] = []
+      for (const clause of group.clauses) {
+        if (clause.type === 'term' && clause.term.negate) {
+          perNegation.push(new Set(await searchTermIds(idx, clause.term, getDocs)))
+        }
+      }
+      return docIds.filter((id) => perNegation.some((set) => !set.has(id)))
+    }
     const hits = new Set(negativeIds)
-    return getDocs().map((d) => d.id).filter((id) => !hits.has(id))
+    return docIds.filter((id) => !hits.has(id))
   }
 
   if (group.combine === 'AND') {

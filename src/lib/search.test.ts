@@ -621,6 +621,20 @@ describe('review fixes: negation, groups, adjacency scope', () => {
     expect(result.primary).not.toContain(2)
   })
 
+  test('soup (-onion OR -garlic): OR negations keep single-ingredient hits', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Onion Soup', ['onion'])), // no garlic → kept
+      buildSearchDoc(makeMeta(2, 'Onion & Garlic Soup', ['onion', 'garlic'])),
+      buildSearchDoc(makeMeta(3, 'Garlic Bread', ['garlic'])), // no soup
+    ]
+    const index = makeIndex(docs)
+    // OR(-onion -garlic) = complement(onion ∩ garlic): a doc is dropped
+    // only when BOTH negations hit it. AND semantics over-excluded doc 1.
+    const result = await searchWithIndex(index, 'soup (-onion OR -garlic)', docs)
+    expect(result.primary).toContain(1)
+    expect(result.primary).not.toContain(2)
+  })
+
   test('soup (-onion -garlic): positive-less subgroup does not collapse the AND', async () => {
     const docs = [
       buildSearchDoc(makeMeta(1, 'Leek Soup', ['leek'])),
