@@ -153,6 +153,7 @@ def clean_title(text: str) -> str:
 # derive_title() as the fallback for any tag missing from this table, so
 # a new tag without an authored title never blocks the generator.
 AUTHORED_TITLES: dict[str, str] = {
+    "v2.4.0": "Smarter recipe search — type less, find more",
     "v2.3.0": "Upstream-exact restriction rendering",
     "v2.2.0": "Import favourites from Mealime",
     "v2.1.0": "One tooltip component, tap-reveal, and a nutrition facts modal",
