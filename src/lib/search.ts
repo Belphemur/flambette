@@ -509,11 +509,16 @@ async function evaluateGroup(
   getDocs: () => SearchDoc[],
 ): Promise<number[]> {
   const positiveSets: number[][] = []
-  let negativeIds: number[] = []
+  const negativeSets: Set<number>[] = []
+  const negativeIds: number[] = []
 
   for (const clause of group.clauses) {
     if (clause.type === 'term' && clause.term.negate) {
-      negativeIds.push(...(await searchTermIds(idx, clause.term, getDocs)))
+      const hits = await searchTermIds(idx, clause.term, getDocs)
+      // Per-negation sets (for the OR complement); negativeIds is the
+      // flattened union (for the AND complement and the subtraction).
+      negativeSets.push(new Set(hits))
+      negativeIds.push(...hits)
     } else if (clause.type === 'term') {
       positiveSets.push(await searchTermIds(idx, clause.term, getDocs))
     } else if (clause.type === 'group') {
@@ -530,15 +535,9 @@ async function evaluateGroup(
     // over-excluded (soup (-onion OR -garlic) dropped an onion-only soup).
     const docIds = getDocs().map((d) => d.id)
     if (group.combine === 'OR') {
-      // negativeIds is a flat id array (all negated matches); chunk it back
-      // per negation so each has its own set.
-      const perNegation: Set<number>[] = []
-      for (const clause of group.clauses) {
-        if (clause.type === 'term' && clause.term.negate) {
-          perNegation.push(new Set(await searchTermIds(idx, clause.term, getDocs)))
-        }
-      }
-      return docIds.filter((id) => perNegation.some((set) => !set.has(id)))
+      // Reuse the per-negation sets collected in the main loop — no
+      // re-search. A doc is kept when at least one negation misses it.
+      return docIds.filter((id) => negativeSets.some((set) => !set.has(id)))
     }
     const hits = new Set(negativeIds)
     return docIds.filter((id) => !hits.has(id))
