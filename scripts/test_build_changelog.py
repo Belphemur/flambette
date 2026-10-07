@@ -5,7 +5,8 @@ The committed public/data/changelog.json is a build-time derivation, so the
 invariants behind it need a gate too — a hand-authored table that shadows
 the git history is invisible to bun test. These goldens assert the PARSER
 (extracting feat/fix, scope, PR, ADR, excluding chore, skipping merges),
-the TITLE precedence (authored > derived), the STALE --check behaviour, and
+the TITLE policy (grandfathered authored table > derived-from-commits,
+which is now the default for new tags), the STALE --check behaviour, and
 the artifact shape.
 
     python3 scripts/test_build_changelog.py
@@ -142,16 +143,21 @@ class ChangelogGoldens(unittest.TestCase):
         self.assertNotIn("(#53)", fav["text"], "PR ref should be stripped from text")
 
     def test_title_precedence_authored_over_derived(self):
-        """Authored titles win over derived ones: every version's title is
-        either explicitly authored (in the generator's table) or derived from
-        its first feat/fix — never a raw commit subject."""
+        """Every version's title is either explicitly authored (in the
+        generator's grandfathered table) or derived from its first feat/fix
+        — never empty, never a version number. The 'looks like a commit
+        subject' check applies to AUTHORED entries only: a derived title is
+        a feat subject by design and may legitimately contain ': '."""
         for v in self.doc["versions"]:
             self.assertTrue(len(v["title"]) > 3,
                             "%s: title too short: '%s'" % (v["version"], v["title"]))
-            self.assertFalse(v["title"].startswith("v"),
-                             "%s: title must not contain a version number: '%s'" % (v["version"], v["title"]))
-            self.assertFalse(": " in v["title"],
-                             "%s: title must not look like a raw commit subject: '%s'" % (v["version"], v["title"]))
+            if v["version"] in _build_changelog.AUTHORED_TITLES:
+                self.assertEqual(v["title"], _build_changelog.AUTHORED_TITLES[v["version"]],
+                                 "%s: authored title drifted from the table" % v["version"])
+                self.assertFalse(v["title"].startswith("v"),
+                                 "%s: authored title must not contain a version number: '%s'" % (v["version"], v["title"]))
+                self.assertFalse(": " in v["title"],
+                                 "%s: authored title must not look like a raw commit subject: '%s'" % (v["version"], v["title"]))
 
     # ── Structural goldens ────────────────────────────────────────────────
 
@@ -243,7 +249,7 @@ class ChangelogGoldens(unittest.TestCase):
             self.assertEqual(parsed["type"], "feat")
             self.assertNotIn("!", parsed["text"])
 
-    # ── Upcoming-candidate + sort goldens ─────────────────────────────────
+    # ── Sort goldens ──────────────────────────────────────────────────────
 
     def test_semver_sort_key_prerelease_ordering(self):
         """A prerelease sorts between the previous release and its own
@@ -254,32 +260,17 @@ class ChangelogGoldens(unittest.TestCase):
         self.assertLess(key("v2.3.0-rc1"), key("v2.3.0-rc2"))
         self.assertLess(key("v2.2.0"), key("v2.2.1"))
 
-    def test_upcoming_candidate_prepends(self):
-        """build(upcoming=...) emits ONE extra candidate entry for untagged
-        HEAD (range newest-tag..HEAD), newest-first; build() without the
-        flag never contains it."""
-        fresh = build()
-        self.assertFalse(
-            any(v["version"] == "v99.0.0" for v in fresh["versions"]),
-            "the candidate leaked into the plain build",
-        )
-        with_upcoming = build(upcoming="v99.0.0")
-        self.assertEqual(with_upcoming["versions"][0]["version"], "v99.0.0")
-        self.assertEqual(
-            len(with_upcoming["versions"]), len(fresh["versions"]) + 1
-        )
-        # Without an authored title the candidate derives one from its
-        # range — never empty.
-        self.assertTrue(len(with_upcoming["versions"][0]["title"]) > 3)
-
-    def test_authored_titles_cover_all_tags(self):
-        """Every v* tag in the repo has an authored title (ADR-0060 §3); the
-        derived fallback exists for FUTURE tags, not for today's."""
+    def test_authored_table_references_real_tags(self):
+        """The grandfathered table only overrides tags that EXIST (ADR-0060
+        §3 as amended): no ghost entries, and each override is a real
+        editorial title. New tags derive their title from the semantic
+        commits — coverage is asserted on the ARTIFACT
+        (test_all_tags_present), not on this table."""
         tags = set(
             subprocess.check_output(["git", "tag", "-l", "v*"], encoding="utf8").split()
         )
-        missing = sorted(tags - set(_build_changelog.AUTHORED_TITLES))
-        self.assertEqual(missing, [], "tags without an authored title: %s" % missing)
+        ghosts = sorted(set(_build_changelog.AUTHORED_TITLES) - tags)
+        self.assertEqual(ghosts, [], "table entries for unknown tags: %s" % ghosts)
         for tag, title in _build_changelog.AUTHORED_TITLES.items():
             self.assertTrue(len(title) > 3, "%s: title too short" % tag)
             self.assertFalse(title.startswith("v"), "%s: title starts with v" % tag)
