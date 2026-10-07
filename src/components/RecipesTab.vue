@@ -601,11 +601,12 @@ onUnmounted(() => observer?.disconnect())
     data-test="search-tips-panel"
     class="rounded-xl border bg-surface-raised px-4 py-3 text-xs text-text-muted space-y-1"
   >
-    <div><code>word word</code> — all words</div>
+    <div><code>word word</code> — all words (AND)</div>
+    <div><code>rice OR quinoa</code> — either word</div>
     <div><code>"tomato soup"</code> — exact phrase</div>
     <div><code>-word</code> — exclude</div>
     <div><code>word*</code> — starts with</div>
-    <div><code>(soup OR stew) -cream</code> — combine</div>
+    <div><code>soup (rice OR quinoa) -cream</code> — combine them</div>
   </div>
 
   <!-- WS1: a 2-column GRID on phones, a wrapping flex row from `sm` up.
