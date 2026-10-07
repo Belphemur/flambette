@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { ArrowUpDown, ChevronDown, Clock, Crown, Heart, Layers, SearchX, Sparkles, UserRound } from 'lucide-vue-next'
+import { ArrowUpDown, ChevronDown, Clock, Crown, Heart, Layers, SearchX, Sparkles, UserRound, X } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { catalog } from '../lib/catalog'
 import { useRestrictions } from '../composables/useRestrictions'
@@ -494,13 +494,24 @@ onUnmounted(() => observer?.disconnect())
   v-model="query"
   type="search"
   placeholder="Search recipes or ingredients…"
-  class="h-11 w-full rounded-xl border px-4 text-sm outline-none focus:border-brand-text"
+  class="h-11 w-full rounded-xl border px-4 pr-10 text-sm outline-none focus:border-brand-text"
   aria-label="Search recipes or ingredients"
   :aria-expanded="suggestions.length > 0"
   :aria-controls="'search-suggest'"
   :aria-activedescendant="suggestSelected >= 0 ? 'search-suggest-item-' + suggestSelected : undefined"
   @keydown="onSuggestKey"
   />
+  <button
+  v-if="query"
+  type="button"
+  data-test="search-clear"
+  :aria-label="`Clear search (${query.length} characters)`"
+  class="absolute inset-y-0 right-0 mx-2 flex h-11 w-6 items-center justify-center text-text-muted hover:text-text"
+  @click.stop="() => (query = '')"
+  @keydown.stop
+  >
+  <X :size="16" aria-hidden="true" />
+  </button>
   <div
   v-if="suggestions.length > 0"
   id="search-suggest"
