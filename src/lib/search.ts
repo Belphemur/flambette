@@ -558,13 +558,20 @@ async function evaluateGroup(
     const negSet = new Set(negativeIds)
     return [...andResult].filter((id) => !negSet.has(id))
   } else {
-    // OR between positive sets, then subtract negative globally
-    const orResult = new Set<number>()
+    // OR: a negated member is its own complement BRANCH — soup OR -bread
+    // inside parens must mean soup ∪ (everything but bread), matching the
+    // top-level per-branch semantics. (Subtraction is AND-group behavior.)
+    const result = new Set<number>()
     for (const set of positiveSets) {
-      for (const id of set) orResult.add(id)
+      for (const id of set) result.add(id)
     }
-    const negSet = new Set(negativeIds)
-    return [...orResult].filter((id) => !negSet.has(id))
+    const docIds = getDocs().map((d) => d.id)
+    for (const nset of negativeSets) {
+      for (const id of docIds) {
+        if (!nset.has(id)) result.add(id)
+      }
+    }
+    return [...result]
   }
 }
 

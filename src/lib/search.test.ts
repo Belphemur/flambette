@@ -651,6 +651,21 @@ describe('review fixes: negation, groups, adjacency scope', () => {
     expect(result.primary).not.toContain(3)
   })
 
+  test('grouped (soup OR -bread) matches top-level branch semantics', async () => {
+    const docs = [
+      buildSearchDoc(makeMeta(1, 'Tomato Soup with Bread', ['tomato', 'bread'])),
+      buildSearchDoc(makeMeta(2, 'Tomato Soup', ['tomato'])),
+      buildSearchDoc(makeMeta(3, 'Plain Bread', ['bread'])),
+    ]
+    const index = makeIndex(docs)
+    // In-group OR: the negated member is its own complement branch —
+    // soup ∪ (catalog minus bread). A subtraction here dropped doc 1.
+    const result = await searchWithIndex(index, '(soup OR -bread)', docs)
+    expect(result.primary).toContain(1)
+    expect(result.primary).toContain(2)
+    expect(result.primary).not.toContain(3)
+  })
+
   test('bare AND primary is literal: "pork" does not fuzzy-match "york"', async () => {
     const docs = [
       // has "rice" (jasmine rice) and "york" — NO pork token
