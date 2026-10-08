@@ -1,6 +1,27 @@
 {
-  "generatedAt": "2026-10-07T21:34:30Z",
+  "generatedAt": "2026-10-08T21:44:50Z",
   "versions": [
+    {
+      "version": "v2.5.0",
+      "date": "2026-10-08",
+      "title": "Meet your household \u2014 room identity, live roster and avatars",
+      "features": [
+        {
+          "text": "meet your household \u2014 room identity, live roster and avatars",
+          "scope": "presence",
+          "pr": 65,
+          "adr": null
+        }
+      ],
+      "fixes": [
+        {
+          "text": "back from a recipe restores the list scroll position",
+          "scope": "ux",
+          "pr": 64,
+          "adr": null
+        }
+      ]
+    },
     {
       "version": "v2.4.0",
       "date": "2026-10-07",
