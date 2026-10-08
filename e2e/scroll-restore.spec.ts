@@ -7,7 +7,7 @@ import {
 } from './helpers'
 
 /**
- * Scroll restoration on back-from-recipe (ADR-0061).
+ * Scroll restoration on back-from-recipe (ADR-0062).
  *
  * vue-router 5 records the leaving page's scroll offset into its history
  * state and hands it back to `scrollBehavior()` as `savedPosition` on
