@@ -212,6 +212,19 @@ export const useRoomStore = defineStore('room', () => {
   const members = ref<RosterMember[] | null>(null)
 
   /**
+   * The profile id THIS SOCKET dialed with (ADR-0063). The relay's roster
+   * row for this device carries that id for the socket's whole life — a
+   * `profile` frame cannot change it — so it, not the identity store's
+   * current id, is what the roster's "you" marker must match. A backup
+   * restore that adopts a DIFFERENT id therefore does not break the
+   * marker: the socket keeps its dialed identity until the next natural
+   * dial (a live re-dial is refused on purpose — as the only peer it
+   * would delete the room and its state, ADR-0026). Cleared with the
+   * room; the sheet falls back to the identity id when null.
+   */
+  const joinedProfileId = ref<string | null>(null)
+
+  /**
    * True from the moment a DELIBERATE join/create was asked for until a
    * `live` frame answers it (ADR-0049 addendum).
    *
@@ -763,6 +776,10 @@ export const useRoomStore = defineStore('room', () => {
     // the upgrade URL and the first roster fan-out is already complete;
     // noted in the ADR). Idempotent: an existing identity is never re-minted.
     identity.generate()
+    // The relay fixes this socket's roster-row id at dial (a `profile`
+    // frame cannot change it) — remember it so the sheet's "you" marker
+    // stays honest even if a later backup restore adopts a different id.
+    joinedProfileId.value = identity.id
     // Review F6: this socket is being RECYCLED, not left. Sending `leave`
     // would tell the relay we are done with a room we intend to re-join,
     // and as the last peer that deletes the room and its state for
@@ -802,6 +819,10 @@ export const useRoomStore = defineStore('room', () => {
       if (ws !== socket) return // superseded by a newer connection
       ws = null
       stopKeepalive()
+      // The roster describes who is CONNECTED (ADR-0063); this socket
+      // just died, so its people list is stale. Degrades to the plain
+      // count until the reconnect's roster fan-out re-fills it.
+      members.value = null
       if (roomGone) return // the room is gone: no reconnect loop
       if (!code.value) {
         // Room never established (initial connect dropped / join rejected).
@@ -837,6 +858,11 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   function cleanupSocket({ sendLeave = true }: { sendLeave?: boolean } = {}) {
+    // The roster describes who is CONNECTED (ADR-0063); this socket is
+    // ending, so its people list is stale the moment it dies. The sheet
+    // degrades to the plain count until the next roster fan-out — a
+    // reload mid-reconnect must not show former members as present.
+    members.value = null
     // Keepalive first: a leaked interval would keep sending into a dead
     // socket forever, and would keep a room alive that nobody is in.
     stopKeepalive()
@@ -992,6 +1018,7 @@ export const useRoomStore = defineStore('room', () => {
     // roster describes those same people (ADR-0063) — same story.
     peers.value = null
     members.value = null
+    joinedProfileId.value = null
     freshJoin.value = false
     reconnectAttempts = 0
     wantedCode = null
@@ -1012,6 +1039,7 @@ export const useRoomStore = defineStore('room', () => {
     error,
     peers,
     members,
+    joinedProfileId,
     /**
      * Armed by a deliberate `join()`/`create()` and still unanswered by a
      * `live` frame. The app shell reads it to land a first-time joiner on

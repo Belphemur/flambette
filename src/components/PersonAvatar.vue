@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
-import { useMediaQuery } from '@vueuse/core'
+import { useDark, useMediaQuery } from '@vueuse/core'
 import { createHashvatar, type HashvatarResult } from 'hashvatar'
 import { avatarTones } from '../lib/personAvatar'
 
@@ -43,6 +43,12 @@ const props = withDefaults(
 // installed @vueuse/core build exposes the same signal as `useMediaQuery`,
 // so the query is built here once — same reactivity, same semantics).
 const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
+// The THEME is a watch source too: `avatarTones()` reads theme-dependent
+// CSS custom properties at render time, and the `.dark` flip (useDark
+// toggles the class on <html>) would otherwise leave a mounted avatar
+// painting the previous theme's palette (ADR-0063 review). useDark() is
+// the same reactive source App.vue uses, so both flip together.
+const isDark = useDark()
 
 const host = ref<HTMLElement | null>(null)
 /** The live render; destroyed before every re-render and on unmount. */
@@ -72,7 +78,7 @@ function render(): void {
 }
 
 watch(
-  () => [props.name, props.size, props.animated, reducedMotion.value] as const,
+  () => [props.name, props.size, props.animated, reducedMotion.value, isDark.value] as const,
   () => render(),
 )
 

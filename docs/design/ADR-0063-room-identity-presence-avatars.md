@@ -201,6 +201,32 @@ carrier (the client does not send `join`/`create` frames; it dials
    not `useReducedMotion()`** — the pinned @vueuse/core build does not
    export the latter. Same query, same reactivity, same semantics.
 
+## Change note (2026-10-09, review round)
+
+Three further implementation facts from the review round, none a decision
+change (numbering continues the list above):
+
+4. **The roster is LIVE-ONLY.** `members` is cleared on every socket end
+   path (close, terminal error, re-dial), so the sheet degrades to the
+   plain count the moment this device disconnects — DESIGN.md's "who is
+   CONNECTED NOW" is enforced by the store, not by sheet timing. The
+   headcount badge keeps its ADR-0049 behaviour (a reconnect refills both).
+5. **Backup restore while connected converges without a re-dial.** The
+   relay fixes a socket's roster-row id at dial, so a restore announces
+   the restored NAME to the live socket (`announceProfile`) and the
+   sheet's "you" marker matches `room.joinedProfileId` (the dialed id),
+   falling back to the identity id when none. A CHANGED id takes effect
+   at the next natural dial. A live re-dial is REFUSED on purpose: as the
+   only peer, `leave` deletes the room and its state (ADR-0026).
+6. **Trust model (recorded, deferred).** Profile ids are CLIENT-ASSERTED:
+   within a room, any peer can claim another's id and so merge into its
+   roster row or rename it. This is inherent to the relay's trust model —
+   the room code is the only credential, and a peer holding it can already
+   rewrite all household state (whole-state LWW). Binding an identity to
+   a server-minted per-device secret is an AUTHENTICATION layer — a new
+   decision, deliberately out of scope here; flagged for a future ADR if
+   rooms ever outgrow a trusted household.
+
 ## Consequences
 
 - **Two new runtime deps**: `uuid` v14 (~small, zero-dep) and `hashvatar`

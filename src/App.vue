@@ -668,7 +668,7 @@ onBeforeUnmount(() => {
   v-if="rosterOpen && roomChip"
   :count="room.peers"
   :members="room.members"
-  :self-id="identity.id || null"
+  :self-id="room.joinedProfileId || identity.id || null"
   @close="rosterOpen = false"
   />
 </template>

@@ -536,9 +536,18 @@ export const STORE_SLICES: SliceDef<any>[] = [
       // replace-on-apply — ADR-0013).
       if (id === '') {
         if (name !== '') useIdentityStore().rename(name)
-        return
+      } else {
+        useIdentityStore().adopt({ id, name })
       }
-      useIdentityStore().adopt({ id, name })
+      // Review (ADR-0063): converge a LIVE room after a restore. The
+      // relay's roster row for this socket keeps the id it dialed with
+      // (`joinedProfileId` — a `profile` frame cannot change an id), so
+      // announcing the restored NAME updates that row; a CHANGED id takes
+      // effect at the next natural dial, and the sheet's "you" marker
+      // stays honest via `joinedProfileId` meanwhile. A live re-dial is
+      // refused on purpose: as the only peer it would delete the room and
+      // its state (ADR-0026). `announceProfile` no-ops when not live.
+      useRoomStore().announceProfile()
     },
   },
 ]
@@ -735,4 +744,5 @@ import { useCustomIngredientsStore } from '../stores/customIngredients'
 import { useFavouritesStore } from '../stores/favourites'
 import { ratingsToRows, useRatingStore, type RatingFileRow } from '../stores/rating'
 import { useIdentityStore } from '../stores/identity'
+import { useRoomStore } from '../stores/room'
 import { MAX_NAME_CHARS, isUuidShape, sanitizeDisplayName } from './profileName'

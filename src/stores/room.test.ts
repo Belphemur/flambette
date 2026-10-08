@@ -4,6 +4,7 @@ import { usePlanStore } from './plan'
 import { useUiStore } from './ui'
 import { useRoomStore, type RoomStatus } from './room'
 import { useIdentityStore } from './identity'
+import { STORE_SLICES } from '../lib/backup'
 
 /**
  * Room store behaviour that the wire-level e2e cannot reach: what the
@@ -1076,5 +1077,38 @@ describe('room identity rides the join/create dial (ADR-0063)', () => {
     room.leave()
     expect(room.members).toBeNull()
     expect(room.peers).toBeNull()
+  })
+
+  test('a socket close clears the roster (live-only), joinedProfileId survives it', async () => {
+    const identity = useIdentityStore()
+    const { room, socket } = await startRoom()
+    expect(room.joinedProfileId).toBe(identity.id)
+    socket.receive({ type: 'peers', count: 2, members: [{ id: null, name: 'Guest' }] })
+    expect(room.members).toHaveLength(1)
+    socket.close() // onclose, not cleanupSocket: its own path
+    expect(room.members).toBeNull()
+    // The dialed id is what the relay still lists this socket as — the
+    // "you" marker keys on it, not on a store id a backup could replace.
+    expect(room.joinedProfileId).toBe(identity.id)
+    room.leave() // also disarms the reconnect this close scheduled
+    expect(room.joinedProfileId).toBeNull()
+  })
+
+  test('a backup restore while live announces the restored name; the socket keeps its dialed id', async () => {
+    const identity = useIdentityStore()
+    const { room, socket } = await startRoom()
+    const dialedId = identity.id
+    const RESTORED_ID = '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b'
+    const slice = STORE_SLICES.find((s) => s.file === 'identity.json')!
+    expect(slice).toBeDefined()
+    slice.write({ id: RESTORED_ID, name: 'Restored Marmot' })
+    expect(identity.id).toBe(RESTORED_ID)
+    // The relay cannot be told a new id mid-socket; the restored NAME
+    // converges onto the row the socket already owns.
+    expect(socket.sent.at(-1)).toMatchObject({ type: 'profile', name: 'Restored Marmot' })
+    expect('id' in (socket.sent.at(-1) as Record<string, unknown>)).toBe(false)
+    // The marker stays honest: the row this socket owns is the dialed id.
+    expect(room.joinedProfileId).toBe(dialedId)
+    room.leave()
   })
 })
