@@ -486,6 +486,70 @@ export const STORE_SLICES: SliceDef<any>[] = [
       )
     },
   },
+  /* This device's room identity (ADR-0063). Identity is DEVICE-scoped,
+     deliberately NOT household state — it never merges and never rides a
+     room snapshot — so import is REPLACE-on-apply: a backup restores
+     whose device this is. The validator requires a UUID-parseable id and
+     a non-empty, clampable name. */
+  {
+    file: 'identity.json',
+    label: 'this device\u2019s identity (name + id)',
+    persistKeys: ['mealime-planner:v1:identity'],
+    read: () => ({ id: useIdentityStore().id, name: useIdentityStore().name }),
+    validate(value) {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return 'identity.json must be an object'
+      }
+      const { id, name } = value as Record<string, unknown>
+      // The ID-LESS shapes are valid: the ABSENT one ({id:'',name:''} — a
+      // device that never joined) and the PRE-JOIN one ({id:'', name} — a
+      // name typed in Settings before the first join; the Settings field is
+      // always editable, so this shape is a legal export). Anything else
+      // must be a full, well-formed identity. Partial shapes are refused,
+      // never repaired — and a pre-join export must never make the WHOLE
+      // backup unrestorable (review: it used to).
+      const nameOk =
+        typeof name === 'string' &&
+        !!sanitizeDisplayName(name) &&
+        // RAW visible length, not the sanitizer's clamped one: no legit
+        // writer produces >MAX chars (rename() and the relays both clamp),
+        // so an over-long name is garbage and is REFUSED, never repaired.
+        [...String(name).replace(/\p{C}/gu, '').trim()].length <= MAX_NAME_CHARS
+      if (id === '') {
+        return name === '' || nameOk
+          ? null
+          : 'identity.json name must be a non-empty name of up to 40 visible characters'
+      }
+      if (!isUuidShape(id)) return 'identity.json id must be a UUID'
+      if (!nameOk) {
+        return 'identity.json name must be a non-empty name of up to 40 visible characters'
+      }
+      return null
+    },
+    write(value) {
+      const { id, name } = value as { id: string; name: string }
+      // The all-empty shape restores as a no-op. An ID-LESS shape restores
+      // the NAME only — an id is never blanked once minted (immutability
+      // works both ways), and a device without one keeps it that way until
+      // its first join, where generate() keeps the restored name. A FULL
+      // identity replaces this device's identity (import is
+      // replace-on-apply — ADR-0013).
+      if (id === '') {
+        if (name !== '') useIdentityStore().rename(name)
+      } else {
+        useIdentityStore().adopt({ id, name })
+      }
+      // Review (ADR-0063): converge a LIVE room after a restore. The
+      // relay's roster row for this socket keeps the id it dialed with
+      // (`joinedProfileId` — a `profile` frame cannot change an id), so
+      // announcing the restored NAME updates that row; a CHANGED id takes
+      // effect at the next natural dial, and the sheet's "you" marker
+      // stays honest via `joinedProfileId` meanwhile. A live re-dial is
+      // refused on purpose: as the only peer it would delete the room and
+      // its state (ADR-0026). `announceProfile` no-ops when not live.
+      useRoomStore().announceProfile()
+    },
+  },
 ]
 
 function isStepTimersMap(value: unknown): boolean {  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
@@ -679,3 +743,6 @@ import { AUTO_PLAN_RULESETS, useUiStore } from '../stores/ui'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
 import { useFavouritesStore } from '../stores/favourites'
 import { ratingsToRows, useRatingStore, type RatingFileRow } from '../stores/rating'
+import { useIdentityStore } from '../stores/identity'
+import { useRoomStore } from '../stores/room'
+import { MAX_NAME_CHARS, isUuidShape, sanitizeDisplayName } from './profileName'

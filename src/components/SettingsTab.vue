@@ -42,6 +42,8 @@ import { mealimeBookmarkletHref } from '../lib/mealimeBookmarklet'
 import { useFavouritesStore } from '../stores/favourites'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
+import { useIdentityStore } from '../stores/identity'
+import PersonAvatar from './PersonAvatar.vue'
 import MealimeImportModal from './MealimeImportModal.vue'
 
 /**
@@ -56,7 +58,47 @@ import MealimeImportModal from './MealimeImportModal.vue'
  */
 const ui = useUiStore()
 const room = useRoomStore()
+// ADR-0063: this device's room identity — the Settings card's name field
+// and avatar preview, and the rename push while connected.
+const identity = useIdentityStore()
 const { shareRoomLink, shareableCode } = useShareRoomLink()
+
+/* ---------- Your name (ADR-0063) ---------- */
+
+/**
+ * The ONE clamp point: the store's `rename` runs the shared sanitizer
+ * (identical to the relay's normalizeProfile), and this draft follows the
+ * store the same way the room-code field follows `ui.householdRoom` —
+ * what the field holds is what the store holds is what the wire carries.
+ */
+const nameInput = ref(identity.name)
+let nameTyping = false
+
+watch(
+  () => identity.name,
+  (name) => {
+    if (nameTyping) return
+    nameInput.value = name
+  },
+)
+
+/** @input on the name field: mark the draft as user-owned until blur. */
+function onNameInput() {
+  nameTyping = true
+}
+
+/**
+ * @blur on the name field: commit through the store (the clamp runs ONCE
+ * here, on the store action) and — while connected — push the rename so
+ * the roster updates immediately.
+ */
+function onNameBlur() {
+  nameTyping = false
+  const before = identity.name
+  identity.rename(nameInput.value)
+  nameInput.value = identity.name // the clamp's answer, echoed back
+  if (identity.name !== before) room.announceProfile()
+}
 
 /* ---------- Default servings (ADR-0037) ---------- */
 
@@ -660,6 +702,30 @@ async function importMealimeFavourites(): Promise<void> {
   >
   Household sync active — {{ householdCode }}<template v-if="room.peers"> · {{ room.peers }} in room</template>
   </p>
+  <!-- ADR-0063: THIS device's identity — the avatar preview hashes the
+       same display name the room sees, and the rename clamps exactly like
+       the relay (one shared sanitizer on the store action) then pushes a
+       `profile` frame while connected. Editing never touches the id. -->
+  <div class="flex items-center gap-3">
+  <PersonAvatar :name="identity.displayName" data-test="identity-avatar" />
+  <label class="min-w-0 flex-1 text-xs">
+  <span class="mb-1 block font-medium">Your name</span>
+  <input
+  v-model="nameInput"
+  type="text"
+  inputmode="text"
+  :maxlength="40"
+  :placeholder="identity.displayName"
+  aria-label="Your display name in the household room"
+  data-test="identity-name-input"
+  class="h-11 w-full rounded-xl border bg-surface-raised px-3 text-sm outline-none focus:border-brand-text"
+  @input="onNameInput"
+  @blur="onNameBlur"
+  @keydown.enter="($event.target as HTMLInputElement).blur()"
+  />
+  <span class="mt-1 block text-text-muted">Shown to the others in your room. Changes update everyone live.</span>
+  </label>
+  </div>
   <!-- Always rendered, never behind a saved-room condition: the note
   on the History tab points here, and a member in a Plan-tab
   room (or with no household code yet) must still be able to

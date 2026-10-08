@@ -32,13 +32,95 @@ import { IDLE_TTL_MS, INACTIVITY_TTL_MS, PRESERVED_WHEN_ABSENT } from './policy'
 import {
   RELAY_ERRORS,
   type ExpiryReason,
+  type PeerProfile,
   type RelayErrorCode,
   type RelayMessage,
+  type RosterMember,
   type SharedSnapshot,
 } from './protocol'
+import { GUEST_NAME, isUuidShape, sanitizeDisplayName } from '../../src/lib/profileName'
 
 /** Re-exported so an adapter needs only this module for the whole vocabulary. */
-export type { ExpiryReason }
+export type { ExpiryReason, PeerProfile, RosterMember }
+
+/* ------------------------------------------------------------------ presence */
+
+/*
+ * Live presence (ADR-0063). The roster is SOCKET-lifetime truth kept by
+ * the relay — never SharedState, never persisted — and every DECISION
+ * about it lives here: what a profile may claim, what a roster row is,
+ * and how a set of sockets becomes a people list.
+ */
+
+/**
+ * Validate a join/create `profile` claim. Requires a UUID-parseable id;
+ * the name is clamped by the ONE shared sanitizer (identically on the
+ * client), falling back to `Guest` when nothing visible remains. Null
+ * for an unusable profile — the peer degrades to a Guest row, never to a
+ * refusal (an old relay must keep admitting an old client).
+ */
+export function normalizeProfile(raw: unknown): PeerProfile | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const { id, name } = raw as Record<string, unknown>
+  if (!isUuidShape(id)) return null
+  return { id, name: sanitizeDisplayName(name) || GUEST_NAME }
+}
+
+/**
+ * The name half of a `profile` MESSAGE (a mid-session rename): clamped
+ * identically, Guest fallback. Any `id` on the frame is IGNORED by the
+ * callers — the id is fixed at join.
+ */
+export function normalizeProfileName(raw: unknown): string {
+  return sanitizeDisplayName(raw) || GUEST_NAME
+}
+
+/**
+ * A rename is authoritative for EVERY socket sharing the identity
+ * (review: the dedupe keeps the FIRST socket's profile, so without this a
+ * device's second tab renaming would leave the first tab's stale name as
+ * the roster's only row for that person). Returns the profile unchanged
+ * for every socket whose id does not match — the adapters apply this per
+ * socket, each in its own store, and the semantics stay here (ADR-0040).
+ */
+export function renamedProfile(
+  profile: PeerProfile | null,
+  id: string,
+  name: string,
+): PeerProfile | null {
+  if (!profile || profile.id !== id) return profile
+  return { ...profile, name }
+}
+
+/**
+ * The roster: a PEOPLE list (ADR-0063). Keyed by profile id, so the same
+ * device with two tabs (two sockets, one identity) appears ONCE; every
+ * profile-less socket is its own Guest row. First-seen order, which is
+ * the order the adapters walk their peer sets in — stable per room.
+ */
+export function buildRoster(profiles: readonly (PeerProfile | null)[]): RosterMember[] {
+  const out: RosterMember[] = []
+  const seen = new Set<string>()
+  for (const profile of profiles) {
+    if (!profile) {
+      out.push({ id: null, name: GUEST_NAME })
+      continue
+    }
+    if (seen.has(profile.id)) continue
+    seen.add(profile.id)
+    out.push({ id: profile.id, name: profile.name })
+  }
+  return out
+}
+
+/**
+ * The `peers` fan-out frame, built HERE so both adapters emit the same
+ * shape on the same occasions (ADR-0063): the count is the relay's
+ * headcount of SOCKETS, the members are the PEOPLE behind them.
+ */
+export function peersFrame(count: number, profiles: readonly (PeerProfile | null)[]): RelayMessage {
+  return { type: 'peers', count, members: buildRoster(profiles) }
+}
 
 /* ------------------------------------------------------------------ records */
 

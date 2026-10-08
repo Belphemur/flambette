@@ -16,7 +16,9 @@ import { homeSeoHead } from './lib/seo'
 import { normalizeRoomCode } from './lib/roomWords'
 import { useHead } from '@unhead/vue'
 import JoinCongratsModal from './components/JoinCongratsModal.vue'
+import RosterSheet from './components/RosterSheet.vue'
 import TooltipBubble from './components/TooltipBubble.vue'
+import { useIdentityStore } from './stores/identity'
 
 /**
  * The app-level DEFAULT head (ADR-0048). Every app-shell route is served
@@ -38,6 +40,9 @@ const router = useRouter()
 const ui = useUiStore()
 const plan = usePlanStore()
 const room = useRoomStore()
+// ADR-0063: instantiating here runs the identity store's hydration-time
+// migration (generate when absent while a household room is saved).
+const identity = useIdentityStore()
 const { shareAction } = useShareRoomLink()
 
 /** Dark mode: follows the system preference until the user overrides it
@@ -130,6 +135,13 @@ const roomChip = computed(() => {
 
 /** The recipe detail view is full-bleed (edge-to-edge hero image). */
 const isRecipe = computed(() => route.name === 'recipe')
+
+/**
+ * The roster sheet behind the room chip (ADR-0063): tapping the chip opens
+ * the PEOPLE currently connected. The chip keeps every status rule; the
+ * sheet is a calm overlay, not a navigation change.
+ */
+const rosterOpen = ref(false)
 
 /** Clicking the header logo always returns to the recipes list (the
  * homepage). ADR-0048: app-shell routes share one head, so the recipes
@@ -465,11 +477,20 @@ onBeforeUnmount(() => {
   its `overflow: hidden` would clip a child bubble (coderabbit r1). -->
   <TooltipBubble :text="`Version ${appVersion}`" placement="below-right" />
   </button>
-  <span
+  <!-- ADR-0063: the chip is now a real BUTTON — tapping it opens the room
+       roster. Every visual is unchanged (dot | badge | word, ADR-0049),
+       the TooltipBubble description stays, and `cursor-help` semantics
+       stay (the affordance rule covers the pointer cursor; the explicit
+       class keeps the help cursor for the tooltip target). It GAINS
+       `aria-expanded`, because it now opens and closes a sheet. -->
+  <button
   v-if="roomChip"
+  type="button"
   class="group relative flex shrink-0 cursor-help items-center gap-1.5 rounded-full bg-surface-sunken px-2.5 py-1.5 text-xs font-medium"
   :aria-label="roomChip.description"
+  :aria-expanded="rosterOpen"
   data-test="room-chip"
+  @click="rosterOpen = true"
   >
   <!-- THE CHIP IS A DOT AND ITS WORD (ADR-0049 addenda 8 + 12). The
        owner's first ruling dropped the icon AND the word; after living
@@ -531,7 +552,7 @@ onBeforeUnmount(() => {
   placement="below-right"
   data-test="room-chip-tooltip"
   />
-  </span>
+  </button>
   <button
   class="flex size-11 items-center justify-center rounded-full text-xl transition-colors hover:bg-surface-sunken"
   :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
@@ -639,4 +660,15 @@ onBeforeUnmount(() => {
   @dismiss="congratsCode = null"
   />
   <ChangelogModal v-if="changelogOpen" @close="changelogOpen = false" />
+  <!-- ADR-0063: tap the chip, meet the room. `count` is the relay's live
+       headcount (the badge's number); `members` is the PEOPLE list (null
+       = an old relay has not told us — degrade to the plain count, never
+       a fake list); `selfId` marks this device's own row. -->
+  <RosterSheet
+  v-if="rosterOpen && roomChip"
+  :count="room.peers"
+  :members="room.members"
+  :self-id="room.joinedProfileId || identity.id || null"
+  @close="rosterOpen = false"
+  />
 </template>

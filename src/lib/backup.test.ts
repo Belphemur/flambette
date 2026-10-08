@@ -4,6 +4,7 @@ import { STORE_SLICES } from './backup'
 import { useUiStore } from '../stores/ui'
 import { usePlanStore } from '../stores/plan'
 import { useRatingStore } from '../stores/rating'
+import { useIdentityStore } from '../stores/identity'
 
 /** read() of the settings slice also carries the theme override, which
  *  lives in localStorage under a non-Pinia key (useDark). */
@@ -521,5 +522,65 @@ describe('ratings slice (ADR-0031 registry)', () => {
     expect(v([{ id: 1, rating: 3, count: 1, updatedAt: 1 }, 7])).toContain('must be objects')
     expect(v({})).toContain('must be an array')
     expect(v([{ id: 1, rating: 3, count: 1, updatedAt: 1 }])).toBeNull()
+  })
+})
+
+/**
+ * The identity slice (ADR-0063). Import is replace-on-apply (device-scoped),
+ * but the PRE-JOIN shape ({id:'', name} — a name typed in Settings before
+ * the first join) must validate and restore without refusing the whole
+ * backup or blanking a minted id (review).
+ */
+describe('identity slice (ADR-0063 registry)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    ;(globalThis as Record<string, unknown>).localStorage = memoryStorage()
+  })
+
+  const identitySlice = () => {
+    const slice = STORE_SLICES.find((s) => s.file === 'identity.json')
+    if (!slice) throw new Error('identity.json slice missing from STORE_SLICES')
+    return slice
+  }
+
+  test("a pre-join export ({id:'', name}) validates and round-trips", () => {
+      const identity = useIdentityStore()
+    // The exact review scenario: rename BEFORE the first join, export.
+    identity.rename('Swift Marmot')
+    const exported = identitySlice().read() as { id: string; name: string }
+    expect(exported).toEqual({ id: '', name: 'Swift Marmot' })
+    expect(identitySlice().validate(exported)).toBeNull()
+
+    // Restore on another never-joined device: the name lands, the id stays
+    // absent until its own first join (which generate() then keeps).
+    useIdentityStore() // fresh
+    identitySlice().write(exported)
+    expect(identity.name).toBe('Swift Marmot')
+    expect(identity.id).toBe('')
+
+    // And a minted id is never blanked by an id-less backup.
+    identity.generate()
+    const minted = identity.id
+    identitySlice().write({ id: '', name: 'Calm Ferret' })
+    expect(identity.id).toBe(minted)
+    expect(identity.name).toBe('Calm Ferret')
+  })
+
+  test('the absent shape stays a no-op; a full identity replaces; garbage is refused', () => {
+    const v = identitySlice().validate
+    expect(v({ id: '', name: '' })).toBeNull()
+    expect(v({ id: '', name: '   ' })).toContain('name must be')
+    expect(v({ id: '', name: 'x'.repeat(41) })).toContain('name must be')
+    expect(v({ id: 'not-a-uuid', name: 'A' })).toContain('UUID')
+    expect(v({ id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b', name: '' })).toContain('name must be')
+
+    const UUID = '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b'
+    identitySlice().write({ id: UUID, name: 'Brave Otter' })
+    const identity = useIdentityStore()
+    expect(identity.id).toBe(UUID)
+    expect(identity.name).toBe('Brave Otter')
+
+    identitySlice().write({ id: '', name: '' })
+    expect(identity.id).toBe(UUID) // no-op, never blanked
   })
 })

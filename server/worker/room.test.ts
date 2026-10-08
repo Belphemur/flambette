@@ -581,3 +581,159 @@ describe('protocol strictness', () => {
     a.close()
   })
 })
+describe('presence (ADR-0063)', () => {
+  const UUID_A = '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b'
+  const UUID_B = '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6c'
+
+  /** Dials WITH a room-identity profile (pid/pname on the upgrade URL). */
+  async function dialWithProfile(
+    room: string,
+    id: string,
+    name: string,
+    op: 'create' | 'join' = 'create',
+  ): Promise<Peer> {
+    return dial(`/?op=${op}&room=${room}&pid=${id}&pname=${encodeURIComponent(name)}`)
+  }
+
+  /** Rosters are a SET of people; getWebSockets() order is not insertion order. */
+  function sortedRoster(members: unknown): { id: string | null; name: string }[] {
+    return (members as { id: string | null; name: string }[]).slice().sort((x, y) =>
+      (x.id ?? '').localeCompare(y.id ?? ''),
+    )
+  }
+
+  it('the first roster fan-out already lists the joiner (no Guest flash)', async () => {
+    const room = nextRoom()
+    const a = await dialWithProfile(room, UUID_A, 'Brave Otter')
+    expect(await a.expect('created')).toMatchObject({ count: 1 })
+    const peers = await a.expect('peers')
+    expect(peers).toMatchObject({ count: 1 })
+    expect(peers.members).toEqual([{ id: UUID_A, name: 'Brave Otter' }])
+    a.close()
+  })
+
+  it('a profile-less (old-version) peer is a Guest row; the badge counts SOCKETS', async () => {
+    const room = nextRoom()
+    const a = await dialWithProfile(room, UUID_A, 'Brave Otter')
+    await a.expect('created')
+    await a.expect('peers') // a's own admission fan-out
+
+    // An old client: no pid/pname, no profile claim anywhere.
+    const legacy = await dial(`/?op=join&room=${room}`)
+    await legacy.expect('joined')
+    const frame = await a.expect('peers')
+    expect(frame).toMatchObject({ count: 2 }) // two SOCKETS...
+    expect(sortedRoster(frame.members)).toEqual([
+      { id: null, name: 'Guest' }, // only one person has a name...
+      { id: UUID_A, name: 'Brave Otter' }, // ...the badge still counts two sockets
+    ])
+    a.close()
+    legacy.close()
+  })
+
+  it('dedupes two tabs of one device into ONE roster row, while the badge counts both sockets', async () => {
+    const room = nextRoom()
+    const a = await dialWithProfile(room, UUID_A, 'Brave Otter')
+    await a.expect('created')
+    await a.expect('peers')
+    // Same device, second tab: same profile id, a NEW socket.
+    const b = await dialWithProfile(room, UUID_A, 'Brave Otter', 'join')
+    await b.expect('joined')
+    const frame = await a.expect('peers')
+    expect(frame).toMatchObject({ count: 2 }) // sockets
+    expect(frame.members).toEqual([{ id: UUID_A, name: 'Brave Otter' }]) // people
+    a.close()
+    b.close()
+  })
+
+  it('a rename re-fans the roster with the new name, and an id on the frame is ignored', async () => {
+    const room = nextRoom()
+    const a = await dialWithProfile(room, UUID_A, 'Brave Otter')
+    await a.expect('created')
+    await a.expect('peers')
+
+    a.send({ type: 'profile', name: 'Swift Marmot', id: UUID_B })
+    const frame = await a.expect('peers')
+    expect(frame.members).toEqual([{ id: UUID_A, name: 'Swift Marmot' }])
+    a.close()
+  })
+
+  it("a rename is authoritative for the device's OTHER tab (review: no stale sibling name)", async () => {
+    const room = nextRoom()
+    const a = await dialWithProfile(room, UUID_A, 'Brave Otter')
+    await a.expect('created')
+    await a.expect('peers')
+    // Same device, second tab: same profile id, a NEW socket that stays
+    // connected and does NOT send anything itself.
+    const b = await dialWithProfile(room, UUID_A, 'Brave Otter', 'join')
+    await b.expect('joined')
+    await a.expect('peers') // b's admission
+
+    // The SECOND tab renames: the dedupe keeps the first socket's profile,
+    // so without propagation a's attachment would keep the stale name.
+    b.send({ type: 'profile', name: 'Swift Marmot' })
+    const frame = await a.expect('peers')
+    expect(frame).toMatchObject({ count: 2 })
+    expect(frame.members).toEqual([{ id: UUID_A, name: 'Swift Marmot' }])
+
+    // And it survives hibernation: the sibling attachments were
+    // re-serialized, so a later fan-out still shows the new name.
+    const c = await dial(`/?op=join&room=${room}`)
+    await c.expect('joined')
+    const refan = await a.expect('peers')
+    expect(sortedRoster(refan.members)).toEqual([
+      { id: null, name: 'Guest' },
+      { id: UUID_A, name: 'Swift Marmot' },
+    ])
+    a.close()
+    b.close()
+    c.close()
+  })
+
+  it('the roster survives hibernation: a departure re-fan still lists the profile', async () => {
+    const room = nextRoom()
+    const a = await dialWithProfile(room, UUID_A, 'Brave Otter')
+    await a.expect('created')
+    await a.expect('peers')
+    const b = await dialWithProfile(room, UUID_B, 'Calm Ferret', 'join')
+    await b.expect('joined')
+    await a.expect('peers') // b's admission
+
+    // b leaves; the runtime reaps the socket BEFORE the close handler runs,
+    // so a's next fan-out is rebuilt from the attachments of the REMAINING
+    // sockets — a's own, hibernated.
+    b.close()
+    const frame = await a.expect('peers')
+    expect(frame).toMatchObject({ count: 1 })
+    expect(frame.members).toEqual([{ id: UUID_A, name: 'Brave Otter' }])
+    a.close()
+  })
+
+  it('a state push from a profiled socket is attributed to the PROFILE id', async () => {
+    const room = nextRoom()
+    const a = await dialWithProfile(room, UUID_A, 'Brave Otter')
+    await a.expect('created')
+    const b = await dialWithProfile(room, UUID_B, 'Calm Ferret', 'join')
+    await b.expect('joined')
+    await a.expect('peers')
+
+    a.send({ type: 'state', rev: 1, state: { plan: [] } })
+    expect(await b.expect('state')).toMatchObject({ rev: 1, from: UUID_A })
+    a.close()
+    b.close()
+  })
+
+  it('a state push from a legacy socket still carries the serial as `from`', async () => {
+    const room = nextRoom()
+    const a = await dialWithProfile(room, UUID_A, 'Brave Otter')
+    await a.expect('created')
+    const b = await dial(`/?op=join&room=${room}`)
+    await b.expect('joined')
+    await a.expect('peers')
+
+    b.send({ type: 'state', rev: 1, state: { plan: [] } })
+    expect(await a.expect('state')).toMatchObject({ rev: 1, from: 'p2' })
+    a.close()
+    b.close()
+  })
+})

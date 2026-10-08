@@ -3,13 +3,17 @@ import {
   ANIMAL_WORDS,
   COLOR_WORDS,
   LEGACY_ROOM_CODE_RE,
+  NAME_ADJECTIVES,
+  NAME_NOUNS,
   PLACE_WORDS,
   WORD_ROOM_CODE_RE,
   formatRoomCode,
+  generateDisplayName,
   generateRoomCode,
   isRoomCode,
   isWordRoomCode,
   normalizeRoomCode,
+  titleCaseName,
   wordListProblem,
 } from './roomWords'
 
@@ -103,5 +107,39 @@ describe('isRoomCode', () => {
     expect(isWordRoomCode('amber-falcon-lantern')).toBe(true)
     expect(isWordRoomCode('ZZ9ZZZ')).toBe(false)
     expect(LEGACY_ROOM_CODE_RE.test('ZZ9ZZZ')).toBe(true)
+  })
+})
+
+describe('display-name lists (ADR-0063)', () => {
+  test('each name list passes the same curated invariants as the code lists', () => {
+    for (const list of [NAME_ADJECTIVES, NAME_NOUNS]) {
+      expect(wordListProblem(list)).toBeNull()
+    }
+  })
+
+  test('name lists are DISJOINT from the room-code lists', () => {
+    // A name never reads like a room code, so its words must never be
+    // room-code words.
+    const codeWords = new Set([...COLOR_WORDS, ...ANIMAL_WORDS, ...PLACE_WORDS])
+    for (const list of [NAME_ADJECTIVES, NAME_NOUNS]) {
+      const overlap = list.filter((word) => codeWords.has(word))
+      expect(overlap).toEqual([])
+    }
+  })
+
+  test('generated names are Title Case "Adjective Noun" pairs', () => {
+    for (let i = 0; i < 100; i++) {
+      const name = generateDisplayName()
+      expect(name).toMatch(/^[A-Z][a-z]{2,9} [A-Z][a-z]{2,9}$/)
+      const [adj, noun] = name.toLowerCase().split(' ')
+      expect(NAME_ADJECTIVES).toContain(adj)
+      expect(NAME_NOUNS).toContain(noun)
+    }
+  })
+
+  test('titleCaseName title-cases a hyphenated pair', () => {
+    expect(titleCaseName('brave otter')).toBe('Brave Otter')
+    expect(titleCaseName('BRAVE OTTER')).toBe('Brave Otter')
+    expect(titleCaseName('  brave   otter ')).toBe('Brave Otter')
   })
 })
