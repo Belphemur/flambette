@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { usePlanStore } from './plan'
 import { useUiStore } from './ui'
 import { useRoomStore, type RoomStatus } from './room'
+import { useIdentityStore } from './identity'
 
 /**
  * Room store behaviour that the wire-level e2e cannot reach: what the
@@ -991,5 +992,89 @@ describe('the fresh-join signal', () => {
     socket.receive({ type: 'error', code: 'room_expired' })
     expect(store.status).toBe('error')
     expect(store.freshJoin).toBe(false)
+  })
+})
+
+/* ---------------------------------------------------------------- presence */
+
+describe('room identity rides the join/create dial (ADR-0063)', () => {
+  test('the FIRST join generates the identity and puts pid/pname on the URL', async () => {
+    const identity = useIdentityStore()
+    const { room, socket } = await startRoom()
+    expect(identity.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    )
+    expect(identity.name).not.toBe('')
+    // The identity rides the SAME upgrade URL as the intent (ADR-0038's
+    // carrier), so the relay's first roster fan-out is already complete.
+    const sent = new URLSearchParams(socket.url.slice(socket.url.indexOf('?') + 1))
+    expect(sent.get('pid')).toBe(identity.id)
+    expect(sent.get('pname')).toBe(identity.name)
+    void room
+  })
+
+  test('an identity is NEVER re-minted on a later dial', async () => {
+    const identity = useIdentityStore()
+    await startRoom()
+    const id = identity.id
+    const name = identity.name
+    await startRoom('amber-falcon-lantern')
+    expect(identity.id).toBe(id)
+    expect(identity.name).toBe(name)
+  })
+
+  test('announceProfile sends { type: "profile", name } and NEVER an id', async () => {
+    const identity = useIdentityStore()
+    const { room, socket } = await startRoom()
+    socket.sent.length = 0
+    identity.rename('Swift Marmot')
+    room.announceProfile()
+    expect(socket.last).toMatchObject({ type: 'profile', name: 'Swift Marmot' })
+    expect('id' in socket.last).toBe(false)
+  })
+
+  test('announceProfile is a no-op when not live (the next join re-announces)', async () => {
+    const identity = useIdentityStore()
+    identity.generate()
+    store.join('amber-falcon-lantern')
+    expect(store.status).toBe<RoomStatus>('connecting')
+    store.announceProfile() // no open socket: must not throw
+    expect(store.status).toBe<RoomStatus>('connecting')
+  })
+
+  test('a peers frame carrying members adopts the roster; absence is silence', async () => {
+    const { room, socket } = await startRoom()
+    socket.receive({
+      type: 'peers',
+      count: 2,
+      members: [
+        { id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b', name: 'Brave Otter' },
+        { id: null, name: 'Guest' },
+      ],
+    })
+    expect(room.members).toEqual([
+      { id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b', name: 'Brave Otter' },
+      { id: null, name: 'Guest' },
+    ])
+    // An OLD relay sends no `members`: the roster stays whatever it was —
+    // never a wipe, never a fake list.
+    socket.receive({ type: 'peers', count: 2 })
+    expect(room.members).toHaveLength(2)
+    // Malformed rows are dropped per-row, valid ones kept — never a crash.
+    socket.receive({
+      type: 'peers',
+      count: 2,
+      members: [{ name: 'x' }, 42, { id: 5, name: 6 }, { id: null, name: 'Latecomer' }],
+    })
+    expect(room.members).toEqual([{ id: null, name: 'Latecomer' }])
+  })
+
+  test('leave() clears the roster with the count', async () => {
+    const { room, socket } = await startRoom()
+    socket.receive({ type: 'peers', count: 2, members: [{ id: null, name: 'Guest' }] })
+    expect(room.members).toHaveLength(1)
+    room.leave()
+    expect(room.members).toBeNull()
+    expect(room.peers).toBeNull()
   })
 })

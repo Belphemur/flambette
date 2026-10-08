@@ -15,8 +15,20 @@ import { usePlanStore, cookedEventKey, type CookedEntry } from './plan'
 import { useGroceryStore } from './grocery'
 import { useRatingStore } from './rating'
 import { useUiStore } from './ui'
+import { useIdentityStore } from './identity'
 
 export type RoomStatus = 'idle' | 'connecting' | 'live' | 'error'
+
+/**
+ * One roster row from the relay's `peers` frame (ADR-0063). Mirrors the
+ * wire shape — `id: null` is a profile-less (old-version) peer — without
+ * importing from `server/` (the client's convention: types are mirrored,
+ * never shared live).
+ */
+export interface RosterMember {
+  id: string | null
+  name: string
+}
 
 /** Shape both peers share via the relay. Client-owned, whole-state LWW.
  *  Unknown optional fields (customs, cookedHistory) are ignored by older
@@ -144,13 +156,24 @@ function writeRevFloor(code: string | null, rev: number) {
  * been (plus the query): same origin, the proxy's /ws path — dev, e2e,
  * LAN and the Docker compose stack never notice.
  */
-function wsUrl(role: 'create' | 'join', roomCode?: string | null): string {
+function wsUrl(
+  role: 'create' | 'join',
+  roomCode: string | null | undefined,
+  profile: { id: string; name: string } | null,
+): string {
   const override = import.meta.env.VITE_RELAY_WS_URL
   const base =
     override ??
     `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}${import.meta.env.BASE_URL}ws`
   const params = new URLSearchParams({ op: role })
   if (roomCode) params.set('room', roomCode)
+  // ADR-0063: the join/create profile rides the SAME upgrade URL as the
+  // intent (ADR-0038's carrier), so the relay's very first roster fan-out
+  // is already complete — the joining peer never flashes as a Guest.
+  if (profile) {
+    params.set('pid', profile.id)
+    params.set('pname', profile.name)
+  }
   return `${base}?${params}`
 }
 
@@ -161,6 +184,10 @@ export const useRoomStore = defineStore('room', () => {
   const favourites = useFavouritesStore()
   const ratings = useRatingStore()
   const ui = useUiStore()
+  // ADR-0063: this device's room identity (UUIDv7 + safe-word name). The
+  // FIRST join/create generates it (see `connect`); every later dial reuses
+  // it, and a rename pushes a `profile` frame (see `announceProfile`).
+  const identity = useIdentityStore()
 
   const status = ref<RoomStatus>('idle')
   const code = ref<string | null>(null)
@@ -174,6 +201,15 @@ export const useRoomStore = defineStore('room', () => {
    * anything -- it only displays what it was last told.
    */
   const peers = ref<number | null>(null)
+
+  /**
+   * The live roster — the PEOPLE behind the count (ADR-0063), a full
+   * replacement on every `peers` frame that carries it. `null` until a
+   * relay tells us (an old relay sends no `members`, and absence must
+   * degrade to the plain count, never a fake list). Deduped RELAY-SIDE by
+   * profile id, so a device's two tabs are one row here already.
+   */
+  const members = ref<RosterMember[] | null>(null)
 
   /**
    * True from the moment a DELIBERATE join/create was asked for until a
@@ -653,6 +689,9 @@ export const useRoomStore = defineStore('room', () => {
         // membership changes, so a peer that joins while this device is
         // mid-cook sees the number move without doing anything.
         adoptPeerCount(msg.count)
+        // ADR-0063: the same frame may carry the FULL roster (people, not
+        // sockets). An old relay sends no `members` — silence, never a wipe.
+        adoptMembers(msg.members)
         break
       }
       case 'error': {
@@ -719,6 +758,11 @@ export const useRoomStore = defineStore('room', () => {
     // with an empty plan.
     roomGone = false
     freshJoin.value = fresh
+    // ADR-0063: the device's FIRST dial generates its identity (the owner's
+    // "generated on first join" rule — dial-time, so the profile can ride
+    // the upgrade URL and the first roster fan-out is already complete;
+    // noted in the ADR). Idempotent: an existing identity is never re-minted.
+    identity.generate()
     // Review F6: this socket is being RECYCLED, not left. Sending `leave`
     // would tell the relay we are done with a room we intend to re-join,
     // and as the last peer that deletes the room and its state for
@@ -730,8 +774,12 @@ export const useRoomStore = defineStore('room', () => {
 
     const socket = new WebSocket(
       // create carries the rolled code (or nothing, for the relay to mint
-      // one); join carries the code it is aiming at.
-      wsUrl(role, role === 'create' ? wantedCode : joinCode),
+      // one); join carries the code it is aiming at. Both carry this
+      // device's profile (ADR-0063).
+      wsUrl(role, role === 'create' ? wantedCode : joinCode, {
+        id: identity.id,
+        name: identity.displayName,
+      }),
     )
     ws = socket
 
@@ -899,14 +947,51 @@ export const useRoomStore = defineStore('room', () => {
     peers.value = value
   }
 
+  /**
+   * Take a relay-supplied roster, accepting only well-formed rows
+   * (ADR-0063): `id` null or a string, `name` a string. A frame without a
+   * usable `members` array (an old relay) is silence — the roster stays
+   * whatever it was, and the sheet degrades to the plain count.
+   */
+  function adoptMembers(value: unknown): void {
+    if (!Array.isArray(value)) return
+    const roster: RosterMember[] = []
+    for (const row of value) {
+      if (typeof row !== 'object' || row === null) continue
+      const { id, name } = row as Record<string, unknown>
+      if (id !== null && typeof id !== 'string') continue
+      if (typeof name !== 'string' || !name) continue
+      roster.push({ id, name })
+    }
+    members.value = roster
+  }
+
+  /**
+   * Push a rename to the relay (ADR-0063): a `profile` frame carrying the
+   * NEW name — the id is fixed at join and never re-sent. No-op when not
+   * live: the next join carries the profile at upgrade, so the roster
+   * converges anyway. NOT throttled client-side — a rename is a deliberate
+   * single edit, and the relay's throttle only prices create/join.
+   */
+  function announceProfile(): void {
+    if (status.value !== 'live' || !ws || ws.readyState !== WebSocket.OPEN) return
+    try {
+      ws.send(JSON.stringify({ type: 'profile', name: identity.displayName }))
+    } catch {
+      /* socket closing; the next join re-announces */
+    }
+  }
+
   /** Leave the current room and go back to idle. */
   function leave() {
     code.value = null
     status.value = 'idle'
     error.value = null
     // The count described THAT room; keeping it would leave a chip
-    // reading "3 in room" for a room this device is no longer in.
+    // reading "3 in room" for a room this device is no longer in. The
+    // roster describes those same people (ADR-0063) — same story.
     peers.value = null
+    members.value = null
     freshJoin.value = false
     reconnectAttempts = 0
     wantedCode = null
@@ -926,6 +1011,7 @@ export const useRoomStore = defineStore('room', () => {
     code,
     error,
     peers,
+    members,
     /**
      * Armed by a deliberate `join()`/`create()` and still unanswered by a
      * `live` frame. The app shell reads it to land a first-time joiner on
@@ -943,5 +1029,6 @@ export const useRoomStore = defineStore('room', () => {
     join,
     resume,
     leave,
+    announceProfile,
   }
 })
