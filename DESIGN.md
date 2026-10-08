@@ -228,6 +228,12 @@ components:
     backgroundColor: "{colors.success}"
   live-room-dot-dark:
     backgroundColor: "{colors.success-soft}"
+  avatar:
+    size: 40px
+    rounded: "{rounded.full}"
+  avatar-sm:
+    size: 28px
+    rounded: "{rounded.full}"
   badge-danger:
     backgroundColor: "{colors.surface-raised}"
     textColor: "{colors.danger}"
@@ -502,6 +508,16 @@ existing family (the nearest, `nutrition-protein`, is modal-only and never on
 the same screen). Used by the user-recipe badge on the recipe detail sheet:
 `NotebookPen` glyph + the label, `cursor-help` with a title tooltip.
 
+A person avatar (ADR-0063) is generated IDENTITY ART, not a UI colour role: its
+palette is produced by the avatar generator and is deliberately exempt from the
+token audit the way recipe photography is. Its identity is still bounded by the
+system — the generator's `tones` are READ AT RUNTIME from the existing family
+tokens (`--color-hue-*`, `--color-meal-*`, `--color-nutrition-*`), so an avatar
+never invents a colour the design system does not carry, no hex literal reaches
+`src/`, and a future palette change re-skins every avatar for free. The canvas
+sits on a `surface-sunken` disc with a `border` keyline so any generated palette
+meets a known surface.
+
 ## Typography
 
 Use a deliberate **system-ui sans stack** (system-ui, -apple-system, Segoe UI,
@@ -566,7 +582,10 @@ It must reflow for zoom/landscape rather than overlap the navigation.
 | Settings | Labelled sections for household sync/privacy, preferences and backup/restore; explicit destructive confirmations. | Local use never requires joining a room. Keep the history-sharing opt-out and backup accessible. |
 
 A live-room status chip is a calm status, not a persistent alarm banner; loss of
-sync must never block finding a recipe or checking groceries. Empty states name
+sync must never block finding a recipe or checking groceries. Tapping the chip
+opens the room roster (ADR-0063) — a calm sheet, not a navigation change — and
+the chip keeps every status rule above while gaining the roster affordance.
+Empty states name
 one useful next action (browse/add meals or generate a plan), without fake data.
 Loading/error states use the same surfaces and retain retry affordances.
 Keep the existing five labelled bottom tabs and full-screen cooking/shopping
@@ -639,6 +658,37 @@ move its label/backplate, resize its hit area or animate a whole navigation bar.
 hover-only affordances only to enabled controls. Keyboard focus has a clear
 2px ring with separation from the component in either theme even on devices
 without hover. Review other active-scale/pulse transitions for reduced motion.
+
+### Person avatars and the room roster (ADR-0063)
+
+A member of the room is shown as a **`PersonAvatar` canvas** (the `hashvatar`
+generator, `dither` mode) beside their name — never initials, never a fetched
+image. The generator hashes the person's DISPLAY NAME, so the pattern is
+deterministic for everyone who reads it and follows the name when it is edited.
+Animation is ON by default (the owner's ask) but collapses to a still pattern
+under `prefers-reduced-motion: reduce`, and the render loop is destroyed on
+unmount and on every hash change — a looping canvas that outlives its row is a
+battery leak, not a decoration.
+
+Sizes are tokens, not ad-hoc numbers: **`avatar` (40px)** wherever the avatar
+stands in a row of its own (roster sheet, Settings preview) and
+**`avatar-sm` (28px)** inline in compact rows. Both clip to a circle
+(`rounded.full`) over a `surface-sunken` disc with a `border` keyline. The
+roster is small and personal, not a leader board: names render Title Case at
+`body-sm`, two people MAY share a name (conflicts are allowed; with the name as
+hash input, identical names render the identical pattern BY DESIGN — the
+quiet "you" marker and context disambiguate, never a colour change), and the
+roster NEVER
+ranks, counts contributions or gamifies presence.
+
+The roster sheet opens by tapping the **live room chip**, which stops being a
+pure status: the chip becomes a real button (`aria-expanded`, keeps its
+TooltipBubble description, keeps the `cursor-help` affordance semantics). The
+sheet header states the relay's live count ("N in room"); each row is the
+member's avatar + name, with a quiet "you" marker on the device's own row —
+text, never a colour-only distinction. Presence is the relay's live truth: the
+sheet shows who is CONNECTED NOW, not who has ever been in the household, and
+empty roster data degrades to the plain count, never a fake member list.
 
 ### Verification and implementation contract
 
