@@ -42,7 +42,11 @@
 import { DurableObject } from 'cloudflare:workers'
 import {
   createRoomRegistry,
+  normalizeProfile,
+  normalizeProfileName,
+  peersFrame,
   type FloorRecord,
+  type PeerProfile,
   type RoomRecord,
   type RoomRegistry,
   type RoomStore,
@@ -51,10 +55,18 @@ import { IDLE_TTL_MS, INACTIVITY_TTL_MS } from '../relay-core/policy'
 import { RELAY_ERRORS, type RelayErrorCode, type RelayMessage } from '../relay-core/protocol'
 import { canonicalizeCode } from '../relay-core/codes'
 
-/** What `deserializeAttachment` carries: this socket's peer identity. */
+/**
+ * What `deserializeAttachment` carries: this socket's peer identity AND
+ * its room-identity profile (ADR-0063). The attachment SURVIVES
+ * hibernation — that is the whole point of keeping presence in it: a
+ * hibernated WebSocket is still a CONNECTED peer, and no SQL row is
+ * needed to remember who it is.
+ */
 interface PeerAttachment {
   id: string
   code: string
+  /** Null = a profile-less (old-version) peer: a Guest roster row. */
+  profile: PeerProfile | null
 }
 
 const SCHEMA = `
@@ -312,29 +324,51 @@ export class Room extends DurableObject<Env> {
   }
 
   /**
-   * Tell every hibernated peer how many of them there are (ADR-0049).
+   * Tell every hibernated peer how many of them there are (ADR-0049) and
+   * who exactly they are (ADR-0063).
    *
    * The count itself is the CORE's (`livePeers + 1` on the admission
    * verdict); walking the peer set is the adapter's, because
    * `ctx.getWebSockets()` is the Durable Object's only notion of "live
-   * peer" — the Bun relay walks a `Set` instead. A refused socket is never
-   * hibernated (`#refuse` uses `accept()`), so it cannot inflate the
-   * count; a socket that died mid-send is guarded by `#send`'s try/catch.
+   * peer" — the Bun relay walks a `Set` instead. The ROSTER is rebuilt
+   * the same way, from each socket's serialized attachment, which is
+   * why presence lives there: it survives hibernation with no SQL. A
+   * refused socket is never hibernated (`#refuse` uses `accept()`), so
+   * it cannot appear in the roster; a socket that died mid-send is
+   * guarded by `#send`'s try/catch.
    */
   #broadcastPeers(): void {
-    const frame: RelayMessage = { type: 'peers', count: this.ctx.getWebSockets().length }
-    for (const peer of this.ctx.getWebSockets()) this.#send(peer, frame)
+    const sockets = this.ctx.getWebSockets()
+    const frame = peersFrame(
+      sockets.length,
+      sockets.map((ws) => this.#profileOf(ws)),
+    )
+    for (const peer of sockets) this.#send(peer, frame)
+  }
+
+  /** A socket's profile, read from its attachment (null when unparseable). */
+  #profileOf(ws: WebSocket): PeerProfile | null {
+    try {
+      const attachment = ws.deserializeAttachment() as PeerAttachment | null
+      return attachment?.profile ?? null
+    } catch {
+      // An attachment the runtime cannot deserialize is a Guest row, not
+      // a crash in the fan-out's path.
+      return null
+    }
   }
 
   /**
-   * Hibernatable accept, tagged with this peer's id. The serial comes
-   * from the core, which keeps it monotone across a re-creation of this
-   * code, so an id is never handed out twice within a code's history.
+   * Hibernatable accept, tagged with this peer's id AND its room-identity
+   * profile (ADR-0063) — the attachment is where presence survives
+   * hibernation. The serial comes from the core, which keeps it monotone
+   * across a re-creation of this code, so an id is never handed out
+   * twice within a code's history.
    */
-  #acceptPeer(server: WebSocket, code: string): string {
+  #acceptPeer(server: WebSocket, code: string, profile: PeerProfile | null): string {
     const id = `p${this.#room.nextSerial()}`
     this.ctx.acceptWebSocket(server, [id])
-    server.serializeAttachment({ id, code } satisfies PeerAttachment)
+    server.serializeAttachment({ id, code, profile } satisfies PeerAttachment)
     return id
   }
 
@@ -367,6 +401,13 @@ export class Room extends DurableObject<Env> {
     // The entry routed by name, so the code in the URL is already
     // canonical; re-deriving it keeps the row self-describing.
     const code = canonicalizeCode(url.searchParams.get('room')) || this.#code
+    // ADR-0063: the join/create profile rides the SAME upgrade URL as the
+    // intent (pid/pname, forwarded by the worker entry), so the very
+    // first roster fan-out is already complete.
+    const profile = normalizeProfile({
+      id: url.searchParams.get('pid') ?? undefined,
+      name: url.searchParams.get('pname') ?? undefined,
+    })
 
     const pair = new WebSocketPair()
     const client = pair[0]
@@ -375,7 +416,7 @@ export class Room extends DurableObject<Env> {
     const verdict = this.#room.admit(mode, this.ctx.getWebSockets().length)
     if (verdict.kind === 'refuse') return this.#refuse(client, server, verdict.error)
 
-    this.#acceptPeer(server, code)
+    this.#acceptPeer(server, code, profile)
     if (verdict.kind === 'establish') {
       // `created` carries the code's rev FLOOR, never the room's current
       // rev: the client seeds above it, so a re-created room cannot pass a
@@ -433,8 +474,11 @@ export class Room extends DurableObject<Env> {
         // it was aiming at. The Bun relay answers a non-member's state
         // with bad_state (the membership check is folded into the same
         // guard), so the two relays speak the same reply here.
+        // ADR-0063: the fan-out `from` is the SENDER's profile id when it
+        // has one, the per-code serial otherwise (legacy peers).
+        const from = attachment?.profile?.id ?? attachment?.id ?? ''
         const verdict = member
-          ? this.#room.push(msg.rev, msg.state, attachment!.id)
+          ? this.#room.push(msg.rev, msg.state, from)
           : { ok: false as const, error: RELAY_ERRORS.badState as RelayErrorCode }
         if (!verdict.ok) {
           this.#fail(ws, verdict.error)
@@ -443,6 +487,33 @@ export class Room extends DurableObject<Env> {
         for (const peer of this.ctx.getWebSockets()) {
           if (peer === ws) continue
           this.#send(peer, verdict.fanOut)
+        }
+        return
+      }
+
+      case 'profile': {
+        // A mid-session rename (ADR-0063). The id is FIXED at join — any
+        // `id` on this frame is ignored — so only the name moves, and the
+        // re-serialized attachment is what the roster survives on.
+        if (!member) {
+          this.#fail(ws, RELAY_ERRORS.notInRoom)
+          return
+        }
+        if (attachment?.profile) {
+          attachment.profile = {
+            ...attachment.profile,
+            name: normalizeProfileName(msg.name),
+          }
+          ws.serializeAttachment(attachment)
+          this.#broadcastPeers()
+        } else if (normalizeProfile(msg)) {
+          // First contact from a client that never carried a profile at
+          // upgrade: adopt id + name, verbatim from the frame. This is the
+          // socket's FIRST adoption, not a later change, so the "id fixed
+          // at join" rule still holds.
+          attachment!.profile = normalizeProfile(msg)
+          ws.serializeAttachment(attachment)
+          this.#broadcastPeers()
         }
         return
       }
@@ -465,7 +536,17 @@ export class Room extends DurableObject<Env> {
         // are still answered rather than dropped when they re-assert THIS
         // room (an old client that only knows how to say so), and refused
         // otherwise: a socket cannot move rooms, and a different code
-        // would need a different Durable Object entirely.
+        // would need a different Durable Object entirely. A profile on
+        // the frame (ADR-0063) is adopted on FIRST contact, like the Bun
+        // adapter's message form.
+        if (member && !attachment?.profile) {
+          const adopted = normalizeProfile(msg.profile)
+          if (adopted) {
+            attachment!.profile = adopted
+            ws.serializeAttachment(attachment)
+            this.#broadcastPeers()
+          }
+        }
         const asked = canonicalizeCode(msg.code)
         const row = member && asked === this.#code ? this.#readRoom() : null
         if (!row) {

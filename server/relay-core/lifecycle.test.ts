@@ -14,9 +14,14 @@
 
 import { describe, expect, test } from 'bun:test'
 import {
+  buildRoster,
   createRoomRegistry,
+  normalizeProfile,
+  normalizeProfileName,
+  peersFrame,
   type ExpiryReason,
   type FloorRecord,
+  type PeerProfile,
   type RoomRecord,
   type RoomRegistry,
   type RoomStore,
@@ -478,5 +483,78 @@ describe('a room dies with its last peer (ADR-0026)', () => {
     h.registry.leave(0)
     const back = h.registry.admit('join', 0)
     expect(back).toEqual({ kind: 'establish', code: 'mauve-peacock-candle', rev: 2, count: 1 })
+  })
+})
+/* ---------------------------------------------------------------- presence */
+
+describe('normalizeProfile (ADR-0063)', () => {
+  test('accepts a UUID id and clamps the name with the ONE shared sanitizer', () => {
+    const profile = normalizeProfile({ id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b', name: '  Brave   Otter ' })
+    expect(profile).toEqual({ id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b', name: 'Brave Otter' })
+  })
+
+  test('a name of only invisible/control characters falls back to Guest', () => {
+    expect(normalizeProfile({ id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b', name: '\u0007\u200d' })?.name).toBe(
+      'Guest',
+    )
+    expect(normalizeProfile({ id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b', name: '' })?.name).toBe('Guest')
+    expect(normalizeProfile({ id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b' })?.name).toBe('Guest')
+  })
+
+  test('a name longer than 40 visible chars is clamped, not refused', () => {
+    const profile = normalizeProfile({ id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b', name: 'a'.repeat(80) })
+    expect(profile?.name).toHaveLength(40)
+  })
+
+  test.each([
+    ['no profile at all', undefined],
+    ['a non-object', 'brave'],
+    ['a missing id', { name: 'Brave Otter' }],
+    ['a non-UUID id', { id: 'guest', name: 'Brave Otter' }],
+    ['a non-string id', { id: 42, name: 'Brave Otter' }],
+  ])('degrades to null (a Guest row) for %s', (_label, raw) => {
+    expect(normalizeProfile(raw)).toBeNull()
+  })
+
+  test('normalizeProfileName clamps identically (the rename path)', () => {
+    expect(normalizeProfileName('  a   b ')).toBe('a b')
+    expect(normalizeProfileName('')).toBe('Guest')
+    expect(normalizeProfileName(undefined)).toBe('Guest')
+    expect(normalizeProfileName('x'.repeat(80))).toHaveLength(40)
+  })
+})
+
+describe('roster construction (ADR-0063)', () => {
+  test('dedupes multi-tab devices by profile id — one device, ONE row', () => {
+    const device = { id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b', name: 'Brave Otter' }
+    expect(buildRoster([device, device, device])).toEqual([{ id: device.id, name: 'Brave Otter' }])
+  })
+
+  test('profile-less peers each get their own Guest row', () => {
+    expect(buildRoster([null, null])).toEqual([
+      { id: null, name: 'Guest' },
+      { id: null, name: 'Guest' },
+    ])
+  })
+
+  test('a mixed room keeps first-seen order and dedupes only same-id peers', () => {
+    const a = { id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b', name: 'Brave Otter' }
+    const b = { id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6c', name: 'Calm Ferret' }
+    expect(buildRoster([a, null, b, a])).toEqual([a, { id: null, name: 'Guest' }, b])
+  })
+
+  test('an empty room builds an empty roster', () => {
+    expect(buildRoster([])).toEqual([])
+  })
+
+  test('peersFrame carries the count AND the full roster (one frame, one truth)', () => {
+    const device = { id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b', name: 'Brave Otter' }
+    // Two sockets, one person: the badge says 2, the roster lists 1.
+    const frame = peersFrame(2, [device, device])
+    expect(frame).toEqual({
+      type: 'peers',
+      count: 2,
+      members: [{ id: device.id, name: 'Brave Otter' }],
+    })
   })
 })

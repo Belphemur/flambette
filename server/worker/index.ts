@@ -153,7 +153,16 @@ export default {
 
     const target = new URL(url)
     target.pathname = '/ws'
-    target.search = `?mode=${op}&room=${encodeURIComponent(code)}`
+    // ADR-0063: the client's join/create profile (pid/pname) rides the
+    // SAME upgrade URL as the intent and is forwarded verbatim — the DO
+    // normalizes it (the core's normalizeProfile) before serializing it
+    // onto the socket's attachment.
+    const pid = url.searchParams.get('pid') ?? ''
+    const pname = url.searchParams.get('pname') ?? ''
+    target.search =
+      `?mode=${op}&room=${encodeURIComponent(code)}` +
+      (pid ? `&pid=${encodeURIComponent(pid)}` : '') +
+      (pname ? `&pname=${encodeURIComponent(pname)}` : '')
     return stub.fetch(new Request(target, request))
   },
 } satisfies ExportedHandler<Env>

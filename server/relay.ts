@@ -20,7 +20,17 @@
  * Run: `bun server/relay.ts` (listens on :8081, override with PORT env).
  */
 
-import { createRoomRegistry, type FloorRecord, type RoomRecord, type RoomRegistry, type RoomStore } from './relay-core/lifecycle'
+import {
+  createRoomRegistry,
+  normalizeProfile,
+  normalizeProfileName,
+  peersFrame,
+  type FloorRecord,
+  type PeerProfile,
+  type RoomRecord,
+  type RoomRegistry,
+  type RoomStore,
+} from './relay-core/lifecycle'
 import { canonicalizeCode, mintLegacyCode, WORD_CODE_RE } from './relay-core/codes'
 import { IDLE_TTL_MS as IDLE_TTL_DEFAULT_MS, INACTIVITY_TTL_MS as INACTIVITY_TTL_DEFAULT_MS, RELAY_SERVICE } from './relay-core/policy'
 import { RELAY_ERRORS, type RelayMessage } from './relay-core/protocol'
@@ -71,6 +81,13 @@ interface SocketData {
   ip: string
   /** A create/join carried in the upgrade URL (ADR-0038). */
   intent: { op: 'create' | 'join'; code: string } | undefined
+  /**
+   * The socket's identity (ADR-0063): the client's join/create carries
+   * `pid`/`pname` on the SAME upgrade URL (the ADR-0038 intent carrier),
+   * and a `profile` message renames mid-session. Null = a profile-less
+   * (old-version) peer, which the roster shows as a Guest row.
+   */
+  profile: PeerProfile | null
 }
 
 /**
@@ -258,17 +275,23 @@ const throttle = makeThrottle({
 /* -------------------------------------------------------------- membership */
 
 /**
- * Tell every attached peer how many of them there are (ADR-0049).
+ * Tell every attached peer how many of them there are (ADR-0049) and who
+ * exactly they are (ADR-0063).
  *
  * Membership is the ONE thing the core cannot broadcast: which sockets
  * belong to a room is the whole difference between a Bun `Set` and a
  * hibernated Durable Object, so each adapter walks its own peer set. The
- * arithmetic and the policy ("on every membership change") are shared.
- * A peer whose socket has already died is skipped by `send`'s guard, so a
- * stale socket cannot turn a fan-out into an exception.
+ * arithmetic and the policy ("on every membership change") are shared;
+ * the frame itself — count plus the DEDUPED people list — is the core's
+ * `peersFrame`. A peer whose socket has already died is skipped by
+ * `send`'s guard, so a stale socket cannot turn a fan-out into an
+ * exception.
  */
 function broadcastPeers(room: Room): void {
-  const frame: RelayMessage = { type: 'peers', count: room.peers.size }
+  const frame = peersFrame(
+    room.peers.size,
+    [...room.peers].map((peer) => peer.data.profile),
+  )
   for (const peer of room.peers) send(peer, frame)
 }
 
@@ -317,6 +340,20 @@ function detach(ws: Socket): void {
 }
 
 /* ---------------------------------------------------------------- admission */
+
+/**
+ * Adopt a profile carried by a join/create MESSAGE (ADR-0063) — the form
+ * pre-ADR-0038 clients and test harnesses use. First contact only: a
+ * socket's id is fixed at its first join, so a profile already present
+ * (from the upgrade URL, or an earlier frame) is never replaced. An
+ * unusable claim is silence, never a refusal — the peer stays/becomes a
+ * Guest row.
+ */
+function adoptMessageProfile(ws: Socket, raw: unknown): void {
+  if (ws.data.profile) return
+  const adopted = normalizeProfile(raw)
+  if (adopted) ws.data.profile = adopted
+}
 
 /** A legacy mint, avoiding codes that are currently live. */
 function mintFreeCode(): string {
@@ -429,7 +466,27 @@ try {
             code: url.searchParams.get('room') ?? '',
           }
         : undefined
-      if (srv.upgrade(req, { data: { isAlive: true, roomCode: undefined, ip, intent, peerId: '' } })) return undefined
+      if (
+        srv.upgrade(req, {
+          data: {
+            isAlive: true,
+            roomCode: undefined,
+            ip,
+            intent,
+            peerId: '',
+            // ADR-0063: the join/create profile rides the SAME upgrade URL
+            // as the intent (pid/pname), so the very first roster fan-out
+            // is already complete — no second round-trip, no Guest flash.
+            // The core's normalizeProfile decides whether the claim is
+            // usable; an invalid one degrades to a Guest row.
+            profile: normalizeProfile({
+              id: url.searchParams.get('pid') ?? undefined,
+              name: url.searchParams.get('pname') ?? undefined,
+            }),
+          },
+        })
+      )
+        return undefined
       // The health body echoes the lifecycle configuration so a test (or an
       // operator) can tell two relays apart without guessing: a leftover
       // listener from an earlier run with DIFFERENT TTLs must never be
@@ -456,7 +513,14 @@ try {
       },
 
       message(ws, data) {
-        let msg: { type?: unknown; code?: unknown; rev?: unknown; state?: unknown }
+        let msg: {
+          type?: unknown
+          code?: unknown
+          rev?: unknown
+          state?: unknown
+          profile?: unknown
+          name?: unknown
+        }
         try {
           msg = JSON.parse(typeof data === 'string' ? data : new TextDecoder().decode(data))
         } catch {
@@ -472,12 +536,39 @@ try {
 
         switch (msg?.type) {
           case 'create':
+            // The message form can carry a profile (ADR-0063); adopt it
+            // BEFORE admission so the created reply and the first roster
+            // fan-out are already complete.
+            adoptMessageProfile(ws, msg.profile)
             performCreate(ws, msg.code, { legacyMessage: true })
             break
 
           case 'join':
+            adoptMessageProfile(ws, msg.profile)
             performJoin(ws, msg.code)
             break
+
+          case 'profile': {
+            // A mid-session rename (ADR-0063). The id is FIXED at join —
+            // any `id` on this frame is ignored — so only the name moves.
+            if (!member || !room) {
+              send(ws, { type: 'error', code: RELAY_ERRORS.notInRoom })
+              return
+            }
+            if (ws.data.profile) {
+              ws.data.profile = { ...ws.data.profile, name: normalizeProfileName(msg.name) }
+            } else {
+              // First contact from a client that never carried a profile at
+              // upgrade: adopt id + name, verbatim from the frame. This is
+              // the socket's FIRST adoption, not a later change, so the
+              // "id fixed at join" rule still holds.
+              const adopted = normalizeProfile(msg)
+              if (adopted) ws.data.profile = adopted
+            }
+            // The roster changed for everyone; the count did not.
+            broadcastPeers(room)
+            break
+          }
 
           case 'keepalive': {
             // Application-level liveness (ADR-0026). NOT throttled: it
@@ -500,7 +591,14 @@ try {
               send(ws, { type: 'error', code: RELAY_ERRORS.badState })
               return
             }
-            const verdict = room.registry.push(msg.rev, msg.state, ws.data.peerId)
+            // ADR-0063: the fan-out `from` is the SENDER's profile id when
+            // it has one (attribution by device identity), the per-code
+            // serial otherwise (legacy peers keep the old value).
+            const verdict = room.registry.push(
+              msg.rev,
+              msg.state,
+              ws.data.profile?.id ?? ws.data.peerId,
+            )
             if (!verdict.ok) {
               send(ws, { type: 'error', code: verdict.error })
               return

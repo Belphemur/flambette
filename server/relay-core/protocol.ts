@@ -14,12 +14,38 @@
 /** A shared-state snapshot, opaque to the relay: it stores and fans it out. */
 export type SharedSnapshot = Record<string, unknown>
 
+/* ------------------------------------------------------------------ *
+ * Room identity + live presence (ADR-0063). ADDITIVE only: every field
+ * below is optional on its frame, so any relay/client combination of
+ * old and new versions degrades gracefully — unknown fields are
+ * ignored, missing profiles render as Guest rows.
+ * ------------------------------------------------------------------ */
+
+/** A socket's identity, as the client declared it at join/create. */
+export interface PeerProfile {
+  /** The client's device UUID (v7). Fixed at join; never re-minted. */
+  id: string
+  /** The display name, clamped by the core's normalizeProfile. */
+  name: string
+}
+
+/** One roster row. `id: null` = a profile-less (old-version) peer. */
+export interface RosterMember {
+  id: string | null
+  name: string
+}
+
 /** What a client sends. `state` is the only message carrying household data. */
 export type ClientMessage =
-  /** Join-or-create a room under `code` (ADR-0026). */
-  | { type: 'join'; code?: unknown }
+  /** Join-or-create a room under `code` (ADR-0026). `profile` is ADR-0063. */
+  | { type: 'join'; code?: unknown; profile?: unknown }
   /** Claim `code`, minting one when absent. Refused as `code_taken` when live. */
-  | { type: 'create'; code?: unknown }
+  | { type: 'create'; code?: unknown; profile?: unknown }
+  /**
+   * A mid-session rename (ADR-0063). An `id` here is IGNORED: the id is
+   * fixed at join and no later frame can change it.
+   */
+  | { type: 'profile'; name?: unknown; id?: unknown }
   /** Application-level liveness. Refreshes BOTH clocks; never throttled. */
   | { type: 'keepalive' }
   /** A whole-state push at revision `rev`. */
@@ -38,8 +64,13 @@ export type RelayMessage =
    * change (ADR-0049). `count` is the number of ATTACHED peers AFTER the
    * change, so the joining peer is included in the frame it receives with
    * its own `created`/`joined` too.
+   *
+   * ADR-0063 adds `members` — the FULL roster (people, not sockets:
+   * deduped by profile id), replacing whatever the receiver held. It
+   * rides the exact same fan-out occasions as the count, and the badge
+   * keeps counting SOCKETS. Older clients ignore the unknown field.
    */
-  | { type: 'peers'; count: number }
+  | { type: 'peers'; count: number; members?: RosterMember[] }
   /** Fan-out of a peer's push, to every peer EXCEPT the sender. */
   | { type: 'state'; rev: number; state: SharedSnapshot; from: string }
   /** Answer to `keepalive`. Deliberately not `pong` — that is the socket-level beat. */
