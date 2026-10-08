@@ -48,7 +48,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4.148.0"
+          wranglerVersion: "4.149.0"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           command: preview --name pr-${{ github.event.pull_request.number || 'main' }} --config server/wrangler.jsonc
         # NO `environment` input on purpose: the action feeds it to wrangler's
@@ -108,7 +108,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4.148.0"
+          wranglerVersion: "4.149.0"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           command: preview --name pr-${{ github.event.pull_request.number || 'main' }}
         # Same reasoning as the relay job: no `environment` input — an env
