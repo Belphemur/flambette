@@ -50,12 +50,16 @@ export const useIdentityStore = defineStore(
     /**
      * Generate the identity when absent. Idempotent, and the ONE writer of
      * `id`: a later call with an id present is a no-op, which is what keeps
-     * the id immutable across joins, reloads and migrations.
+     * the id immutable across joins, reloads and migrations. A name the
+     * user already typed in Settings (the field is always editable, so a
+     * pre-join rename is legal) is KEPT — the safe words are a fallback,
+     * never an override (review: generate() used to overwrite it).
      */
     function generate(): void {
       if (id.value) return
+      const chosen = name.value
       id.value = uuidv7()
-      name.value = generateDisplayName()
+      if (!chosen) name.value = generateDisplayName()
     }
 
     /**

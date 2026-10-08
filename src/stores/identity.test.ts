@@ -52,6 +52,16 @@ describe('identity store', () => {
     expect(identity.name).toBe(firstName)
   })
 
+  test('generate() KEEPS a name the user typed before the first join', () => {
+    // The Settings field is always editable, so a pre-join rename is legal;
+    // minting the id at the first dial must not discard it (review).
+    const identity = useIdentityStore()
+    identity.rename('Swift Marmot')
+    identity.generate()
+    expect(isUuidShape(identity.id)).toBe(true)
+    expect(identity.name).toBe('Swift Marmot')
+  })
+
   test('ensureIfInRoom() generates when a household room is set (migration path)', () => {
     // A device that upgraded while already in a household: the ui slice
     // holds the room, the identity slice is absent.

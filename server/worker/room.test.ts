@@ -658,6 +658,38 @@ describe('presence (ADR-0063)', () => {
     a.close()
   })
 
+  it("a rename is authoritative for the device's OTHER tab (review: no stale sibling name)", async () => {
+    const room = nextRoom()
+    const a = await dialWithProfile(room, UUID_A, 'Brave Otter')
+    await a.expect('created')
+    await a.expect('peers')
+    // Same device, second tab: same profile id, a NEW socket that stays
+    // connected and does NOT send anything itself.
+    const b = await dialWithProfile(room, UUID_A, 'Brave Otter', 'join')
+    await b.expect('joined')
+    await a.expect('peers') // b's admission
+
+    // The SECOND tab renames: the dedupe keeps the first socket's profile,
+    // so without propagation a's attachment would keep the stale name.
+    b.send({ type: 'profile', name: 'Swift Marmot' })
+    const frame = await a.expect('peers')
+    expect(frame).toMatchObject({ count: 2 })
+    expect(frame.members).toEqual([{ id: UUID_A, name: 'Swift Marmot' }])
+
+    // And it survives hibernation: the sibling attachments were
+    // re-serialized, so a later fan-out still shows the new name.
+    const c = await dial(`/?op=join&room=${room}`)
+    await c.expect('joined')
+    const refan = await a.expect('peers')
+    expect(sortedRoster(refan.members)).toEqual([
+      { id: null, name: 'Guest' },
+      { id: UUID_A, name: 'Swift Marmot' },
+    ])
+    a.close()
+    b.close()
+    c.close()
+  })
+
   it('the roster survives hibernation: a departure re-fan still lists the profile', async () => {
     const room = nextRoom()
     const a = await dialWithProfile(room, UUID_A, 'Brave Otter')

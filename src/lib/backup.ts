@@ -501,23 +501,43 @@ export const STORE_SLICES: SliceDef<any>[] = [
         return 'identity.json must be an object'
       }
       const { id, name } = value as Record<string, unknown>
-      // The ABSENT shape ({id:'',name:''} — a device that never joined) is
-      // valid and restores as a no-op; anything else must be a full,
-      // well-formed identity. Partial shapes are refused, never repaired.
-      if (id === '' && name === '') return null
+      // The ID-LESS shapes are valid: the ABSENT one ({id:'',name:''} — a
+      // device that never joined) and the PRE-JOIN one ({id:'', name} — a
+      // name typed in Settings before the first join; the Settings field is
+      // always editable, so this shape is a legal export). Anything else
+      // must be a full, well-formed identity. Partial shapes are refused,
+      // never repaired — and a pre-join export must never make the WHOLE
+      // backup unrestorable (review: it used to).
+      const nameOk =
+        typeof name === 'string' &&
+        !!sanitizeDisplayName(name) &&
+        // RAW visible length, not the sanitizer's clamped one: no legit
+        // writer produces >MAX chars (rename() and the relays both clamp),
+        // so an over-long name is garbage and is REFUSED, never repaired.
+        [...String(name).replace(/\p{C}/gu, '').trim()].length <= MAX_NAME_CHARS
+      if (id === '') {
+        return name === '' || nameOk
+          ? null
+          : 'identity.json name must be a non-empty name of up to 40 visible characters'
+      }
       if (!isUuidShape(id)) return 'identity.json id must be a UUID'
-      if (
-        typeof name !== 'string' ||
-        !sanitizeDisplayName(name) ||
-        [...sanitizeDisplayName(name)].length > MAX_NAME_CHARS
-      ) {
+      if (!nameOk) {
         return 'identity.json name must be a non-empty name of up to 40 visible characters'
       }
       return null
     },
     write(value) {
       const { id, name } = value as { id: string; name: string }
-      if (id === '') return
+      // The all-empty shape restores as a no-op. An ID-LESS shape restores
+      // the NAME only — an id is never blanked once minted (immutability
+      // works both ways), and a device without one keeps it that way until
+      // its first join, where generate() keeps the restored name. A FULL
+      // identity replaces this device's identity (import is
+      // replace-on-apply — ADR-0013).
+      if (id === '') {
+        if (name !== '') useIdentityStore().rename(name)
+        return
+      }
       useIdentityStore().adopt({ id, name })
     },
   },

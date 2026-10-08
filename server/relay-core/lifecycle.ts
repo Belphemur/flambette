@@ -76,6 +76,23 @@ export function normalizeProfileName(raw: unknown): string {
 }
 
 /**
+ * A rename is authoritative for EVERY socket sharing the identity
+ * (review: the dedupe keeps the FIRST socket's profile, so without this a
+ * device's second tab renaming would leave the first tab's stale name as
+ * the roster's only row for that person). Returns the profile unchanged
+ * for every socket whose id does not match — the adapters apply this per
+ * socket, each in its own store, and the semantics stay here (ADR-0040).
+ */
+export function renamedProfile(
+  profile: PeerProfile | null,
+  id: string,
+  name: string,
+): PeerProfile | null {
+  if (!profile || profile.id !== id) return profile
+  return { ...profile, name }
+}
+
+/**
  * The roster: a PEOPLE list (ADR-0063). Keyed by profile id, so the same
  * device with two tabs (two sockets, one identity) appears ONCE; every
  * profile-less socket is its own Guest row. First-seen order, which is

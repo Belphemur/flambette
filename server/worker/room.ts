@@ -45,6 +45,7 @@ import {
   normalizeProfile,
   normalizeProfileName,
   peersFrame,
+  renamedProfile,
   type FloorRecord,
   type PeerProfile,
   type RoomRecord,
@@ -500,11 +501,30 @@ export class Room extends DurableObject<Env> {
           return
         }
         if (attachment?.profile) {
-          attachment.profile = {
-            ...attachment.profile,
-            name: normalizeProfileName(msg.name),
-          }
+          const name = normalizeProfileName(msg.name)
+          const id = attachment.profile.id
+          attachment.profile = { ...attachment.profile, name }
           ws.serializeAttachment(attachment)
+          // A rename is authoritative for EVERY socket sharing the identity
+          // (ADR-0063 dedupe): a device's second tab renaming must not leave
+          // the first tab's stale name as the roster's row for that person
+          // (review — the dedupe keeps the FIRST socket's profile). The
+          // attachments are where presence survives hibernation, so each
+          // sibling socket re-serializes too.
+          for (const peer of this.ctx.getWebSockets()) {
+            if (peer === ws) continue
+            try {
+              const sibling = peer.deserializeAttachment() as PeerAttachment | null
+              if (!sibling) continue
+              const next = renamedProfile(sibling.profile ?? null, id, name)
+              if (next && next !== sibling.profile) {
+                sibling.profile = next
+                peer.serializeAttachment(sibling)
+              }
+            } catch {
+              // An unreadable attachment is a Guest row, not a rename blocker.
+            }
+          }
           this.#broadcastPeers()
         } else if (normalizeProfile(msg)) {
           // First contact from a client that never carried a profile at

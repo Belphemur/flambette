@@ -19,6 +19,7 @@ import {
   normalizeProfile,
   normalizeProfileName,
   peersFrame,
+  renamedProfile,
   type ExpiryReason,
   type FloorRecord,
   type PeerProfile,
@@ -556,5 +557,39 @@ describe('roster construction (ADR-0063)', () => {
       count: 2,
       members: [{ id: device.id, name: 'Brave Otter' }],
     })
+  })
+})
+
+describe('rename propagation (ADR-0063)', () => {
+  const device = { id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b', name: 'Brave Otter' }
+  const other = { id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6c', name: 'Calm Ferret' }
+
+  test('a rename is authoritative for EVERY socket sharing the profile id', () => {
+    // Two tabs of one device: both move, so the dedupe keeps no stale name.
+    expect(renamedProfile(device, device.id, 'Swift Marmot')).toEqual({
+      id: device.id,
+      name: 'Swift Marmot',
+    })
+    expect(renamedProfile({ ...device }, device.id, 'Swift Marmot')).toEqual({
+      id: device.id,
+      name: 'Swift Marmot',
+    })
+  })
+
+  test('a rename never touches a DIFFERENT identity or a profile-less peer', () => {
+    expect(renamedProfile(other, device.id, 'Swift Marmot')).toBe(other)
+    expect(renamedProfile(null, device.id, 'Swift Marmot')).toBeNull()
+  })
+
+  test('after propagating a rename, the roster still dedupes to the NEW name', () => {
+    // The decision the adapters pin: the sending socket renames itself, the
+    // siblings follow, and buildRoster can no longer surface the old name.
+    const profiles = [device, other, { ...device }].map((p) =>
+      renamedProfile(p, device.id, 'Swift Marmot'),
+    )
+    expect(buildRoster(profiles)).toEqual([
+      { id: device.id, name: 'Swift Marmot' },
+      other,
+    ])
   })
 })

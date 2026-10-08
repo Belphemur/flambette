@@ -25,6 +25,7 @@ import {
   normalizeProfile,
   normalizeProfileName,
   peersFrame,
+  renamedProfile,
   type FloorRecord,
   type PeerProfile,
   type RoomRecord,
@@ -556,7 +557,18 @@ try {
               return
             }
             if (ws.data.profile) {
-              ws.data.profile = { ...ws.data.profile, name: normalizeProfileName(msg.name) }
+              const name = normalizeProfileName(msg.name)
+              const id = ws.data.profile.id
+              ws.data.profile = { ...ws.data.profile, name }
+              // A rename is authoritative for EVERY socket sharing the
+              // identity (ADR-0063 dedupe): a device's second tab renaming
+              // must not leave the first tab's stale name as the roster's
+              // row for that person (review — the dedupe keeps the FIRST
+              // socket's profile, so only-the-sender would go stale).
+              for (const peer of room.peers) {
+                if (peer === ws) continue
+                peer.data.profile = renamedProfile(peer.data.profile, id, name)
+              }
             } else {
               // First contact from a client that never carried a profile at
               // upgrade: adopt id + name, verbatim from the frame. This is
