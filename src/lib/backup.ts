@@ -486,6 +486,41 @@ export const STORE_SLICES: SliceDef<any>[] = [
       )
     },
   },
+  /* This device's room identity (ADR-0063). Identity is DEVICE-scoped,
+     deliberately NOT household state — it never merges and never rides a
+     room snapshot — so import is REPLACE-on-apply: a backup restores
+     whose device this is. The validator requires a UUID-parseable id and
+     a non-empty, clampable name. */
+  {
+    file: 'identity.json',
+    label: 'this device\u2019s identity (name + id)',
+    persistKeys: ['mealime-planner:v1:identity'],
+    read: () => ({ id: useIdentityStore().id, name: useIdentityStore().name }),
+    validate(value) {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return 'identity.json must be an object'
+      }
+      const { id, name } = value as Record<string, unknown>
+      // The ABSENT shape ({id:'',name:''} — a device that never joined) is
+      // valid and restores as a no-op; anything else must be a full,
+      // well-formed identity. Partial shapes are refused, never repaired.
+      if (id === '' && name === '') return null
+      if (!isUuidShape(id)) return 'identity.json id must be a UUID'
+      if (
+        typeof name !== 'string' ||
+        !sanitizeDisplayName(name) ||
+        [...sanitizeDisplayName(name)].length > MAX_NAME_CHARS
+      ) {
+        return 'identity.json name must be a non-empty name of up to 40 visible characters'
+      }
+      return null
+    },
+    write(value) {
+      const { id, name } = value as { id: string; name: string }
+      if (id === '') return
+      useIdentityStore().adopt({ id, name })
+    },
+  },
 ]
 
 function isStepTimersMap(value: unknown): boolean {  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
@@ -679,3 +714,5 @@ import { AUTO_PLAN_RULESETS, useUiStore } from '../stores/ui'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
 import { useFavouritesStore } from '../stores/favourites'
 import { ratingsToRows, useRatingStore, type RatingFileRow } from '../stores/rating'
+import { useIdentityStore } from '../stores/identity'
+import { MAX_NAME_CHARS, isUuidShape, sanitizeDisplayName } from './profileName'

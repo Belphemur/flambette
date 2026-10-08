@@ -61,6 +61,42 @@ export const PLACE_WORDS: readonly string[] = [
 /** The three word lists, in the order a code reads out. */
 export const ROOM_WORD_LISTS: readonly (readonly string[])[] = [COLOR_WORDS, ANIMAL_WORDS, PLACE_WORDS]
 
+/*
+ * Display-name lists (ADR-0063): deliberately NOT the room-code lists, so
+ * a person's name never reads like a room code. Same curation rules as the
+ * code lists — lowercase ASCII, 3–10 letters — and disjoint from them (the
+ * unit tests pin the disjointness), because "Brave Otter" joined to a
+ * three-word code is one shared vocabulary too many.
+ */
+
+export const NAME_ADJECTIVES: readonly string[] = [
+  'brave', 'bright', 'calm', 'cheery', 'clever', 'cozy', 'crisp', 'dapper',
+  'dashing', 'eager', 'easygoing', 'fancy', 'festive', 'gentle', 'glad',
+  'gleeful', 'golden', 'grand', 'happy', 'hardy', 'hearty', 'honeyed',
+  'jolly', 'joyful', 'keen', 'kindly', 'lively', 'lucky', 'mellow', 'merry',
+  'mighty', 'mild', 'minty', 'noble', 'nimble', 'honest', 'perky', 'peaceful',
+  'peppery', 'playful', 'plucky', 'posh', 'prim', 'quick', 'quirky', 'radiant',
+  'restful', 'rosy', 'rustic', 'sassy', 'serene', 'sharp', 'shiny', 'silky',
+  'simple', 'smart', 'smooth', 'snappy', 'snazzy', 'spiffy', 'spicy',
+  'sprightly', 'stellar', 'sunny', 'sweet', 'tidy', 'toasty', 'tranquil',
+  'upbeat', 'valiant', 'vivid', 'warm', 'whimsical', 'witty', 'zesty', 'zen',
+]
+
+export const NAME_NOUNS: readonly string[] = [
+  'apron', 'basil', 'batter', 'bayleaf', 'blender', 'bowl', 'brioche', 'brook',
+  'cacao', 'cake', 'caramel', 'clove', 'cocoa', 'comet', 'croissant', 'crumble',
+  'cumin', 'curry', 'custard', 'dandelion', 'dawn', 'dumpling', 'ember',
+  'fennel', 'fern', 'fig', 'fluff', 'forest', 'gnocchi', 'granola', 'grove',
+  'hazelnut', 'herb', 'honey', 'horizon', 'jam', 'juniper', 'kernel', 'kiwi',
+  'latte', 'lemon', 'linden', 'loaf', 'maple', 'meringue', 'mocha', 'morsel',
+  'muffin', 'noodle', 'nutmeg', 'oat', 'oatmeal', 'papaya', 'pancake', 'pastry',
+  'peanut', 'pear', 'pesto', 'polenta', 'popsicle', 'pudding', 'radish',
+  'raisin', 'recipe', 'relish', 'risotto', 'rosemary', 'sage', 'scone', 'sesame',
+  'shortbread', 'simmer', 'skillet', 'snack', 'sorbet', 'sorrel', 'spoon',
+  'sprinkle', 'steam', 'sugar', 'sundae', 'syrup', 'thyme', 'toaster', 'treacle',
+  'tulip', 'vanilla', 'vine', 'whisk', 'zucchini',
+]
+
 /** 3–10 lowercase letters per word. */
 const WORD_RE = /^[a-z]{3,10}$/
 
@@ -166,6 +202,28 @@ export function isRoomCode(code: string): boolean {
 /** True when the code is the new three-word format. */
 export function isWordRoomCode(code: string): boolean {
   return WORD_ROOM_CODE_RE.test(code)
+}
+
+/**
+ * A generated display name, shown Title Case (ADR-0063): `<adjective> <noun>`
+ * — "Brave Otter". The name is stored exactly as returned (displayed,
+ * wire-carried and avatar-hashed from the same string), so there is one
+ * spelling of a person everywhere. Name conflicts are fine: the roster
+ * disambiguates by pattern and context, never by forced uniqueness.
+ */
+export function generateDisplayName(): string {
+  const adj = NAME_ADJECTIVES[randomIndex(NAME_ADJECTIVES.length)]
+  const noun = NAME_NOUNS[randomIndex(NAME_NOUNS.length)]
+  return titleCaseName(`${adj} ${noun}`)
+}
+
+/** "brave otter" → "Brave Otter" (the generated names' display form). */
+export function titleCaseName(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word[0].toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
 }
 
 /**
