@@ -247,6 +247,23 @@ spoken by a Durable Object instead of a Bun process.
   design). The relay's `normalizeCode` is GONE —
   `server/relay-core/codes.ts` re-exports the client's `normalizeRoomCode`,
   so there is one canonicaliser.
+- **Room identity + presence (ADR-0063)**: every device carries a persisted
+  identity (`mealime-planner:v1:identity`, backup slice `identity.json` in
+  `STORE_SLICES`) — an immutable UUIDv7 from the `uuid` package plus an
+  editable safe-word display name from `NAME_ADJECTIVES`/`NAME_NOUNS` in
+  `roomWords.ts`, clamped by the ONE sanitizer `src/lib/profileName.ts`
+  that the relays import too. Presence is RELAY-SIDE, never SharedState:
+  the `peers` frame carries `members[]` (roster deduped per profile id,
+  Guest rows for profile-less peers), profiles ride the upgrade URL
+  (`pid`/`pname`) and `state.from` is the sender's profile id. The roster
+  is LIVE-ONLY (cleared on every socket end path); ids are FIXED AT DIAL —
+  a rename announces a `profile` frame, a restored backup announces the
+  name and the sheet's you-marker keys on `room.joinedProfileId` (never
+  re-dial to apply an id: as the only peer it deletes the room,
+  ADR-0026). Profile ids are CLIENT-ASSERTED within the room-code trust
+  boundary; binding them to a server secret is an auth layer, a future
+  ADR. Avatars: `PersonAvatar` wraps `hashvatar` (dither, hashed on the
+  NAME, `useDark` in the watch) with tones read from the design tokens.
 - **Share room = one tap to the clipboard (ADR-0023)**: use
   `useShareRoomLink()` (`src/composables/useShareRoomLink.ts`), never
   `navigator.share` (no Web Share on plain-HTTP LAN) and never a raw
