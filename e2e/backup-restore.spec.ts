@@ -103,6 +103,15 @@ async function backupSeed(page: Page): Promise<{ planned: string; cooked: string
   // Dark theme override.
   await page.getByRole('button', { name: 'Switch to dark mode' }).click()
 
+  // Join a household room: ADR-0063 generates the device identity on the
+  // first dial, so the export carries a REAL identity.json (not the
+  // absent shape) and the round-trip can pin its restore.
+  await gotoTab(page, 'Settings')
+  await page.getByTestId('household-room-new').click()
+  await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, {
+    timeout: 10_000,
+  })
+
   return { planned, cooked, custom, remembered, checkedKeys, newFav }
 }
 
@@ -147,6 +156,7 @@ test('full round-trip: seed, export, fresh context, import — everything is res
     'cooked-history.json',
     'custom-ingredients.json',
     'favourites.json',
+    'identity.json',
     'meta.json',
     'plan.json',
     'ratings.json',
@@ -165,6 +175,11 @@ test('full round-trip: seed, export, fresh context, import — everything is res
   // ADR-0031: household stars travel in their own slice, and an UNRATED
   // profile exports an empty object (never a missing key, never a wipe).
   expect(json('ratings.json')).toEqual([])
+  // ADR-0063: the identity travels too — the seed joined a household, so
+  // this device HAS one (a UUID-shaped id + its safe-word name).
+  const identity = json('identity.json')
+  expect(identity.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+  expect(identity.name.length).toBeGreaterThan(0)
   // Scrub-target sweep: no tokens / PII anywhere in the export.
   const raw = decoder.decode(bytes)
   expect(raw).not.toMatch(/_BB8sG3|newmail|ab0047d4|\.pi\//)
@@ -213,6 +228,13 @@ test('full round-trip: seed, export, fresh context, import — everything is res
   expect(
     await b.evaluate(() => JSON.parse(localStorage.getItem('mealime-planner:v1:favourites') ?? '[]')),
   ).toContain(seed.newFav)
+  // Identity restored (ADR-0063, replace-on-apply): the SAME id and name
+  // this device exported, not a re-minted one.
+  const restoredIdentity = await b.evaluate(() =>
+    JSON.parse(localStorage.getItem('mealime-planner:v1:identity') ?? '{}'),
+  )
+  expect(restoredIdentity.id).toBe(identity.id)
+  expect(restoredIdentity.name).toBe(identity.name)
   // Theme override restored (vueuse bridge).
   await expect(b.locator('html')).toHaveClass(/dark/)
 

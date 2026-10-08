@@ -177,6 +177,30 @@ the ADR-0049 size. `data-test` hooks: `room-chip` (existing, now a button),
   the roster live; backup round-trip carries `identity.json`; registry
   coverage stays green; the animated avatar honors reduced motion.
 
+## Change note (2026-10-09, implementation)
+
+Three implementation facts deviate from the letter of §1/§2/§3 without
+changing any decision. All were forced by ADR-0038's upgrade-URL intent
+carrier (the client does not send `join`/`create` frames; it dials
+`?op=create|join&room=...`):
+
+1. **Identity is generated at the join/create DIAL, not on the success
+   frame.** The profile has to ride the upgrade URL, which is built
+   before the relay can answer. `pid`/`pname` travel the SAME query the
+   intent already uses, so the very first roster fan-out is already
+   complete — the joining peer never flashes as a Guest row. A dial
+   whose join then fails leaves an unused identity behind, which is
+   harmless (the owner's rule — "generated on first join, kept after" —
+   is about a fresh install never minting one, and that still holds:
+   `connect()` is only reached from room business).
+2. **The relay honours a `profile` on `join`/`create` MESSAGE frames
+   too** (first contact adopts id + name; later frames rename only), so
+   the §2 frame contract is real for message-protocol clients; the
+   client itself uses the URL.
+3. **Reduced motion is `useMediaQuery('(prefers-reduced-motion: reduce)')`,
+   not `useReducedMotion()`** — the pinned @vueuse/core build does not
+   export the latter. Same query, same reactivity, same semantics.
+
 ## Consequences
 
 - **Two new runtime deps**: `uuid` v14 (~small, zero-dep) and `hashvatar`
