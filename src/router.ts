@@ -45,7 +45,15 @@ export const router = createRouter({
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
-  scrollBehavior() {
-    return { top: 0 }
+  /**
+   * Restore the scroll position on back/forward navigations (ADR-0062):
+   * on a POP navigation vue-router 5 hands us `savedPosition` — the
+   * scroll offset recorded in the DESTINATION entry's history state when
+   * we last left it — so returning it lands the user where they left the
+   * list. PUSH navigations (card → detail, logo, tab switches) have no
+   * saved position and keep starting at the top.
+   */
+  scrollBehavior(_to, _from, savedPosition) {
+    return savedPosition ?? { top: 0 }
   },
 })
