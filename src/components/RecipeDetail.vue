@@ -350,6 +350,7 @@ function startCooking() {
   <button
   class="absolute top-3 left-3 flex size-11 items-center justify-center rounded-full bg-surface-dark text-text-dark shadow"
   aria-label="Back"
+  data-test="detail-back"
   @click="close"
   >
   <ArrowLeft :size="20" aria-hidden="true" />
