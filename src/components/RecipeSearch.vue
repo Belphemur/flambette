@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from 'vue'
+import { onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { ChevronDown, X } from 'lucide-vue-next'
 import { searchVariantIds, suggest } from '../lib/search'
 
@@ -15,6 +15,10 @@ import { searchVariantIds, suggest } from '../lib/search'
 
 const query = defineModel<string>({ required: true })
 
+/** The search input itself: Enter blurs it so the mobile on-screen
+ *  keyboard closes and the results become visible (ADR-0064 §4). */
+const input = useTemplateRef<HTMLInputElement>('input')
+
 /* ---------- Async search results pipeline ---------- */
 
 /** Async search results: null means no active search (show all). */
@@ -23,6 +27,21 @@ const searchResults = ref<{ primary: number[]; fallback: number[] } | null>(null
  *  a new query never flashes "No recipes match" before results land. */
 const searchPending = ref(false)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
+
+/** Run the search for `current` now. The stale-response guard (a
+ *  response for a query the user has since changed is discarded) lives
+ *  here so BOTH callers — the 200 ms debounce and Enter's flush — share
+ *  it verbatim. */
+async function runSearch(current: string) {
+  // Guard the async boundary: an earlier request (including the cold
+  // index fetch) finishing after the query changed must never
+  // overwrite the newer state.
+  const r = await searchVariantIds(current).catch((e) => { void e; return null })
+  if (query.value.trim() !== current) return
+  searchResults.value = r
+  searchPending.value = false
+}
+
 watch(query, (q) => {
   if (searchTimer) clearTimeout(searchTimer)
   const trimmed = q.trim()
@@ -32,17 +51,25 @@ watch(query, (q) => {
     return
   }
   searchPending.value = true
-  searchTimer = setTimeout(async () => {
-    // Guard the async boundary: an earlier request (including the cold
-    // index fetch) finishing after the query changed must never
-    // overwrite the newer state.
-    const current = trimmed
-    const r = await searchVariantIds(current).catch((e) => { void e; return null })
-    if (query.value.trim() !== current) return
-    searchResults.value = r
-    searchPending.value = false
-  }, 200)
+  searchTimer = setTimeout(() => void runSearch(trimmed), 200)
 })
+
+/** Enter flushes the 200 ms search debounce (ADR-0064 §4): the results
+ *  are on screen when the keyboard finishes closing, not 200 ms later. */
+function flushSearch() {
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+    searchTimer = null
+  }
+  const trimmed = query.value.trim()
+  if (!trimmed) {
+    searchResults.value = null
+    searchPending.value = false
+    return
+  }
+  searchPending.value = true
+  void runSearch(trimmed)
+}
 
 /* ---------- AutoSuggest dropdown state ---------- */
 
@@ -89,6 +116,28 @@ watch(query, (q) => {
 })
 
 function onSuggestKey(e: KeyboardEvent) {
+  // Enter is handled BEFORE the dropdown-empty early-return (ADR-0064
+  // §4): commit a highlighted suggestion exactly as before, then ALWAYS
+  // dispose the menu and blur — on a phone the open dropdown covers the
+  // results and the keyboard stays up otherwise. The open-with-nothing-
+  // highlighted case that used to fall through was exactly the bug.
+  if (e.key === 'Enter') {
+  e.preventDefault()
+  if (suggestions.value.length > 0 && suggestSelected.value >= 0) {
+  const picked = suggestions.value[suggestSelected.value]!
+  // Same no-op guard as selectSuggestion: a flag set on an unchanged
+  // query would kill the next real edit's suggestions.
+  if (query.value !== picked) {
+    suppressNextSuggest = true
+    query.value = picked
+  }
+  }
+  suggestions.value = []
+  suggestSelected.value = -1
+  flushSearch()
+  input.value?.blur()
+  return
+  }
   if (suggestions.value.length === 0) return
   switch (e.key) {
   case 'ArrowDown':
@@ -98,19 +147,6 @@ function onSuggestKey(e: KeyboardEvent) {
   case 'ArrowUp':
   e.preventDefault()
   suggestSelected.value = Math.max(suggestSelected.value - 1, 0)
-  break
-  case 'Enter':
-  if (suggestSelected.value >= 0) {
-  const picked = suggestions.value[suggestSelected.value]!
-  // Same no-op guard as selectSuggestion: a flag set on an unchanged
-  // query would kill the next real edit's suggestions.
-  if (query.value !== picked) {
-    suppressNextSuggest = true
-    query.value = picked
-  }
-  suggestions.value = []
-  suggestSelected.value = -1
-  }
   break
   case 'Escape':
   suggestions.value = []
@@ -159,8 +195,10 @@ onUnmounted(() => {
   <div class="space-y-3">
   <div class="relative">
   <input
+  ref="input"
   v-model="query"
   type="search"
+  enterkeyhint="search"
   placeholder="Search recipes or ingredients…"
   class="h-11 w-full rounded-xl border px-4 pr-10 text-sm outline-none focus:border-brand-text"
   aria-label="Search recipes or ingredients"

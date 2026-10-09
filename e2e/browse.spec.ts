@@ -101,6 +101,21 @@ test('suggest dropdown opens, navigates and commits', async ({ page }) => {
   expect(value).not.toBe('chick')
 })
 
+test('Enter with nothing highlighted dismisses the dropdown and blurs the searchbox', async ({ page }) => {
+  const searchbox = page.getByRole('searchbox', { name: 'Search recipes or ingredients' })
+  await searchbox.fill('chick')
+  await page.waitForTimeout(400) // debounce settles
+  await expect(page.getByTestId('search-suggest')).toBeVisible()
+  // The mobile bug (ADR-0064 §4): with the dropdown OPEN but nothing
+  // highlighted, Enter used to be a no-op — the menu stayed up and the
+  // on-screen keyboard never closed. Enter must dispose the menu AND
+  // blur the input; blur is the accepted proxy for "keyboard closed",
+  // which is not scriptable.
+  await searchbox.press('Enter')
+  await expect(page.getByTestId('search-suggest')).toBeHidden()
+  await expect(searchbox).not.toBeFocused()
+})
+
 test('suggest dropdown hides for a complete word with no completions', async ({ page }) => {
   const searchbox = page.getByRole('searchbox', { name: 'Search recipes or ingredients' })
   // "rice" is a word the index knows: the suggester would answer with the
