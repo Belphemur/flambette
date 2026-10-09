@@ -108,6 +108,38 @@ const COLOR_TOKENS: Record<string, string> = {
   'favourite-soft': '--color-favourite-soft',
   household: '--color-household',
   'household-soft': '--color-household-soft',
+  // Store DEPARTMENT identities (ADR-0076): 14 aisle pairs + the two
+  // registry reuses (Produce -> hue-vegetarian, Meat & Seafood ->
+  // hue-meat) are mapped through those existing tokens above. Aisle
+  // tokens never join ICON_ROLES — a department is a third question.
+  'aisle-gold': '--color-aisle-gold',
+  'aisle-gold-soft': '--color-aisle-gold-soft',
+  'aisle-crust': '--color-aisle-crust',
+  'aisle-crust-soft': '--color-aisle-crust-soft',
+  'aisle-sunrise': '--color-aisle-sunrise',
+  'aisle-sunrise-soft': '--color-aisle-sunrise-soft',
+  'aisle-coffee': '--color-aisle-coffee',
+  'aisle-coffee-soft': '--color-aisle-coffee-soft',
+  'aisle-husk': '--color-aisle-husk',
+  'aisle-husk-soft': '--color-aisle-husk-soft',
+  'aisle-slate': '--color-aisle-slate',
+  'aisle-slate-soft': '--color-aisle-slate-soft',
+  'aisle-royal': '--color-aisle-royal',
+  'aisle-royal-soft': '--color-aisle-royal-soft',
+  'aisle-ice': '--color-aisle-ice',
+  'aisle-ice-soft': '--color-aisle-ice-soft',
+  'aisle-leaf': '--color-aisle-leaf',
+  'aisle-leaf-soft': '--color-aisle-leaf-soft',
+  'aisle-rose': '--color-aisle-rose',
+  'aisle-rose-soft': '--color-aisle-rose-soft',
+  'aisle-violet': '--color-aisle-violet',
+  'aisle-violet-soft': '--color-aisle-violet-soft',
+  'aisle-wine': '--color-aisle-wine',
+  'aisle-wine-soft': '--color-aisle-wine-soft',
+  'aisle-lavender': '--color-aisle-lavender',
+  'aisle-lavender-soft': '--color-aisle-lavender-soft',
+  'aisle-stone': '--color-aisle-stone',
+  'aisle-stone-soft': '--color-aisle-stone-soft',
 }
 
 /** Non-colour tokens that must also stay in step. */

@@ -78,9 +78,12 @@ const canSubmit = computed(() => query.value.trim().length > 0)
 const CATEGORY_PLACEHOLDER = 'Pick a store category'
 const categoryOptions = computed<FilterDropdownOption[]>(() => [
   { value: '', label: CATEGORY_PLACEHOLDER },
-  ...STORE_SECTIONS.map((s) => ({ value: s, label: s, icon: aisleIcon(s)?.glyph })).sort((a, b) =>
-  a.label.localeCompare(b.label),
-  ),
+  ...STORE_SECTIONS.map((s) => ({
+  value: s,
+  label: s,
+  icon: aisleIcon(s)?.glyph,
+  iconClass: aisleIcon(s)?.className,
+  })).sort((a, b) => a.label.localeCompare(b.label)),
 ])
 /** The option matching the explicit override, when one is set. */
 const selectedCategoryOption = computed(() =>
@@ -334,15 +337,16 @@ const ariaLabel = 'Add a custom grocery item'
   @select="(v) => (category = v)"
   @open="categoryMenuOpen = $event"
   >
-  <!-- The closed trigger shows the selected department's glyph (owner
-  addendum); muted ink — the trigger's active tint paints the control,
-  never the glyph (ADR-0036). -->
+  <!-- The closed trigger shows the selected department's glyph IN ITS
+  aisle hue (ADR-0076); the trigger's active tint paints the control,
+  never replaces the glyph's identity. -->
   <template #icon>
   <component
   :is="selectedCategoryOption!.icon"
   v-if="selectedCategoryOption?.icon"
   :size="16"
-  class="shrink-0 text-text-muted"
+  :class="selectedCategoryOption.iconClass"
+  class="shrink-0"
   aria-hidden="true"
   />
   </template>
@@ -386,7 +390,7 @@ const ariaLabel = 'Add a custom grocery item'
   <span v-if="rowAt(i)!.unit" class="shrink-0 text-xs text-text-muted">{{ rowAt(i)!.unit }}</span>
   <!-- Live category feedback (ADR-0014): visible on every row and
   folded into the row's accessible name (not decorative). The department
-  glyph rides the pill (owner addendum); muted ink, the pill text stays
+  glyph rides the pill IN ITS aisle hue (ADR-0076); the pill text stays
   the label. -->
   <span
   class="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold text-text-muted"
@@ -396,6 +400,7 @@ const ariaLabel = 'Add a custom grocery item'
   :is="aisleIcon(rowAt(i)!.category)!.glyph"
   v-if="aisleIcon(rowAt(i)!.category)"
   :size="12"
+  :class="aisleIcon(rowAt(i)!.category)!.className"
   aria-hidden="true"
   />
   {{ rowAt(i)!.category }}

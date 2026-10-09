@@ -181,6 +181,43 @@
   --color-nutrition-fat: #7a5f0c;
   --color-nutrition-fat-soft: #e8c86a;
 
+  /* --- Store DEPARTMENT identities (DESIGN.md `aisle-*`, ADR-0076).
+     14 measured pairs over the 29 departments whose identity the food
+     registry does not already claim (Produce reuses `hue-vegetarian`,
+     Meat & Seafood `hue-meat`). Kindred departments deliberately ALIAS a
+     token — never adjacent in STORE_SECTIONS order — the glyph and the
+     printed name do the identity work inside the family. These never
+     join the IconRole registry: a department is a third question beside
+     "what kind of food" and "what does this number mean". --- */
+  --color-aisle-gold: #8f7d00;
+  --color-aisle-gold-soft: #ede795;
+  --color-aisle-crust: #7a3b10;
+  --color-aisle-crust-soft: #f0b49a;
+  --color-aisle-sunrise: #c25a14;
+  --color-aisle-sunrise-soft: #fce4c4;
+  --color-aisle-coffee: #5f4630;
+  --color-aisle-coffee-soft: #c2a075;
+  --color-aisle-husk: #5f6e1e;
+  --color-aisle-husk-soft: #bccb7e;
+  --color-aisle-slate: #46586e;
+  --color-aisle-slate-soft: #a6bacb;
+  --color-aisle-royal: #2c4fbe;
+  --color-aisle-royal-soft: #6f9cef;
+  --color-aisle-ice: #0c8cad;
+  --color-aisle-ice-soft: #a6dcf0;
+  --color-aisle-leaf: #55786a;
+  --color-aisle-leaf-soft: #a9d6c4;
+  --color-aisle-rose: #cb3d86;
+  --color-aisle-rose-soft: #f4a6ce;
+  --color-aisle-violet: #6c2bb0;
+  --color-aisle-violet-soft: #a08ce0;
+  --color-aisle-wine: #6b2137;
+  --color-aisle-wine-soft: #d391a5;
+  --color-aisle-lavender: #6c64a0;
+  --color-aisle-lavender-soft: #c8c2d8;
+  --color-aisle-stone: #635a46;
+  --color-aisle-stone-soft: #bfb4a0;
+
   /* --- Status. Not food identity: never a "what kind of food" cue. ---
      `success` is the live-room signal (ADR-0049) and is deliberately a
      DIFFERENT green from `hue-vegetarian` / `hue-vegan`: it lives in the
@@ -315,6 +352,21 @@
   --color-nutrition-protein: var(--color-nutrition-protein-soft, #c4a8f5);
   --color-nutrition-carbs: var(--color-nutrition-carbs-soft, #5cc0d8);
   --color-nutrition-fat: var(--color-nutrition-fat-soft, #e8c86a);
+  /* Aisle department hues keep their identity in dark mode (ADR-0076). */
+  --color-aisle-gold: var(--color-aisle-gold-soft, #ede795);
+  --color-aisle-crust: var(--color-aisle-crust-soft, #f0b49a);
+  --color-aisle-sunrise: var(--color-aisle-sunrise-soft, #fce4c4);
+  --color-aisle-coffee: var(--color-aisle-coffee-soft, #c2a075);
+  --color-aisle-husk: var(--color-aisle-husk-soft, #bccb7e);
+  --color-aisle-slate: var(--color-aisle-slate-soft, #a6bacb);
+  --color-aisle-royal: var(--color-aisle-royal-soft, #6f9cef);
+  --color-aisle-ice: var(--color-aisle-ice-soft, #a6dcf0);
+  --color-aisle-leaf: var(--color-aisle-leaf-soft, #a9d6c4);
+  --color-aisle-rose: var(--color-aisle-rose-soft, #f4a6ce);
+  --color-aisle-violet: var(--color-aisle-violet-soft, #a08ce0);
+  --color-aisle-wine: var(--color-aisle-wine-soft, #d391a5);
+  --color-aisle-lavender: var(--color-aisle-lavender-soft, #c8c2d8);
+  --color-aisle-stone: var(--color-aisle-stone-soft, #bfb4a0);
   --color-warning: var(--color-warning-soft, #fdba74);
   --color-success: var(--color-success-soft, #34d399);
   --color-on-success: #0a2e22;

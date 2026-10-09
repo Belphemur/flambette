@@ -7,8 +7,7 @@ import { extraCollapseKey, groupExtras, storeCollapseKey, type ExtraGroup } from
 import { sinkChecked } from '../lib/sink'
 import { extraCheckedKey } from '../lib/extraCheckedKeys'
 import { STORE_SECTIONS } from '../lib/sections'
-import { aisleRole } from '../lib/aisleRole'
-import HueIcon from './HueIcon.vue'
+import { aisleIcon } from '../lib/aisleRole'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
 import IngredientAutocomplete from './IngredientAutocomplete.vue'
 
@@ -321,7 +320,18 @@ function exitShopping() {
   data-test="shop-extra-subsection-toggle"
   @click="toggleSection(extraKey(group.name))"
   >
-  <span class="text-label-md font-semibold text-text">{{ group.name }}</span>
+  <!-- Same glyph grammar as the Grocery tab's extras band (ADR-0076):
+  department hue where the name is a real department; `Uncategorized`
+  (a view label) renders no glyph. -->
+  <component
+  :is="aisleIcon(group.name)!.glyph"
+  v-if="aisleIcon(group.name)"
+  :size="16"
+  :class="aisleIcon(group.name)!.className"
+  class="shrink-0"
+  aria-hidden="true"
+  />
+  <span class="min-w-0 flex-1 truncate text-label-md font-semibold text-text">{{ group.name }}</span>
   <span class="flex items-center gap-2">
   <span
   class="rounded-full px-2 py-0.5 font-mono-data text-label-sm tabular-nums"
@@ -386,9 +396,17 @@ function exitShopping() {
   >
   <!-- The hue glyph sits OUTSIDE the toggle: the toggle's own svg count
   is pinned at one (the chevron) by the shop auto-collapse spec, and a
-  decorative glyph must not become part of that count. -->
+  decorative glyph must not become part of that count. Every department
+  wears its glyph + aisle hue (ADR-0076); the band's name span carries
+  the accessible label. -->
   <div class="flex items-center gap-2 border-b border-border bg-surface-sunken px-3 py-2.5">
-  <HueIcon v-if="aisleRole(section.name)" :role="aisleRole(section.name)!" :size="18" />
+  <component
+  :is="aisleIcon(section.name)!.glyph"
+  :size="18"
+  :class="aisleIcon(section.name)!.className"
+  class="shrink-0"
+  aria-hidden="true"
+  />
   <button
   class="flex min-w-0 flex-1 items-center justify-between text-left"
   :aria-expanded="!isCollapsed(storeKey(section.name))"

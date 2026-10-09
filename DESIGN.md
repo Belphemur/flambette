@@ -73,6 +73,34 @@ colors:
   danger-soft: "#FCA5A5"
   favourite: "#C9183C"
   favourite-soft: "#FB7185"
+  aisle-gold: "#8F7D00"
+  aisle-gold-soft: "#EDE795"
+  aisle-crust: "#7A3B10"
+  aisle-crust-soft: "#F0B49A"
+  aisle-sunrise: "#C25A14"
+  aisle-sunrise-soft: "#FCE4C4"
+  aisle-coffee: "#5F4630"
+  aisle-coffee-soft: "#C2A075"
+  aisle-husk: "#5F6E1E"
+  aisle-husk-soft: "#BCCB7E"
+  aisle-slate: "#46586E"
+  aisle-slate-soft: "#A6BACB"
+  aisle-royal: "#2C4FBE"
+  aisle-royal-soft: "#6F9CEF"
+  aisle-ice: "#0C8CAD"
+  aisle-ice-soft: "#A6DCF0"
+  aisle-leaf: "#55786A"
+  aisle-leaf-soft: "#A9D6C4"
+  aisle-rose: "#CB3D86"
+  aisle-rose-soft: "#F4A6CE"
+  aisle-violet: "#6C2BB0"
+  aisle-violet-soft: "#A08CE0"
+  aisle-wine: "#6B2137"
+  aisle-wine-soft: "#D391A5"
+  aisle-lavender: "#6C64A0"
+  aisle-lavender-soft: "#C8C2D8"
+  aisle-stone: "#635A46"
+  aisle-stone-soft: "#BFB4A0"
   household: "#86198F"
   household-soft: "#E879F9"
 typography:
@@ -420,6 +448,90 @@ components:
     backgroundColor: "{colors.surface-dark-raised}"
     textColor: "{colors.nutrition-sodium-soft}"
     size: 18px
+  icon-aisle-gold:
+    textColor: "{colors.aisle-gold}"
+    size: 18px
+  icon-aisle-gold-dark:
+    textColor: "{colors.aisle-gold-soft}"
+    size: 18px
+  icon-aisle-crust:
+    textColor: "{colors.aisle-crust}"
+    size: 18px
+  icon-aisle-crust-dark:
+    textColor: "{colors.aisle-crust-soft}"
+    size: 18px
+  icon-aisle-sunrise:
+    textColor: "{colors.aisle-sunrise}"
+    size: 18px
+  icon-aisle-sunrise-dark:
+    textColor: "{colors.aisle-sunrise-soft}"
+    size: 18px
+  icon-aisle-coffee:
+    textColor: "{colors.aisle-coffee}"
+    size: 18px
+  icon-aisle-coffee-dark:
+    textColor: "{colors.aisle-coffee-soft}"
+    size: 18px
+  icon-aisle-husk:
+    textColor: "{colors.aisle-husk}"
+    size: 18px
+  icon-aisle-husk-dark:
+    textColor: "{colors.aisle-husk-soft}"
+    size: 18px
+  icon-aisle-slate:
+    textColor: "{colors.aisle-slate}"
+    size: 18px
+  icon-aisle-slate-dark:
+    textColor: "{colors.aisle-slate-soft}"
+    size: 18px
+  icon-aisle-royal:
+    textColor: "{colors.aisle-royal}"
+    size: 18px
+  icon-aisle-royal-dark:
+    textColor: "{colors.aisle-royal-soft}"
+    size: 18px
+  icon-aisle-ice:
+    textColor: "{colors.aisle-ice}"
+    size: 18px
+  icon-aisle-ice-dark:
+    textColor: "{colors.aisle-ice-soft}"
+    size: 18px
+  icon-aisle-leaf:
+    textColor: "{colors.aisle-leaf}"
+    size: 18px
+  icon-aisle-leaf-dark:
+    textColor: "{colors.aisle-leaf-soft}"
+    size: 18px
+  icon-aisle-rose:
+    textColor: "{colors.aisle-rose}"
+    size: 18px
+  icon-aisle-rose-dark:
+    textColor: "{colors.aisle-rose-soft}"
+    size: 18px
+  icon-aisle-violet:
+    textColor: "{colors.aisle-violet}"
+    size: 18px
+  icon-aisle-violet-dark:
+    textColor: "{colors.aisle-violet-soft}"
+    size: 18px
+  icon-aisle-wine:
+    textColor: "{colors.aisle-wine}"
+    size: 18px
+  icon-aisle-wine-dark:
+    textColor: "{colors.aisle-wine-soft}"
+    size: 18px
+  icon-aisle-lavender:
+    textColor: "{colors.aisle-lavender}"
+    size: 18px
+  icon-aisle-lavender-dark:
+    textColor: "{colors.aisle-lavender-soft}"
+    size: 18px
+  icon-aisle-stone:
+    textColor: "{colors.aisle-stone}"
+    size: 18px
+  icon-aisle-stone-dark:
+    textColor: "{colors.aisle-stone-soft}"
+    size: 18px
   donut-protein:
     backgroundColor: "{colors.surface-raised}"
     textColor: "{colors.nutrition-protein}"
@@ -634,6 +746,56 @@ never invents a colour the design system does not carry, no hex literal reaches
 `src/`, and a future palette change re-skins every avatar for free. The canvas
 sits on a `surface-sunken` disc with a `border` keyline so any generated palette
 meets a known surface.
+
+### Store department (aisle) hues (ADR-0076)
+
+Every grocery department carries an icon AND a hue: the aisle band, the extras
+sub-section bands, the add-extra category picker and the autocomplete's
+per-row category pill all render the department's glyph in its department
+colour. Two departments are already identity-claimed by the food registry and
+REUSE its tokens — Produce wears `hue-vegetarian`, Meat & Seafood wears
+`hue-meat` — so an aisle band and a protein chip never disagree about what
+green or red means. The remaining departments draw on a dedicated `aisle-*`
+family: 14 measured hue pairs covering 29 departments by affinity, where
+kindred departments deliberately SHARE a token (an alias, ΔE 0 by design —
+the glyph shape and the printed name do the identity work inside the family):
+
+| Token | Light / dark | Departments |
+| --- | --- | --- |
+| `aisle-gold` | `#8F7D00` / `#EDE795` | Deli & Specialty Cheese, Nut Butters Honey & Jams, Pasta & Sauces |
+| `aisle-crust` | `#7A3B10` / `#F0B49A` | Bakery, Baking & Spices, Pet Care |
+| `aisle-sunrise` | `#C25A14` / `#FCE4C4` | Breakfast, Snacks, Baby |
+| `aisle-coffee` | `#5F4630` / `#C2A075` | Coffee & Tea, Nuts Seeds & Dried Fruit |
+| `aisle-husk` | `#5F6E1E` / `#BCCB7E` | Rice Grains & Beans, Oils Sauces & Condiments |
+| `aisle-slate` | `#46586E` / `#A6BACB` | Canned & Jarred Goods, Household, Customer Service |
+| `aisle-royal` | `#2C4FBE` / `#6F9CEF` | Dairy Cheese & Eggs, International |
+| `aisle-ice` | `#0C8CAD` / `#A6DCF0` | Frozen |
+| `aisle-leaf` | `#55786A` / `#A9D6C4` | Health, Cleaning Products |
+| `aisle-rose` | `#CB3D86` / `#F4A6CE` | Candy, Floral |
+| `aisle-violet` | `#6C2BB0` / `#A08CE0` | Beverages, Party |
+| `aisle-wine` | `#6B2137` / `#D391A5` | Wine Beer & Spirits |
+| `aisle-lavender` | `#6C64A0` / `#C8C2D8` | Personal Care |
+| `aisle-stone` | `#635A46` / `#BFB4A0` | Kitchen, Other |
+
+Aisles that alias a token are never ADJACENT in `STORE_SECTIONS` order, so a
+scan never sees two same-coloured bands in a row. An aisle hue is a
+DEPARTMENT identity, never a state: checked rows paint the `success` done
+state (ADR-0072), not the aisle hue, and nothing in the registry knows
+whether a row is checked. Aisle tokens never join the `IconRole` registry —
+they answer "which department", a third question beside "what kind of food"
+and "what does this number mean" — and no component may consume an
+`aisle-*` token outside the four grocery call sites.
+
+**Measurement record (ADR-0076).** Every light value clears the 3:1 non-text
+bar on page, card AND sunken band (worst 3.13:1, `aisle-ice` on the well);
+every soft value clears 3:1 on all three dark surfaces. All 14 pairs sit ≥ 10
+ΔE (CIEDE2000) from every existing family EXCEPT seventeen pairs in the
+8.0–9.9 band — the amber, violet and pastel-blue spaces were already fully
+occupied (the saffron addendum's "8.4 accepted" precedent) — every one of
+them against a semantic token that never co-occurs with the aisle band as a
+competing decision, with the glyph + printed name as the second signal.
+Aisle hues are decorative reinforcement beside a visible label: colour is
+never the only signal (ADR-0036).
 
 ## Typography
 

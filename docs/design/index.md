@@ -5,14 +5,14 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**81 records.** One file per decision (`ADR-NNNN-slug.md`),
+**82 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
 
 ## In force
 
-The 68 accepted records below all still govern. Skim the ones
+The 69 accepted records below all still govern. Skim the ones
 near your change before proposing anything -- they encode *why* the
 architecture is shaped the way it is.
 
@@ -86,6 +86,7 @@ architecture is shaped the way it is.
 | [0073](ADR-0073-recipe-detail-composition.md) | Recipe detail adopts the two-column composition; cooking keeps the command room | 2026-10-09 |
 | [0074](ADR-0074-explore-archive-composition.md) | Explore is the archive — count line, sort menu, and the card overlay grammar | 2026-10-09 |
 | [0075](ADR-0075-cross-surface-consistency-contract.md) | The Stitch grammar is one contract — cross-surface consistency sweep | 2026-10-09 |
+| [0076](ADR-0076-department-aisle-hues.md) | Department hues for every grocery category | 2026-10-09 |
 
 ## Not in force
 
@@ -123,8 +124,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0076**). Do not count the files -- that is how the
-   collisions above happened (81 files share 75 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0077**). Do not count the files -- that is how the
+   collisions above happened (82 files share 76 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.

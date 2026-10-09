@@ -52,6 +52,8 @@ export interface FilterDropdownOption {
   count?: number
   /** Bare leading glyph for this row (e.g. Sparkles for an "Any" row). */
   icon?: Component
+  /** Literal colour utility for the bare glyph (e.g. an aisle hue, ADR-0076). */
+  iconClass?: string
   /** Categorical hue for this row (a meal occasion, ADR-0043); wins over `icon`. */
   iconRole?: IconRole | null
 }
@@ -196,6 +198,7 @@ watch(menu.open, (v) => emit('open', v))
           :is="option.icon"
           v-else-if="option.icon"
           :size="16"
+          :class="option.iconClass"
           aria-hidden="true"
           />
           <span class="min-w-0 flex-1 truncate">{{ option.label }}</span>
