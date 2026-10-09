@@ -68,12 +68,18 @@ const canSubmit = computed(() => query.value.trim().length > 0)
  * "Pick a store category" placeholder is the FIRST entry so "no override
  * yet" stays expressible and the trigger reads as unset by default; the
  * rest comes from the canonical `STORE_SECTIONS` constant (no second copy
- * of the taxonomy).
+ * of the taxonomy) — rendered ALPHABETICALLY (owner ruling): the picker
+ * is a lookup, not a store walk, so the user scans for the aisle by
+ * name. The constant's own order is load-bearing (section rendering,
+ * heuristic priority, groupExtras) and is untouched; only this display
+ * copy sorts.
  */
 const CATEGORY_PLACEHOLDER = 'Pick a store category'
 const categoryOptions = computed<FilterDropdownOption[]>(() => [
   { value: '', label: CATEGORY_PLACEHOLDER },
-  ...STORE_SECTIONS.map((s) => ({ value: s, label: s })),
+  ...STORE_SECTIONS.map((s) => ({ value: s, label: s })).sort((a, b) =>
+  a.label.localeCompare(b.label),
+  ),
 ])
 const categorySelectedIndex = computed(() =>
   Math.max(0, categoryOptions.value.findIndex((o) => o.value === category.value)),
