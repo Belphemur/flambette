@@ -101,6 +101,36 @@ test('suggest dropdown opens, navigates and commits', async ({ page }) => {
   expect(value).not.toBe('chick')
 })
 
+test('Enter with nothing highlighted dismisses the dropdown and blurs the searchbox', async ({ page }) => {
+  const searchbox = page.getByRole('searchbox', { name: 'Search recipes or ingredients' })
+  await searchbox.fill('chick')
+  await page.waitForTimeout(400) // debounce settles
+  await expect(page.getByTestId('search-suggest')).toBeVisible()
+  // The mobile bug (ADR-0064 §4): with the dropdown OPEN but nothing
+  // highlighted, Enter used to be a no-op — the menu stayed up and the
+  // on-screen keyboard never closed. Enter must dispose the menu AND
+  // blur the input; blur is the accepted proxy for "keyboard closed",
+  // which is not scriptable.
+  await searchbox.press('Enter')
+  await expect(page.getByTestId('search-suggest')).toBeHidden()
+  await expect(searchbox).not.toBeFocused()
+})
+
+test('Enter keeps the dropdown dismissed while suggest work is pending', async ({ page }) => {
+  const searchbox = page.getByRole('searchbox', { name: 'Search recipes or ingredients' })
+  // Regression: Enter dismisses the dropdown WITHOUT changing the query,
+  // so the pending 150 ms suggest timer (or its in-flight response) used
+  // to pass the query-only stale guard and restore the menu over the
+  // results. Press Enter INSIDE the suggest debounce window, before any
+  // suggestion lands, and the menu must stay gone for good.
+  await searchbox.fill('chick')
+  await page.waitForTimeout(100) // suggest timer armed, not yet fired
+  await searchbox.press('Enter')
+  await page.waitForTimeout(500) // the pending work would have landed by now
+  await expect(page.getByTestId('search-suggest')).toBeHidden()
+  await expect(searchbox).not.toBeFocused()
+})
+
 test('suggest dropdown hides for a complete word with no completions', async ({ page }) => {
   const searchbox = page.getByRole('searchbox', { name: 'Search recipes or ingredients' })
   // "rice" is a word the index knows: the suggester would answer with the
