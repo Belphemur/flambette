@@ -24,6 +24,19 @@ import { useRestrictions } from '../composables/useRestrictions'
  * aggregates the planned meals into store-section lines and tracks the
  * checked/total progress.
  */
+
+/** One row of the Grocery tab's Contributing Meals card (ADR-0071). */
+export interface MealLineSummary {
+  id: number
+  name: string
+  /** Thumbnail URL, resolved through the shared `imageSrc` path. */
+  image: string
+  /** Planned servings for THIS household entry, not the authored ones. */
+  servings: number
+  /** Grocery lines this meal contributes, from the SAME aggregation pass. */
+  lines: number
+}
+
 export function useGroceryList() {
   const plan = usePlanStore()
   const checked = useGroceryStore()
@@ -75,18 +88,6 @@ export function useGroceryList() {
 
   function entryServings(variantId: number): number {
     return plan.plan.find((e) => e.variantId === variantId)?.servings ?? 1
-  }
-
-  /** One row of the Grocery tab's Contributing Meals card (ADR-0071). */
-  export interface MealLineSummary {
-    id: number
-    name: string
-    /** Thumbnail URL, resolved through the shared `imageSrc` path. */
-    image: string
-    /** Planned servings for THIS household entry, not the authored ones. */
-    servings: number
-    /** Grocery lines this meal contributes, from the SAME aggregation pass. */
-    lines: number
   }
 
   /**
