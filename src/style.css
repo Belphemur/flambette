@@ -90,14 +90,42 @@
   --color-brand-tint-dark: #44241d;
   --color-on-brand: #ffffff;
 
-  /* --- Light surfaces & neutrals (DESIGN.md `colors`) --- */
-  --color-surface: #fff8f0;
-  --color-surface-raised: #ffffff;
-  --color-surface-sunken: #fff0e6;
-  --color-border: #e5d8cb;
-  --color-border-strong: #8c7a6b;
-  --color-text: #292524;
-  --color-text-muted: #63574e;
+  /* --- Light surfaces & neutrals (DESIGN.md `colors`, Warm Culinary
+     Paper values per ADR-0067) --- */
+  --color-surface: #fbf8f2;
+  --color-surface-raised: #f4efe6;
+  --color-surface-sunken: #ede5d8;
+  --color-border: #e3d8c8;
+  /* Control keyline: measured pick #947E64 (ADR-0067's measured record) —
+     the warm-tan family line down to the first value ≥3:1 on BOTH the
+     card (3.38:1) and the sunken well (3.10:1). */
+  --color-border-strong: #947e64;
+  --color-text: #1c1c18;
+  --color-text-muted: #59413c;
+
+  /* --- New v2 families (ADR-0067). Saffron = timers/heat/tips, a
+     NON-food family (3.01:1 on the page — graphic/large-numeral role;
+     never a diet or category cue). Espresso = the SECONDARY chrome
+     surface (bottom nav, photo-scrim discs): literal dark chrome in
+     BOTH themes, dark pair re-pointed in the .dark flip. Popover white
+     is elevation level 2 (popovers/sticky bars) with the ONE warm
+     shadow. The chrome-* family is the light foreground ON that dark
+     chrome and never flips (the bar is dark in both themes). --- */
+  --color-saffron: #d97706;
+  --color-saffron-soft: #fcd34d;
+  --color-espresso: #2b1e1a;
+  --color-espresso-dark: #1e1512;
+  --color-popover: #ffffff;
+  --color-popover-dark: #2c231e;
+  --color-chrome-muted: #c7b5a6;
+  --color-chrome-backplate: #fbeae5;
+  --color-chrome-backplate-text: #8e2c17;
+  --color-chrome-border: #a28e80;
+  --color-chrome-accent: #f08a6a;
+
+  /* The ONE warm ambient shadow (ADR-0068): elevation level 2 only —
+     popovers, dropdowns, sticky bars. Cards never take a shadow. */
+  --shadow-popover: 0 8px 24px -4px rgb(43 30 26 / 0.08);
 
   /* --- Dark surfaces & neutrals. Declared here so `dark:` utilities
      exist for the rare component that needs the literal token (e.g. a
@@ -172,7 +200,12 @@
   --color-on-success: #ffffff;
   --color-danger: #b91c1c;
   --color-danger-soft: #fca5a5;
-  --color-favourite: #e11d48;
+  /* Favourite rose: darkened from #E11D48 to #C9183C at the v2 migration
+     (ADR-0067 measured record) — on the new paper card the old rose text
+     measured 4.10:1, below the 4.5:1 text bar the lint gate enforces; the
+     new rose clears 4.5:1 on ALL four light contexts. favourite-soft (the
+     heart fill) is unchanged. */
+  --color-favourite: #c9183c;
   --color-favourite-soft: #fb7185;
   --color-household: #86198f;
   --color-household-soft: #e879f9;
@@ -187,28 +220,52 @@
      full 9999px -> Tailwind's rounded-md / rounded-lg / rounded-xl /
      rounded-2xl / rounded-full. Recipe cards and dialogs take xl. --- */
 
-  /* --- Typography (DESIGN.md `typography`). The app is offline-first,
-     so the stack is system-ui: no webfont, no network request, no
-     claim that Inter exists on the user's device. Hierarchy comes from
-     these sizes, not from a second typeface. --- */
-  --text-headline-lg: 32px;
-  --text-headline-lg--line-height: 1.15;
+  /* --- Typography (DESIGN.md `typography`, the ADR-0066 ladder).
+     Plus Jakarta Sans is the voice; JetBrains Mono the DATA voice.
+     Both self-hosted (see the @font-face rules at the top). The
+     cooking view keeps its measured 20px/1.6 step. --- */
+  --text-display-lg: 48px;
+  --text-display-lg--line-height: 56px;
+  --text-display-lg--font-weight: 700;
+  --text-headline-lg: 36px;
+  --text-headline-lg--line-height: 44px;
   --text-headline-lg--font-weight: 700;
+  --text-headline-lg-mobile: 28px;
+  --text-headline-lg-mobile--line-height: 36px;
+  --text-headline-lg-mobile--font-weight: 700;
   --text-headline-md: 24px;
-  --text-headline-md--line-height: 1.25;
+  --text-headline-md--line-height: 32px;
   --text-headline-md--font-weight: 700;
+  --text-headline-sm: 20px;
+  --text-headline-sm--line-height: 28px;
+  --text-headline-sm--font-weight: 700;
   --text-title: 16px;
   --text-title--line-height: 1.4;
   --text-title--font-weight: 600;
+  --text-body-lg: 18px;
+  --text-body-lg--line-height: 28px;
+  --text-body-lg--font-weight: 400;
   --text-body-md: 16px;
   --text-body-md--line-height: 1.55;
   --text-body-md--font-weight: 400;
   --text-body-sm: 14px;
   --text-body-sm--line-height: 1.5;
   --text-body-sm--font-weight: 400;
-  --text-label-md: 12px;
+  --text-label-md: 14px;
   --text-label-md--line-height: 1.4;
-  --text-label-md--font-weight: 500;
+  --text-label-md--font-weight: 600;
+  /* Small DATA labels: JetBrains Mono 12/500, +0.04em. */
+  --text-label-sm: 12px;
+  --text-label-sm--line-height: 1.4;
+  --text-label-sm--font-weight: 500;
+  --text-label-sm--letter-spacing: 0.04em;
+  --text-label-sm--font-family: var(--font-mono-data);
+  /* The DATA voice: quantities, times, dates, counts, room codes,
+     aisle indices, versions — never prose. */
+  --text-mono-data: 13px;
+  --text-mono-data--line-height: 18px;
+  --text-mono-data--font-weight: 500;
+  --text-mono-data--font-family: var(--font-mono-data);
   --text-cooking-step: 20px;
   --text-cooking-step--line-height: 1.6;
   --text-cooking-step--font-weight: 500;
@@ -236,6 +293,12 @@
   --color-border-strong: var(--color-border-dark-strong);
   --color-text: var(--color-text-dark);
   --color-text-muted: var(--color-text-dark-muted);
+  /* The espresso chrome deepens a step in dark mode so the bar stays
+     distinct from the dark card surfaces; the chrome-* foregrounds are
+     LITERAL and never re-point (they must read on the dark bar in both
+     themes). */
+  --color-espresso: var(--color-espresso-dark);
+  --color-popover: var(--color-popover-dark);
 
   /* Hues keep their identity and become their legible dark variants. */
   --color-hue-meat: var(--color-hue-meat-soft, #f08a6a);
