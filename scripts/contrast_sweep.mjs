@@ -134,6 +134,7 @@ const MEASURE = () => {
   return out
 }
 
+
 const preview = spawn('bun', ['run', 'preview', '--port', '4199', '--strictPort'], { stdio: 'ignore' })
 await new Promise((resolve, reject) => {
   const t = setTimeout(() => reject(new Error('preview server did not start')), 30_000)
@@ -183,44 +184,35 @@ try {
     }
   }
   /* ---------- ADR-0072: the success completion fill ---------- */
+  // Seed ONE real plan first: the app is the only seeder allowed (a fixture
+  // would measure a page nobody can reach), so the first catalog recipe is
+  // planned through its own detail sheet exactly as the board capture does.
+  await page.goto(`${BASE}/`)
+  await page.locator('[data-test="recipe-card-link"]').first().waitFor({ timeout: 30_000 })
+  await page.locator('[data-test="recipe-card-link"]').first().click()
+  const sheet = page.getByRole('dialog')
+  await sheet.getByRole('button', { name: 'Add to plan' }).click()
+  await sheet.getByRole('button', { name: 'Back' }).click().catch(() => {})
   for (const theme of ['light', 'dark']) {
-    if (theme === 'dark') {
-      await page.getByRole('button', { name: 'Switch to dark mode' }).click()
+    // The previous loop leaves the app in whichever theme it ended on, so the
+    // toggle is only pressed when the app is NOT already in the target theme.
+    const isDark = async () =>
+      (await page.evaluate(() => document.documentElement.classList.contains('dark'))) === true
+    if ((theme === 'dark') !== (await isDark())) {
+      await page.getByRole('button', { name: /Switch to (dark|light) mode/ }).click()
       await page.waitForTimeout(300)
-    }
-    // A real checked grocery row: the plan tab seeds one, and the grocery
-    // tab renders the rows we care about. Nothing here is a fixture.
-    await page.goto(`${BASE}/plan`)
-    await page.waitForTimeout(600)
-    const seeded = await page.evaluate(async () => {
-      const raw = localStorage.getItem('mealime-planner:v1:plan')
-      return raw !== null
-    })
-    if (!seeded) {
-      console.log(`\n== ${theme} / success fill: SKIPPED (no plan to render rows)`)
-      continue
     }
     await page.goto(`${BASE}/grocery`)
     await page.locator('[data-test="grocery-row"] input[type=checkbox]').first().waitFor({ timeout: 20_000 })
     await page.locator('[data-test="grocery-row"] input[type=checkbox]').first().check()
     await page.waitForTimeout(300)
-    const pairs = await page.evaluate(MEASURE_SUCCESS)
-    console.log(`\n== ${theme} / success fill (ADR-0072)`)
-    for (const p of pairs) {
-      const gate = p.kind === 'text' ? (p.large ? 3.0 : 4.5) : 3.0
-      const ok = p.ratio >= gate
-      if (!ok) exitCode = 1
-      console.log(`   ${ok ? 'ok  ' : 'FAIL'} ${p.kind} ${p.ratio} (gate ${gate}): ${p.label}`)
-    }
-  }
-  await browser.close()
-} finally {
-  preview.kill('SIGTERM')
-}
-process.exit(exitCode)
-
 /** The `success` fill's own pairs, measured off a REAL checked row. */
-const MEASURE_SUCCESS = () => {
+function MEASURE_SUCCESS() {
+  function hexToRgb(hex) {
+    const h = hex.replace('#', '').trim()
+    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
+    return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16))
+  }
   function lum(c) {
     const [r, g, b] = c.map((v) => {
       const s = v / 255
@@ -273,7 +265,7 @@ const MEASURE_SUCCESS = () => {
     // The tick: `on-success` is the CSS variable the platform draws, so
     // read it from the document root rather than guessing.
     const onSuccess = getComputedStyle(document.documentElement).getPropertyValue('--color-on-success').trim()
-    const tick = /^#/.test(onSuccess) ? hexToRgb(onSuccess) : [255, 255, 255]
+    const tick = hexToRgb(onSuccess)
     out.push({
       kind: 'text',
       large: false,
@@ -283,3 +275,103 @@ const MEASURE_SUCCESS = () => {
   }
   return out
 }
+
+    const pairs = await page.evaluate(MEASURE_SUCCESS)
+    console.log(`\n== ${theme} / success fill (ADR-0072)`)
+    for (const p of pairs) {
+      const gate = p.kind === 'text' ? (p.large ? 3.0 : 4.5) : 3.0
+      const ok = p.ratio >= gate
+      if (!ok) exitCode = 1
+      console.log(`   ${ok ? 'ok  ' : 'FAIL'} ${p.kind} ${p.ratio} (gate ${gate}): ${p.label}`)
+    }
+  }
+  await browser.close()
+} finally {
+  preview.kill('SIGTERM')
+}
+process.exit(exitCode)
+
+await new Promise((resolve, reject) => {
+  const t = setTimeout(() => reject(new Error('preview server did not start')), 30_000)
+  const probe = setInterval(async () => {
+    try {
+      await fetch(BASE)
+      clearTimeout(t)
+      clearInterval(probe)
+      resolve()
+    } catch {}
+  }, 300)
+})
+
+try {
+  const browser = await chromium.launch()
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+  const page = await ctx.newPage()
+  await page.route('**/*', (route) =>
+    route.request().url().startsWith('http://localhost') ? route.continue() : route.abort(),
+  )
+  await page.goto(`${BASE}/`)
+  await page.locator('[data-test="recipe-card-link"]').first().waitFor({ timeout: 30_000 })
+
+  for (const theme of ['light', 'dark']) {
+    if (theme === 'dark') await page.getByRole('button', { name: 'Switch to dark mode' }).click()
+    for (const surface of SURFACES) {
+      if (surface.url) {
+        await page.goto(`${BASE}${surface.url}`)
+        await page.waitForTimeout(700)
+      } else {
+        await openCooking(page)
+      }
+      const samples = await page.evaluate(MEASURE)
+      const fails = samples.filter((s) => s.ratio < (s.kind === 'text' ? (s.large ? 3.0 : 4.5) : 3.0))
+      const textOnly = samples.filter((s) => s.kind === 'text').sort((a, b) => a.ratio - b.ratio)
+      const keyOnly = samples.filter((s) => s.kind === 'keyline').sort((a, b) => a.ratio - b.ratio)
+      console.log(`\n== ${theme} / ${surface.name}: ${samples.length} samples, ${fails.length} FAIL`)
+      console.log(`   worst text: ${textOnly[0] ? `${textOnly[0].ratio} "${textOnly[0].label}"` : 'n/a'}`)
+      console.log(`   worst keyline: ${keyOnly[0] ? `${keyOnly[0].ratio} "${keyOnly[0].label}"` : 'n/a'}`)
+      for (const f of fails) {
+        exitCode = 1
+        console.log(`   FAIL ${f.kind}${f.large ? '(large)' : ''} ${f.ratio}: "${f.label}"`)
+      }
+      if (surface.url === null) await page.getByRole('button', { name: 'Close cooking mode' }).click().catch(() => {})
+      if (surface.name === 'shop') await page.goBack() // fullscreen has no header for the next toggle
+    }
+  }
+  /* ---------- ADR-0072: the success completion fill ---------- */
+  // Seed ONE real plan first: the app is the only seeder allowed (a fixture
+  // would measure a page nobody can reach), so the first catalog recipe is
+  // planned through its own detail sheet exactly as the board capture does.
+  await page.goto(`${BASE}/`)
+  await page.locator('[data-test="recipe-card-link"]').first().waitFor({ timeout: 30_000 })
+  await page.locator('[data-test="recipe-card-link"]').first().click()
+  const sheet = page.getByRole('dialog')
+  await sheet.getByRole('button', { name: 'Add to plan' }).click()
+  await sheet.getByRole('button', { name: 'Back' }).click().catch(() => {})
+  for (const theme of ['light', 'dark']) {
+    // The previous loop leaves the app in whichever theme it ended on, so the
+    // toggle is only pressed when the app is NOT already in the target theme.
+    const isDark = async () =>
+      (await page.evaluate(() => document.documentElement.classList.contains('dark'))) === true
+    if ((theme === 'dark') !== (await isDark())) {
+      await page.getByRole('button', { name: /Switch to (dark|light) mode/ }).click()
+      await page.waitForTimeout(300)
+    }
+    await page.goto(`${BASE}/grocery`)
+    await page.locator('[data-test="grocery-row"] input[type=checkbox]').first().waitFor({ timeout: 20_000 })
+    await page.locator('[data-test="grocery-row"] input[type=checkbox]').first().check()
+    await page.waitForTimeout(300)
+    const pairs = await page.evaluate(MEASURE_SUCCESS)
+    console.log(`\n== ${theme} / success fill (ADR-0072)`)
+    for (const p of pairs) {
+      const gate = p.kind === 'text' ? (p.large ? 3.0 : 4.5) : 3.0
+      const ok = p.ratio >= gate
+      if (!ok) exitCode = 1
+      console.log(`   ${ok ? 'ok  ' : 'FAIL'} ${p.kind} ${p.ratio} (gate ${gate}): ${p.label}`)
+    }
+  }
+  await browser.close()
+} finally {
+  preview.kill('SIGTERM')
+}
+process.exit(exitCode)
+
