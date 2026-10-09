@@ -5,6 +5,7 @@ import { STORE_SECTIONS } from '../lib/sections'
 import FilterDropdown from './FilterDropdown.vue'
 import type { FilterDropdownOption } from './FilterDropdown.vue'
 import { nameKey } from '../lib/grocery'
+import { aisleIcon } from '../lib/aisleRole'
 import {
   isSuggestionListVisible,
   suggestIngredients,
@@ -77,10 +78,14 @@ const canSubmit = computed(() => query.value.trim().length > 0)
 const CATEGORY_PLACEHOLDER = 'Pick a store category'
 const categoryOptions = computed<FilterDropdownOption[]>(() => [
   { value: '', label: CATEGORY_PLACEHOLDER },
-  ...STORE_SECTIONS.map((s) => ({ value: s, label: s })).sort((a, b) =>
+  ...STORE_SECTIONS.map((s) => ({ value: s, label: s, icon: aisleIcon(s)?.glyph })).sort((a, b) =>
   a.label.localeCompare(b.label),
   ),
 ])
+/** The option matching the explicit override, when one is set. */
+const selectedCategoryOption = computed(() =>
+  categoryOptions.value.find((o) => o.value === category.value) ?? null,
+)
 const categorySelectedIndex = computed(() =>
   Math.max(0, categoryOptions.value.findIndex((o) => o.value === category.value)),
 )
@@ -328,7 +333,20 @@ const ariaLabel = 'Add a custom grocery item'
   menu-width="w-full"
   @select="(v) => (category = v)"
   @open="categoryMenuOpen = $event"
+  >
+  <!-- The closed trigger shows the selected department's glyph (owner
+  addendum); muted ink — the trigger's active tint paints the control,
+  never the glyph (ADR-0036). -->
+  <template #icon>
+  <component
+  :is="selectedCategoryOption!.icon"
+  v-if="selectedCategoryOption?.icon"
+  :size="16"
+  class="shrink-0 text-text-muted"
+  aria-hidden="true"
   />
+  </template>
+  </FilterDropdown>
   </div>
 
   <ul
@@ -367,12 +385,21 @@ const ariaLabel = 'Add a custom grocery item'
   >
   <span v-if="rowAt(i)!.unit" class="shrink-0 text-xs text-text-muted">{{ rowAt(i)!.unit }}</span>
   <!-- Live category feedback (ADR-0014): visible on every row and
-  folded into the row's accessible name (not decorative). -->
+  folded into the row's accessible name (not decorative). The department
+  glyph rides the pill (owner addendum); muted ink, the pill text stays
+  the label. -->
   <span
-  class="shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold text-text-muted"
+  class="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold text-text-muted"
   data-test="suggestion-category"
-  >{{ rowAt(i)!.category }}</span
   >
+  <component
+  :is="aisleIcon(rowAt(i)!.category)!.glyph"
+  v-if="aisleIcon(rowAt(i)!.category)"
+  :size="12"
+  aria-hidden="true"
+  />
+  {{ rowAt(i)!.category }}
+  </span>
   </li>
   </ul>
   </div>

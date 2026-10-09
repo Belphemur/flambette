@@ -18,7 +18,7 @@ import { extraCollapseKey, groupExtras, storeCollapseKey } from '../lib/extraSec
 import { extraCheckedKey } from '../lib/extraCheckedKeys'
 import type { GroceryItem } from '../lib/grocery'
 import { STORE_SECTIONS } from '../lib/sections'
-import { aisleRole } from '../lib/aisleRole'
+import { aisleIcon } from '../lib/aisleRole'
 import { imageSrc, onImgError } from '../lib/images'
 import HueIcon from './HueIcon.vue'
 import { usePlanStore } from '../stores/plan'
@@ -429,6 +429,22 @@ const shopperCount = computed(() => room.peers ?? 1)
   data-test="extra-subsection-toggle"
   @click="toggleSection(extraKey(group.name))"
   >
+  <!-- Same glyph grammar as an aisle band (owner addendum): a hue where
+  the sub-section's name is a registry-claimed identity, muted ink
+  otherwise; `Uncategorized` is a view label, not a department — no
+  glyph (aisleIcon returns null there). -->
+  <HueIcon
+  v-if="aisleIcon(group.name)?.role"
+  :role="aisleIcon(group.name)!.role!"
+  :size="16"
+  />
+  <component
+  :is="aisleIcon(group.name)!.glyph"
+  v-else-if="aisleIcon(group.name)"
+  :size="16"
+  class="shrink-0 text-text-muted"
+  aria-hidden="true"
+  />
   <span class="min-w-0 flex-1 truncate text-label-md font-semibold text-text">
   {{ group.name }}
   </span>
@@ -508,12 +524,22 @@ const shopperCount = computed(() => room.peers ?? 1)
   data-test="grocery-section-toggle"
   @click="toggleSection(sectionKey(section.name))"
   >
-  <!-- Registry hue glyph, DECORATIVE: the band prints the section name
-  beside it, so the label is the carrier and the glyph is the aisle's
-  identity (ADR-0036). Only Produce and Meat & Seafood have an identity
-  the registry already claims — the rest render no glyph rather than a
-  borrowed hue (src/lib/aisleRole.ts). -->
-  <HueIcon v-if="aisleRole(section.name)" :role="aisleRole(section.name)!" :size="18" />
+  <!-- EVERY aisle carries its glyph (owner addendum): a HUE where the
+  registry claims the department's identity (Produce → vegetarian green,
+  Meat & Seafood → meat red), muted-ink identity-by-shape everywhere else —
+  a department never borrows another question's colour (ADR-0036). -->
+  <HueIcon
+  v-if="aisleIcon(section.name)!.role"
+  :role="aisleIcon(section.name)!.role!"
+  :size="18"
+  />
+  <component
+  :is="aisleIcon(section.name)!.glyph"
+  v-else
+  :size="18"
+  class="shrink-0 text-text-muted"
+  aria-hidden="true"
+  />
   <!-- Name and aisle index are SEPARATE elements: the name is what a
   reader (and a spec) matches on, the index is the parenthetical.
   Derived from STORE_SECTIONS order, never hand-numbered. -->
