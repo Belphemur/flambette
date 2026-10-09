@@ -5,6 +5,17 @@ Offline-first Vue 3 SPA for the frozen Mealime recipe catalog (2,759 recipes
 host** — this is enforced by e2e (`blockExternalRequests` +
 `expectZeroMealimeRequests`); never add a fetch to external hosts.
 
+## Product definition (PRD)
+
+`docs/PRD.md` is the product requirements document: personas, value pillars,
+the five surfaces, the design-theme summary and the release roadmap. It is a
+LIVING product authority and the umbrella over the full redesign (mobile +
+desktop): any change that adds, removes or re-scopes user-facing behaviour
+updates the PRD in the SAME change, or files an ADR explaining the divergence —
+never leave the two disagreeing silently. DESIGN.md implements the PRD's
+design intent with normative tokens; `docs/design/` ADRs record the decisions.
+The PRD is NOT an ADR: the generated `docs/design/index.md` does not index it.
+
 ## Stack
 
 - Vue 3 (`<script setup>`) + Vite + TypeScript + Tailwind CSS v4

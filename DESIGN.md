@@ -392,6 +392,8 @@ hero, weekday calendar, engagement streaks, invented savings dashboard or AI bra
 
 ### Product basis and precedence
 
+- [PRD](docs/PRD.md): the product brief this document serves — personas,
+  pillars, the five surfaces and the roadmap; scope changes keep it current.
 - [README](README.md), Features: browse → plan → derived grocery → shopping →
   cooking, local catalog/images, adjustable servings, backup and household sync.
 - [ADR-0024](docs/design/ADR-0024-auto-plan-pack-builder.md): the differentiator is
