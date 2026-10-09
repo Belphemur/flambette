@@ -48,6 +48,7 @@ import {
   Plus,
   Timer,
   Utensils,
+  X,
 } from 'lucide-vue-next'
 import { isUserRecipeId } from '../lib/userRecipes'
 
@@ -342,10 +343,32 @@ function stepCountdown(index: number): string | null {
 function startStepTimer(index: number): void {
   const hint = hintAt(index)
   if (!hint || !meta.value) return
+  // ONE live timer per step from this sheet: a second press must never
+  // stack a duplicate countdown (the affordance disables while armed —
+  // this guard is the store-level backstop, e.g. via a rapid double-tap
+  // that lands before the re-render).
+  if (armedByStep.value.has(index)) return
   const suggestion: TimerSuggestion = suggestionFromHint(hint)
   const id = ui.addTimer(meta.value.id, suggestion.label, suggestion.seconds)
   if (id === null) return
   armedByStep.value = new Map(armedByStep.value).set(index, id)
+}
+
+/**
+ * Dismiss the timer armed for one step: drop it from the SHARED store
+ * (so the countdown also stops ticking in cooking mode's strip — the
+ * ADR-0020 contract makes the store the single source of armed timers)
+ * AND from this sheet's mapping. Expiry cleans its own mapping in
+ * `stepCountdown`; only a USER dismissal has to cancel a timer that is
+ * still counting.
+ */
+function dismissStepTimer(index: number): void {
+  const id = armedByStep.value.get(index)
+  if (id === undefined || !meta.value) return
+  ui.clearTimer(meta.value.id, id)
+  const next = new Map(armedByStep.value)
+  next.delete(index)
+  armedByStep.value = next
 }
 
 /** Personal cooked history (this device only, ADR-0011). */
@@ -887,6 +910,7 @@ function startCooking() {
   <span
   class="shrink-0 rounded-md bg-surface-sunken px-2 py-1 font-mono-data text-label-sm tabular-nums"
   :class="readyIngredients.has(item.id) ? 'text-text-muted' : 'text-text'"
+  data-test="detail-ingredient-qty"
   >{{ item.quantity || '—' }}</span>
   </li>
   </ul>
@@ -915,8 +939,9 @@ function startCooking() {
   so cooking mode picks it up; nothing auto-starts (ADR-0041 §4). -->
   <div v-if="hintAt(i)" class="mt-2 ml-9 flex items-center gap-2">
   <button
-  class="flex h-11 items-center gap-1.5 rounded-lg bg-surface-sunken px-2.5 text-label-md font-medium text-text hover:bg-surface"
+  class="flex h-11 items-center gap-1.5 rounded-lg bg-surface-sunken px-2.5 text-label-md font-medium text-text hover:bg-surface disabled:opacity-50 disabled:hover:bg-surface-sunken"
   :aria-label="`Start a ${suggestionFromHint(hintAt(i)!).minutes} minute timer for step ${i + 1}`"
+  :disabled="armedByStep.has(i)"
   data-test="detail-step-timer"
   @click="startStepTimer(i)"
   >
@@ -929,6 +954,19 @@ function startCooking() {
   class="font-mono-data text-label-md tabular-nums text-brand-text"
   data-test="detail-step-countdown"
   >{{ stepCountdown(i) }}</span>
+  <!-- Dismiss (owner ask): an armed countdown is cancellable from the
+  sheet — clearTimer drops it from the SHARED store, so cooking mode's
+  strip stops with it. Hidden while nothing is armed; expiry unhides
+  both this and the disabled start button. -->
+  <button
+  v-if="armedByStep.has(i)"
+  class="flex size-8 shrink-0 items-center justify-center rounded-full text-text-muted hover:bg-surface-sunken hover:text-text"
+  :aria-label="`Dismiss the timer for step ${i + 1}`"
+  data-test="detail-step-timer-dismiss"
+  @click="dismissStepTimer(i)"
+  >
+  <X :size="14" aria-hidden="true" />
+  </button>
   </div>
   <ul
   v-if="step.details.length"
