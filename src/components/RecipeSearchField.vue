@@ -1,25 +1,27 @@
 <script setup lang="ts">
 import { onUnmounted, ref, useTemplateRef, watch } from 'vue'
-import { X } from 'lucide-vue-next'
+import { useRoute, useRouter } from 'vue-router'
+import { CircleHelp, X } from 'lucide-vue-next'
 import { suggest } from '../lib/search'
 import { useRecipeSearch } from '../composables/useRecipeSearch'
+import { useSearchTips } from '../composables/useSearchTips'
 
 /**
  * THE search field (ADR-0070, migrated from RecipeSearch per ADR-0064):
- * one component, TWO mount points — the header well on desktop (≥lg,
- * Recipes tab active) and the top of the Recipes content below it. The
- * query and the async results pipeline are module-scope state owned by
+ * one component, TWO mount points — the header well on desktop (≥lg, on
+ * EVERY tab since Addendum 2) and the top of the Recipes content below it.
+ * The query and the async results pipeline are module-scope state owned by
  * `useRecipeSearch` (never persisted, never room-synced); this component
  * is the CONTROL: the input, the clear button, the suggest dropdown and
- * the tips disclosure. Facets, sort and the results grid stay in
+ * the `?` tips affordance. Facets, sort and the results grid stay in
  * RecipesTab, which reads `searchResults`/`searchPending` off the same
  * composable.
  *
- * `variant="header"` renders the bare well (the tips disclosure and the
- * wrapper rhythm belong to the panel mount); `variant="panel"` renders
- * the field plus the tips disclosure, as the in-content mount always
- * has. The `/` affordance is desktop-only and mounted-field-only: the
- * global keydown listener lives on the instance, so exactly one input
+ * `variant="header"` renders the bare well plus the `?` affordance (the
+ * tips PANEL and the wrapper rhythm belong to the panel mount);
+ * `variant="panel"` renders the field itself, as the in-content mount
+ * always has. The `/` affordance is desktop-only and mounted-field-only:
+ * the global keydown listener lives on the instance, so exactly one input
  * answers it wherever the field currently is.
  */
 const props = withDefaults(defineProps<{ variant?: 'header' | 'panel' }>(), {
@@ -27,6 +29,9 @@ const props = withDefaults(defineProps<{ variant?: 'header' | 'panel' }>(), {
 })
 
 const { query, flushSearch, armFlush } = useRecipeSearch()
+const { toggleTips, showTips } = useSearchTips()
+const router = useRouter()
+const route = useRoute()
 
 /** The search input itself: Enter blurs it so the mobile on-screen
  *  keyboard closes and the results become visible (ADR-0064 §4). */
@@ -139,6 +144,30 @@ function onSuggestKey(e: KeyboardEvent) {
   }
 }
 
+/**
+ * ADR-0070 Addendum 2: the well is PERSISTENT — it renders on every tab,
+ * and the first keystroke made while the grid is not on screen ROUTES to
+ * it. The grid is the only results surface, so a search typed on the
+ * Plan tab has to land on Recipes; a query that merely SURVIVES a tab
+ * switch (Decision 5) does not drag the reader back on its own.
+ */
+watch(query, (q) => {
+  if (props.variant !== 'header') return
+  if (route.name === 'recipes') return
+  if (q.trim() === '') return
+  void router.push({ name: 'recipes' })
+})
+
+/**
+ * The `?` affordance beside the well opens the tips disclosure from ANY
+ * tab, which means routing to the tab that mounts the panel — the
+ * disclosure is content, so it only exists where its content does.
+ */
+function onTipsClick(): void {
+  toggleTips()
+  if (route.name !== 'recipes') void router.push({ name: 'recipes' })
+}
+
 function selectSuggestion(s: string) {
   dismissSuggestions()
   // Only suppress when the assignment actually CHANGES the query: picking
@@ -221,6 +250,21 @@ onUnmounted(() => {
   @keydown.stop
   >
   <X :size="16" aria-hidden="true" />
+  </button>
+  <!-- ADR-0070 Addendum 1: the `?` affordance rides the well on EVERY
+  tab. It opens the same content-level disclosure the Recipes tab's own
+  toggle does, so it routes there when it is pressed elsewhere. -->
+  <button
+  v-if="variant === 'header'"
+  type="button"
+  data-test="search-tips-toggle"
+  :aria-expanded="showTips"
+  aria-controls="search-tips-panel"
+  aria-label="Search tips"
+  class="absolute inset-y-0 right-8 flex w-8 items-center justify-center text-text-muted hover:text-text"
+  @click.stop="onTipsClick"
+  >
+  <CircleHelp :size="16" aria-hidden="true" />
   </button>
   <div
   v-if="suggestions.length > 0"

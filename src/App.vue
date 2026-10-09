@@ -137,14 +137,13 @@ const roomChip = computed(() => {
 /** The recipe detail view is full-bleed (edge-to-edge hero image). */
 const isRecipe = computed(() => route.name === 'recipe')
 
-/** ADR-0070: on desktop (≥lg) while the Recipes tab is active, the search
- *  well lives in the header band, right of the wordmark. The media query
- *  mirrors the `lg:` Tailwind variant so the v-if (not a CSS hide) keeps
- *  exactly ONE search field in the document at any width. */
+/** ADR-0070 (Addendum 2): the search well is PERSISTENT — it renders in
+ *  the header band on EVERY tab at lg+, not only on Recipes. The media
+ *  query mirrors the `lg:` Tailwind variant so the v-if (not a CSS hide)
+ *  keeps exactly ONE search field in the document at any width, and the
+ *  fullscreen focus modes (cooking, shopping) keep their own chrome. */
 const isDesktop = useMediaQuery('(min-width: 1024px)')
-const showHeaderSearch = computed(
-  () => isDesktop.value && route.name === 'recipes' && !isFullscreenMode.value,
-)
+const showHeaderSearch = computed(() => isDesktop.value && !isFullscreenMode.value)
 
 /**
  * The roster sheet behind the room chip (ADR-0063): tapping the chip opens
@@ -475,11 +474,13 @@ onBeforeUnmount(() => {
   <img src="/favicon.svg" alt="" width="22" height="22" class="inline" aria-hidden="true" />
   Flambette
   </button>
-  <!-- ADR-0070: the desktop search well in the header band — a sunken
-  field (ADR-0065), width-capped and aligned to the container. Only on
-  the Recipes tab; other tabs compose without the well. The query state
-  and pipeline are the module singleton the content field shares, so the
-  field can move between mounts without losing the in-flight search. -->
+  <!-- ADR-0070 (Addendum 2): the desktop search well in the header band —
+  a sunken field (ADR-0065), width-capped and aligned to the container,
+  mounted on EVERY tab. Typing while the grid is not on screen routes to
+  Recipes (RecipeSearchField), because the grid is the only results
+  surface. The query state and pipeline are the module singleton the
+  content field shares, so the field moves between mounts without losing
+  an in-flight search. -->
   <RecipeSearchField v-if="showHeaderSearch" variant="header" class="hidden w-full max-w-72 lg:block" />
   <div class="flex items-center gap-2">
   <button

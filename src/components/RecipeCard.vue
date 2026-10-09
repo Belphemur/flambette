@@ -8,11 +8,13 @@ import { catalog } from '../lib/catalog'
 import { isUserRecipeId, showNewBadge } from '../lib/userRecipes'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
 import { useFavouritesStore } from '../stores/favourites'
-import { Clock, Heart } from 'lucide-vue-next'
+import { useRatingStore } from '../stores/rating'
+import { Clock, Heart, Star } from 'lucide-vue-next'
 
 const props = defineProps<{ meta: VariantMeta }>()
 
 const favourites = useFavouritesStore()
+const ratings = useRatingStore()
 
 /** Categorical ingredient-TYPE hue (ADR-0036); null when the catalog
  *  publishes no category we have a hue for — no icon beats a wrong hue. */
@@ -30,6 +32,21 @@ const typeRole = computed(() =>
 const mealTypeRole = computed(() => mealRole(props.meta.ruleset))
 
 const isFavourite = computed(() => favourites.isFavourite(props.meta.id))
+
+/**
+ * The rating disc's value (ADR-0074): the household's own stars when it
+ * has rated this recipe, else the catalog's Bayesian mean as the
+ * read-only fallback — the same precedence `RatingStars` uses, so the
+ * disc and the control below it can never print two different numbers.
+ */
+const ratingValue = computed(() => {
+  const mine = ratings.ratingFor(props.meta.id)
+  if (mine > 0) return mine
+  return Math.round(props.meta.rating * 5 * 10) / 10
+})
+const ratingSource = computed<'household' | 'catalog'>(() =>
+  ratings.ratingFor(props.meta.id) > 0 ? 'household' : 'catalog',
+)
 
 /**
  * ADR-0054: the NEW badge — this card's recipe was authored by the
@@ -97,6 +114,28 @@ const showNew = computed(() => {
   <!-- DESIGN.md photo-control: a solid ESPRESSO disc (roasted espresso,
   ADR-0067 — literal dark chrome over any photograph), white idle glyph,
   favourite-soft heart when selected. -->
+  <!-- ADR-0074's card overlay grammar: the photo carries AT MOST the
+  espresso favourite heart and, when rated, an espresso rating disc
+  (star + mono value). The protein-hue type chip stays OFF the photo
+  and ON the facts row (an icon-only food chip on imagery fails
+  ADR-0036's label-stays rule). The disc is DECORATIVE — the value is
+  printed as text beside the star and the household's rating control
+  stays the star widget below it — so nothing about it is colour-only. -->
+  <span
+  v-if="ratingValue > 0"
+  class="absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded-full bg-espresso px-2 py-1 font-mono-data text-label-sm font-semibold tabular-nums text-on-brand"
+  :aria-label="
+  ratingSource === 'household'
+  ? `Your household rating: ${ratingValue} of 5 stars`
+  : `Catalog rating: ${ratingValue} of 5 stars`
+  "
+  data-test="card-rating-disc"
+  :data-rating="ratingValue"
+  :data-source="ratingSource"
+  >
+  <Star :size="14" :fill="'currentColor'" aria-hidden="true" />
+  {{ ratingValue }}
+  </span>
   <button
   class="absolute top-2 right-2 z-10 flex size-11 items-center justify-center rounded-full bg-espresso text-on-brand"
   :aria-label="isFavourite ? 'Remove from favourites' : 'Add to favourites'"

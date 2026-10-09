@@ -50,6 +50,7 @@ import FilterDropdown from './FilterDropdown.vue'
 import type { FilterDropdownOption } from './FilterDropdown.vue'
 import HueIcon from './HueIcon.vue'
 import { useRecipeSearch } from '../composables/useRecipeSearch'
+import { useSearchTips } from '../composables/useSearchTips'
 
 /** ADR-0070: the query is EPHEMERAL state in a module-scope composable
  *  (never persisted, never room-synced — a search is a question, not a
@@ -62,8 +63,11 @@ const { query, searchResults, searchPending } = useRecipeSearch()
 const isDesktop = useMediaQuery('(min-width: 1024px)')
 
 /** Search-tips disclosure: closed by default, user-toggled, device-local
- *  (ADR-0027) — content-level, so it survives the field's header move. */
-const showTips = ref(false)
+ *  (ADR-0027) — content-level, so it survives the field's header move.
+ *  The STATE is the module singleton in `useSearchTips`, shared with the
+ *  header's `?` affordance (ADR-0070 Addendum 1): the panel itself stays
+ *  here, with the content it explains. */
+const { showTips, toggleTips } = useSearchTips()
 
 const favourites = useFavouritesStore()
 const ui = useUiStore()
@@ -443,15 +447,17 @@ onUnmounted(() => observer?.disconnect())
   <!-- The tips disclosure is CONTENT, not a mount of the field: it
   must stay available at lg+ (where the field moved to the header) and
   it must not bloat the header band. Toggle state stays device-local
-  (ADR-0027), panel closed by default. -->
-  <div class="flex w-full justify-end">
+  (ADR-0027), panel closed by default. At lg+ the header's `?`
+  affordance (RecipeSearchField) opens the SAME disclosure, so this
+  in-content toggle is the mobile/panel-mount face of one state. -->
+  <div v-if="!isDesktop" class="flex w-full justify-end">
   <button
   data-test="search-tips-toggle"
   :aria-expanded="showTips"
   aria-controls="search-tips-panel"
   class="flex items-center gap-1 py-2 text-xs text-text-muted transition-transform"
   :class="showTips ? 'rotate-180' : ''"
-  @click="showTips = !showTips"
+  @click="toggleTips"
   >
   Search tips
   <ChevronDown :size="14" aria-hidden="true" class="transition-transform" />
@@ -724,8 +730,19 @@ onUnmounted(() => observer?.disconnect())
   <div v-if="results.list.length === 0 && !searchPending" class="py-16 text-center text-text-muted">
   <SearchX :size="40" class="mx-auto" aria-hidden="true" />
   <p class="mt-2 font-medium">No recipes match your filters</p>
-  <p v-if="query.trim()" data-test="search-empty-tip" class="mt-2 text-sm">
-    Tip: try fewer words, or "exact phrase", or -word to exclude.
+  <!-- ADR-0070 Addendum 1: the hint no longer dead-ends as static
+  text — it OPENS the disclosure, so a reader who got here with a
+  too-clever query has a way out of it. -->
+  <p v-if="query.trim()" class="mt-2 text-sm">
+  <button
+  class="rounded-lg px-2 py-1 font-medium text-brand-text underline hover:bg-surface-sunken"
+  data-test="search-empty-tip"
+  :aria-expanded="showTips"
+  aria-controls="search-tips-panel"
+  @click="toggleTips"
+  >
+  Show search tips
+  </button>
   </p>
   </div>
   </section>
