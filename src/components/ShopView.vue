@@ -208,7 +208,7 @@ function exitShopping() {
   >
   <div class="mx-auto flex max-w-app items-center gap-3 px-4 py-3">
   <button
-  class="flex h-11 shrink-0 items-center rounded-xl border px-3 text-sm font-medium active:bg-surface-sunken"
+  class="flex h-11 shrink-0 items-center rounded-xl border border-border-strong bg-surface-raised px-3 text-sm font-medium text-text active:bg-surface-sunken"
   data-test="exit-shopping"
   @click="exitShopping"
   >
@@ -216,11 +216,11 @@ function exitShopping() {
   Exit
   </button>
   <div class="min-w-0 flex-1">
-  <div class="flex items-center justify-between text-xs">
+  <div class="flex items-center justify-between font-mono-data text-xs tabular-nums">
   <span class="font-semibold" data-test="shopping-progress" aria-live="polite">
   {{ checkedCount }} / {{ totalCount }}
   </span>
-  <span class="">{{ progressPct }}%</span>
+  <span>{{ progressPct }}%</span>
   </div>
   <div class="mt-1 h-2 overflow-hidden rounded-full bg-surface-sunken">
   <div
@@ -231,7 +231,7 @@ function exitShopping() {
   </div>
   <button
   v-if="checkedCount > 0"
-  class="flex h-11 shrink-0 items-center gap-1 rounded-xl border px-3 text-sm font-medium active:bg-surface-sunken"
+  class="flex h-11 shrink-0 items-center gap-1 rounded-xl border border-border-strong bg-surface-raised px-3 text-sm font-medium text-text active:bg-surface-sunken"
   data-test="clear-list"
   aria-label="Clear grocery list"
   @click="confirmAndClearGrocery()"
@@ -304,7 +304,7 @@ function exitShopping() {
   <span class="text-base font-semibold">{{ group.name }}</span>
   <span class="flex items-center gap-2">
   <span
-  class="rounded-full bg-surface-sunken px-2 py-px text-[10px] font-semibold text-text-muted"
+  class="rounded-full bg-surface-sunken px-2 py-px font-mono-data text-[10px] font-semibold tabular-nums text-text-muted"
   data-test="section-count-pill"
   >{{ extraDoneCount(group) }}/{{ group.items.length }}</span>
   <span class="text-base">
@@ -315,7 +315,7 @@ function exitShopping() {
   </button>
   <ul
   v-if="!isCollapsed(extraKey(group.name))"
-  class="divide-y"
+  class="divide-y divide-border"
   data-test="shop-extra-subsection-rows"
   >
   <!-- Checked items sink, stable within the sub-section — the same
@@ -328,7 +328,7 @@ function exitShopping() {
   @click="checked.toggleChecked(extraCheckedKey(item.name))"
   >
   <span
-  class="flex size-8 shrink-0 items-center justify-center rounded-full border-2 text-xl"
+  class="flex size-8 shrink-0 items-center justify-center rounded-full border-2 border-border-strong text-xl"
   :class="checked.map[extraCheckedKey(item.name)] ? 'border-brand bg-brand text-on-brand' : ''"
   aria-hidden="true"
   >
@@ -364,7 +364,7 @@ function exitShopping() {
   <span class="text-lg font-bold tracking-tight">{{ section.name }}</span>
   <span class="flex items-center gap-2">
   <span
-  class="rounded-full bg-surface-sunken px-2 py-px text-[10px] font-semibold text-text-muted"
+  class="rounded-full bg-surface-sunken px-2 py-px font-mono-data text-[10px] font-semibold tabular-nums text-text-muted"
   data-test="section-count-pill"
   >{{ sectionDoneCount(section) }}/{{ sectionTotalCount(section) }}</span>
   <span class="text-lg">
@@ -374,7 +374,7 @@ function exitShopping() {
   </span>
   </button>
   <template v-if="!isCollapsed(storeKey(section.name))">
-  <ul class="divide-y" data-test="shop-section-rows">
+  <ul class="divide-y divide-border" data-test="shop-section-rows">
   <!-- Unchecked first (checked items sink), stable within each group;
   the ordering lives once in src/lib/sink.ts, shared with the extras
   sub-sections above. -->
@@ -386,7 +386,7 @@ function exitShopping() {
   @click="checked.toggleChecked(entry.line.key)"
   >
   <span
-  class="flex size-8 shrink-0 items-center justify-center rounded-full border-2 text-xl"
+  class="flex size-8 shrink-0 items-center justify-center rounded-full border-2 border-border-strong text-xl"
   :class="checked.map[entry.line.key] ? 'border-brand bg-brand text-on-brand' : ''"
   aria-hidden="true"
   >

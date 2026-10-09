@@ -229,7 +229,7 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   <div
   class="sticky top-12 z-10 -mx-4 flex items-center justify-between border-b border-border bg-surface px-4 py-2"
   >
-  <p class="text-sm font-semibold" aria-live="polite">
+  <p class="font-mono-data text-sm font-semibold tabular-nums" aria-live="polite">
   {{ checkedCount }} / {{ totalCount }} items
   </p>
   <div class="h-1.5 w-24 overflow-hidden rounded-full bg-surface-sunken">
@@ -300,7 +300,7 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   </h3>
   <ul
   v-if="!isCollapsed(extraKey(group.name))"
-  class="divide-y rounded-xl ring-1"
+  class="divide-y divide-border rounded-xl bg-surface-raised ring-1 ring-border"
   data-test="extra-subsection-rows"
   >
   <li
@@ -368,7 +368,7 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   </h3>
   <ul
   v-if="!isCollapsed(sectionKey(section.name))"
-  class="divide-y rounded-xl ring-1"
+  class="divide-y divide-border rounded-xl bg-surface-raised ring-1 ring-border"
   data-test="grocery-section-rows"
   >
   <li v-for="item in section.items" :key="item.normalized">
