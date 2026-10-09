@@ -1,88 +1,36 @@
 <script setup lang="ts">
 import { onUnmounted, ref, useTemplateRef, watch } from 'vue'
-import { ChevronDown, X } from 'lucide-vue-next'
-import { searchVariantIds, suggest } from '../lib/search'
+import { X } from 'lucide-vue-next'
+import { suggest } from '../lib/search'
+import { useRecipeSearch } from '../composables/useRecipeSearch'
 
-/** The search control, extracted from RecipesTab (ADR-0064): the input,
- *  the clear button, the suggest dropdown, the tips disclosure and both
- *  debounce pipelines. It is the search CONTROL — facets, sort and the
- *  results grid stay in RecipesTab, which reads `searchResults` /
- *  `searchPending` back off this component's exposed refs.
+/**
+ * THE search field (ADR-0070, migrated from RecipeSearch per ADR-0064):
+ * one component, TWO mount points — the header well on desktop (≥lg,
+ * Recipes tab active) and the top of the Recipes content below it. The
+ * query and the async results pipeline are module-scope state owned by
+ * `useRecipeSearch` (never persisted, never room-synced); this component
+ * is the CONTROL: the input, the clear button, the suggest dropdown and
+ * the tips disclosure. Facets, sort and the results grid stay in
+ * RecipesTab, which reads `searchResults`/`searchPending` off the same
+ * composable.
  *
- *  The query's single source of truth is RecipesTab's own ref, handed
- *  down with v-model: the model writes through, the query is never
- *  copied into a second ref here (DRY — one query, two watchers). */
+ * `variant="header"` renders the bare well (the tips disclosure and the
+ * wrapper rhythm belong to the panel mount); `variant="panel"` renders
+ * the field plus the tips disclosure, as the in-content mount always
+ * has. The `/` affordance is desktop-only and mounted-field-only: the
+ * global keydown listener lives on the instance, so exactly one input
+ * answers it wherever the field currently is.
+ */
+const props = withDefaults(defineProps<{ variant?: 'header' | 'panel' }>(), {
+  variant: 'panel',
+})
 
-const query = defineModel<string>({ required: true })
+const { query, flushSearch, armFlush } = useRecipeSearch()
 
 /** The search input itself: Enter blurs it so the mobile on-screen
  *  keyboard closes and the results become visible (ADR-0064 §4). */
 const input = useTemplateRef<HTMLInputElement>('input')
-
-/* ---------- Async search results pipeline ---------- */
-
-/** Async search results: null means no active search (show all). */
-const searchResults = ref<{ primary: number[]; fallback: number[] } | null>(null)
-/** True while a debounced search is in flight — hides the empty state so
- *  a new query never flashes "No recipes match" before results land. */
-const searchPending = ref(false)
-let searchTimer: ReturnType<typeof setTimeout> | null = null
-
-/** Armed when Enter commits a highlighted suggestion whose text differs
- *  from the model: a defineModel write does not update this child's prop
- *  synchronously (the parent re-render flushes in a microtask), so
- *  reading `query` in the same handler still sees the PRE-pick text.
- *  Instead of searching that stale read, the query watcher runs the
- *  search IMMEDIATELY on the write's arrival — the same effect as
- *  Enter's flush, with the picked text guaranteed (ADR-0064 §4). */
-let flushOnQueryWrite = false
-
-/** Run the search for `current` now. The stale-response guard (a
- *  response for a query the user has since changed is discarded) lives
- *  here so BOTH callers — the 200 ms debounce and Enter's flush — share
- *  it verbatim. */
-async function runSearch(current: string) {
-  // Guard the async boundary: an earlier request (including the cold
-  // index fetch) finishing after the query changed must never
-  // overwrite the newer state.
-  const r = await searchVariantIds(current).catch((e) => { void e; return null })
-  if (query.value.trim() !== current) return
-  searchResults.value = r
-  searchPending.value = false
-}
-
-watch(query, (q) => {
-  if (searchTimer) clearTimeout(searchTimer)
-  const trimmed = q.trim()
-  if (!trimmed) {
-    searchResults.value = null
-    searchPending.value = false
-    return
-  }
-  searchPending.value = true
-  if (flushOnQueryWrite) {
-    flushOnQueryWrite = false
-    void runSearch(trimmed)
-    return
-  }
-  searchTimer = setTimeout(() => {
-    searchTimer = null
-    void runSearch(trimmed)
-  }, 200)
-})
-
-/** Enter flushes the 200 ms search debounce (ADR-0064 §4): the results
- *  are on screen when the keyboard finishes closing, not 200 ms later.
- *  Only a PENDING debounce is flushable — once the timer has fired, the
- *  search for the current query is already in flight or landed, and
- *  kicking it again would repeat the same work for the same query. */
-function flushSearch() {
-  if (!searchTimer) return
-  clearTimeout(searchTimer)
-  searchTimer = null
-  searchPending.value = true
-  void runSearch(query.value.trim())
-}
 
 /* ---------- AutoSuggest dropdown state ---------- */
 
@@ -161,11 +109,10 @@ function onSuggestKey(e: KeyboardEvent) {
   // Same no-op guard as selectSuggestion: a flag set on an unchanged
   // query would kill the next real edit's suggestions.
   suppressNextSuggest = true
-  // The model write lands one parent render later, so the flush is
-  // armed on the QUERY WATCHER (flushOnQueryWrite) instead of reading
-  // the model here — reading `query` now would still see the pre-pick
-  // text and search it.
-  flushOnQueryWrite = true
+  // The composable write fires its watcher on the next flush, so the
+  // flush is armed there (armFlush) instead of searching the pre-pick
+  // text read here.
+  armFlush()
   query.value = picked
   dismissSuggestions()
   } else {
@@ -203,32 +150,45 @@ function selectSuggestion(s: string) {
   }
 }
 
-/* ---------- Search-tips disclosure ---------- */
+/* ---------- `/` focuses the search (ADR-0070 Decision 4) ---------- */
 
-/** Search-tips disclosure: closed by default, user-toggled. The toggle
- *  state is device-local (never a household preference — ADR-0027). The
- *  panel starts closed so first paint shows results, not help, on mobile. */
-const showTips = ref(false)
+/** `/` focuses THIS field — ignored while the user is already typing in
+ *  another field (or using a modifier). The listener belongs to the
+ *  mounted instance, so exactly one input answers it wherever the field
+ *  currently renders, and it disappears with the mount. */
+function onGlobalKey(e: KeyboardEvent) {
+  if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return
+  const target = e.target as HTMLElement | null
+  if (
+    target &&
+    (target.isContentEditable ||
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'SELECT')
+  )
+    return
+  e.preventDefault()
+  input.value?.focus()
+}
 
-/* RecipesTab reads the results pipeline off this component (ADR-0064 §3):
- * exposed refs are unwrapped reactively by the expose proxy, so the
- * parent's computeds track them as ordinary state. */
-defineExpose({ searchResults, searchPending })
-
+/** The listener is added here (not module scope) so only a MOUNTED field
+ *  answers `/` — the panel mount on phones, the header well on desktop. */
+window.addEventListener('keydown', onGlobalKey)
 onUnmounted(() => {
+  window.removeEventListener('keydown', onGlobalKey)
   // A KeepAlive'd parent does not unmount on tab switches, so these only
   // fire on final teardown — but a pending timer outliving its component
-  // would write into dead refs. Clear both.
-  if (searchTimer) clearTimeout(searchTimer)
+  // would write into dead refs. Clear it.
   if (suggestTimer) clearTimeout(suggestTimer)
 })
 </script>
 
 <template>
-  <!-- space-y-3 keeps the section's original rhythm: these three blocks
-  sat between the section's direct children, so the wrapper reproduces
-  the same gaps internally (the section's own space-y-3 continues below). -->
-  <div class="space-y-3">
+  <!-- The panel variant keeps the section's original rhythm with
+  space-y-3; the header variant renders the bare well (the tips block
+  belongs to the content column, and the header row's own gap does the
+  spacing). -->
+  <div :class="variant === 'panel' ? 'space-y-3' : ''">
   <div class="relative">
   <input
   ref="input"
@@ -243,6 +203,14 @@ onUnmounted(() => {
   :aria-activedescendant="suggestSelected >= 0 ? 'search-suggest-item-' + suggestSelected : undefined"
   @keydown="onSuggestKey"
   />
+  <!-- The desktop affordance: `/` focuses the search. kbd hint only in
+  the header variant — the pointer-free affordance matters where the
+  keyboard exists; on touch the field is simply there. -->
+  <kbd
+  v-if="variant === 'header'"
+  class="pointer-events-none absolute inset-y-0 right-2.5 flex items-center font-mono-data text-xs text-text-muted"
+  aria-hidden="true"
+  >/</kbd>
   <button
   v-if="query"
   type="button"
@@ -254,7 +222,6 @@ onUnmounted(() => {
   >
   <X :size="16" aria-hidden="true" />
   </button>
-  <!-- ADR-0068 level 2: popover-white + the ONE warm shadow. -->
   <div
   v-if="suggestions.length > 0"
   id="search-suggest"
@@ -277,34 +244,6 @@ onUnmounted(() => {
   {{ s }}
   </div>
   </div>
-  </div>
-
-  <div class="flex w-full justify-end">
-  <button
-    data-test="search-tips-toggle"
-    :aria-expanded="showTips"
-    aria-controls="search-tips-panel"
-    class="flex items-center gap-1 py-2 text-xs text-text-muted transition-transform"
-    :class="showTips ? 'rotate-180' : ''"
-    @click="showTips = !showTips"
-  >
-    Search tips
-    <ChevronDown :size="14" aria-hidden="true" class="transition-transform" />
-  </button>
-  </div>
-
-  <div
-    v-if="showTips"
-    id="search-tips-panel"
-    data-test="search-tips-panel"
-    class="rounded-xl border bg-surface-raised px-4 py-3 text-xs text-text-muted space-y-1"
-  >
-    <div><code>word word</code> — all words (AND)</div>
-    <div><code>rice OR quinoa</code> — either word</div>
-    <div><code>"tomato soup"</code> — exact phrase</div>
-    <div><code>-word</code> — exclude</div>
-    <div><code>word*</code> — starts with</div>
-    <div><code>soup (rice OR quinoa) -cream</code> — combine them</div>
   </div>
   </div>
 </template>

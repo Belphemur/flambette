@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
-import { ArrowUpDown, Clock, Crown, Heart, Layers, SearchX, Sparkles, UserRound } from 'lucide-vue-next'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
+import { ArrowUpDown, ChevronDown, Clock, Crown, Heart, Layers, SearchX, Sparkles, UserRound } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { catalog } from '../lib/catalog'
 import { useRestrictions } from '../composables/useRestrictions'
@@ -44,18 +45,25 @@ import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
 import { useUiStore } from '../stores/ui'
 import RecipeCard from './RecipeCard.vue'
-import RecipeSearch from './RecipeSearch.vue'
+import RecipeSearchField from './RecipeSearchField.vue'
 import FilterDropdown from './FilterDropdown.vue'
 import type { FilterDropdownOption } from './FilterDropdown.vue'
 import HueIcon from './HueIcon.vue'
+import { useRecipeSearch } from '../composables/useRecipeSearch'
 
-/** The search box stays device-local: it is a question, not a household
- *  preference (ADR-0027). Everything below it is shared.
- *
- *  The query is the search control's single source of truth (ADR-0064):
- *  RecipeSearch owns the input and both debounce pipelines, writes the
- *  model through, and never keeps its own copy of the string. */
-const query = ref('')
+/** ADR-0070: the query is EPHEMERAL state in a module-scope composable
+ *  (never persisted, never room-synced — a search is a question, not a
+ *  household preference, ADR-0027). Header well and this content field
+ *  read the same singleton; switching tabs keeps the query in memory. */
+const { query, searchResults, searchPending } = useRecipeSearch()
+
+/** The desktop breakpoint where the search well moves into the header.
+ *  Same lg: value as the Tailwind variant used in App.vue. */
+const isDesktop = useMediaQuery('(min-width: 1024px)')
+
+/** Search-tips disclosure: closed by default, user-toggled, device-local
+ *  (ADR-0027) — content-level, so it survives the field's header move. */
+const showTips = ref(false)
 
 const favourites = useFavouritesStore()
 const ui = useUiStore()
@@ -277,17 +285,10 @@ const DIET_ICONS: Record<DietId, { icon: Component; cls: string }> = Object.from
   }),
 ) as Record<DietId, { icon: Component; cls: string }>
 
-/* ---------- Result pipeline (owned by RecipeSearch, ADR-0064) ---------- */
+/* ---------- Result pipeline (owned by useRecipeSearch, ADR-0070) ---------- */
 
-/** Template ref to the search control: it owns the query watchers, both
- *  debounce timers and the tips disclosure. The exposed refs are unwrapped
- *  reactively by the expose proxy, so these computeds read them like
- *  ordinary local state and the rest of this component is unchanged. */
-const search = useTemplateRef<InstanceType<typeof RecipeSearch>>('search')
-const searchResults = computed<{ primary: number[]; fallback: number[] } | null>(
-  () => search.value?.searchResults ?? null,
-)
-const searchPending = computed(() => search.value?.searchPending ?? false)
+/* searchResults / searchPending come off the composable above — one
+ * pipeline shared with the header mount, never a per-instance copy. */
 
 /** Comparator for the current sortBy selection, used to sort primary and fallback separately. */
 function getSortComparator(sortBy: SortBy): (a: VariantMeta, b: VariantMeta) => number {
@@ -431,11 +432,45 @@ onUnmounted(() => observer?.disconnect())
 
 <template>
   <section class="space-y-3">
-  <!-- ADR-0064: the search control (input, suggest dropdown, tips
-  disclosure, both debounce pipelines) lives in ONE component; the
-  facets, sort and grid below stay here. The query's single source
-  of truth is this component's `query` ref, handed down with v-model. -->
-  <RecipeSearch ref="search" v-model="query" />
+  <!-- ADR-0064: the search control (input, suggest dropdown, both
+  debounce pipelines) lives in ONE component; the facets, sort and grid
+  below stay here. ADR-0070: below lg the field lives in-content; at lg+
+  it moves into the header well (App.vue) — one component, two mount
+  points, and v-if (not a CSS hide) so ids and data-test hooks never
+  duplicate. The query state is the module singleton both mounts share. -->
+  <RecipeSearchField v-if="!isDesktop" />
+
+  <!-- The tips disclosure is CONTENT, not a mount of the field: it
+  must stay available at lg+ (where the field moved to the header) and
+  it must not bloat the header band. Toggle state stays device-local
+  (ADR-0027), panel closed by default. -->
+  <div class="flex w-full justify-end">
+  <button
+  data-test="search-tips-toggle"
+  :aria-expanded="showTips"
+  aria-controls="search-tips-panel"
+  class="flex items-center gap-1 py-2 text-xs text-text-muted transition-transform"
+  :class="showTips ? 'rotate-180' : ''"
+  @click="showTips = !showTips"
+  >
+  Search tips
+  <ChevronDown :size="14" aria-hidden="true" class="transition-transform" />
+  </button>
+  </div>
+
+  <div
+  v-if="showTips"
+  id="search-tips-panel"
+  data-test="search-tips-panel"
+  class="rounded-xl border bg-popover px-4 py-3 text-xs text-text-muted space-y-1"
+  >
+  <div><code>word word</code> — all words (AND)</div>
+  <div><code>rice OR quinoa</code> — either word</div>
+  <div><code>"tomato soup"</code> — exact phrase</div>
+  <div><code>-word</code> — exclude</div>
+  <div><code>word*</code> — starts with</div>
+  <div><code>soup (rice OR quinoa) -cream</code> — combine them</div>
+  </div>
 
   <!-- WS1: a 2-column GRID on phones, a wrapping flex row from `sm` up.
   Grid cells never orphan a control on a line of its own, which is

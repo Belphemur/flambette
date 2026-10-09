@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useDark, useToggle } from '@vueuse/core'
+import { useDark, useMediaQuery, useToggle } from '@vueuse/core'
 import { CircleAlert, Moon, Sun, X } from 'lucide-vue-next'
 import ChangelogModal from './components/ChangelogModal.vue'
 import { checkVersion, type VersionState } from './lib/versionCheck'
@@ -19,6 +19,7 @@ import JoinCongratsModal from './components/JoinCongratsModal.vue'
 import RosterSheet from './components/RosterSheet.vue'
 import TooltipBubble from './components/TooltipBubble.vue'
 import { useIdentityStore } from './stores/identity'
+import RecipeSearchField from './components/RecipeSearchField.vue'
 
 /**
  * The app-level DEFAULT head (ADR-0048). Every app-shell route is served
@@ -135,6 +136,15 @@ const roomChip = computed(() => {
 
 /** The recipe detail view is full-bleed (edge-to-edge hero image). */
 const isRecipe = computed(() => route.name === 'recipe')
+
+/** ADR-0070: on desktop (≥lg) while the Recipes tab is active, the search
+ *  well lives in the header band, right of the wordmark. The media query
+ *  mirrors the `lg:` Tailwind variant so the v-if (not a CSS hide) keeps
+ *  exactly ONE search field in the document at any width. */
+const isDesktop = useMediaQuery('(min-width: 1024px)')
+const showHeaderSearch = computed(
+  () => isDesktop.value && route.name === 'recipes' && !isFullscreenMode.value,
+)
 
 /**
  * The roster sheet behind the room chip (ADR-0063): tapping the chip opens
@@ -465,6 +475,12 @@ onBeforeUnmount(() => {
   <img src="/favicon.svg" alt="" width="22" height="22" class="inline" aria-hidden="true" />
   Flambette
   </button>
+  <!-- ADR-0070: the desktop search well in the header band — a sunken
+  field (ADR-0065), width-capped and aligned to the container. Only on
+  the Recipes tab; other tabs compose without the well. The query state
+  and pipeline are the module singleton the content field shares, so the
+  field can move between mounts without losing the in-flight search. -->
+  <RecipeSearchField v-if="showHeaderSearch" variant="header" class="hidden w-full max-w-72 lg:block" />
   <div class="flex items-center gap-2">
   <button
   type="button"
