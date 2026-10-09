@@ -141,7 +141,10 @@ layout assertions that read old geometry.
 5. Grocery + Shop re-skin.
 6. History + Settings re-skin.
 7. Dark-mode + contrast sweep + screenshot boards (both themes, all
-   surfaces) + full gate run.
+   surfaces) + full gate run. The boards live in
+   [`docs/design/boards/`](design/boards/MANIFEST.md) (28 captures, both
+   themes, desktop 1280 + Pixel 7 390) and the measured WCAG sweep is
+   `scripts/contrast_sweep.mjs`.
 
 Each slice: locked ADR/DESIGN.md authority → implementation → review
 campaign → owner visual pass. Gates: design.md lint 0/0, build, unit,
