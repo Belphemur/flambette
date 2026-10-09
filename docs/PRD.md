@@ -84,6 +84,7 @@ Unlike generic recipe scrapers, calorie-counting diaries, or bloated ad-supporte
   - Background-safe timer state stored in local storage, surviving app reloads and screen sleep.
 - **Completion & History (ADR-0032)**:
   - Cooking completion logs an entry to the user's cooking history (shared with household room by default with opt-out).
+  - The History tab (ADR-0034) reads that log as a plan-grouped chronological record with period pills (All time / Past 30 days / Past 90 days — a read window, not a household preference), mono dates/counts and the household sharing note; never ranked or gamified.
 
 ### 3.5 Surface 5: Household Sync & Roster (ADR-0063)
 - **Room Coordination**:
