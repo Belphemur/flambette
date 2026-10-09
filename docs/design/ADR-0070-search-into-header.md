@@ -44,3 +44,21 @@ changes HOME, not STATE.
   selector names are unchanged.
 - No store migration, no backup-registry change, no room-payload change.
 - ADR-0016's Pixel 7 tab fit is untouched (mobile header stays as-is).
+
+## Addendum (2026-10-09): tips discoverability
+
+Owner ruling: the tips disclosure survives the header move but is too
+easy to miss, and the one-shot auto-expand stays FORBIDDEN (the search
+campaign's standing ruling — no reversal). The disclosure comes back
+as a CONTEXTUAL reveal:
+
+- The zero-result empty state's hint gains a **"Show search tips"**
+  button that opens the disclosure (`search-tips-panel`) — the hint no
+  longer dead-ends as static text.
+- The toggle becomes a **`?` affordance beside the desktop header
+  search well** (aria-labelled, `aria-expanded`), replacing the
+  right-aligned text link below the grid header; mobile keeps the
+  disclosure toggle with the panel mount.
+- The disclosure itself stays closed-by-default, device-local,
+  content-level (not part of the field component) — ADR-0027's
+  ephemeral/search-is-not-a-preference rule is untouched.

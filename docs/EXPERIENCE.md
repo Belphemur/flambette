@@ -22,14 +22,23 @@ The owner picked the Recipe Detail & Cooking Mode screen as the standard
 every other surface must match:
 
 - Desktop: 4:3 photograph BESIDE the intro (never a screen-wide ribbon);
-  title, facts and the action panel to its right; ingredients and
-  instructions in a ~1:1.5 two-column reading layout below.
+  title, facts and the action panel to its right (ADR-0073's 5/7-col
+  grid); ingredients and instructions in a ~1:1.5 two-column reading
+  layout below — ingredients as a CHECKLIST card (right-aligned mono
+  quantities, success check state, "Mark all ready", ephemeral
+  device-local state).
 - Mobile: photo → title/facts → actions → ingredients → steps, single
   column, 16px gutters.
+- Metadata strip on the intro card: total time, per-serving calories
+  (never scaled), household rating, servings stepper, sodium droplet —
+  real catalog data only (ADR-0073's rejected-fictions list).
 - Measured-amount chips beneath steps; one-tap timers always visible once
-  running; servings stepper on the facts row.
-- ONE filled tomato per surface (Start cooking / Cook again); favourite is
-  the espresso-disc heart over the photo; everything else outline/tonal.
+  running; servings stepper on the facts row; detail previews steps as
+  numbered cards whose timer-hint steps carry the inline timer.
+- ONE filled intent per surface, and the intents split by colour: TOMATO
+  = begin (Start cooking / Cook again), SUCCESS = complete (Finish
+  cooking, ADR-0072); favourite is the espresso-disc heart over the
+  photo; everything else outline/tonal.
 - Cooking mode is a different room: chromeless, 672px measure, one step at
   20px, thumb controls. Detail teaches; cooking commands.
 
@@ -98,8 +107,18 @@ paper and every affected pair re-measured.
   never a food hue); exclusions keep explicit wording; label never drops.
 - Fields (ADR-0065): sunken wells — paper-elevated fill, control keyline,
   12px radius, 44px height, tomato focus keyline under the global ring.
-- Checklists: 20px boxes (6px radius, warm border); checked = tomato fill
-  (grocery) / herb green (prep), struck + muted text.
+- Checklists: 20px boxes (6px radius, warm border); checked = SUCCESS
+  fill + struck muted text (completion is the success family — ADR-0072;
+  never a food hue, never tomato). Preference toggles are not
+  checklists and keep their neutral control styling.
+- Quantities/times/dates/counts render as right-aligned JetBrains Mono
+  data badges in list rows (the §4 data voice, ADR-0071/0073).
+- Grouped lists render as INDEX CARDS: rows inside one rounded
+  surface-raised card with keyline dividers; the header is a band with
+  the group's hue glyph, name, and mono count pill; walk-order groups
+  carry an aisle index (ADR-0071). Every tab opens with an EDITORIAL
+  header block (eyebrow → H1 → derived-from subtitle, real counts only
+  — ADR-0075's grammar inventory).
 - Buttons: primary tomato 12px radius (pill allowed on compact), hover
   `primary-strong`, active scale 0.98 (reduced-motion: colour only);
   secondary outline; destructive danger outline + confirm.
@@ -107,15 +126,26 @@ paper and every affected pair re-measured.
 
 ## 7. Surface walk-through (desktop AND mobile per surface)
 
-- Explore: search well + quick-filter pills, 2/3/4-col photo grid (1-col
-  <360px), mono count line; sodium never on cards.
+- Explore (ADR-0074): search well + sort MENU (check on active) +
+  quick-filter pills + meal-type pills (ADR-0043 data), 2/3/4-col photo
+  grid (1-col <360px), mono count line when filtered; card overlays =
+  espresso favourite/rating discs only, type chips stay on the facts
+  row; sodium never on cards; NO "offline" copy (owner ruling).
 - Plan: unscheduled meal rows (thumb, title, stepper, facts), mono totals
   strip, Auto-Plan carries THE tomato; preview/undo untouched.
-- Grocery: EXTRA ITEMS first with add-row; keylined aisle cards with `N/M`
-  mono pills; provenance beside names; Start shopping primary.
+- Grocery (ADR-0071): editorial header with derived-from counts; EXTRA
+  ITEMS first with add-row (desktop: Quick Entry in the sidebar);
+  keylined aisle cards with hue-glyph header bands, aisle indices and
+  `N/M` mono pills; checked rows stay IN PLACE (struck, success) —
+  Shop keeps the sink; desktop sidebar (contributing meals + ceiling
+  explainer, real counts only); room strip only when joined.
 - Shop: chromeless; exit + `N/M (pct%)` progress; ≥52px rows; auto-
-  collapsed done aisles; extras pinned; no photos.
-- Cooking: 672px measure, one step, chips, timers, finish flow.
+  collapsed done aisles; extras pinned; no photos; adopts the aisle
+  band + qty-badge + success-checkbox grammar (ADR-0075 sweep).
+- Cooking: 672px measure, one step, chips, timers, sticky prev/next +
+  mono step counter + Finish cooking in SUCCESS (ADR-0072).
+- Detail: ADR-0073's composition — checklist card, metadata strip,
+  step-list preview; rejected render fictions never ship.
 - History: plan-grouped log, mono dates/counts, period pills, sharing
   note, honest empty state, no gamification.
 - Settings: identity / household sync / preferences / backup / about;
@@ -145,6 +175,18 @@ layout assertions that read old geometry.
    [`docs/design/boards/`](design/boards/MANIFEST.md) (28 captures, both
    themes, desktop 1280 + Pixel 7 390) and the measured WCAG sweep is
    `scripts/contrast_sweep.mjs`.
+8. Grocery reading surface (ADR-0071): in-place checked state, editorial
+   header, aisle cards + indices, qty badges, desktop sidebar, room
+   strip; sink specs rewritten; Shop keeps the sink.
+9. Recipe detail composition (ADR-0073) + cooking nav bar + success
+   finish (ADR-0072).
+10. Explore archive composition (ADR-0074): sort menu, overlay grammar,
+    meal-type pills; search-tips contextual reveal (ADR-0070 addendum).
+11. Cross-surface consistency sweep (ADR-0075): the grammar inventory
+    walked over ALL surfaces, sweep table extended (success pairs),
+    boards re-captured and RE-INSPECTED, full gate, per-rule checklist
+    in the report. Workers read the target screens from the Stitch
+    project (MCP) before each slice.
 
 Each slice: locked ADR/DESIGN.md authority → implementation → review
 campaign → owner visual pass. Gates: design.md lint 0/0, build, unit,
@@ -152,11 +194,14 @@ full e2e serially, screenshots actually inspected.
 
 ## 10. Open items for the owner
 
-- `border-strong` measured value (family `#C9B8A4`–`#D3C4B0`).
-- Espresso bottom nav in LIGHT mode — confirm (renders show it).
-- Saffron timer family — confirm.
-- Stitch fictions (device-id string format, v0.11.1 badge, invented
-  recipes) reconcile to the REPO's real data, never the render.
+- RESOLVED 2026-10-09 (slices 8–11 rulings): `border-strong` =
+  `#947E64`; espresso bottom nav in light mode CONFIRMED (shipped,
+  slice 1); saffron CONFIRMED (shipped); grocery checked state =
+  success family (ADR-0072); reading/task split for Grocery/Shop
+  (ADR-0071); no "offline" copy on Explore (ADR-0074); search-tips
+  contextual reveal, auto-expand stays forbidden (ADR-0070 addendum).
+- Standing: Stitch fictions (device-id string format, v0.11.1 badge,
+  invented recipes) reconcile to the REPO's real data, never the render.
 - Stitch's own CSS uses BOTH the M3 ladder and our old hexes in prompt
   echoes (`#FFF8F0`, `#E5D8CB`) — the ADOPTED values are §3's table; the
   repo is authoritative where a render disagrees.
