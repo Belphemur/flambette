@@ -248,6 +248,10 @@ test('Leave drops the saved code, so the household does not rejoin next launch (
   await expect(page.getByTestId('household-room-status')).toContainText(code, { timeout: 20_000 })
 
   await page.getByTestId('household-room-clear').click()
+  // Destructive is danger-outlined AND confirmed (DESIGN.md): the press
+  // arms the shared toast confirm; the action performs the opt-out.
+  await expect(page.getByTestId('toast')).toContainText('Leave room')
+  await page.getByTestId('toast-action-primary').click()
   // The socket is gone…
   await expect(page.getByTestId('room-chip')).toHaveCount(0)
   // …the SETTING is gone, which is the half that used to survive: leaving

@@ -101,10 +101,11 @@ Unlike generic recipe scrapers, calorie-counting diaries, or bloated ad-supporte
 
 ### 4.1 Visual Theme Tokens
 - **Theme**: Warm, tactile kitchen companion; avoids corporate grey dashboards or neon gradients.
-- **Surfaces**:
-  - Page Background: Cream Paper (`#FFF8F0` Light / Espresso `#171310` Dark)
-  - Cards & Raised Containers: Pure White (`#FFFFFF` Light / Charcoal `#241C18` Dark)
-  - Sunken / Metadata Bands: Peach-Cream (`#FFF0E6` Light / Cocoa `#32261F` Dark)
+- **Surfaces** (ADR-0067 "Warm Culinary Paper" — DESIGN.md is the normative authority):
+  - Page Background: Cream Paper (`#FBF8F2` Light / espresso-family dark pair)
+  - Cards & Raised Containers: Paper Card (`#F4EFE6` Light / dark pair) — keylined, never shadowed
+  - Sunken / Metadata Bands & Fields: Paper Elevated (`#EDE5D8` Light / dark pair)
+  - Bottom nav + photo discs: Roasted Espresso (`#2B1E1A`) dark chrome in BOTH themes
 - **Primary Action (Tomato Red)**:
   - Primary: `#B3381F`
   - Hover / Active: `#8E2C17`
