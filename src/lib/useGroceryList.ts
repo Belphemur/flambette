@@ -77,6 +77,43 @@ export function useGroceryList() {
     return plan.plan.find((e) => e.variantId === variantId)?.servings ?? 1
   }
 
+  /** One row of the Grocery tab's Contributing Meals card (ADR-0071). */
+  export interface MealLineSummary {
+    id: number
+    name: string
+    /** Thumbnail URL, resolved through the shared `imageSrc` path. */
+    image: string
+    /** Planned servings for THIS household entry, not the authored ones. */
+    servings: number
+    /** Grocery lines this meal contributes, from the SAME aggregation pass. */
+    lines: number
+  }
+
+  /**
+   * Per-meal line counts for the desktop sidebar — derived from the ONE
+   * aggregation pass (`aggregateInputs`), never a second walk of the
+   * catalog: a sidebar that re-counted would drift from the list the
+   * moment a merge rule changed (ADR-0071 Consequences).
+   *
+   * Empty until every planned meal's doc has loaded, exactly like `items`:
+   * the card shows a skeleton rather than a partial count.
+   */
+  const mealSummaries = computed<MealLineSummary[]>(() => {
+    if (aggregateInputs.value.length !== plannedMetas.value.length) return []
+    return aggregateInputs.value.map((input) => ({
+      id: input.doc.id,
+      name: input.recipeName,
+      image: input.doc.thumbnail_image_url ?? null,
+      servings: entryServings(input.doc.id),
+      lines: input.displayLines ? input.displayLines.length : input.doc.line_items.length,
+    }))
+  })
+
+  /** Servings the plan covers — the editorial header's second real count. */
+  const totalServings = computed(() =>
+    plan.plan.reduce((n, entry) => n + (entry.servings ?? 1), 0),
+  )
+
   /**
    * The aggregated list, PLUS one localized rendering per line (ADR-0047).
    *
@@ -209,6 +246,8 @@ export function useGroceryList() {
     items,
     totalCount,
     checkedCount,
+    totalServings,
+    mealSummaries,
     sections,
     ensureDocs,
     confirmAndClearGrocery,

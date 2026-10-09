@@ -449,6 +449,12 @@ input[type='checkbox'].check-box {
   border-color: var(--color-border-strong);
   border-radius: var(--radius-sm, 6px);
 }
+/* COMPLETION (ADR-0072): a done-state box fills `success`, never a food
+   hue and never brand. One class for every completion call site — grocery
+   rows, extras rows, the shop-mode tick, the detail checklist — so no
+   checkbox family drifts (ADR-0075 rule 4). Prep lists keep the same
+   accent through `.prep`. */
+input[type='checkbox'].check-box.done,
 input[type='checkbox'].check-box.prep {
   accent-color: var(--color-success);
 }

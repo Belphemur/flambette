@@ -802,9 +802,16 @@ tonal surfaces (`surface-sunken` / `popover`) with `mono-data` numbers.
 ### Checklists
 
 Checklist boxes (grocery rows, prep lists) are **20px squares with a 6px radius and
-a `border-strong` warm keyline**. Checked = tomato fill (`brand`) on grocery, herb
-green (`success`) on prep lists, the text struck and muted. The tick never relies
-on colour alone — the strikethrough carries the state.
+a `border-strong` warm keyline**. A COMPLETION — a checked-off grocery row, an
+extras row, the Shop-mode tick, a detail-surface checklist row — fills the
+**`success`** family with the `on-success` glyph, and the text is struck and muted
+(ADR-0072). Tomato stays the START intent (Start shopping / Start cooking /
+Auto-Plan), so a run of checked rows never dilutes the one-filled-tomato rule.
+Configuration (settings switches, the share-history checkbox), the Plan tab's
+cleared-ingredient boxes (cleared = REMOVED, not bought — `accent-brand` until a
+surface pass reaches them) and favourites (`favourite`) are NOT completions and
+keep their own families. The tick never relies on colour alone — the strikethrough
+carries the state.
 
 ### Selection and actions
 
