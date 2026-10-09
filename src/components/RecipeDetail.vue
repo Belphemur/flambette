@@ -16,6 +16,14 @@ import {
 } from '../lib/units'
 import { MAX_SERVINGS } from '../lib/servings'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
+import {
+  getTimerHints,
+  hintForStep,
+  suggestionFromHint,
+  type TimerHint,
+  type TimerSuggestion,
+} from '../lib/timerSuggest'
+import { formatCountdown, remainingSeconds } from '../lib/stepTimer'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
@@ -38,6 +46,7 @@ import {
   Minus,
   NotebookPen,
   Plus,
+  Timer,
   Utensils,
 } from 'lucide-vue-next'
 import { isUserRecipeId } from '../lib/userRecipes'
@@ -216,6 +225,128 @@ const macroBars = computed(() => {
 })
 
 const inPlan = computed(() => (meta.value ? plan.planContains(meta.value.id) : false))
+
+/* ---------- Ephemeral prep checklist (ADR-0073) ---------- */
+
+/**
+ * Checked ingredient ids for THIS sheet only. Ephemeral by construction:
+ * a plain component ref, never persisted and never carried in the room
+ * payload (prep state is personal and short-lived — the SHOP list is the
+ * household's checklist). Switching recipe clears it, so one sheet's
+ * ticks can never read as another dish's.
+ */
+const readyIngredients = ref(new Set<number>())
+const allReady = computed(
+  () =>
+    scaledIngredients.value.length > 0 &&
+    scaledIngredients.value.every((item) => readyIngredients.value.has(item.id)),
+)
+
+function toggleReady(id: number): void {
+  const next = new Set(readyIngredients.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  readyIngredients.value = next
+}
+
+/** "Mark all ready" toggles every row, not just the open ones. */
+function toggleAllReady(): void {
+  if (allReady.value) {
+    readyIngredients.value = new Set()
+    return
+  }
+  readyIngredients.value = new Set(scaledIngredients.value.map((item) => item.id))
+}
+
+/* ---------- Inline step-timer affordances (ADR-0073 / ADR-0020) ---------- */
+
+/**
+ * The recipe's build-time timer hints, loaded on demand from the sidecar
+ * and cached per session — the same artifact and the same lazy pattern
+ * the cooking view uses, so the two surfaces cannot disagree about what
+ * a step's duration is. A recipe with no sidecar resolves to no hints,
+ * which is a fact about the catalog (ADR-0041).
+ */
+const hints = ref<TimerHint[] | null>(null)
+
+watch(
+  () => meta.value?.id,
+  (id) => {
+    hints.value = null
+    readyIngredients.value = new Set()
+    if (id === undefined) return
+    void getTimerHints(id).then((loaded) => {
+      // A stale fetch (the reader moved to another recipe) never wins.
+      if (meta.value?.id === id) hints.value = loaded
+    })
+  },
+  { immediate: true },
+)
+
+/** The hint for one step index, if the authored text carries a duration. */
+function hintAt(index: number): TimerHint | null {
+  if (!hints.value) return null
+  return hintForStep(hints.value, [index])
+}
+
+/**
+ * step index -> the timer id this sheet armed for it. Ephemeral like the
+ * checklist: the ARMED timer itself lives in the ui store (the ADR-0020
+ * contract, the same store cooking mode uses), so a countdown keeps
+ * running if the reader leaves the sheet; only this sheet's mapping of
+ * which step to which timer is view state.
+ */
+const armedByStep = ref(new Map<number, number>())
+
+/** A 1s tick, alive only while a timer this sheet armed is counting. */
+const now = ref(Date.now())
+let tick: ReturnType<typeof setInterval> | null = null
+function syncTick(): void {
+  const live = [...armedByStep.value.values()].some((id) => {
+    const t = ui.stepTimers[meta.value?.id ?? -1]?.[id]
+    return t !== undefined && remainingSeconds(t, now.value) > 0 && t.running
+  })
+  if (live && tick === null) {
+    tick = setInterval(() => {
+      now.value = Date.now()
+    }, 1000)
+  } else if (!live && tick !== null) {
+    clearInterval(tick)
+    tick = null
+  }
+}
+watch([armedByStep, () => ui.stepTimers], syncTick, { deep: true, immediate: true })
+onUnmounted(() => {
+  if (tick !== null) clearInterval(tick)
+})
+
+/** Seconds left on the timer armed for one step, or null when none. */
+function stepCountdown(index: number): string | null {
+  const id = armedByStep.value.get(index)
+  if (id === undefined || !meta.value) return null
+  const timer = ui.stepTimers[meta.value.id]?.[id]
+  if (!timer) return null
+  const left = remainingSeconds(timer, now.value)
+  if (left <= 0) {
+    armedByStep.value.delete(index)
+    return null
+  }
+  return formatCountdown(left)
+}
+
+/**
+ * Arm the step's authored duration. A user press arms it — the same
+ * confirm-the-parser's-finding rule the cooking view keeps (ADR-0041 §4),
+ * so nothing a sidecar reported ever starts counting on its own.
+ */
+function startStepTimer(index: number): void {
+  const hint = hintAt(index)
+  if (!hint || !meta.value) return
+  const suggestion: TimerSuggestion = suggestionFromHint(hint)
+  const id = ui.addTimer(meta.value.id, suggestion.label, suggestion.seconds)
+  if (id === null) return
+  armedByStep.value = new Map(armedByStep.value).set(index, id)
+}
 
 /** Personal cooked history (this device only, ADR-0011). */
 const cooked = useCookHistory()
@@ -454,6 +585,31 @@ function startCooking() {
   <Utensils :size="16" aria-hidden="true" />serves {{ servings }}
   </span>
   </div>
+  <!-- Metadata strip (ADR-0073): REAL catalog facts only — total time,
+  calories per serving (never scaled), sodium. Macro splits, difficulty,
+  test counts and SKUs do not exist in the catalog and are rejected
+  fictions, so they are not here. The strip is data voice: mono,
+  tabular, with the ADR-0036 semantic hues on the two nutrition facts. -->
+  <dl
+  class="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono-data text-label-md tabular-nums text-text-muted"
+  data-test="detail-metadata-strip"
+  >
+  <div class="flex items-center gap-1.5">
+  <Clock :size="16" aria-hidden="true" />
+  <dt class="sr-only">Total time</dt>
+  <dd>{{ meta.cooking_minutes }} min</dd>
+  </div>
+  <div class="flex items-center gap-1.5">
+  <HueIcon role="energy" :size="16" />
+  <dt class="sr-only">Calories per serving</dt>
+  <dd data-test="detail-metadata-calories">{{ Math.round(meta.calories) }} kcal / serving</dd>
+  </div>
+  <div v-if="meta.sodium_mg" class="flex items-center gap-1.5">
+  <HueIcon role="sodium" :size="16" />
+  <dt class="sr-only">Sodium per serving</dt>
+  <dd>{{ Math.round(meta.sodium_mg) }} mg</dd>
+  </div>
+  </dl>
   <p
   v-if="cookLine"
   class="group relative text-sm font-medium text-brand-text"
@@ -687,20 +843,51 @@ function startCooking() {
   class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] lg:items-start"
   data-test="detail-columns"
   >
-  <section>
-  <h3 class="mb-2 text-body-sm font-semibold">
+  <!-- Ingredient checklist card (ADR-0073): name left, quantity right in
+  the mono data voice, each row checkable with the ADR-0072 success
+  state. The checks are EPHEMERAL view state — never persisted, never
+  room-synced; the household's checklist is the grocery list. Sticky on
+  desktop so a long step list never scrolls the mise en place away. -->
+  <section class="lg:sticky lg:top-24">
+  <div class="mb-2 flex items-center justify-between gap-2">
+  <h3 class="text-body-sm font-semibold">
   Ingredients ({{ servings }} servings)
   </h3>
-  <ul class="divide-y divide-border rounded-xl bg-surface-raised ring-1 ring-border">
+  <button
+  class="flex h-11 items-center rounded-lg px-2 text-label-md font-semibold text-brand-text hover:bg-surface-sunken"
+  :aria-pressed="allReady"
+  data-test="mark-all-ready"
+  @click="toggleAllReady"
+  >
+  {{ allReady ? 'All ready' : 'Mark all ready' }}
+  </button>
+  </div>
+  <ul
+  class="divide-y divide-border rounded-xl bg-surface-raised ring-1 ring-border"
+  data-test="detail-ingredients"
+  >
   <li
   v-for="item in scaledIngredients"
   :key="item.id"
-  class="flex gap-3 px-4 py-2.5 text-body-sm"
+  class="flex items-center gap-3 px-3 py-2.5"
+  data-test="detail-ingredient-row"
   >
-  <span class="w-24 shrink-0 font-medium text-brand-text font-mono-data tabular-nums">{{
-  item.quantity || '—'
-  }}</span>
-  <span>{{ item.ingredient_name }}</span>
+  <label class="flex min-w-0 flex-1 hovercap:cursor-pointer items-center gap-3">
+  <input
+  type="checkbox"
+  class="check-box done"
+  :checked="readyIngredients.has(item.id)"
+  @change="toggleReady(item.id)"
+  />
+  <span
+  class="min-w-0 flex-1 text-body-sm"
+  :class="readyIngredients.has(item.id) ? 'text-text-muted line-through' : 'text-text'"
+  >{{ item.ingredient_name }}</span>
+  </label>
+  <span
+  class="shrink-0 rounded-md bg-surface-sunken px-2 py-1 font-mono-data text-label-sm tabular-nums"
+  :class="readyIngredients.has(item.id) ? 'text-text-muted' : 'text-text'"
+  >{{ item.quantity || '—' }}</span>
   </li>
   </ul>
   </section>
@@ -712,6 +899,7 @@ function startCooking() {
   v-for="(step, i) in scaledSteps"
   :key="i"
   class="rounded-xl bg-surface-raised p-4 ring-1 ring-border"
+  data-test="detail-step"
   >
   <div class="flex gap-3">
   <span
@@ -720,6 +908,27 @@ function startCooking() {
   {{ i + 1 }}
   </span>
   <p class="text-body-md">{{ step.primary }}</p>
+  </div>
+  <!-- Inline timer affordance (ADR-0073): ONLY where the recipe's own
+  sidecar reports a duration for this step — never a guessed one
+  (ADR-0022). The press ARMS the duration in the shared timer store,
+  so cooking mode picks it up; nothing auto-starts (ADR-0041 §4). -->
+  <div v-if="hintAt(i)" class="mt-2 ml-9 flex items-center gap-2">
+  <button
+  class="flex h-11 items-center gap-1.5 rounded-lg bg-surface-sunken px-2.5 text-label-md font-medium text-text hover:bg-surface"
+  :aria-label="`Start a ${suggestionFromHint(hintAt(i)!).minutes} minute timer for step ${i + 1}`"
+  data-test="detail-step-timer"
+  @click="startStepTimer(i)"
+  >
+  <Timer :size="16" aria-hidden="true" />
+  {{ suggestionFromHint(hintAt(i)!).label }} ·
+  {{ suggestionFromHint(hintAt(i)!).minutes }} min
+  </button>
+  <span
+  v-if="stepCountdown(i)"
+  class="font-mono-data text-label-md tabular-nums text-brand-text"
+  data-test="detail-step-countdown"
+  >{{ stepCountdown(i) }}</span>
   </div>
   <ul
   v-if="step.details.length"
