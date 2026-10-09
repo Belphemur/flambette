@@ -28,6 +28,15 @@ const searchResults = ref<{ primary: number[]; fallback: number[] } | null>(null
 const searchPending = ref(false)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
+/** Armed when Enter commits a highlighted suggestion whose text differs
+ *  from the model: a defineModel write does not update this child's prop
+ *  synchronously (the parent re-render flushes in a microtask), so
+ *  reading `query` in the same handler still sees the PRE-pick text.
+ *  Instead of searching that stale read, the query watcher runs the
+ *  search IMMEDIATELY on the write's arrival — the same effect as
+ *  Enter's flush, with the picked text guaranteed (ADR-0064 §4). */
+let flushOnQueryWrite = false
+
 /** Run the search for `current` now. The stale-response guard (a
  *  response for a query the user has since changed is discarded) lives
  *  here so BOTH callers — the 200 ms debounce and Enter's flush — share
@@ -51,24 +60,28 @@ watch(query, (q) => {
     return
   }
   searchPending.value = true
-  searchTimer = setTimeout(() => void runSearch(trimmed), 200)
+  if (flushOnQueryWrite) {
+    flushOnQueryWrite = false
+    void runSearch(trimmed)
+    return
+  }
+  searchTimer = setTimeout(() => {
+    searchTimer = null
+    void runSearch(trimmed)
+  }, 200)
 })
 
 /** Enter flushes the 200 ms search debounce (ADR-0064 §4): the results
- *  are on screen when the keyboard finishes closing, not 200 ms later. */
+ *  are on screen when the keyboard finishes closing, not 200 ms later.
+ *  Only a PENDING debounce is flushable — once the timer has fired, the
+ *  search for the current query is already in flight or landed, and
+ *  kicking it again would repeat the same work for the same query. */
 function flushSearch() {
-  if (searchTimer) {
-    clearTimeout(searchTimer)
-    searchTimer = null
-  }
-  const trimmed = query.value.trim()
-  if (!trimmed) {
-    searchResults.value = null
-    searchPending.value = false
-    return
-  }
+  if (!searchTimer) return
+  clearTimeout(searchTimer)
+  searchTimer = null
   searchPending.value = true
-  void runSearch(trimmed)
+  void runSearch(query.value.trim())
 }
 
 /* ---------- AutoSuggest dropdown state ---------- */
@@ -76,21 +89,35 @@ function flushSearch() {
 /** Set after committing a suggestion so the suggest watcher skips its
  *  next fetch — otherwise the dropdown pops back up over the results. */
 let suppressNextSuggest = false
+/** Generation counter for suggest work. Every dismissal bumps it, so a
+ *  pending timer or an in-flight `suggest()` response cannot write
+ *  `suggestions` back and pop the dropdown up over the results after a
+ *  dismissal: Enter/Escape dismiss WITHOUT changing the query, so the
+ *  query-only stale guard cannot see it — the generation bump is the
+ *  only witness. */
+let suggestGen = 0
 const suggestions = ref<string[]>([])
 const suggestSelected = ref(-1)
 let suggestTimer: ReturnType<typeof setTimeout> | null = null
+
+/** Dispose the dropdown AND invalidate its pending/in-flight work. */
+function dismissSuggestions() {
+  if (suggestTimer) clearTimeout(suggestTimer)
+  suggestTimer = null
+  suggestGen++
+  suggestions.value = []
+  suggestSelected.value = -1
+}
+
 watch(query, (q) => {
   if (suggestTimer) clearTimeout(suggestTimer)
+  suggestGen++
+  const gen = suggestGen
   const trimmed = q.trim()
-  if (!trimmed) {
-    suggestions.value = []
-    suggestSelected.value = -1
-    return
-  }
-  // The user just committed a suggestion: the query is already the full
-  // text they chose, so offering completions of it again only pops the
-  // dropdown back up over the results.
-  if (suppressNextSuggest) {
+  // An empty query and a just-committed suggestion share one outcome:
+  // the query is already the text the user wants, so offering
+  // completions of it again only pops the dropdown up over the results.
+  if (!trimmed || suppressNextSuggest) {
     suppressNextSuggest = false
     suggestions.value = []
     suggestSelected.value = -1
@@ -99,7 +126,10 @@ watch(query, (q) => {
   suggestTimer = setTimeout(async () => {
     const current = trimmed
     const results = await suggest(current)
-    if (query.value.trim() !== current) return // stale response
+    // Stale response: the query moved on, OR the dropdown was dismissed
+    // since the fetch started (Enter/Escape clear it without changing
+    // the query — the generation bump is what invalidates those).
+    if (gen !== suggestGen || query.value.trim() !== current) return
     // When the typed query IS a word the index knows (e.g. "rice"), the
     // suggester answers with the word itself plus fuzzy neighbours
     // ("rich", "ice"). Offering the word back is a no-op, and the
@@ -123,18 +153,26 @@ function onSuggestKey(e: KeyboardEvent) {
   // highlighted case that used to fall through was exactly the bug.
   if (e.key === 'Enter') {
   e.preventDefault()
-  if (suggestions.value.length > 0 && suggestSelected.value >= 0) {
-  const picked = suggestions.value[suggestSelected.value]!
+  const picked =
+  suggestions.value.length > 0 && suggestSelected.value >= 0
+  ? suggestions.value[suggestSelected.value]!
+  : null
+  if (picked !== null && query.value !== picked) {
   // Same no-op guard as selectSuggestion: a flag set on an unchanged
   // query would kill the next real edit's suggestions.
-  if (query.value !== picked) {
-    suppressNextSuggest = true
-    query.value = picked
-  }
-  }
-  suggestions.value = []
-  suggestSelected.value = -1
+  suppressNextSuggest = true
+  // The model write lands one parent render later, so the flush is
+  // armed on the QUERY WATCHER (flushOnQueryWrite) instead of reading
+  // the model here — reading `query` now would still see the pre-pick
+  // text and search it.
+  flushOnQueryWrite = true
+  query.value = picked
+  dismissSuggestions()
+  } else {
+  // Nothing highlighted, or the picked text is already the query.
+  dismissSuggestions()
   flushSearch()
+  }
   input.value?.blur()
   return
   }
@@ -149,13 +187,13 @@ function onSuggestKey(e: KeyboardEvent) {
   suggestSelected.value = Math.max(suggestSelected.value - 1, 0)
   break
   case 'Escape':
-  suggestions.value = []
-  suggestSelected.value = -1
+  dismissSuggestions()
   break
   }
 }
 
 function selectSuggestion(s: string) {
+  dismissSuggestions()
   // Only suppress when the assignment actually CHANGES the query: picking
   // a suggestion equal to the current text never fires the watcher, and a
   // stale flag would silently swallow the user's NEXT real edit.
@@ -163,8 +201,6 @@ function selectSuggestion(s: string) {
     suppressNextSuggest = true
     query.value = s
   }
-  suggestions.value = []
-  suggestSelected.value = -1
 }
 
 /* ---------- Search-tips disclosure ---------- */

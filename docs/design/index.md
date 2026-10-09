@@ -74,7 +74,7 @@ architecture is shaped the way it is.
 | [0061](ADR-0061-stale-version-refresh-banner.md) | Stale-version detection and the refresh banner | 2026-10-07 |
 | [0062](ADR-0062-scroll-restoration-on-back.md) | Scroll restoration on back-from-recipe | 2026-10-08 |
 | [0063](ADR-0063-room-identity-presence-avatars.md) | Room identity — device UUIDv7, safe-word names, live relay presence, and hashvatar avatars | 2026-10-08 |
-| [0064](ADR-0064-search-component.md) | RecipeSearch component + mobile Enter dismissal _(supersedes ADR-0060)_ | 2026-10-09 |
+| [0064](ADR-0064-search-component.md) | RecipeSearch component + mobile Enter dismissal | 2026-10-09 |
 
 ## Not in force
 

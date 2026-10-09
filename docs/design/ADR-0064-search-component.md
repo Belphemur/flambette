@@ -1,7 +1,8 @@
 # ADR-0064: RecipeSearch component + mobile Enter dismissal
 
 Status: accepted (2026-10-09)
-Supersedes: nothing (refines the presentation layer of ADR-0060-recipe-search-language)
+Supersedes: nothing
+Refines the presentation layer of ADR-0060-recipe-search-language.
 
 ## Context
 
