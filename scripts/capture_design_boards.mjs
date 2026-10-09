@@ -126,7 +126,12 @@ const SURFACES = ['recipes', 'plan', 'grocery', 'shop', 'cooking', 'history', 's
 // ---- start the preview server (the built bundle) ----
 /** `--out <dir>` is documented in the header: honour it instead of silently
  *  overwriting the checked-in boards. */
-const OUT_DIR = process.argv.find((a) => a.startsWith('--out='))?.slice(6) ?? 'docs/design/boards'
+/** `--out <dir>` AND `--out=<dir>` are both documented — accept both. */
+const outArgIdx = process.argv.indexOf('--out')
+const OUT_DIR =
+  (outArgIdx >= 0 ? process.argv[outArgIdx + 1] : undefined) ??
+  process.argv.find((a) => a.startsWith('--out='))?.slice(6) ??
+  'docs/design/boards'
 mkdirSync(OUT_DIR, { recursive: true })
 const preview = spawn('bun', ['run', 'preview', '--port', '4197', '--strictPort'], {
   stdio: 'inherit',

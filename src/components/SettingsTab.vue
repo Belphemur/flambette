@@ -387,14 +387,18 @@ function confirmLeaveHousehold() {
 
 /** Run the full opt-out against ONE code — the code the prompt named. */
 function leaveHouseholdCode(code: string | null) {
-  const restore = ui.householdRoom
-  // Point the card at the room the prompt named, run the existing opt-out
-  // (which stops the socket, clears the code and the saved join target),
-  // then put the card's own field back — a device that re-rolled while the
-  // toast was open must not lose the code it was about to join.
+  const current = ui.householdRoom
+  // Point the card at the room the prompt named and run the existing
+  // opt-out, which stops the socket AND clears the saved join target — the
+  // point of Leave (ADR-0049): a rejoin-on-launch would silently undo it.
   ui.householdRoom = code ?? ''
   clearHouseholdRoom()
-  ui.householdRoom = restore
+  // Restore the field only for a code the reader typed or rolled WHILE the
+  // toast was open (a different code than the one just left). Restoring the
+  // code we just left is exactly the auto-join bug this whole flow exists to
+  // avoid, so in that case the field stays empty — which is what the prompt
+  // said would happen.
+  if (current !== (code ?? '')) ui.householdRoom = current
 }
 
 function clearHouseholdRoom() {

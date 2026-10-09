@@ -145,7 +145,7 @@ const hasAnyCook = computed(() => plan.cookedHistory.length > 0)
   </p>
 
   <div
-  v-if="groups.length === 0"
+  v-if="groups.length === 0 && !hasAnyCook"
   class="rounded-xl bg-surface-raised py-16 text-center text-text-muted ring-1 ring-border"
   data-test="history-empty"
   >
