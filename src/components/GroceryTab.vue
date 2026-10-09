@@ -514,8 +514,11 @@ const shopperCount = computed(() => room.peers ?? 1)
   the registry already claims — the rest render no glyph rather than a
   borrowed hue (src/lib/aisleRole.ts). -->
   <HueIcon v-if="aisleRole(section.name)" :role="aisleRole(section.name)!" :size="18" />
+  <!-- Name and aisle index are SEPARATE elements: the name is what a
+  reader (and a spec) matches on, the index is the parenthetical.
+  Derived from STORE_SECTIONS order, never hand-numbered. -->
   <span class="min-w-0 flex-1 truncate text-label-md font-semibold text-text">
-  {{ section.name }}
+  <span>{{ section.name }}</span>
   <span class="ml-1 font-normal text-text-muted">(Aisle {{ aisleNumber(section.name) }})</span>
   </span>
   <!-- Completion pill: `success`-tinted when the aisle is done, tonal
