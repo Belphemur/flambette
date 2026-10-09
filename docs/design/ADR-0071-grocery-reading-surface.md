@@ -121,8 +121,15 @@ Dated change note; Status stays Accepted.
   same screen, which is the collision ADR-0036 (and ADR-0072's
   done-state ruling) exists to prevent. These are DEPARTMENT identities
   and never state: a checked row's success fill is painted by the row.
-  A later owner ruling extended the band to carry a lucide glyph for
-  every category; the registry mapping above remains the hue rule.
+  **Current rule (ADR-0076, owner ruling, supersedes the paragraph above on
+  GLYPHS only):** every category now carries a lucide glyph from
+  `src/lib/aisleRole.ts`. The HUE half still holds — only Produce and
+  Meat & Seafood wear a registry hue, and the other departments wear their
+  glyph in muted ink (`text-text-muted`) rather than borrowing a hue they do
+  not own. The grocery aisle band, the grocery extras sub-sections (which
+  never carry an aisle index) and ShopView's band (rendered OUTSIDE its
+  toggle so the toggle's svg count stays the chevron the auto-collapse spec
+  pins) all read that one table.
 - **ADR-0075 rule 4 on this surface.** The completion colour is the
   `success` family for every done-state here (row ticks, the `N/M`
   pill once a section is done). The progress BAR stays `brand`: it

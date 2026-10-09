@@ -33,7 +33,11 @@ Four levels, mirroring the design system:
 - The `.dark` block re-points each level's variables; every affected pair
   re-measured (WCAG text/keyline gates per the standing procedure).
 - Checklist boxes: 20px, 6px radius, `border-strong` keyline; checked =
-  tomato fill (grocery) / herb green (prep), struck + muted text.
+  the **`success` family** with `on-success` glyph, struck + muted text.
+  (Amended 2026-10-09 by ADR-0072: a COMPLETION is never a food hue and
+  never brand — tomato is spent on start intents. DESIGN.md's Checklists
+  section is the current authority; ADR-0072 lists the few call sites
+  that are NOT completions.)
 - Reduced-motion has nothing to disarm: the blur is static, never animated.
 - Cards rendered with `shadow-*` utilities anywhere in `src/` are a bug
   after the migration slice lands.
