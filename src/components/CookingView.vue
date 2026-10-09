@@ -1061,9 +1061,13 @@ function onTouchEnd(e: TouchEvent) {
   Next
   <ChevronRight :size="18" aria-hidden="true" class="ml-1 inline" />
   </button>
+  <!-- Finish cooking is a COMPLETION, not a start intent: it fills the
+  `success` family while every start intent on this surface (Start
+  cooking, Next) stays tomato — ADR-0072's colour split, one filled
+  intent per surface with the colours doing the distinguishing. -->
   <button
   v-else
-  class="h-14 flex-[2] rounded-xl bg-brand text-base font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
+  class="h-14 flex-[2] rounded-xl bg-success text-base font-semibold text-on-success transition-[background-color,transform] hover:bg-success-soft active:scale-[0.98]"
   data-test="finish"
   aria-label="Finish cooking and mark as cooked"
   @click="finishCooked"
