@@ -413,7 +413,11 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <div class="mx-auto flex min-h-dvh max-w-app flex-col" data-test="app-shell">
+  <!-- ADR-0065: the SHELL is full-window and the chrome bars (header,
+       bottom nav) span the viewport edge to edge; main content and the
+       chrome content rows align to the 1100px container. Below 1100px
+       nothing changes — this was already the geometry. -->
+  <div class="flex min-h-dvh flex-col" data-test="app-shell">
   <!-- Stale-version banner (ADR-0061): fixed above the sticky header,
        never covering or shifting the bottom nav. role="status" so it is
        announced without interrupting. Session-only dismissal. -->
@@ -448,7 +452,9 @@ onBeforeUnmount(() => {
   :class="showBanner ? 'mt-12' : ''"
   :style="{ top: showBanner ? '48px' : '0px' }"  
   >
-  <div class="flex items-center justify-between px-4 py-2">
+  <!-- The content row aligns to the 1100px container (ADR-0065): the
+       BAND spans the window, the row does not. -->
+  <div class="mx-auto flex w-full max-w-app items-center justify-between px-4 py-2">
   <button
   type="button"
   data-test="home-link"
@@ -586,7 +592,7 @@ onBeforeUnmount(() => {
 
   <main
   v-else
-  class="flex-1"
+  class="mx-auto w-full max-w-app flex-1"
   :class="isRecipe || isFullscreenMode ? '' : 'px-4 pt-4 pb-28'"
   >
   <RouterView v-slot="{ Component }">
@@ -617,26 +623,33 @@ onBeforeUnmount(() => {
   </div>
   </Transition>
 
+  <!-- ADR-0067: the bar is roasted-espresso chrome in BOTH themes — the
+       chrome-* foreground family is LITERAL (never flips), while the bar
+       itself deepens espresso → espresso-dark in dark mode. ADR-0016's
+       measured Pixel 7 fit (82px/tab) is untouched: same bar height,
+       same five labelled tabs, same hit areas. -->
   <nav
   v-if="!isFullscreenMode"
-  class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface-raised"
+  class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-chrome-border bg-espresso"
   aria-label="Main navigation"
   >
-  <div class="mx-auto flex max-w-app">
+  <div class="mx-auto flex w-full max-w-app">
   <button
   v-for="tab in TABS"
   :key="tab.id"
-  class="nav-tab flex min-h-14 flex-1 flex-col items-center justify-center gap-1 pt-1.5 text-label-md font-medium transition-colors"
-  :class="route.path === tab.to ? 'text-brand-text' : 'text-text-muted'"
+  class="nav-tab flex min-h-14 flex-1 flex-col items-center justify-center gap-1 pt-1.5 text-label-md transition-colors"
+  :class="route.path === tab.to ? 'text-chrome-accent' : 'text-chrome-muted'"
   :aria-current="route.path === tab.to ? 'page' : undefined"
   @click="router.push(tab.to)"
   >
   <!-- A tinted icon BACKPLATE marks the active tab (DESIGN.md
   Navigation): a colour change alone is too quiet, and the
-  backplate never resizes the tab or moves the label. -->
+  backplate never resizes the tab or moves the label. The LITERAL
+  chrome-backplate (cream) — the flipping brand-tint would turn
+  near-espresso in dark mode and vanish against the bar. -->
   <span
   class="flex h-8 w-14 items-center justify-center rounded-full transition-colors"
-  :class="route.path === tab.to ? 'bg-brand-tint' : ''"
+  :class="route.path === tab.to ? 'bg-chrome-backplate' : ''"
   >
   <component
   :is="tab.icon"

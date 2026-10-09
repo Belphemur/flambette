@@ -262,12 +262,16 @@ components:
     backgroundColor: "{colors.espresso-dark}"
     textColor: "{colors.chrome-muted}"
     height: 56px
-  nav-tab-active:
+  nav-tab-active-backplate:
     backgroundColor: "{colors.chrome-backplate}"
     textColor: "{colors.chrome-backplate-text}"
-  nav-tab-active-dark:
+  nav-tab-active-backplate-dark:
     backgroundColor: "{colors.chrome-backplate}"
     textColor: "{colors.chrome-backplate-text}"
+  nav-tab-active-label:
+    textColor: "{colors.chrome-accent}"
+  nav-tab-active-label-dark:
+    textColor: "{colors.chrome-accent}"
   nav-tab-icon-hover:
     textColor: "{colors.chrome-accent}"
   nav-tab-icon-hover-dark:
@@ -841,11 +845,13 @@ through the token pairs, never `dark:` utilities. Placeholder and hint text stay
 The bottom nav sits on the **roasted-espresso bar** (ADR-0067) in BOTH themes —
 dark chrome in light mode, as every reviewed render shows. Keep five icons plus
 visible labels. An active tab has a modest rounded `chrome-backplate` icon
-backplate, `chrome-backplate-text` foreground and `aria-current`, not only a
-text-colour change; idle labels use `chrome-muted`. The chrome foreground tokens
-are LITERAL (they never flip — the bar is dark in both themes), while the bar
-itself flips `espresso` → `espresso-dark`. Tab sizing and hit area stay stable
-(ADR-0016's Pixel 7 fit).
+backplate (`chrome-backplate-text` on it — the icon is ON the cream), the active
+LABEL in `chrome-accent` — the label sits on the BAR below the backplate, where
+dark red would measure only 1.94:1 — plus `aria-current`, not only a text-colour
+change; idle labels use `chrome-muted`. The chrome foreground tokens are LITERAL
+(they never flip — the bar is dark in both themes), while the bar itself flips
+`espresso` → `espresso-dark`. Tab sizing and hit area stay stable (ADR-0016's
+Pixel 7 fit).
 
 Within `@media (hover: hover)` ONLY, hovering the whole tab lifts its icon by
 **2px** and tints it to the chrome accent (`chrome-accent`) over **150ms ease**.

@@ -444,7 +444,9 @@ input[type="radio"] {
   }
 
   /* Nav icon hover (DESIGN.md `nav-tab-icon-hover`): a 2px lift + a
-   * tint to the theme's brand foreground over 150ms ease. Same
+   * tint to the chrome accent over 150ms ease. The bar is espresso
+   * chrome in BOTH themes (ADR-0067), so the accent is the literal
+   * chrome-accent — there is no dark: branch to write. Same
    * reasoning as the cursor rule above — a hover state is a MOUSE
    * affordance, so the whole animation lives inside this media query
    * and can never be left stuck under a finger on touch. No hit area,
@@ -460,12 +462,7 @@ input[type="radio"] {
   .nav-tab:hover .nav-tab-icon,
   .nav-tab:focus-visible .nav-tab-icon {
     transform: translateY(-2px);
-    color: var(--color-brand);
-  }
-
-  .dark .nav-tab:hover .nav-tab-icon,
-  .dark .nav-tab:focus-visible .nav-tab-icon {
-    color: var(--color-brand-soft);
+    color: var(--color-chrome-accent);
   }
 }
 
