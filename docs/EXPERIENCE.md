@@ -91,7 +91,8 @@ paper and every affected pair re-measured.
 
 - Header: full-window paper band (ADR-0065), content aligned to the
   1100px container; wordmark left, room chip + version + theme right;
-  search well right on the Recipes tab (ADR-0070).
+  search well right on EVERY tab (ADR-0070 Addendum 2 — searching
+  elsewhere routes to Recipes; the `?` tips affordance rides it).
 - Bottom nav: five labelled tabs, 56px, ≥44px targets, on the roasted-
   espresso bar; active tab keeps tinted backplate + `aria-current`; hover
   lifts the icon 2px (pointer-only, reduced-motion safe).

@@ -62,3 +62,20 @@ as a CONTEXTUAL reveal:
 - The disclosure itself stays closed-by-default, device-local,
   content-level (not part of the field component) — ADR-0027's
   ephemeral/search-is-not-a-preference rule is untouched.
+
+## Addendum 2 (2026-10-09): the well is persistent — all tabs
+
+Owner ruling: **the search bar is visible on ALL screens.** This
+AMENDS Decision 1's "while the Recipes tab is active" scoping:
+
+- The header well renders on every tab at `lg:` (same mount, same
+  component, same ephemeral composable — the query does not care where
+  you type it).
+- Searching from a non-Recipes tab ROUTES to Recipes: the grid is the
+  only results surface, so the first keystroke (or submit) while
+  elsewhere switches the route and the results render under the same
+  query. Leaving Recipes keeps the query in memory (Decision 5).
+- Mobile is unchanged: no header field at small widths; the field stays
+  on the Recipes content mount (the Pixel 7 header has no room for a
+  well — ADR-0016).
+- The `?` tips affordance (Addendum 1) rides the well on every tab.
