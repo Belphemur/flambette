@@ -460,9 +460,15 @@ onUnmounted(() => observer?.disconnect())
   <template #icon><Clock :size="16" aria-hidden="true" /></template>
   </FilterDropdown>
 
+  <!-- ADR-0069: the favourites chip is always rose-tinted at rest
+  (8% favourite tint + favourite text) and brand-selected when on. -->
   <button
   class="flex h-11 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors"
-  :class="filters.favOnly ? 'border-favourite bg-brand-tint text-text' : ''"
+  :class="
+  filters.favOnly
+  ? 'border-brand-text bg-brand-tint text-brand-text'
+  : 'chip-tint border-transparent text-favourite'
+  "
   :aria-pressed="filters.favOnly"
   aria-label="Favourites only"
   data-test="favourites-filter"
@@ -560,13 +566,20 @@ onUnmounted(() => observer?.disconnect())
   aria-label="Protein filters"
   data-test="protein-filters"
   >
+  <!-- ADR-0069: chips are ALWAYS tinted. Idle = 8% hue tint + hue text
+  (the food hue IS the chip's identity at rest); selected = brand tint
+  + brand text + brand keyline. "Any" has no hue and stays neutral. -->
   <button
   v-for="p in PROTEIN_OPTIONS"
   :key="p.value || 'any'"
   type="button"
   :data-test="`protein-chip-${p.value || 'any'}`"
   class="flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-raised px-3 text-sm font-medium whitespace-nowrap transition-colors"
-  :class="filters.protein === p.value ? 'border-brand-text bg-brand-tint text-brand-text' : ''"
+  :class="
+  filters.protein === p.value
+  ? 'border-brand-text bg-brand-tint text-brand-text'
+  : [PROTEIN_ICONS[p.value].cls, 'chip-tint border-transparent']
+  "
   :aria-pressed="filters.protein === p.value"
   :aria-label="`Protein: ${p.label}`"
   @click="setProtein(p.value)"
@@ -587,13 +600,20 @@ onUnmounted(() => observer?.disconnect())
   aria-label="Diet filters"
   data-test="diet-filters"
   >
+  <!-- ADR-0069 always-tinted idle (8% hue tint + hue text; exclusions
+  keep their explicit wording beside the borrowed hue); selected is
+  brand tint + brand text, never a filled food hue. -->
   <button
   v-for="d in DIET_IDS"
   :key="d"
   type="button"
   :data-test="`diet-chip-${d}`"
   class="flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-raised px-3 text-sm font-medium whitespace-nowrap transition-colors"
-  :class="activeDiets.includes(d) ? 'border-brand-text bg-brand-tint text-brand-text' : ''"
+  :class="
+  activeDiets.includes(d)
+  ? 'border-brand-text bg-brand-tint text-brand-text'
+  : [DIET_ICONS[d].cls, 'chip-tint border-transparent']
+  "
   :aria-pressed="activeDiets.includes(d)"
   :aria-label="`${DIET_LABELS[d]}: ${DIET_DESCRIPTIONS[d]}`"
   @click="toggleDiet(d)"
@@ -612,7 +632,7 @@ onUnmounted(() => observer?.disconnect())
   </div>
   </div>
 
-  <p class="text-xs text-text-muted">
+  <p class="font-mono-data text-xs tabular-nums text-text-muted">
   {{ results.list.length }} recipe{{ results.list.length === 1 ? '' : 's' }}
   <button
   v-if="filtersActive"

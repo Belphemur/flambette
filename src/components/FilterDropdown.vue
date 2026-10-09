@@ -158,9 +158,11 @@ watch(menu.open, (v) => emit('open', v))
       <span class="truncate">{{ selected?.label ?? label }}</span>
       <ChevronDown :size="16" class="shrink-0 opacity-60" aria-hidden="true" />
     </button>
+    <!-- ADR-0068 level 2: popovers are popover-white + the ONE warm
+    shadow. -->
     <ul
     v-if="menu.open.value"
-    class="absolute right-0 z-30 overflow-y-auto overflow-x-clip rounded-xl bg-surface-raised py-1 shadow-lg ring-1"
+    class="absolute right-0 z-30 overflow-y-auto overflow-x-clip rounded-xl bg-popover py-1 shadow-popover ring-1 ring-border"
     :class="[menuWidth, menuUp ? 'bottom-full mb-1' : 'mt-1']"
     :style="menuMaxH !== null ? { maxHeight: `${menuMaxH}px` } : undefined"
     role="listbox"

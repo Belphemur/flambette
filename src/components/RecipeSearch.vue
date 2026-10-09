@@ -236,7 +236,7 @@ onUnmounted(() => {
   type="search"
   enterkeyhint="search"
   placeholder="Search recipes or ingredients…"
-  class="h-11 w-full rounded-xl border px-4 pr-10 text-sm outline-none focus:border-brand-text"
+  class="field w-full px-4 pr-10"
   aria-label="Search recipes or ingredients"
   :aria-expanded="suggestions.length > 0"
   :aria-controls="'search-suggest'"
@@ -254,12 +254,13 @@ onUnmounted(() => {
   >
   <X :size="16" aria-hidden="true" />
   </button>
+  <!-- ADR-0068 level 2: popover-white + the ONE warm shadow. -->
   <div
   v-if="suggestions.length > 0"
   id="search-suggest"
   data-test="search-suggest"
   role="listbox"
-  class="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl border bg-surface-raised shadow-lg"
+  class="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl border bg-popover shadow-popover"
   >
   <div
   v-for="(s, i) in suggestions"

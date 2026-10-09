@@ -389,6 +389,93 @@ input[type="radio"] {
 }
 
 /* ------------------------------------------------------------------ *
+ * THE one field class (ADR-0065): every free-text input and textarea
+ * is a sunken well — `surface-sunken` fill, 1px `border-strong`
+ * control keyline, 12px radius, 44px touch height. Focus deepens the
+ * keyline to the action-text colour (`brand-text`, which the theme
+ * flip carries to `brand-soft` in dark) beneath the global 2px
+ * focus-visible ring. Placeholder/hint text stays muted. Width and
+ * padding stay UTILITY-owned at the call site (a narrow number field
+ * and a full-width search share the class), so the class carries only
+ * the well itself. New inputs pick this up; per-view one-off field
+ * styling is retired.
+ * ------------------------------------------------------------------ */
+.field {
+  @apply h-11 rounded-xl border bg-surface-sunken text-sm text-text outline-none transition-colors;
+  border-color: var(--color-border-strong);
+}
+.field::placeholder {
+  @apply text-text-muted;
+}
+.field:focus {
+  border-color: var(--color-brand-text);
+}
+textarea.field {
+  @apply min-h-20 py-2.5;
+}
+
+/* Modal scrim (ADR-0068 level 3): the espresso scrim + 6px blur — the
+   explicit, scoped exception to the no-global-blur rule. Modals and
+   sheets ONLY; plain page backgrounds never blur. Derived from the
+   espresso token (45% over the page) so there is one espresso source of
+   truth; static, never animated, so reduced-motion has nothing to
+   disarm. The dark theme's espresso-dark pair deepens the scrim
+   automatically through the flip. */
+.modal-scrim {
+  background-color: color-mix(in srgb, var(--color-espresso) 45%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Chip idle tint (ADR-0069): an ALWAYS-TINTED chip fills with 8% of its
+   semantic hue. One class does every hue: the chip's TEXT carries the hue
+   (text-hue-meat, …), so 8% of `currentColor` IS the hue tint — and the
+   theme flip re-points currentColor at the soft variant in dark mode for
+   free. Unlayered, so it overrides the chip's neutral `bg-surface-raised`
+   utility when both are present. Selected chips swap to `brand-tint` and
+   drop this class — selection is always brand (ADR-0036). */
+.chip-tint {
+  background-color: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+/* Checklist boxes (ADR-0068): 20px squares, 6px radius, `border-strong`
+   warm keyline. The NATIVE control stays (semantics, hit target and the
+   platform tick) — the global `accent-color: var(--color-brand)` rule
+   above paints the checked fill tomato and follows the theme flip, so
+   the box only needs its geometry and keyline here. Prep lists add the
+   `.prep` variant, which re-points the accent to the herb green. */
+input[type='checkbox'].check-box {
+  @apply size-5 shrink-0 rounded-sm border transition-colors;
+  border-color: var(--color-border-strong);
+  border-radius: var(--radius-sm, 6px);
+}
+input[type='checkbox'].check-box.prep {
+  accent-color: var(--color-success);
+}
+input[type='checkbox'].check-box:disabled {
+  opacity: 0.5;
+}
+
+/* Button states (EXPERIENCE.md §6): primary hover deepens to
+   `primary-strong` (never an opacity fade) and the press scales to
+   0.98 — colour-only under prefers-reduced-motion. Secondary and
+   destructive keep their outlines; the shadow vocabulary never
+   reaches a button. */
+.btn-primary {
+  @apply rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand transition-[background-color,transform] active:scale-[0.98] active:bg-brand-strong;
+}
+.btn-secondary {
+  @apply rounded-xl border border-border-strong bg-surface-raised px-4 text-sm font-semibold text-brand-text transition-[background-color,transform] active:scale-[0.98];
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary,
+  .btn-secondary {
+    transform: none !important;
+    transition-property: background-color;
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * Clickable affordance: a pointer cursor on everything you can click.
  *
  * Scoped to `@media (hover: hover)` on purpose. A pointer is a MOUSE

@@ -763,10 +763,10 @@ async function importMealimeFavourites(): Promise<void> {
   data-test="household-room-input"
   @input="onRoomInput"
   @blur="onRoomBlur"
-  class="h-11 min-w-0 flex-1 rounded-xl border bg-surface-raised px-3 text-sm outline-none focus:border-brand-text"
+  class="field min-w-0 flex-1 px-3"
   />
   <button
-  class="h-11 rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand active:bg-brand-strong disabled:opacity-50"
+  class="h-11 rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong disabled:opacity-50"
   data-test="household-room-join"
   aria-label="Save this household room code and join it now"
   :disabled="!canJoinRoom"
@@ -787,7 +787,7 @@ async function importMealimeFavourites(): Promise<void> {
   Share room link
   </button>
   <button
-  class="h-11 rounded-lg bg-brand px-3 text-xs font-semibold text-on-brand active:bg-brand-strong"
+  class="h-11 rounded-lg bg-brand px-3 text-xs font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
   data-test="household-room-new"
   aria-label="Generate a new three-word room code and join it"
   @click="newRoomCodeAndJoin"
@@ -816,7 +816,7 @@ async function importMealimeFavourites(): Promise<void> {
   </p>
   <div class="flex gap-2">
   <button
-  class="flex h-11 flex-1 items-center justify-center rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand active:bg-brand-strong"
+  class="flex h-11 flex-1 items-center justify-center rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
   data-test="export-settings"
   aria-label="Download backup file"
   @click="downloadBackup"
@@ -888,14 +888,14 @@ async function importMealimeFavourites(): Promise<void> {
   </ol>
   <textarea
   v-model="mealimeInput"
-  class="h-24 w-full rounded-xl border bg-surface-raised px-3 py-2 text-xs outline-none focus:border-brand-text"
+  class="field w-full px-3 py-2 text-xs"
   placeholder='Paste here — the text the bookmark copied (starts with {"source":…}).'
   aria-label="Paste your copied Mealime favourites here"
   data-test="mealime-import-input"
   @input="clearMealimeReport"
   ></textarea>
   <button
-  class="h-11 w-full rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand active:bg-brand-strong"
+  class="h-11 w-full rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
   data-test="mealime-import-button"
   aria-label="Import the pasted Mealime favourites"
   @click="importMealimeFavourites"
@@ -924,11 +924,13 @@ async function importMealimeFavourites(): Promise<void> {
   <!-- Import-backup confirm dialog -->
   <div
   v-if="backupConfirmOpen"
-  class="fixed inset-0 z-50 flex items-center justify-center bg-surface-dark/50 p-4"
+  class="fixed inset-0 z-50 flex items-center justify-center modal-scrim p-4"
   @click.self="cancelBackupImport"
   >
+  <!-- ADR-0068: a settings section is a level-1 card — paper fill,
+       1px keyline, 12px radius, NO shadow. -->
   <div
-  class="w-full max-w-md space-y-3 rounded-2xl bg-surface-raised p-4 shadow-xl"
+  class="w-full max-w-md space-y-3 rounded-xl bg-surface-raised p-4"
   role="dialog"
   aria-label="Confirm backup restore"
   >
@@ -949,7 +951,7 @@ async function importMealimeFavourites(): Promise<void> {
   Cancel
   </button>
   <button
-  class="h-11 flex-1 rounded-xl bg-brand text-sm font-semibold text-on-brand active:bg-brand-strong"
+  class="h-11 flex-1 rounded-xl bg-brand text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
   data-test="import-settings-confirm"
   aria-label="Restore backup"
   @click="confirmBackupImport"

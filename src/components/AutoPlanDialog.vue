@@ -310,7 +310,7 @@ function setCategory(value: string) {
   <Teleport to="body">
   <div
   v-if="autoPlanOpen"
-  class="fixed inset-0 z-40 flex items-end justify-center bg-surface-dark/50"
+  class="fixed inset-0 z-40 flex items-end justify-center modal-scrim"
   @click.self="closeAutoPlan"
   >
   <!-- The panel is BOTTOM-anchored (`items-end` on the scrim), so when
@@ -320,7 +320,7 @@ function setCategory(value: string) {
   panel clamps and scrolls its own content, keeping BOTH ends reachable
   on a short window. -->
   <div
-  class="max-h-[85vh] w-full max-w-app space-y-4 overflow-y-auto rounded-t-2xl bg-surface-raised p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl"
+  class="max-h-[85vh] w-full max-w-app space-y-4 overflow-y-auto rounded-t-2xl bg-surface-raised p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
   role="dialog"
   aria-label="Generate an auto-plan"
   data-test="auto-plan-dialog"

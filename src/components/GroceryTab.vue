@@ -215,7 +215,7 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
 
   <template v-else>
   <button
-  class="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand text-base font-bold text-on-brand shadow-sm active:bg-brand-strong"
+  class="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand text-base font-bold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
   data-test="start-shopping"
   @click="router.push('/shop')"
   >
@@ -263,7 +263,7 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   <div v-if="plan.customItems.length > 0" class="space-y-1.5" data-test="extra-section">
   <h3 class="flex items-center gap-2 px-1 pt-2 text-xs font-bold tracking-wider text-text-muted uppercase">
   Extra items
-  <span class="rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold text-text-muted">
+  <span class="rounded-full bg-surface-sunken px-2 py-0.5 font-mono-data text-[10px] font-semibold tabular-nums text-text-muted">
   {{ plan.customItems.length }}
   </span>
   </h3>
@@ -290,7 +290,7 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   </span>
   <span class="flex items-center gap-2">
   <span
-  class="rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold text-text-muted"
+  class="rounded-full bg-surface-sunken px-2 py-0.5 font-mono-data text-[10px] font-semibold tabular-nums text-text-muted"
   data-test="section-count-pill"
   >{{ extraDoneCount(group) }}/{{ group.items.length }}</span>
   <ChevronRight v-if="isCollapsed(extraKey(group.name))" :size="16" aria-hidden="true" />
@@ -312,7 +312,7 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   <label class="flex min-w-0 flex-1 hovercap:cursor-pointer items-center gap-3">
   <input
   type="checkbox"
-  class="size-5 shrink-0 accent-brand"
+  class="check-box"
   :checked="!!checked.map[extraCheckedKey(item.name)]"
   @change="checked.toggleChecked(extraCheckedKey(item.name))"
   />
@@ -358,7 +358,7 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   </span>
   <span class="flex items-center gap-2">
   <span
-  class="rounded-full bg-surface-sunken px-2 py-px text-[10px] font-semibold text-text-muted"
+  class="rounded-full bg-surface-sunken px-2 py-px font-mono-data text-[10px] font-semibold tabular-nums text-text-muted"
   data-test="section-count-pill"
   >{{ sectionDoneCount(section) }}/{{ sectionTotalCount(section) }}</span>
   <ChevronRight v-if="isCollapsed(sectionKey(section.name))" :size="16" aria-hidden="true" />
@@ -381,7 +381,7 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   <label class="flex min-w-0 flex-1 hovercap:cursor-pointer items-center gap-3">
   <input
   type="checkbox"
-  class="size-5 shrink-0 accent-brand"
+  class="check-box"
   :checked="!!checked.map[line.key]"
   @change="checked.toggleChecked(line.key)"
   />
@@ -413,7 +413,7 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   class="cursor-help whitespace-nowrap rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand-text outline-none focus-visible:ring-2 focus-visible:ring-brand"
   >{{ item.recipes.length }} recipes</span>
   <span
-  class="pointer-events-none absolute bottom-full right-0 z-20 mb-1.5 hidden w-56 rounded-lg bg-surface-dark px-2.5 py-1.5 text-[11px] leading-snug text-on-brand shadow-lg group-hover/pill:block group-focus-within/pill:block"
+  class="pointer-events-none absolute bottom-full right-0 z-20 mb-1.5 hidden w-56 rounded-lg bg-surface-dark px-2.5 py-1.5 text-[11px] leading-snug text-on-brand shadow-popover group-hover/pill:block group-focus-within/pill:block"
   >
   <span class="block font-semibold">Used by {{ item.recipes.length }} planned meal{{ item.recipes.length === 1 ? '' : 's' }}:</span>
   {{ item.recipes.join(', ') }}

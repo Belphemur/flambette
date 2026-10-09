@@ -287,7 +287,7 @@ const ariaLabel = 'Add a custom grocery item'
   aria-autocomplete="list"
   :aria-controls="suggestionsVisible ? listboxId : undefined"
   :aria-activedescendant="suggestionsVisible && activeIndex >= 0 ? optionId(activeIndex) : undefined"
-  class="h-11 w-full rounded-xl border px-4 text-sm outline-none focus:border-brand-text"
+  class="field w-full px-4"
   data-test="add-bar-input"
   @input="onInput"
   @keydown="onKeydown"
@@ -330,7 +330,7 @@ const ariaLabel = 'Add a custom grocery item'
   :id="listboxId"
   role="listbox"
   aria-label="Ingredient suggestions"
-  class="absolute z-30 left-0 right-0 mt-1 overflow-hidden rounded-xl bg-surface-raised shadow-lg ring-1 ring-border"
+  class="absolute z-30 left-0 right-0 mt-1 overflow-hidden rounded-xl bg-popover shadow-popover ring-1 ring-border"
   data-test="ingredient-suggestions"
   >
   <li

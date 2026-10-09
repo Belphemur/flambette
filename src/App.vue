@@ -606,7 +606,7 @@ onBeforeUnmount(() => {
   <div
   v-if="ui.toast"
   role="status"
-  class="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-surface-dark px-4 py-2 text-sm font-medium text-on-brand shadow-lg"
+  class="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-surface-dark px-4 py-2 text-sm font-medium text-on-brand shadow-popover"
   :data-test="ui.toast.kind ? `${ui.toast.kind}-toast` : 'toast'"
   >
   <span>{{ ui.toast.message }}</span>

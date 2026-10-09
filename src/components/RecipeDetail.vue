@@ -564,7 +564,7 @@ function startCooking() {
   </div>
   </div>
   <button
-  class="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 text-base font-semibold text-on-brand shadow-sm active:bg-brand-strong dark:ring-1 dark:ring-brand-soft"
+  class="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 text-base font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong dark:ring-1 dark:ring-brand-soft"
   data-test="start-cooking"
   @click="startCooking"
   >

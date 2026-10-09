@@ -60,8 +60,11 @@ const showNew = computed(() => {
   <!-- No `group/htt` here (ADR-0044): the icon tooltip is anchored by a
   hit-test on the icon's own rect, not by an ancestor group — hovering
   the card must NOT open it. -->
+  <!-- ADR-0068 level 1: an index card on the counter — paper fill, 1px
+  keyline, NO shadow. Hover strengthens the keyline (desktop only); the
+  card never lifts. -->
   <article
-  class="group relative overflow-hidden rounded-xl bg-surface-raised ring-1 ring-border transition-shadow hover:shadow-md"
+  class="group relative overflow-hidden rounded-xl bg-surface-raised ring-1 ring-border transition-shadow hovercap:hover:ring-border-strong"
   data-test="recipe-card"
   :data-variant-id="meta.id"
   >
@@ -132,10 +135,12 @@ const showNew = computed(() => {
   <span v-if="mealTypeRole" class="flex items-center">
   <HueIcon :role="mealTypeRole" :size="16" :label="ICON_ROLES[mealTypeRole].label" />
   </span>
-  <span class="flex items-center gap-1 whitespace-nowrap" data-test="card-energy">
+  <!-- The DATA voice (ADR-0066): quantities and times render in
+  JetBrains Mono with tabular numerals — never prose. -->
+  <span class="flex items-center gap-1 whitespace-nowrap font-mono-data tabular-nums" data-test="card-energy">
   <HueIcon role="energy" :size="16" />{{ Math.round(meta.calories) }} kcal
   </span>
-  <span class="flex items-center gap-1 whitespace-nowrap" data-test="card-time">
+  <span class="flex items-center gap-1 whitespace-nowrap font-mono-data tabular-nums" data-test="card-time">
   <Clock :size="16" aria-hidden="true" />{{ meta.cooking_minutes }} min
   </span>
   </p>

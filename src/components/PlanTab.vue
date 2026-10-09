@@ -132,7 +132,7 @@ function canMore(meal: PlannedMeal): boolean {
   <!-- Auto-Plan is the prominent route to building a plan, so it carries
        the ONE filled tomato on this surface; Share is secondary. -->
   <button
-  class="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-on-brand shadow-sm active:bg-brand-strong"
+  class="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
   data-test="auto-plan-button"
   @click="autoPlanDialog?.open()"
   >
@@ -228,7 +228,7 @@ function canMore(meal: PlannedMeal): boolean {
   </ul>
 
   <button
-  class="w-full rounded-xl bg-brand py-3 text-sm font-semibold text-on-brand shadow-sm active:bg-brand-strong"
+  class="w-full rounded-xl bg-brand py-3 text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
   data-test="auto-plan-button"
   @click="autoPlanDialog?.open()"
   >
@@ -267,11 +267,11 @@ function canMore(meal: PlannedMeal): boolean {
   <Teleport to="body">
   <div
   v-if="shareSheetOpen"
-  class="fixed inset-0 z-40 flex items-end justify-center bg-surface-dark/50"
+  class="fixed inset-0 z-40 flex items-end justify-center modal-scrim"
   @click.self="closeShareSheet"
   >
   <div
-  class="w-full max-w-app space-y-3 rounded-t-2xl bg-surface-raised p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl"
+  class="w-full max-w-app space-y-3 rounded-t-2xl bg-surface-raised p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
   role="dialog"
   aria-label="Share your meal plan"
   >
@@ -326,7 +326,7 @@ function canMore(meal: PlannedMeal): boolean {
   </label>
   <template v-if="room.inRoom">
   <input
-  class="h-11 w-full rounded-lg border border-border bg-surface px-3 text-xs text-text-muted outline-none focus:border-brand-text"
+  class="field w-full px-3 text-xs"
   type="text"
   readonly
   :value="roomLink ?? ''"

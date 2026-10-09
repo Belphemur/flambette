@@ -869,7 +869,7 @@ function onTouchEnd(e: TouchEvent) {
   type="text"
   :maxlength="MAX_TIMER_LABEL"
   placeholder="Name (e.g. Rice)"
-  class="h-11 min-w-0 flex-1 rounded-xl border px-2 text-sm"
+  class="field min-w-0 flex-1 px-2"
   data-test="timer-name"
   />
   <label class="sr-only" for="timer-minutes-input">Timer minutes</label>
@@ -881,7 +881,7 @@ function onTouchEnd(e: TouchEvent) {
   min="1"
   :max="MAX_TIMER_SECONDS / 60"
   placeholder="Min"
-  class="h-11 w-16 shrink-0 rounded-xl border px-2 text-sm"
+  class="field w-16 shrink-0 px-2 font-mono-data tabular-nums"
   data-test="timer-minutes"
   />
   <!-- The one-tap presets, and the explicit confirm every custom
@@ -985,12 +985,12 @@ function onTouchEnd(e: TouchEvent) {
   <Teleport to="body">
   <div
   v-if="manageOpen"
-  class="fixed inset-0 z-40 flex items-end justify-center bg-surface-dark/50"
+  class="fixed inset-0 z-40 flex items-end justify-center modal-scrim"
   data-test="timer-manage-scrim"
   @click.self="manageOpen = false"
   >
   <div
-  class="w-full max-w-app space-y-3 rounded-t-2xl bg-surface-raised p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl"
+  class="w-full max-w-app space-y-3 rounded-t-2xl bg-surface-raised p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
   role="dialog"
   aria-label="Manage timers"
   data-test="timer-manage-sheet"
@@ -1057,7 +1057,7 @@ function onTouchEnd(e: TouchEvent) {
   </button>
   <button
   v-if="!isLast"
-  class="h-14 flex-[2] rounded-xl bg-brand text-base font-semibold text-on-brand shadow-sm active:bg-brand-strong"
+  class="h-14 flex-[2] rounded-xl bg-brand text-base font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
   @click="next"
   >
   Next
@@ -1065,7 +1065,7 @@ function onTouchEnd(e: TouchEvent) {
   </button>
   <button
   v-else
-  class="h-14 flex-[2] rounded-xl bg-brand text-base font-semibold text-on-brand shadow-sm active:bg-brand-strong"
+  class="h-14 flex-[2] rounded-xl bg-brand text-base font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
   data-test="finish"
   aria-label="Finish cooking and mark as cooked"
   @click="finishCooked"
