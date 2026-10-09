@@ -96,18 +96,35 @@ export function useGroceryList() {
    * catalog: a sidebar that re-counted would drift from the list the
    * moment a merge rule changed (ADR-0071 Consequences).
    *
+   * The count is the meal's SURVIVING line count: an ingredient the
+   * household has cleared is dropped by `aggregateGroceries`, so the card
+   * must not keep advertising it (a card that says "6 grocery lines" over
+   * a list showing two is a lie the reader can check).
+   *
    * Empty until every planned meal's doc has loaded, exactly like `items`:
    * the card shows a skeleton rather than a partial count.
    */
   const mealSummaries = computed<MealLineSummary[]>(() => {
     if (aggregateInputs.value.length !== plannedMetas.value.length) return []
-    return aggregateInputs.value.map((input) => ({
-      id: input.doc.id,
-      name: input.recipeName,
-      image: input.doc.thumbnail_image_url ?? null,
-      servings: entryServings(input.doc.id),
-      lines: input.displayLines ? input.displayLines.length : input.doc.line_items.length,
-    }))
+    return aggregateInputs.value.map((input) => {
+      // The SAME rows `aggregateGroceries` walks, normalised the SAME way
+      // (its overlay path is `keyName`; the base path derives it from the
+      // ingredient name), matched with the SAME cleared set — so the count
+      // cannot disagree with the list by construction.
+      const rows: readonly { keyName: string }[] =
+        input.displayLines ??
+        input.doc.line_items.map((li) => ({ keyName: nameKey(li.ingredient_name) }))
+      const lines = input.cleared
+        ? rows.filter((row) => !input.cleared!.has(row.keyName)).length
+        : rows.length
+      return {
+        id: input.doc.id,
+        name: input.recipeName,
+        image: input.doc.thumbnail_image_url,
+        servings: entryServings(input.doc.id),
+        lines,
+      }
+    })
   })
 
   /** Servings the plan covers — the editorial header's second real count. */

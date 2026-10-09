@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChefHat, RefreshCw } from 'lucide-vue-next'
+import { CalendarSearch, ChefHat, RefreshCw } from 'lucide-vue-next'
 import { catalog } from '../lib/catalog'
 import {
   filterHistoryEvents,
@@ -112,6 +112,9 @@ const windowedEvents = computed(() =>
 /** Factual totals for the chosen window — counts, never ranks: no
  *  streaks, no badges, nothing the roster rule calls gamification. */
 const summary = computed(() => summarizeHistory(windowedEvents.value))
+
+/** Does this household have ANY cook at all, window or not? */
+const hasAnyCook = computed(() => plan.cookedHistory.length > 0)
 </script>
 
 <template>
@@ -150,14 +153,56 @@ const summary = computed(() => summarizeHistory(windowedEvents.value))
   <p class="mt-2 font-medium">Nothing cooked yet</p>
   <p class="mx-auto mt-1 max-w-xs text-body-sm">Mark meals as cooked when you finish them.</p>
   <button
-  class="mt-4 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98]"
+  class="mt-4 min-h-11 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98]"
   @click="router.push('/')"
   >
   Browse recipes
   </button>
   </div>
 
-  <template v-else>
+  <!-- The PERIOD PILLS sit OUTSIDE both branches on purpose: an empty
+       30/90-day window must never remove the only control that gets the
+       reader back to "All time", and a household whose whole log is older
+       than the window is not the same fact as a household with no log. -->
+  <div
+    v-if="hasAnyCook"
+    class="flex flex-wrap items-center gap-2"
+    role="group"
+    aria-label="History period"
+    data-test="history-period"
+  >
+    <button
+      v-for="p in PERIODS"
+      :key="p.id"
+      class="min-h-11 rounded-full border px-3 py-1 text-xs font-semibold transition-colors"
+      :class="
+        period.id === p.id
+          ? 'border-brand bg-brand-tint text-brand-text'
+          : 'border-border bg-surface-sunken text-text-muted'
+      "
+      :aria-pressed="period.id === p.id"
+      :aria-label="`Show the ${p.label.toLowerCase()} history`"
+      :data-test="`history-period-${p.id}`"
+      @click="period = p"
+    >
+      {{ p.label }}
+    </button>
+  </div>
+
+  <!-- An empty WINDOW is not an empty log: say so, and keep the pills. -->
+  <div
+    v-if="hasAnyCook && groups.length === 0"
+    class="rounded-xl bg-surface-raised py-16 text-center text-text-muted ring-1 ring-border"
+    data-test="history-empty-window"
+  >
+    <CalendarSearch :size="40" class="mx-auto" aria-hidden="true" />
+    <p class="mt-2 font-medium">Nothing cooked in this window</p>
+    <p class="mx-auto mt-1 max-w-xs text-body-sm">
+      Your earlier cooks are still here — widen the period above to see them.
+    </p>
+  </div>
+
+  <template v-else-if="groups.length > 0">
   <!-- The window's DATA numbers (counts, never ranks — no streaks, no
        badges): total cooks, distinct dishes, most recent. Same tonal
        strip language as the Plan tab's totals, numbers in the mono
@@ -182,27 +227,6 @@ const summary = computed(() => summarizeHistory(windowedEvents.value))
   </div>
   </div>
 
-  <!-- Period pills (ADR-0069): 9999px, tinted selection. Selection is
-       always brand; idle keeps the tonal surface. A read window, not a
-       preference — ephemeral view state, like the search query. -->
-  <div class="flex flex-wrap items-center gap-2" role="group" aria-label="History period" data-test="history-period">
-  <button
-  v-for="p in PERIODS"
-  :key="p.id"
-  class="rounded-full border px-3 py-1 text-xs font-semibold transition-colors"
-  :class="
-  period.id === p.id
-    ? 'border-primary-tint bg-primary-tint text-primary-strong'
-    : 'border-border bg-surface-sunken text-text-muted'
-  "
-  :aria-pressed="period.id === p.id"
-  :aria-label="`Show the ${p.label.toLowerCase()} history`"
-  :data-test="`history-period-${p.id}`"
-  @click="period = p"
-  >
-  {{ p.label }}
-  </button>
-  </div>
   </template>
 
   <div v-if="groups.length > 0" class="space-y-5">
@@ -265,7 +289,7 @@ const summary = computed(() => summarizeHistory(windowedEvents.value))
   <!-- ADR-0055: the absolute date — a descendant of the group host,
   below-right of it. -->
   <span
-  class="mr-1.5 rounded-full bg-primary-tint px-2 py-px text-[10px] font-bold text-primary-strong"
+  class="mr-1.5 rounded-full bg-brand-tint px-2 py-px text-[10px] font-bold text-brand-text"
   :data-test="`history-count-${row.variantId}`"
   >
   {{ row.count === 1 ? 'cooked once' : `cooked ${row.count} times` }}
@@ -275,7 +299,7 @@ const summary = computed(() => summarizeHistory(windowedEvents.value))
   </p>
   </div>
   <button
-  class="shrink-0 rounded-lg border border-border-strong bg-surface-raised px-3 py-2 text-xs font-semibold text-brand-text hover:bg-surface-sunken"
+  class="min-h-11 shrink-0 rounded-lg border border-border-strong bg-surface-raised px-3 py-2 text-xs font-semibold text-brand-text hover:bg-surface-sunken"
   :aria-label="`Add ${row.meta.name} to plan`"
   :data-test="`history-add-${row.variantId}`"
   @click="addToPlan(row)"

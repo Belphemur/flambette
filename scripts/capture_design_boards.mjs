@@ -23,9 +23,8 @@
  */
 import { spawn } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { chromium } from 'playwright'
+import { chromium } from '@playwright/test'
 
-const OUT_DIR = 'docs/design/boards'
 const BASE = 'http://localhost:4197'
 const VIEWPORTS = [
   { tag: 'desktop', width: 1280, height: 800 },
@@ -125,11 +124,27 @@ async function captureAll(page, tag, shots) {
 const SURFACES = ['recipes', 'plan', 'grocery', 'shop', 'cooking', 'history', 'settings']
 
 // ---- start the preview server (the built bundle) ----
+/** `--out <dir>` is documented in the header: honour it instead of silently
+ *  overwriting the checked-in boards. */
+const OUT_DIR = process.argv.find((a) => a.startsWith('--out='))?.slice(6) ?? 'docs/design/boards'
+mkdirSync(OUT_DIR, { recursive: true })
 const preview = spawn('bun', ['run', 'preview', '--port', '4197', '--strictPort'], {
   stdio: 'inherit',
 })
+let previewKilled = false
+function killPreview() {
+  if (previewKilled) return
+  previewKilled = true
+  preview.kill('SIGTERM')
+}
 await new Promise((resolve, reject) => {
-  const t = setTimeout(() => reject(new Error('preview server did not start')), 30_000)
+  const t = setTimeout(() => {
+    clearInterval(probe)
+    // The server is spawned, so a failed probe MUST still reap it — a leaked
+    // `vite preview` holds `--strictPort` hostage for the next run.
+    killPreview()
+    reject(new Error('preview server did not start'))
+  }, 30_000)
   const probe = setInterval(async () => {
     try {
       await fetch(BASE)
@@ -158,5 +173,5 @@ try {
   writeFileSync(`${OUT_DIR}/MANIFEST.generated.txt`, manifest.join('\n') + '\n')
   console.log(manifest.join('\n'))
 } finally {
-  preview.kill('SIGTERM')
+  killPreview()
 }

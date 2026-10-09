@@ -451,16 +451,23 @@ onUnmounted(() => observer?.disconnect())
   affordance (RecipeSearchField) opens the SAME disclosure, so this
   in-content toggle is the mobile/panel-mount face of one state. -->
   <div v-if="!isDesktop" class="flex w-full justify-end">
+  <!-- A 44px hit target (DESIGN.md Controls), and the rotation belongs to
+       the CHEVRON: rotating the whole button turned the "Search tips"
+       label upside down. -->
   <button
   data-test="search-tips-toggle"
   :aria-expanded="showTips"
   aria-controls="search-tips-panel"
-  class="flex items-center gap-1 py-2 text-xs text-text-muted transition-transform"
-  :class="showTips ? 'rotate-180' : ''"
+  class="flex min-h-11 items-center gap-1 px-2 py-2 text-xs text-text-muted"
   @click="toggleTips"
   >
   Search tips
-  <ChevronDown :size="14" aria-hidden="true" class="transition-transform" />
+  <ChevronDown
+  :size="14"
+  aria-hidden="true"
+  class="transition-transform"
+  :class="showTips ? 'rotate-180' : ''"
+  />
   </button>
   </div>
 

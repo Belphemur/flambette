@@ -359,7 +359,7 @@ function setCategory(value: string) {
   ]"
   :key="m.value"
   class="px-3 py-2 text-xs font-semibold first:rounded-l-lg last:rounded-r-lg"
-  :class="ui.autoPlanMode === m.value ? 'bg-primary-tint text-primary-strong' : 'text-text-muted'"
+  :class="ui.autoPlanMode === m.value ? 'bg-brand-tint text-brand-text' : 'text-text-muted'"
   role="radio"
   :aria-checked="ui.autoPlanMode === m.value"
   :data-test="`auto-plan-mode-${m.value}`"

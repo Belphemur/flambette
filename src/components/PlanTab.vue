@@ -50,6 +50,22 @@ function closeShareSheet() {
   shareSheetOpen.value = false
 }
 
+/**
+ * Leaving the shared room from the share sheet is the same destructive act
+ * the Settings card confirms: an inline toast question, and the Leave action
+ * runs the store's own `leave()` (which detaches the socket without touching
+ * the saved default-join code, so the household rejoins on next launch).
+ */
+function confirmLeaveRoom() {
+  ui.showToast(`Leave room ${room.code ?? ''}? Your plan stops syncing with the household.`, {
+    duration: 10_000,
+    actions: [
+      { label: 'Leave', run: () => room.leave() },
+      { label: 'Cancel', run: () => ui.dismissToast() },
+    ],
+  })
+}
+
 function copyRoomLink() {
   const link = room.roomLink()
   if (!link) return
@@ -346,10 +362,13 @@ function canMore(meal: PlannedMeal): boolean {
   >
   {{ copied ? 'Copied' : 'Copy room link' }}
   </button>
+  <!-- Leaving is a full opt-out here too: the same confirm-first
+  workflow Settings uses, so an accidental tap cannot drop a household
+off the shared plan. -->
   <button
   class="h-11 rounded-xl border border-border-strong px-4 text-sm font-medium text-text active:bg-surface-sunken"
   data-test="leave-room"
-  @click="room.leave()"
+  @click="confirmLeaveRoom"
   >
   Leave room
   </button>

@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { onUnmounted, ref, useTemplateRef, watch } from 'vue'
+import {
+  onActivated,
+  onDeactivated,
+  onMounted,
+  onUnmounted,
+  ref,
+  useTemplateRef,
+  watch,
+} from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CircleHelp, X } from 'lucide-vue-next'
 import { suggest } from '../lib/search'
@@ -164,8 +172,15 @@ watch(query, (q) => {
  * disclosure is content, so it only exists where its content does.
  */
 function onTipsClick(): void {
+  // The panel lives with the Recipes content, so pressing `?` elsewhere has
+  // to route there — and it must OPEN the disclosure, never toggle it shut
+  // for a reader who left the tab with tips already open.
+  if (route.name !== 'recipes') {
+    showTips.value = true
+    void router.push({ name: 'recipes' })
+    return
+  }
   toggleTips()
-  if (route.name !== 'recipes') void router.push({ name: 'recipes' })
 }
 
 function selectSuggestion(s: string) {
@@ -200,9 +215,17 @@ function onGlobalKey(e: KeyboardEvent) {
   input.value?.focus()
 }
 
-/** The listener is added here (not module scope) so only a MOUNTED field
- *  answers `/` — the panel mount on phones, the header well on desktop. */
-window.addEventListener('keydown', onGlobalKey)
+/**
+ * `RecipesTab` is inside a `<KeepAlive>`, so leaving the tab DEACTIVATES
+ * this component instead of unmounting it: a listener added at setup and
+ * removed only at unmount would keep answering `/` on every other tab,
+ * swallowing the keystroke and focusing an input that is not on screen. The
+ * lifecycle pair is therefore activation-scoped, with unmount cleanup on top
+ * (ADR-0070 §4's "exactly one input answers it" survives a cached parent).
+ */
+onMounted(() => window.addEventListener('keydown', onGlobalKey))
+onActivated(() => window.addEventListener('keydown', onGlobalKey))
+onDeactivated(() => window.removeEventListener('keydown', onGlobalKey))
 onUnmounted(() => {
   window.removeEventListener('keydown', onGlobalKey)
   // A KeepAlive'd parent does not unmount on tab switches, so these only
@@ -225,7 +248,7 @@ onUnmounted(() => {
   type="search"
   enterkeyhint="search"
   placeholder="Search recipes or ingredients…"
-  class="field w-full px-4 pr-10"
+  class="field w-full px-4 pr-20"
   aria-label="Search recipes or ingredients"
   :aria-expanded="suggestions.length > 0"
   :aria-controls="'search-suggest'"
@@ -236,8 +259,8 @@ onUnmounted(() => {
   the header variant — the pointer-free affordance matters where the
   keyboard exists; on touch the field is simply there. -->
   <kbd
-  v-if="variant === 'header'"
-  class="pointer-events-none absolute inset-y-0 right-2.5 flex items-center font-mono-data text-xs text-text-muted"
+  v-if="variant === 'header' && !query"
+  class="pointer-events-none absolute inset-y-0 right-3 flex items-center font-mono-data text-xs text-text-muted"
   aria-hidden="true"
   >/</kbd>
   <button
@@ -261,7 +284,7 @@ onUnmounted(() => {
   :aria-expanded="showTips"
   aria-controls="search-tips-panel"
   aria-label="Search tips"
-  class="absolute inset-y-0 right-8 flex w-8 items-center justify-center text-text-muted hover:text-text"
+  class="absolute inset-y-0 right-9 flex w-11 items-center justify-center text-text-muted hover:text-text"
   @click.stop="onTipsClick"
   >
   <CircleHelp :size="16" aria-hidden="true" />

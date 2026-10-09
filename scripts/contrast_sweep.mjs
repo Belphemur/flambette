@@ -22,7 +22,7 @@
  * constants, because the tint alpha is what the eye actually sees.
  */
 import { spawn } from 'node:child_process'
-import { chromium } from 'playwright'
+import { chromium } from '@playwright/test'
 
 const BASE = 'http://localhost:4199'
 const SURFACES = [
@@ -118,12 +118,34 @@ const MEASURE = () => {
     // "control keyline", gate 3:1). Chip/card tint borders are ADR-0069
     // decoration whose state is carried by fill+text, not the keyline.
     const strongVar = getComputedStyle(document.documentElement).getPropertyValue('--color-border-strong').trim()
-    const strongRgb = hexToRgb(strongVar)
+    // Resolve the token through a probe element: the browser normalises ANY
+    // format (oklch, rgb(), 3/8-digit hex) to `rgb(...)`, so a token change
+    // cannot silently disable the keyline gate the way a hex-only parse did.
+    const strongRgb = strongVar
+      ? (() => {
+          const probe = document.createElement('span')
+          probe.style.color = strongVar
+          document.body.appendChild(probe)
+          const probeRgb = parse(getComputedStyle(probe).color)
+          probe.remove()
+          return probeRgb ? probeRgb.rgb : null
+        })()
+      : null
+    if (!strongRgb) {
+      out.push({
+        kind: 'keyline',
+        large: false,
+        label: `--color-border-strong unreadable ("${strongVar}")`,
+        ratio: 0,
+      })
+    }
     const bw = parseFloat(st.borderTopWidth) + parseFloat(st.borderLeftWidth)
     const bc = parse(st.borderTopColor)
     const borderIsControl =
       bc && strongRgb && bc.a > 0.5 && bc.rgb.every((v, i) => Math.abs(v - strongRgb[i]) <= 2)
-    if (bw > 0 && bc && el.tagName === 'BUTTON' && borderIsControl) {
+    const keylineCarrier =
+      el.tagName === 'BUTTON' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA'
+    if (bw > 0 && bc && keylineCarrier && borderIsControl) {
       const key = `K|${text ?? el.tagName}`
       if (!seen.has(key)) {
         seen.add(key)
@@ -136,8 +158,20 @@ const MEASURE = () => {
 
 
 const preview = spawn('bun', ['run', 'preview', '--port', '4199', '--strictPort'], { stdio: 'ignore' })
+let previewKilled = false
+function killPreview() {
+  if (previewKilled) return
+  previewKilled = true
+  preview.kill('SIGTERM')
+}
 await new Promise((resolve, reject) => {
-  const t = setTimeout(() => reject(new Error('preview server did not start')), 30_000)
+  const t = setTimeout(() => {
+    clearInterval(probe)
+    // The server is spawned, so a failed probe MUST still reap it — a leaked
+    // `vite preview` holds `--strictPort` hostage for the next run.
+    killPreview()
+    reject(new Error('preview server did not start'))
+  }, 30_000)
   const probe = setInterval(async () => {
     try {
       await fetch(BASE)
@@ -158,6 +192,15 @@ try {
   )
   await page.goto(`${BASE}/`)
   await page.locator('[data-test="recipe-card-link"]').first().waitFor({ timeout: 30_000 })
+
+  // Seed ONE real plan BEFORE the surface loop: the app is the only seeder
+  // allowed (a fixture would measure a page nobody can reach), and without
+  // it the Grocery/Shop visits below measure their EMPTY state and the
+  // success-fill gate has no row to look at.
+  await page.locator('[data-test="recipe-card-link"]').first().click()
+  const seedSheet = page.getByRole('dialog')
+  await seedSheet.getByRole('button', { name: 'Add to plan' }).click()
+  await seedSheet.getByRole('button', { name: 'Back' }).click().catch(() => {})
 
   for (const theme of ['light', 'dark']) {
     if (theme === 'dark') await page.getByRole('button', { name: 'Switch to dark mode' }).click()
@@ -184,15 +227,8 @@ try {
     }
   }
   /* ---------- ADR-0072: the success completion fill ---------- */
-  // Seed ONE real plan first: the app is the only seeder allowed (a fixture
-  // would measure a page nobody can reach), so the first catalog recipe is
-  // planned through its own detail sheet exactly as the board capture does.
-  await page.goto(`${BASE}/`)
-  await page.locator('[data-test="recipe-card-link"]').first().waitFor({ timeout: 30_000 })
-  await page.locator('[data-test="recipe-card-link"]').first().click()
-  const sheet = page.getByRole('dialog')
-  await sheet.getByRole('button', { name: 'Add to plan' }).click()
-  await sheet.getByRole('button', { name: 'Back' }).click().catch(() => {})
+  // (The plan was seeded before the surface sweep above, so this block can go
+  // straight to the grocery rows in both themes.)
   for (const theme of ['light', 'dark']) {
     // The previous loop leaves the app in whichever theme it ended on, so the
     // toggle is only pressed when the app is NOT already in the target theme.
@@ -287,7 +323,7 @@ function MEASURE_SUCCESS() {
   }
   await browser.close()
 } finally {
-  preview.kill('SIGTERM')
+  killPreview()
 }
 process.exit(exitCode)
 

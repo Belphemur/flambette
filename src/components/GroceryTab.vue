@@ -249,9 +249,18 @@ onMounted(() => {
 })
 onBeforeUnmount(() => media?.removeEventListener('change', onMediaChange))
 
-/** The room strip only exists for a joined room (owner ruling, ADR-0071). */
+/**
+ * The room strip only exists for a joined room (owner ruling, ADR-0071) —
+ * and it only claims to be LIVE when the relay says so. `room.code` outlives
+ * a dropped connection (the client keeps the code so it can reconnect), and
+ * `room.peers` is null until the first `peers` frame: neither is evidence of
+ * a live shopper, so the strip states the connection honestly instead of
+ * inventing a headcount of one.
+ */
 const inRoom = computed(() => room.inRoom && room.code !== null)
-const shopperCount = computed(() => room.peers ?? 1)
+const roomLive = computed(() => room.status === 'live')
+/** null = "not told yet", which the strip says rather than guessing. */
+const shopperCount = computed(() => room.peers)
 </script>
 
 <template>
@@ -375,14 +384,14 @@ const shopperCount = computed(() => room.peers ?? 1)
   >
   <span class="flex items-center gap-2">
   <span
-  v-if="room.status === 'live'"
+  v-if="roomLive"
   class="size-2 shrink-0 rounded-full bg-success"
   aria-hidden="true"
   />
-  <span class="text-text">Synced live with room:</span>
+  <span class="text-text">{{ roomLive ? 'Synced live with room:' : 'Reconnecting to room:' }}</span>
   <span class="font-mono-data text-text">{{ room.code }}</span>
   </span>
-  <span class="flex items-center gap-1 text-text-muted">
+  <span v-if="shopperCount !== null" class="flex items-center gap-1 text-text-muted">
   <Users :size="14" aria-hidden="true" />
   {{ shopperCount }} active shopper{{ shopperCount === 1 ? '' : 's' }}
   </span>
@@ -580,6 +589,7 @@ const shopperCount = computed(() => room.peers ?? 1)
   type="checkbox"
   class="check-box done"
   :checked="!!checked.map[line.key]"
+  :aria-label="line.text ? `${line.text} ${item.name}` : item.name"
   @change="checked.toggleChecked(line.key)"
   />
   <span
@@ -672,6 +682,9 @@ const shopperCount = computed(() => room.peers ?? 1)
   </div>
   </li>
   </ul>
+  <p v-else-if="mealSummaries.length === 0 && plan.plan.length === 0" class="mt-2 text-body-sm text-text-muted">
+  No meals planned yet — the extras below are not tied to a recipe.
+  </p>
   <p v-else class="mt-2 text-body-sm text-text-muted">Loading the plan's meals…</p>
   </div>
 

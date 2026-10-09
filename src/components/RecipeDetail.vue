@@ -23,7 +23,11 @@ import {
   type TimerHint,
   type TimerSuggestion,
 } from '../lib/timerSuggest'
-import { formatCountdown, remainingSeconds } from '../lib/stepTimer'
+import {
+  formatCountdown,
+  remainingSeconds,
+  MAX_CONCURRENT_TIMERS,
+} from '../lib/stepTimer'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
@@ -262,6 +266,15 @@ function toggleAllReady(): void {
 /* ---------- Inline step-timer affordances (ADR-0073 / ADR-0020) ---------- */
 
 /**
+ * step index -> the timer id this sheet armed for it. Ephemeral like the
+ * checklist: the ARMED timer itself lives in the ui store (the ADR-0020
+ * contract, the same store cooking mode uses), so a countdown keeps
+ * running if the reader leaves the sheet; only this sheet's mapping of
+ * which step to which timer is view state.
+ */
+const armedByStep = ref(new Map<number, number>())
+
+/**
  * The recipe's build-time timer hints, loaded on demand from the sidecar
  * and cached per session — the same artifact and the same lazy pattern
  * the cooking view uses, so the two surfaces cannot disagree about what
@@ -275,6 +288,12 @@ watch(
   (id) => {
     hints.value = null
     readyIngredients.value = new Set()
+    // The step->timer mapping is scoped to ONE recipe. The sheet component
+    // is reused (`<component :is>` with no key), so without this reset a
+    // step index armed for the PREVIOUS recipe would leave the next
+    // recipe's same-indexed step disabled for good, with a dismiss button
+    // whose `clearTimer(nextId, staleId)` is a silent no-op.
+    armedByStep.value = new Map()
     if (id === undefined) return
     void getTimerHints(id).then((loaded) => {
       // A stale fetch (the reader moved to another recipe) never wins.
@@ -290,14 +309,6 @@ function hintAt(index: number): TimerHint | null {
   return hintForStep(hints.value, [index])
 }
 
-/**
- * step index -> the timer id this sheet armed for it. Ephemeral like the
- * checklist: the ARMED timer itself lives in the ui store (the ADR-0020
- * contract, the same store cooking mode uses), so a countdown keeps
- * running if the reader leaves the sheet; only this sheet's mapping of
- * which step to which timer is view state.
- */
-const armedByStep = ref(new Map<number, number>())
 
 /** A 1s tick, alive only while a timer this sheet armed is counting. */
 const now = ref(Date.now())
@@ -326,10 +337,20 @@ function stepCountdown(index: number): string | null {
   const id = armedByStep.value.get(index)
   if (id === undefined || !meta.value) return null
   const timer = ui.stepTimers[meta.value.id]?.[id]
-  if (!timer) return null
+  // The timer is gone from the shared store (expired, or dismissed from
+  // cooking mode's strip): forget the mapping too, or this step would
+  // stay marked armed with a working-but-pointless dismiss button.
+  if (!timer) {
+    const next = new Map(armedByStep.value)
+    next.delete(index)
+    armedByStep.value = next
+    return null
+  }
   const left = remainingSeconds(timer, now.value)
   if (left <= 0) {
-    armedByStep.value.delete(index)
+    const next = new Map(armedByStep.value)
+    next.delete(index)
+    armedByStep.value = next
     return null
   }
   return formatCountdown(left)
@@ -350,7 +371,17 @@ function startStepTimer(index: number): void {
   if (armedByStep.value.has(index)) return
   const suggestion: TimerSuggestion = suggestionFromHint(hint)
   const id = ui.addTimer(meta.value.id, suggestion.label, suggestion.seconds)
-  if (id === null) return
+  // The concurrent-timer cap (MAX_CONCURRENT_TIMERS): a press that cannot
+  // arm must SAY so, never silently do nothing — the detail's strip is the
+  // ADR-0020 shared store, so the cook manages the crowded set from
+  // cooking mode's own replace flow, which is where a swap belongs.
+  if (id === null) {
+    ui.showToast(
+      `${MAX_CONCURRENT_TIMERS} timers are already running — drop one in cooking mode first.`,
+      { duration: 4000 },
+    )
+    return
+  }
   armedByStep.value = new Map(armedByStep.value).set(index, id)
 }
 
@@ -732,7 +763,7 @@ function startCooking() {
   class="px-3 py-2 text-xs font-semibold capitalize"
   :class="
   unitSystem === system
-  ? 'rounded-lg bg-primary-tint text-primary-strong'
+  ? 'rounded-lg bg-brand-tint text-brand-text'
   : 'text-text-muted'
   "
   :aria-pressed="unitSystem === system"

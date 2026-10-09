@@ -815,7 +815,7 @@ function onTouchEnd(e: TouchEvent) {
   >{{ t.label }}</span
   >
   <button
-  class="flex h-11 min-w-20 shrink-0 items-center justify-center gap-1 px-1 font-mono-data text-base font-semibold tabular-nums text-saffron"
+  class="flex h-11 min-w-24 shrink-0 items-center justify-center gap-1 px-1 font-mono-data text-xl font-semibold tabular-nums text-saffron"
   data-test="step-timer"
   aria-live="polite"
   :aria-label="
@@ -1014,7 +1014,7 @@ function onTouchEnd(e: TouchEvent) {
   >
   <span class="min-w-0 flex-1 truncate text-sm font-semibold">{{ t.label }}</span>
   <button
-  class="flex h-11 min-w-20 shrink-0 items-center justify-center gap-1 px-1 font-mono-data text-base font-semibold tabular-nums text-saffron"
+  class="flex h-11 min-w-24 shrink-0 items-center justify-center gap-1 px-1 font-mono-data text-xl font-semibold tabular-nums text-text"
   :data-test="`timer-manage-toggle-${t.id}`"
   :aria-label="
   isRunning(t)
@@ -1067,7 +1067,7 @@ function onTouchEnd(e: TouchEvent) {
   intent per surface with the colours doing the distinguishing. -->
   <button
   v-else
-  class="h-14 flex-[2] rounded-xl bg-success text-base font-semibold text-on-success transition-[background-color,transform] hover:bg-success-soft active:scale-[0.98]"
+  class="h-14 flex-[2] rounded-xl bg-success text-base font-semibold text-on-success transition-[background-color,transform,filter] hover:brightness-95 active:scale-[0.98]"
   data-test="finish"
   aria-label="Finish cooking and mark as cooked"
   @click="finishCooked"

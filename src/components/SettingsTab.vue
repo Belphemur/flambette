@@ -361,21 +361,40 @@ function newRoomCodeAndJoin() {
  * The danger CONFIRM (DESIGN.md: destructive is danger-outlined AND
  * confirmed). The app's confirm pattern is the non-blocking toast with
  * inline actions (the grocery-clear workflow) — a native `confirm()`
- * would freeze the tab and never match the toast surface. `onDismiss`
- * keeps the toast's every end path from being read as a confirmation;
- * the Leave action runs the full opt-out above.
+ * would freeze the tab and never match the toast surface.
+ *
+ * The prompt NAMES the room it will leave and the action leaves THAT one:
+ * the code is captured when the prompt opens, so re-rolling or joining a
+ * different code while the toast sits on screen cannot make the confirm
+ * act against a room the question never mentioned. No `kind`: a kind names
+ * a confirmation RESULT (data-test="<kind>-toast"), while this prompt is a
+ * question whose actions carry their own hooks.
  */
 function confirmLeaveHousehold() {
   const code = ui.householdRoom
-  // NO `kind`: a kind names a confirmation RESULT (data-test="<kind>-toast");
-  // this prompt is a question, and its actions carry their own hooks.
-  ui.showToast(`Leave ${code ? `room ${code}` : 'the household room'}? This device will not rejoin on future launches.`, {
+  const target = code ?? null
+  const question = target
+    ? `Leave room ${target}? This device will not rejoin on future launches.`
+    : 'Leave the household room? This device will not rejoin on future launches.'
+  ui.showToast(question, {
     duration: 10_000,
     actions: [
-      { label: 'Leave', run: () => clearHouseholdRoom() },
+      { label: 'Leave', run: () => leaveHouseholdCode(target) },
       { label: 'Cancel', run: () => ui.dismissToast() },
     ],
   })
+}
+
+/** Run the full opt-out against ONE code — the code the prompt named. */
+function leaveHouseholdCode(code: string | null) {
+  const restore = ui.householdRoom
+  // Point the card at the room the prompt named, run the existing opt-out
+  // (which stops the socket, clears the code and the saved join target),
+  // then put the card's own field back — a device that re-rolled while the
+  // toast was open must not lose the code it was about to join.
+  ui.householdRoom = code ?? ''
+  clearHouseholdRoom()
+  ui.householdRoom = restore
 }
 
 function clearHouseholdRoom() {
@@ -606,7 +625,7 @@ async function importMealimeFavourites(): Promise<void> {
   class="px-3 py-2 text-sm font-semibold"
   :class="
   ui.unitSystem === system
-    ? 'rounded-lg bg-primary-tint text-primary-strong'
+    ? 'rounded-lg bg-brand-tint text-brand-text'
     : 'text-text-muted'
   "
   :aria-pressed="ui.unitSystem === system"
@@ -693,7 +712,7 @@ async function importMealimeFavourites(): Promise<void> {
   class="flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm font-semibold"
   :class="
   isActiveRestriction(restriction.id)
-    ? 'border-primary-tint bg-primary-tint text-primary-strong'
+    ? 'border-brand bg-brand-tint text-brand-text'
     : 'border-border bg-surface text-text-muted'
   "
   :aria-pressed="isActiveRestriction(restriction.id)"
@@ -734,10 +753,6 @@ async function importMealimeFavourites(): Promise<void> {
   >
   Household sync active — <span class="font-mono-data">{{ householdCode }}</span><template v-if="room.peers"> · <span class="font-mono-data tabular-nums">{{ room.peers }}</span> in room</template>
   </p>
-  <!-- ADR-0063: THIS device's identity — the avatar preview hashes the
-       same display name the room sees, and the rename clamps exactly like
-       the relay (one shared sanitizer on the store action) then pushes a
-       `profile` frame while connected. Editing never touches the id. -->
   <!-- ADR-0063: THIS device's identity — the avatar preview hashes the
        same display name the room sees, and the rename clamps exactly
        like the relay (one shared sanitizer on the store action) then
@@ -911,7 +926,7 @@ async function importMealimeFavourites(): Promise<void> {
   Drag this button to the bookmarks bar:
   <a
   :href="bookmarkletHref"
-  class="mt-1 inline-flex items-center gap-1 rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs font-semibold text-primary-strong"
+  class="mt-1 inline-flex items-center gap-1 rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs font-semibold text-brand-text"
   data-test="mealime-bookmarklet-link"
   aria-label="Flambette: copy my favourites — drag this to your bookmarks bar, then click it on my.mealime.com"
   @click.prevent="onBookmarkletClick"
@@ -982,8 +997,10 @@ async function importMealimeFavourites(): Promise<void> {
   >{{ appVersion }}</span>
   </div>
   <p class="text-body-sm text-text-muted">
-  100% offline-first — the catalog, its photos and this device's data never reach a server. The header's version tells
-  you what is running; tapping it opens the changelog.
+  100% offline-first — the whole catalog, its photos and this device's settings stay on this
+  device and never reach a server. Household sync is the one exception you choose: joining a room
+  shares your plan, grocery list and preferences through the room relay so the other devices see
+  them. The header's version tells you what is running; tapping it opens the changelog.
   </p>
   </div>
 
