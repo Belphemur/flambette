@@ -123,8 +123,10 @@ function canMore(meal: PlannedMeal): boolean {
   <p class="mt-2 font-medium">Your meal plan is empty</p>
   <p class="mt-1 text-sm">Add recipes from the Recipes tab to build your week.</p>
   <div class="mt-4 flex items-center justify-center gap-2">
+  <!-- ONE filled tomato per surface (DESIGN.md): Auto-Plan keeps it;
+  Browse recipes is the outlined secondary. -->
   <button
-  class="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-on-brand"
+  class="rounded-xl border border-border-strong bg-surface-raised px-4 py-2.5 text-sm font-semibold text-brand-text active:bg-surface-sunken"
   @click="router.push('/')"
   >
   Browse recipes
@@ -143,19 +145,22 @@ function canMore(meal: PlannedMeal): boolean {
   </div>
 
   <template v-else>
-  <div class="grid grid-cols-3 gap-2 rounded-xl p-4 text-center ring-1">
+  <div
+  class="grid grid-cols-3 gap-2 rounded-xl p-4 text-center ring-1 ring-border"
+  data-test="plan-totals"
+  >
   <div>
-  <p class="text-lg font-bold text-brand-text">{{ totals.meals }}</p>
+  <p class="text-lg font-bold text-brand-text font-mono-data tabular-nums">{{ totals.meals }}</p>
   <p class="text-xs">{{ totals.meals === 1 ? 'meal' : 'meals' }}</p>
   </div>
   <div>
-  <p class="text-lg font-bold text-brand-text">{{
+  <p class="text-lg font-bold text-brand-text font-mono-data tabular-nums">{{
   Math.round(totals.calories).toLocaleString()
   }}</p>
   <p class="text-xs">kcal total</p>
   </div>
   <div>
-  <p class="text-lg font-bold text-brand-text">{{ totals.cookTime }}</p>
+  <p class="text-lg font-bold text-brand-text font-mono-data tabular-nums">{{ totals.cookTime }}</p>
   <p class="text-xs">min to cook</p>
   </div>
   </div>
@@ -164,7 +169,7 @@ function canMore(meal: PlannedMeal): boolean {
   <li
   v-for="meal in meals"
   :key="meal.meta.id"
-  class="rounded-xl ring-1"
+  class="rounded-xl bg-surface-raised ring-1 ring-border"
   >
   <!-- 44px controls need ~230px; on a 390px phone that is more than half
   the row, so the control cluster WRAPS to its own line and the recipe
@@ -181,14 +186,14 @@ function canMore(meal: PlannedMeal): boolean {
   />
   <div class="min-w-[12rem] flex-1 hovercap:cursor-pointer" @click="openRecipe(meal.meta.id)">
   <h3 class="line-clamp-2 text-sm font-semibold">{{ meal.meta.name }}</h3>
-  <p class="mt-0.5 text-xs">
+  <p class="mt-0.5 font-mono-data text-xs tabular-nums">
   {{ Math.round(meal.meta.calories) }} kcal/serving ·
   {{ meal.meta.cooking_minutes }} min
-  <span v-if="meal.meta.is_pro" class="ml-1 rounded bg-surface-dark px-1 py-px text-[10px] font-bold text-warning-soft">PRO</span>
+  <span v-if="meal.meta.is_pro" class="ml-1 rounded bg-espresso px-1 py-px font-sans text-[10px] font-bold text-warning-soft">PRO</span>
   </p>
   </div>
   <div class="ml-auto flex shrink-0 items-center gap-1">
-  <div class="flex shrink-0 items-center rounded-lg border">
+  <div class="flex shrink-0 items-center rounded-lg border border-border-strong">
   <button
   class="flex size-11 items-center justify-center"
   :disabled="meal.servings <= 1"
@@ -197,7 +202,7 @@ function canMore(meal: PlannedMeal): boolean {
   >
   <Minus :size="16" aria-hidden="true" />
   </button>
-  <span class="w-6 text-center text-xs font-semibold" aria-label="Servings">{{ meal.servings }}</span>
+  <span class="w-6 text-center font-mono-data text-xs font-semibold tabular-nums" aria-label="Servings">{{ meal.servings }}</span>
   <button
   class="flex size-11 items-center justify-center"
   :aria-label="`More servings of ${meal.meta.name}`"
@@ -238,13 +243,13 @@ function canMore(meal: PlannedMeal): boolean {
 
   <div class="flex gap-2">
   <button
-  class="w-full rounded-xl border py-3 text-sm font-medium"
+  class="w-full rounded-xl border border-border-strong bg-surface-raised py-3 text-sm font-medium text-text active:bg-surface-sunken"
   @click="plan.clearPlan"
   >
   Clear plan
   </button>
   <button
-  class="group relative w-full rounded-xl border py-3 text-sm font-medium hover:bg-surface-sunken"
+  class="group relative w-full rounded-xl border border-border-strong bg-surface-raised py-3 text-sm font-medium text-text hover:bg-surface-sunken"
   @click="openShareSheet"
   >
   Share
@@ -276,7 +281,7 @@ function canMore(meal: PlannedMeal): boolean {
   aria-label="Share your meal plan"
   >
   <div class="flex items-center justify-between">
-  <h3 class="text-sm font-bold tracking-tight">Share your plan</h3>
+  <h3 class="text-headline-sm">Share your plan</h3>
   <button
   class="flex size-11 items-center justify-center rounded-full hover:bg-surface-sunken"
   aria-label="Close share sheet"
@@ -293,9 +298,9 @@ function canMore(meal: PlannedMeal): boolean {
   <!-- Live room: the ONLY share path since ADR-0051 retired `?p=`. -->
   <div class="space-y-2 rounded-xl bg-surface p-3">
   <div class="flex items-center gap-2">
-  <span class="text-sm font-bold tracking-tight">Live room</span>
+  <span class="text-headline-sm">Live room</span>
   <span
-  class="rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-text-muted"
+  class="rounded-full bg-surface-sunken px-2 py-0.5 font-mono-data text-[10px] font-bold uppercase tracking-wide text-text-muted"
   >New</span
   >
   </div>
@@ -335,14 +340,14 @@ function canMore(meal: PlannedMeal): boolean {
   />
   <div class="flex gap-2">
   <button
-  class="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-surface-dark px-4 text-sm font-semibold text-warning-soft active:bg-surface-dark-sunken"
+  class="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border-strong bg-surface-raised px-4 text-sm font-semibold text-brand-text active:bg-surface-sunken"
   data-test="copy-room-link"
   @click="copyRoomLink"
   >
   {{ copied ? 'Copied' : 'Copy room link' }}
   </button>
   <button
-  class="h-11 rounded-xl border px-4 text-sm font-medium"
+  class="h-11 rounded-xl border border-border-strong px-4 text-sm font-medium text-text active:bg-surface-sunken"
   data-test="leave-room"
   @click="room.leave()"
   >
@@ -352,7 +357,7 @@ function canMore(meal: PlannedMeal): boolean {
   </template>
   <button
   v-else
-  class="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand active:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-60"
+  class="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-60"
   data-test="start-room"
   :disabled="room.status === 'connecting'"
   @click="startLiveRoom"
