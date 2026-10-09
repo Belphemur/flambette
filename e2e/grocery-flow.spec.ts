@@ -42,7 +42,10 @@ async function readIngredient(page: Page, name: RegExp): Promise<IngredientInfo>
     const row = rows.nth(i)
     const text = (await row.textContent()) ?? ''
     if (!name.test(text)) continue
-    const qty = ((await row.locator('span').first().textContent()) ?? '').trim()
+    // ADR-0073: the row is name-left + a right-aligned mono QUANTITY badge,
+    // so the amount is read from that badge's own hook rather than from the
+    // first span in the row (which is the ingredient's name).
+    const qty = ((await row.getByTestId('detail-ingredient-qty').textContent()) ?? '').trim()
     const m = qty.match(/^([\d.]+)/)
     if (m) return { base, amount: Number(m[1]) }
   }
@@ -62,9 +65,13 @@ async function setServings(page: Page, target: number) {
   throw new Error(`could not set servings to ${target}`)
 }
 
-/** Grocery list labels (one per grocery line). */
+/**
+ * A grocery line (ADR-0071): the row is checked-in-place with the name left
+ * and the amount as a right-aligned mono badge, so the row's text is the
+ * NAME and the amount lives in its own `grocery-qty` badge.
+ */
 function groceryLines(page: Page, name: RegExp) {
-  return page.locator('main label').filter({ hasText: name })
+  return page.getByTestId('grocery-row').filter({ hasText: name })
 }
 
 test('planned servings scale the grocery list', async ({ page }) => {
@@ -78,8 +85,12 @@ test('planned servings scale the grocery list', async ({ page }) => {
   await gotoTab(page, 'Grocery')
   const garlic = groceryLines(page, /garlic/i)
   await expect(garlic).toHaveCount(1, { timeout: 10_000 })
-  // 8 planned servings over the recipe's base `base` servings
-  await expect(garlic.first()).toHaveText(new RegExp(`${fmt((amount * 8) / base)} cloves`))
+  // 8 planned servings over the recipe's base `base` servings, rendered in
+  // the row's right-aligned mono quantity badge (ADR-0071 delta 4).
+  await expect(garlic.first().getByTestId('grocery-qty')).toHaveText(
+    new RegExp(`${fmt((amount * 8) / base)} cloves`),
+  )
+  await expect(garlic.first()).toContainText(/garlic/i)
 })
 
 test('shared ingredient merges into a single summed grocery line', async ({ page }) => {
@@ -92,7 +103,9 @@ test('shared ingredient merges into a single summed grocery line', async ({ page
   await gotoTab(page, 'Grocery')
   const garlic = groceryLines(page, /garlic/i)
   await expect(garlic).toHaveCount(1, { timeout: 10_000 })
-  await expect(garlic.first()).toHaveText(new RegExp(`${fmt((a.amount * 8) / a.base)} cloves`))
+  await expect(garlic.first().getByTestId('grocery-qty')).toHaveText(
+    new RegExp(`${fmt((a.amount * 8) / a.base)} cloves`),
+  )
 
   // Recipe B: also contains garlic — find it via ingredient search
   await gotoTab(page, 'Recipes')
@@ -106,7 +119,7 @@ test('shared ingredient merges into a single summed grocery line', async ({ page
   // Merged: still one garlic line, summed across both planned meals
   await expect(garlic).toHaveCount(1, { timeout: 10_000 })
   const expected = fmt((a.amount * 8) / a.base + b.amount * (b.base / b.base))
-  await expect(garlic.first()).toHaveText(new RegExp(`${expected} cloves`))
+  await expect(garlic.first().getByTestId('grocery-qty')).toHaveText(new RegExp(`${expected} cloves`))
   // Provenance: the shared ingredient is marked as spanning both meals.
   const pill = garlic.first().getByText('2 recipes')
   await expect(pill).toBeVisible()

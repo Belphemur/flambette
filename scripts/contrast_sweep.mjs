@@ -13,6 +13,13 @@
  * Gates: text 4.5:1 (normal) / 3.0:1 (>= 18.66px bold or >= 24px);
  * keylines (non-text) 3.0:1. Prints the worst pair per surface and exits
  * non-zero when a pair fails, so the sweep can be quoted in a report.
+ *
+ * ADR-0072 adds a dedicated section: the `success` completion fill.
+ * A done-state box is NON-TEXT chrome under the 3:1 gate, and it has
+ * two things to clear — the `on-success` tick it carries, and the paper
+ * surface the box itself sits on. Both are measured from the computed
+ * style of a REAL checked grocery row in both themes, never from token
+ * constants, because the tint alpha is what the eye actually sees.
  */
 import { spawn } from 'node:child_process'
 import { chromium } from 'playwright'
@@ -175,8 +182,104 @@ try {
       if (surface.name === 'shop') await page.goBack() // fullscreen has no header for the next toggle
     }
   }
+  /* ---------- ADR-0072: the success completion fill ---------- */
+  for (const theme of ['light', 'dark']) {
+    if (theme === 'dark') {
+      await page.getByRole('button', { name: 'Switch to dark mode' }).click()
+      await page.waitForTimeout(300)
+    }
+    // A real checked grocery row: the plan tab seeds one, and the grocery
+    // tab renders the rows we care about. Nothing here is a fixture.
+    await page.goto(`${BASE}/plan`)
+    await page.waitForTimeout(600)
+    const seeded = await page.evaluate(async () => {
+      const raw = localStorage.getItem('mealime-planner:v1:plan')
+      return raw !== null
+    })
+    if (!seeded) {
+      console.log(`\n== ${theme} / success fill: SKIPPED (no plan to render rows)`)
+      continue
+    }
+    await page.goto(`${BASE}/grocery`)
+    await page.locator('[data-test="grocery-row"] input[type=checkbox]').first().waitFor({ timeout: 20_000 })
+    await page.locator('[data-test="grocery-row"] input[type=checkbox]').first().check()
+    await page.waitForTimeout(300)
+    const pairs = await page.evaluate(MEASURE_SUCCESS)
+    console.log(`\n== ${theme} / success fill (ADR-0072)`)
+    for (const p of pairs) {
+      const gate = p.kind === 'text' ? (p.large ? 3.0 : 4.5) : 3.0
+      const ok = p.ratio >= gate
+      if (!ok) exitCode = 1
+      console.log(`   ${ok ? 'ok  ' : 'FAIL'} ${p.kind} ${p.ratio} (gate ${gate}): ${p.label}`)
+    }
+  }
   await browser.close()
 } finally {
   preview.kill('SIGTERM')
 }
 process.exit(exitCode)
+
+/** The `success` fill's own pairs, measured off a REAL checked row. */
+const MEASURE_SUCCESS = () => {
+  function lum(c) {
+    const [r, g, b] = c.map((v) => {
+      const s = v / 255
+      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
+    })
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+  }
+  function ratio(a, b) {
+    const [hi, lo] = [lum(a), lum(b)].sort((p, q) => q - p)
+    return (hi + 0.05) / (lo + 0.05)
+  }
+  function parse(c) {
+    const m = /rgba?\(([^)]+)\)/.exec(c)
+    if (!m) return null
+    const p = m[1].split(',').map((n) => parseFloat(n))
+    const a = p.length > 3 ? p[3] : 1
+    return { rgb: [p[0], p[1], p[2]], a }
+  }
+  // Composite an alpha background over what is behind it.
+  function over(fg, bg) {
+    if (!fg || fg.a >= 1) return fg.rgb
+    return fg.rgb.map((v, i) => v * fg.a + bg[i] * (1 - fg.a))
+  }
+  function bgChain(el) {
+    let cur = el
+    let acc = [255, 255, 255]
+    const chain = []
+    while (cur) {
+      const c = parse(getComputedStyle(cur).backgroundColor)
+      if (c && c.a > 0) chain.push(c)
+      cur = cur.parentElement
+    }
+    for (let i = chain.length - 1; i >= 0; i--) acc = over(chain[i], acc)
+    return acc
+  }
+  const box = document.querySelector('[data-test="grocery-row"] input[type=checkbox]')
+  if (!box) return []
+  const st = getComputedStyle(box)
+  const rowBg = bgChain(box.closest('[data-test="grocery-row"]') ?? box)
+  const fill = parse(st.accentColor) ?? parse(st.backgroundColor)
+  const out = []
+  if (fill) {
+    // The fill against the surface the box sits on (non-text, 3:1).
+    out.push({
+      kind: 'keyline',
+      large: false,
+      label: 'success fill vs the grocery surface',
+      ratio: Number(ratio(over(fill, rowBg), rowBg).toFixed(2)),
+    })
+    // The tick: `on-success` is the CSS variable the platform draws, so
+    // read it from the document root rather than guessing.
+    const onSuccess = getComputedStyle(document.documentElement).getPropertyValue('--color-on-success').trim()
+    const tick = /^#/.test(onSuccess) ? hexToRgb(onSuccess) : [255, 255, 255]
+    out.push({
+      kind: 'text',
+      large: false,
+      label: 'on-success tick on the success fill',
+      ratio: Number(ratio(over({ rgb: tick, a: 1 }, over(fill, rowBg)), over(fill, rowBg)).toFixed(2)),
+    })
+  }
+  return out
+}

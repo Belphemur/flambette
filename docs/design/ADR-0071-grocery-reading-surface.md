@@ -104,3 +104,31 @@ and re-converge in visual grammar (ADR-0074):
 - **Drop collapse**: rejected (owner) — ADR-0008's auto-collapse is
   pinned and useful with many sections; the render's static look is a
   mock's convenience.
+
+## Addendum (2026-10-09): implementation notes
+
+Dated change note; Status stays Accepted.
+
+- **Which aisles carry a hue glyph.** The band's leading icon comes from
+  the ONE role registry (`src/lib/palette.ts`, ADR-0036) via
+  `src/lib/aisleRole.ts`: Produce and Meat & Seafood are the two
+  departments whose identity the registry ALREADY claims (produce IS
+  vegetables; the aisle is named for its meat), so their glyph is an
+  identity, not a decoration. Every other section renders NO glyph
+  rather than borrowing a hue it does not own — lending
+  `hue-vegetarian` to "Baking & Spices", or a meal-occasion hue to
+  "Coffee & Tea", would make one colour answer two questions on the
+  same screen, which is the collision ADR-0036 (and ADR-0072's
+  done-state ruling) exists to prevent. These are DEPARTMENT identities
+  and never state: a checked row's success fill is painted by the row.
+  A later owner ruling extended the band to carry a lucide glyph for
+  every category; the registry mapping above remains the hue rule.
+- **ADR-0075 rule 4 on this surface.** The completion colour is the
+  `success` family for every done-state here (row ticks, the `N/M`
+  pill once a section is done). The progress BAR stays `brand`: it
+  measures progress through a run the tomato Start-shopping intent
+  began, and one filled tomato per surface still holds.
+- **Rejected fictions, gathered** (rend only): "Est. Market Time ~25
+  mins" (no data), per-item flavour sublines ("Pre-washed clamshell
+  packaging" — invented), "Custom Note" pills, per-row "Cook Again"
+  (re-cook is detail/cooking's flow), gamification of any kind.

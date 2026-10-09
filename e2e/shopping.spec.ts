@@ -81,7 +81,11 @@ test('shopping mode: custom items get their own section and collapse works', asy
   await expect(page.locator('[data-test=shop-custom-items] [data-test=shop-row]')).toHaveCount(1)
 
   // Collapsible sections: first section header collapses its list.
-  const headers = page.locator('main section > button')
+  // ADR-0075's grammar sweep wrapped the shop band's toggle in the band
+  // row (the hue glyph sits outside the button so the toggle's own svg
+  // count stays the chevron), so the pin is the semantic toggle hook
+  // rather than a `section > button` structural selector.
+  const headers = page.locator('main [data-test=shop-section-toggle]')
   await expect(headers.first()).toBeVisible()
   const first = headers.first()
   await first.click()

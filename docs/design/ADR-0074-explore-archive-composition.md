@@ -75,3 +75,31 @@ ADR-0027, holds):
   grammar).
 - **Curated "Featured" section**: rejected — no curation data exists;
   the grid IS the archive.
+
+## Addendum (2026-10-09): implementation notes
+
+Dated change note; Status stays Accepted.
+
+- **The sort menu already existed.** ADR-0045 had already replaced the
+  native `<select>` with the shared `FilterDropdown` — a button trigger
+  with a popover listbox, a check on the active option and the
+  Check-or-spacer alignment that stops labels shifting. ADR-0074's
+  "proper menu" need was therefore met by grooming, not by building:
+  `sortBy`, its options and `normalizeQuickFilters`' validation are
+  untouched.
+- **`mealType` already existed.** The occasion row maps to ADR-0043's
+  `recipe_types.json` table, and `mealType` has been a sanitized,
+  persisted `QuickFilters` member since ADR-0043 (commit `0c82196`), so
+  this ADR's "a NEW member if the owner confirms" resolved to "already
+  shipped" — no second member, no migration.
+- **The rating disc is additive.** The photo carries at most the
+  espresso favourite heart and, when rated, an espresso rating disc
+  (star + mono value). The household's star WIDGET stays in the card
+  body: it is a control on the ADR-0031 half-star grid, e2e-pinned, and
+  a badge is not a control. The disc prints the household's rating when
+  one exists and the catalog Bayesian mean otherwise — the same
+  precedence `RatingStars` uses, so the two can never disagree.
+- **ADR-0075 rule 5 (real data only).** No availability line ships; the
+  offline count lives in the mono "Showing N of M" count line only when
+  a filter is active. "Pantry Index • Vol. IV", "Seasonal Archive" and
+  "Cookbook Storage Mode Active" are recorded as rejected fictions.

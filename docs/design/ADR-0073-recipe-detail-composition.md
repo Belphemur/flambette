@@ -84,3 +84,26 @@ invented.
   prep state is personal and short-lived; syncing it buys noise in the
   whole-state payload for no household value (the SHOP list is the
   synced checklist).
+
+## Addendum (2026-10-09): implementation notes
+
+Dated change note; Status stays Accepted.
+
+- **The metadata strip carries only what the catalog publishes**: total
+  time, calories per serving (never scaled) and sodium, in the mono data
+  voice with the ADR-0036 semantic hues. Macro split bar, cookware
+  module, pro tips, difficulty, "Tested N×", SKUs and the voice banner
+  stay rejected fictions — the catalog has no such fields and none are
+  derivable.
+- **The checklist is ephemeral, and that is the whole point.** The
+  ingredient card's checks live in a component ref: never persisted,
+  never room-synced, cleared when the sheet changes recipe. The
+  household's checklist is the grocery list; syncing a personal prep
+  state would buy noise in the whole-state payload for nothing.
+- **Step previews arm, never auto-start.** A step's inline timer
+  affordance appears only where the recipe's own build-time sidecar
+  reports a duration (ADR-0041/0022 — nothing is ever invented), and
+  the press ARMS it in the shared `ui.stepTimers` store so cooking mode
+  picks it up. The detail's `?` step-timer affordance and the render's
+  per-step sub-checks ("Pat fillets dry") are rejected fiction: the
+  detail previews the list, cooking mode runs one step.

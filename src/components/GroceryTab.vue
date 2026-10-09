@@ -399,7 +399,10 @@ const shopperCount = computed(() => room.peers ?? 1)
   not appear in the recipe-derived Produce store section below. -->
   <div v-if="plan.customItems.length > 0" class="space-y-1.5" data-test="extra-section">
   <!-- The extras GROUP header is a group label, not an aisle: no
-  `(Aisle N)`, no hue glyph (ADR-0071 / ADR-0050 §2). -->
+  `(Aisle N)`, no hue glyph (ADR-0071 / ADR-0050 §2). It is a static
+  HEADING — the group itself never collapses (its sub-sections do), so
+  there is no toggle button and no chevron here. -->
+  <h3>
   <div
   class="flex items-center gap-2 overflow-hidden rounded-xl bg-surface-raised px-3 py-2.5 ring-1 ring-border"
   >
@@ -408,6 +411,7 @@ const shopperCount = computed(() => room.peers ?? 1)
   class="shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 font-mono-data text-label-sm tabular-nums text-text-muted"
   >{{ plan.customItems.length }}</span>
   </div>
+  </h3>
 
   <IngredientAutocomplete v-if="!isDesktop" ref="addForm" />
 
@@ -498,8 +502,11 @@ const shopperCount = computed(() => room.peers ?? 1)
   </div>
 
   <!-- No extras yet: the same add-row, unheaded, at the very top (desktop
-  owns its copy in the sidebar's Quick Extra Entry). -->
-  <IngredientAutocomplete v-if="!isDesktop" ref="addForm" />
+  owns its copy in the sidebar's Quick Extra Entry). ONE mount at a time
+  — this row is the `v-else` of the extras block, so the add-bar never
+  exists twice (a second mounted add-row would fight the ADR-0014 focus
+  handoff and make every add-bar locator ambiguous). -->
+  <IngredientAutocomplete v-else v-if="!isDesktop" ref="addForm" />
 
   <!-- STORE SECTIONS as aisle index cards (ADR-0071 delta 3): one rounded
   `surface-raised` card per aisle with keyline dividers, a header BAND
