@@ -667,7 +667,7 @@ function onTouchEnd(e: TouchEvent) {
   :aria-label="`Cooking ${meta.name}`"
   >
   <!-- Header: name, servings, progress + thin progress bar -->
-  <header class="border-b">
+  <header class="border-b border-border">
   <div class="mx-auto flex max-w-reading items-center justify-between gap-2 px-4 py-3">
   <button
   class="flex size-11 shrink-0 items-center justify-center rounded-full text-lg"
@@ -678,7 +678,7 @@ function onTouchEnd(e: TouchEvent) {
   </button>
   <div class="min-w-0 flex-1 text-center">
   <p class="truncate text-sm font-bold tracking-tight">{{ meta.name }}</p>
-  <p class="text-xs" aria-live="polite" data-test="cook-serves">
+  <p class="font-mono-data text-xs tabular-nums" aria-live="polite" data-test="cook-serves">
   serves {{ servings }} ·
   <span class="font-semibold" data-test="step-counter">{{ counterLabel }}</span>
   </p>
@@ -732,7 +732,7 @@ function onTouchEnd(e: TouchEvent) {
   <span class="h-px flex-1" aria-hidden="true"></span>
   </div>
   <p
-  class="text-xl leading-relaxed font-medium sm:text-2xl sm:leading-relaxed"
+  class="text-cooking-step"
   :data-test="vs.partner ? 'step-partner-text' : 'step-text'"
   >
   {{ vs.step.primary }}
@@ -741,7 +741,7 @@ function onTouchEnd(e: TouchEvent) {
   <li
   v-for="(d, j) in vs.step.details"
   :key="j"
-  class="flex items-start gap-3 rounded-xl p-3 text-sm ring-1"
+  class="flex items-start gap-3 rounded-xl p-3 text-sm ring-1 ring-border"
   >
   <span
   class="mt-0.5 size-5 shrink-0 rounded border-2"
@@ -793,7 +793,7 @@ function onTouchEnd(e: TouchEvent) {
   navigation. -->
   <div
   v-if="doc"
-  class="bg-surface-raised px-4 py-2"
+  class="border-t border-border bg-surface px-4 py-2"
   data-test="timer-strip"
   >
   <div class="mx-auto max-w-reading space-y-2">
@@ -806,7 +806,7 @@ function onTouchEnd(e: TouchEvent) {
   <div
   v-for="t in timers"
   :key="t.id"
-  class="flex shrink-0 items-center gap-1 rounded-xl border px-2 py-1"
+  class="flex shrink-0 items-center gap-1 rounded-xl border border-border-strong px-2 py-1"
   :data-test="`timer-chip-${t.id}`"
   >
   <span
@@ -815,8 +815,7 @@ function onTouchEnd(e: TouchEvent) {
   >{{ t.label }}</span
   >
   <button
-  class="flex h-11 min-w-20 shrink-0 items-center justify-center gap-1 px-1 font-mono text-base font-semibold tabular-nums"
-  :class="isRunning(t) ? 'text-brand-text' : ''"
+  class="flex h-11 min-w-20 shrink-0 items-center justify-center gap-1 px-1 font-mono-data text-base font-semibold tabular-nums text-saffron"
   data-test="step-timer"
   aria-live="polite"
   :aria-label="
@@ -848,7 +847,7 @@ function onTouchEnd(e: TouchEvent) {
   the whole set at a glance once four of them are running. -->
   <button
   v-if="timers.length"
-  class="flex size-11 shrink-0 items-center justify-center rounded-full border"
+  class="flex size-11 shrink-0 items-center justify-center rounded-full border border-border-strong"
   data-test="timer-fab"
   aria-label="Manage timers"
   @click="manageOpen = true"
@@ -895,7 +894,7 @@ function onTouchEnd(e: TouchEvent) {
   <button
   v-for="m in TIMER_PRESETS_MIN"
   :key="m"
-  class="h-11 shrink-0 rounded-lg border px-2 text-xs font-medium"
+  class="h-11 shrink-0 rounded-lg border border-border-strong px-2 font-mono-data text-xs font-medium"
   :data-test="`timer-preset-${m}`"
   :aria-label="`Start a ${m} minute timer`"
   @click="armPreset(m)"
@@ -904,7 +903,7 @@ function onTouchEnd(e: TouchEvent) {
   </button>
   <button
   v-if="recipeTotalSuggestion"
-  class="h-11 shrink-0 rounded-lg border border-dashed px-2 text-xs font-medium"
+  class="h-11 shrink-0 rounded-lg border border-dashed border-border-strong px-2 font-mono-data text-xs font-medium"
   data-test="timer-preset-recipe"
   :aria-label="`Start a timer for the recipe total cooking time of ${recipeTotalSuggestion} minutes`"
   @click="armPreset(recipeTotalSuggestion)"
@@ -925,7 +924,7 @@ function onTouchEnd(e: TouchEvent) {
   Start
   </button>
   <button
-  class="flex size-11 shrink-0 items-center justify-center rounded-lg border"
+  class="flex size-11 shrink-0 items-center justify-center rounded-lg border border-border-strong"
   data-test="timer-cancel"
   aria-label="Clear the timer fields"
   @click="cancelDraft"
@@ -940,7 +939,7 @@ function onTouchEnd(e: TouchEvent) {
   same type is live) is a legitimate second ask. -->
   <div v-if="suggestionOffered && suggestion" class="flex items-center gap-2" data-test="timer-suggest-row">
   <button
-  class="flex h-11 min-w-0 flex-1 items-center gap-1.5 rounded-xl border border-dashed px-2 text-left text-xs font-medium"
+  class="flex h-11 min-w-0 flex-1 items-center gap-1.5 rounded-xl border border-dashed border-border-strong px-2 text-left text-xs font-medium"
   data-test="timer-suggest"
   :aria-label="`Use the ${suggestion.minutes} minute ${suggestion.label} timer this step suggests`"
   @click="applySuggestion(suggestion)"
@@ -959,14 +958,14 @@ function onTouchEnd(e: TouchEvent) {
   No timer is ever dropped without an explicit choice. -->
   <div
   v-if="pendingArm"
-  class="flex flex-wrap items-center gap-2 rounded-xl border px-2 py-1 text-xs"
+  class="flex flex-wrap items-center gap-2 rounded-xl border border-border-strong px-2 py-1 text-xs"
   data-test="timer-replace-prompt"
   >
   <span>Four timers is the limit. Replace which one?</span>
   <button
   v-for="t in timers"
   :key="t.id"
-  class="h-11 rounded-lg border px-2 font-medium"
+  class="h-11 rounded-lg border border-border-strong px-2 font-mono-data text-xs font-medium"
   :data-test="`timer-replace-${t.id}`"
   :aria-label="`Replace the ${t.label} timer`"
   @click="replaceWith(t.id)"
@@ -1010,13 +1009,12 @@ function onTouchEnd(e: TouchEvent) {
   <li
   v-for="t in timers"
   :key="t.id"
-  class="flex items-center gap-2 rounded-xl border px-2 py-1"
+  class="flex items-center gap-2 rounded-xl border border-border-strong px-2 py-1"
   data-test="timer-manage-row"
   >
   <span class="min-w-0 flex-1 truncate text-sm font-semibold">{{ t.label }}</span>
   <button
-  class="flex h-11 min-w-20 shrink-0 items-center justify-center gap-1 px-1 font-mono text-base font-semibold tabular-nums"
-  :class="isRunning(t) ? 'text-brand-text' : ''"
+  class="flex h-11 min-w-20 shrink-0 items-center justify-center gap-1 px-1 font-mono-data text-base font-semibold tabular-nums text-saffron"
   :data-test="`timer-manage-toggle-${t.id}`"
   :aria-label="
   isRunning(t)
@@ -1044,11 +1042,11 @@ function onTouchEnd(e: TouchEvent) {
   </Teleport>
 
   <!-- Big navigation buttons -->
-  <footer class="border-t px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+  <footer class="border-t border-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
   <div class="mx-auto flex max-w-reading flex-col gap-2">
   <div class="flex gap-3">
   <button
-  class="h-14 min-w-28 flex-1 rounded-xl border text-base font-semibold transition-opacity disabled:opacity-40"
+  class="h-14 min-w-28 flex-1 rounded-xl border border-border-strong text-base font-semibold transition-opacity disabled:opacity-40"
   :disabled="isFirst"
   @click="prev"
   >
@@ -1081,7 +1079,7 @@ function onTouchEnd(e: TouchEvent) {
   stops inviting a second one. -->
   <button
   v-if="!isLast"
-  class="h-12 rounded-xl border text-sm font-semibold text-brand-text active:bg-surface-sunken disabled:opacity-60"
+  class="h-12 rounded-xl border border-border-strong text-sm font-semibold text-brand-text active:bg-surface-sunken disabled:opacity-60"
   data-test="mark-cooked"
   aria-label="Mark as cooked and keep cooking"
   :disabled="sessionRecorded"

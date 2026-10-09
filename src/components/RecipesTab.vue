@@ -462,7 +462,7 @@ onUnmounted(() => observer?.disconnect())
   v-if="showTips"
   id="search-tips-panel"
   data-test="search-tips-panel"
-  class="rounded-xl border bg-popover px-4 py-3 text-xs text-text-muted space-y-1"
+  class="rounded-xl border border-border bg-popover px-4 py-3 text-xs text-text-muted space-y-1"
   >
   <div><code>word word</code> — all words (AND)</div>
   <div><code>rice OR quinoa</code> — either word</div>

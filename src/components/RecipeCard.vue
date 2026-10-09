@@ -76,24 +76,29 @@ const showNew = computed(() => {
   @error="onImgError"
   class="aspect-[4/3] w-full bg-surface-sunken object-cover"
   />
+  <!-- Corner marks sit on the photograph, so they ride the same
+  espresso disc chrome as the photo controls (ADR-0067). -->
   <span
   v-if="showNew"
-  class="absolute top-2 left-2 rounded bg-surface-dark px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-brand-soft"
+  class="absolute top-2 left-2 rounded bg-espresso px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-brand-soft"
   data-test="new-badge"
   >
   NEW
   </span>
   <span
   v-else-if="meta.is_pro"
-  class="absolute top-2 left-2 rounded bg-surface-dark px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-warning-soft"
+  class="absolute top-2 left-2 rounded bg-espresso px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-warning-soft"
   >
   PRO
   </span>
   <!-- A REAL control above the card's stretched link: the heart is not
   nested inside the link, it stops propagation, and it carries its
   own 44px hit area (DESIGN.md Components/Selection). -->
+  <!-- DESIGN.md photo-control: a solid ESPRESSO disc (roasted espresso,
+  ADR-0067 — literal dark chrome over any photograph), white idle glyph,
+  favourite-soft heart when selected. -->
   <button
-  class="absolute top-2 right-2 z-10 flex size-11 items-center justify-center rounded-full bg-surface-dark text-text-dark"
+  class="absolute top-2 right-2 z-10 flex size-11 items-center justify-center rounded-full bg-espresso text-on-brand"
   :aria-label="isFavourite ? 'Remove from favourites' : 'Add to favourites'"
   :aria-pressed="isFavourite"
   @click.stop="favourites.toggleFavourite(meta.id)"
@@ -101,7 +106,7 @@ const showNew = computed(() => {
   <Heart
   :size="20"
   :fill="isFavourite ? 'currentColor' : 'none'"
-  :class="isFavourite ? 'text-favourite-soft' : 'text-text-dark'"
+  :class="isFavourite ? 'text-favourite-soft' : ''"
   aria-hidden="true"
   />
   </button>

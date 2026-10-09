@@ -345,10 +345,12 @@ function startCooking() {
   @error="onImgError"
   class="aspect-[4/3] w-full object-cover lg:rounded-xl"
   />
-  <!-- Solid espresso discs over the photo (DESIGN.md Elevation):
-  the contrast never depends on the photograph's brightness. -->
+  <!-- Solid espresso discs over the photo (DESIGN.md photo-control):
+  roasted espresso, white glyph; the contrast never depends on the
+  photograph's brightness — and NO shadow (ADR-0068: the disc's own
+  darkness is the separation). -->
   <button
-  class="absolute top-3 left-3 flex size-11 items-center justify-center rounded-full bg-surface-dark text-text-dark shadow"
+  class="absolute top-3 left-3 flex size-11 items-center justify-center rounded-full bg-espresso text-on-brand"
   aria-label="Back"
   data-test="detail-back"
   @click="close"
@@ -356,7 +358,7 @@ function startCooking() {
   <ArrowLeft :size="20" aria-hidden="true" />
   </button>
   <button
-  class="absolute top-3 right-3 flex size-11 items-center justify-center rounded-full bg-surface-dark shadow"
+  class="absolute top-3 right-3 flex size-11 items-center justify-center rounded-full bg-espresso text-on-brand"
   :aria-label="favourites.isFavourite(meta.id) ? 'Remove from favourites' : 'Add to favourites'"
   :aria-pressed="favourites.isFavourite(meta.id)"
   @click="favourites.toggleFavourite(meta.id)"
@@ -365,7 +367,7 @@ function startCooking() {
   :size="22"
   aria-hidden="true"
   :fill="favourites.isFavourite(meta.id) ? 'currentColor' : 'none'"
-  :class="favourites.isFavourite(meta.id) ? 'text-favourite-soft' : 'text-text-dark'"
+  :class="favourites.isFavourite(meta.id) ? 'text-favourite-soft' : ''"
   />
   </button>
   </figure>
@@ -375,7 +377,7 @@ function startCooking() {
   <div class="flex flex-wrap items-center gap-2 text-label-md text-text-muted">
   <span
   v-if="meta.is_pro"
-  class="rounded bg-surface-dark px-1.5 py-0.5 font-bold text-warning-soft"
+  class="rounded bg-espresso px-1.5 py-0.5 font-bold text-warning-soft"
   >PRO</span
   >
   <!-- Type icon only: no redundant category word beside an
@@ -520,7 +522,7 @@ function startCooking() {
   >
   <Minus :size="18" aria-hidden="true" />
   </button>
-  <span class="w-8 text-center text-sm font-semibold tabular-nums">{{
+  <span class="w-8 text-center text-sm font-semibold font-mono-data tabular-nums">{{
   servings
   }}</span>
   <button
@@ -587,18 +589,18 @@ function startCooking() {
   <section class="mt-6" data-test="nutrition">
   <h3 class="mb-2 text-body-sm font-semibold">Nutrition</h3>
   <div class="rounded-xl bg-surface-sunken p-4">
-  <p class="flex flex-wrap gap-4 text-body-sm">
+  <p class="flex flex-wrap gap-4 font-mono-data text-body-sm tabular-nums">
   <span class="flex items-center gap-1.5">
   <HueIcon role="energy" :size="18" />
-  <span class="tabular-nums">{{ Math.round(meta.calories) }} kcal / serving</span>
+  <span>{{ Math.round(meta.calories) }} kcal / serving</span>
   </span>
   <span class="flex items-center gap-1.5">
   <Clock :size="18" aria-hidden="true" />
-  <span class="tabular-nums">{{ meta.cooking_minutes }} min</span>
+  <span>{{ meta.cooking_minutes }} min</span>
   </span>
   <span v-if="meta.sodium_mg" class="flex items-center gap-1.5" data-test="nutrition-sodium">
   <HueIcon role="sodium" :size="18" />
-  <span class="tabular-nums">{{ Math.round(meta.sodium_mg) }} mg sodium</span>
+  <span>{{ Math.round(meta.sodium_mg) }} mg sodium</span>
   </span>
   </p>
   <div class="mt-3 space-y-1.5">
@@ -611,7 +613,7 @@ function startCooking() {
   :style="{ width: `${Math.round(bar.value * 100)}%` }"
   />
   </div>
-  <span class="w-10 text-right text-label-md font-medium tabular-nums">{{
+  <span class="w-10 shrink-0 text-right text-label-md font-medium font-mono-data tabular-nums">{{
   Math.round(bar.value * 100)
   }}%</span>
   </div>
@@ -695,7 +697,7 @@ function startCooking() {
   :key="item.id"
   class="flex gap-3 px-4 py-2.5 text-body-sm"
   >
-  <span class="w-24 shrink-0 font-medium text-brand-text tabular-nums">{{
+  <span class="w-24 shrink-0 font-medium text-brand-text font-mono-data tabular-nums">{{
   item.quantity || '—'
   }}</span>
   <span>{{ item.ingredient_name }}</span>
@@ -713,7 +715,7 @@ function startCooking() {
   >
   <div class="flex gap-3">
   <span
-  class="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-on-brand"
+  class="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand font-mono-data text-xs font-bold text-on-brand"
   >
   {{ i + 1 }}
   </span>

@@ -227,7 +227,7 @@ onUnmounted(() => {
   id="search-suggest"
   data-test="search-suggest"
   role="listbox"
-  class="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl border bg-popover shadow-popover"
+  class="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl border border-border bg-popover shadow-popover"
   >
   <div
   v-for="(s, i) in suggestions"

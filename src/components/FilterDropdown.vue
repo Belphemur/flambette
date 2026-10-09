@@ -146,7 +146,7 @@ watch(menu.open, (v) => emit('open', v))
     <button
     :ref="menu.triggerEl"
     type="button"
-    class="flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors"
+    class="flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-border-strong px-3 text-sm font-medium transition-colors"
     :class="active ? 'border-brand-text bg-brand-tint text-brand-text' : ''"
     aria-haspopup="listbox"
     :aria-expanded="menu.open.value"
