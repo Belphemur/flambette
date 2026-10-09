@@ -200,6 +200,16 @@ components:
   control-border-dark:
     backgroundColor: "{colors.border-dark-strong}"
     height: 1px
+  field:
+    backgroundColor: "{colors.surface-sunken}"
+    textColor: "{colors.text}"
+    height: 44px
+    rounded: "{rounded.lg}"
+  field-dark:
+    backgroundColor: "{colors.surface-dark-sunken}"
+    textColor: "{colors.text-dark}"
+    height: 44px
+    rounded: "{rounded.lg}"
   nav-bar:
     backgroundColor: "{colors.surface-raised}"
     textColor: "{colors.text-muted}"
@@ -540,10 +550,14 @@ measure provide the editorial character, not an extra typeface.
 
 ### Shared frame
 
-One fluid `container` token caps the app at **1100px border-box**. Header, main
-content and bottom-navigation alignment share it. Use 16px mobile / 24px desktop
-internal gutters without adding another narrower container inside the recipe grid.
-The bottom bar may have a full-window background; its tabs align with the shell.
+One fluid `container` token caps the app at **1100px border-box**. Main content
+and the content rows of the header and bottom navigation align to it. The header
+bar and the bottom bar are FULL-WINDOW chrome (ADR-0065): their backgrounds and
+edge borders span the viewport edge to edge on every width — below 1100px this
+is already the case — while the logo, room chip, app version and navigation tabs
+stay aligned with the content column, making the header symmetric with the
+bottom navigation. Use 16px mobile / 24px desktop internal gutters without
+adding another narrower container inside the recipe grid.
 At 1440px and 1920px desktop widths the app remains centred and actually uses the
 1100px allowance. At narrower widths it fits the viewport without horizontal scroll.
 
@@ -644,6 +658,21 @@ height, and the dark-mode keyline described above. Add/Update in plan uses the
 secondary outlined surface. Loading/disabled/focus/hover/pressed states are explicit;
 disabled must not look clickable and loading must not collapse the control.
 Back and favourite controls stay visible over any photo.
+
+### Fields (inputs and textareas)
+
+Every free-text field — recipe search, ingredient add-rows, settings inputs,
+cooking-view scale and note inputs, textareas — speaks ONE sunken-well language
+(ADR-0065). At rest the field is a well of `surface-sunken` carrying the typed
+value, bounded by the 1px `border-strong` control keyline (`control-border`),
+`rounded.lg` 12px, at the 44px touch height. Focus takes the action-text colour
+(`primary-strong`, `primary-soft` in dark) on the keyline, beneath the global 2px
+focus ring. The well RECESSES into the page where cards LIFT off it: a field
+never borrows the recipe-card shadow, and `primary-tint` never fills a field —
+tint means selection, and a field is not a selection. All fields share one
+component class so the language cannot drift per view; dark mode flips entirely
+through the token pairs, never `dark:` utilities. Placeholder and hint text stay
+`text-muted`; disabled fields keep the well and mute their text.
 
 ### Navigation and motion
 
