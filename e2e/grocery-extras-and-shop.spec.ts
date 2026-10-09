@@ -145,7 +145,7 @@ test.describe('EXTRA ITEMS sub-sectioned by category (ADR-0050)', () => {
     await planFirstRecipe(page)
   })
 
-  test('an extra with a known category gets its OWN sub-section and stays in EXTRA ITEMS (never routed)', async ({ page }) => {
+  test('an extra with a known category gets its OWN sub-section and stays in EXTRA ITEMS (never routed)', async ({ page, isMobile }) => {
     // Unknown name, explicit category pick (the ADR-0012 override dropdown,
     // now the shared FilterDropdown per ADR-0050 §8).
     await input(page).fill('Sunshade tent')
@@ -193,9 +193,18 @@ test.describe('EXTRA ITEMS sub-sectioned by category (ADR-0050)', () => {
       }
     })
     expect(order.extraTop).toBeLessThan(order.firstSectionTop)
-    // Add-row sits directly under the EXTRA ITEMS header.
-    expect(order.addBarTop).toBeGreaterThan(order.headerBottom)
-    expect(order.addBarTop - order.headerBottom).toBeLessThan(80)
+    // The add-row is anchored to the extras group, but WHERE depends on the
+    // breakpoint (ADR-0071 delta 4): phones keep it directly under the
+    // group header; desktop relocates it into the sidebar's Quick Extra
+    // Entry. Either way it belongs to the extras group, never to a store
+    // section.
+    if (isMobile) {
+      expect(order.addBarTop).toBeGreaterThan(order.headerBottom)
+      expect(order.addBarTop - order.headerBottom).toBeLessThan(80)
+    } else {
+      await expect(page.getByTestId('grocery-sidebar')).toContainText('Quick extra entry')
+      await expect(page.getByTestId('extra-section').getByTestId('add-bar-input')).toHaveCount(0)
+    }
 
     await expectZeroMealimeRequests(page)
   })

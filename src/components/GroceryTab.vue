@@ -406,6 +406,9 @@ const shopperCount = computed(() => room.peers ?? 1)
   <div
   class="flex items-center gap-2 overflow-hidden rounded-xl bg-surface-raised px-3 py-2.5 ring-1 ring-border"
   >
+  <!-- The HEADING holds the label only: the count pill is a sibling, so
+  the group's accessible name is exactly "Extra items" (ADR-0050 §1's
+  pin) and a screen reader hears the count as the pill it is. -->
   <span class="min-w-0 flex-1 text-label-md font-semibold text-text">Extra items</span>
   <span
   class="shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 font-mono-data text-label-sm tabular-nums text-text-muted"
