@@ -870,16 +870,22 @@ function startCooking() {
   </button>
   </div>
   </div>
+  <!-- The width is RESPONSIVE, never flex-1 alone: in a column flex (a
+  phone) `flex-1` zeroes the flex-basis on the MAIN AXIS, which is the
+  HEIGHT — the pills collapsed to their content height and rendered
+  SHORTER than the tertiary facts button below them (the inverted
+  hierarchy the owner screenshotted). Full-width stacked pills on a
+  phone, one shared row from sm up. -->
   <div class="flex flex-col gap-2 sm:flex-row">
   <button
-  class="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-brand px-4 text-base font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong dark:ring-1 dark:ring-brand-soft"
+  class="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-brand px-4 text-base font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong sm:w-auto sm:flex-1 dark:ring-1 dark:ring-brand-soft"
   data-test="start-cooking"
   @click="startCooking"
   >
   <ChefHat :size="18" aria-hidden="true" />Start cooking
   </button>
   <button
-  class="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-surface-raised px-4 text-sm font-semibold text-brand-text ring-1 ring-border-strong active:bg-surface-sunken"
+  class="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-surface-raised px-4 text-sm font-semibold text-brand-text ring-1 ring-border-strong active:bg-surface-sunken sm:w-auto sm:flex-1"
   data-test="add-to-plan"
   @click="addToPlan"
   >
@@ -915,8 +921,14 @@ function startCooking() {
   </h3>
   <span class="font-mono-data text-label-sm font-normal text-text-muted whitespace-nowrap">Per serving</span>
   </div>
-  <div v-if="meta" class="mt-2 grid grid-cols-5 gap-1.5 sm:hidden" data-test="nutrition-stat-boxes">
-  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface px-1 py-2 text-center">
+  <!-- ENERGY is the responsive member of the list (owner: on a phone it
+       is redundant — the per-serving context is the header's, and
+  calories read on the metadata band above): hidden below sm, part of
+  the list at sm+ — a responsive toggle on the list, never a hard-coded
+  count. Sodium keeps its OWN hue (`nutrition-sodium` indigo — owner:
+  sodium stays separate, never a macro colour). -->
+  <div v-if="meta" class="mt-2 grid grid-cols-4 gap-1.5 sm:grid-cols-5 sm:hidden" data-test="nutrition-stat-boxes">
+  <div class="hidden flex-col items-center gap-0.5 rounded-lg bg-surface px-1 py-2 text-center sm:flex">
   <span class="text-[10px] font-semibold text-text-muted">Energy</span>
   <span class="text-headline-sm font-bold text-text">{{ Math.round(meta.calories) }}</span>
   <span class="font-mono-data text-[10px] text-text-muted">kcal</span>
@@ -990,7 +1002,7 @@ function startCooking() {
   unchanged. -->
   <button
   v-if="doc"
-  class="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-surface px-4 text-sm font-semibold text-brand-text ring-1 ring-border-strong active:bg-surface-sunken sm:w-auto sm:px-3"
+  class="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-surface px-4 text-sm font-semibold text-brand-text ring-1 ring-border-strong active:bg-surface-sunken sm:w-auto sm:px-3"
   aria-label="Full nutrition facts"
   aria-haspopup="dialog"
   data-test="nutrition-open"
