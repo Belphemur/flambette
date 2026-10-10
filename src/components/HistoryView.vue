@@ -228,7 +228,12 @@ const hasAnyCook = computed(() => plan.cookedHistory.length > 0)
         {{ p.label }}
       </button>
     </div>
-    <div class="relative sm:w-72">
+    <!-- The search filters ROWS of the period window — in an empty window
+         (whole log older than the period) there is nothing to filter, and
+         the no-matches feedback lives in the list branch, so a visible
+         search here is a control that silently does nothing (kody +
+         coderabbit). The pills stay: they are the way back to "All time". -->
+    <div v-if="groups.length > 0" class="relative sm:w-72">
       <Search
         :size="16"
         aria-hidden="true"

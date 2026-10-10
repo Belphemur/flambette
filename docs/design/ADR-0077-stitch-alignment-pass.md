@@ -255,9 +255,15 @@ detail page against the mock and found two defects this pass fixes:
 - **A second, larger search field class per mount**: rejected — that is
   exactly the drift ADR-0070's "one component, two mount points" rule exists
   to prevent. ONE variant, applied by the one component.
-- **Macro split bar on detail**: rejected again — ADR-0073's rejected-fiction
-  reasoning holds: the catalog publishes `calories` and `sodium_mg` only, and
-  a bar implies a split of a whole that the data does not describe.
+- **Macro split bar on detail**: ~~rejected again~~ **SUPERSEDED (2026-10-10
+  addendum, above)** — the earlier "the data cannot support a bar" reasoning
+  was WRONG about the data: the catalog publishes `meta.macros` (protein /
+  carbs / fats as fractions of calories) alongside `calories` and
+  `sodium_mg`, which is exactly what a split needs. The addendum ADOPTS the
+  render's one segmented bar (segments = the macro fractions, brand-ramp
+  colours, grams in the legend via the shared `lib/nutrition` Atwater
+  helper, sodium in the legend). This entry is kept only for the decision
+  trail — implement from the addendum, not from this rejection.
 - **Group History by DAY like the render**: rejected — ADR-0034's plan
   provenance is the app's real model (a cook event carries its plan id), and
   the render's day grouping would throw that provenance away to match a

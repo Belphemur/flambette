@@ -30,10 +30,13 @@ every other surface must match:
 - Mobile: photo → title/facts → actions → ingredients → steps, single
   column, 16px gutters.
 - Metadata strip on the intro card: total time, per-serving calories
-  (never scaled), household rating, servings stepper, sodium droplet —
-  real catalog data only (ADR-0073's rejected-fictions list). The strip
-  is ONE keylined band with divided cells (ADR-0077): three across a
-  phone, four–five across desktop, values in the mono data voice.
+  (never scaled), household rating, servings stepper — real catalog
+  data only (ADR-0073's rejected-fictions list). The strip is ONE
+  keylined band with divided cells (ADR-0077): FOUR cells at every
+  viewport (2×2 on a phone, 1×4 on desktop) — sodium is NOT a band cell
+  (the render's four columns have no sodium, and the macro fractions
+  already sum to 1); it reads in the nutrition legend's droplet hue
+  below. Values in the mono data voice.
 - Measured-amount chips beneath steps — on the detail's step preview as
   well as in cooking (ADR-0077), derived from the same pure helper
   (ADR-0022); one-tap timers always visible once running; servings

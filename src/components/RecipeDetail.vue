@@ -359,11 +359,13 @@ function hintAt(index: number): TimerHint | null {
  * the cooking view's disclosure is the workspace. No match means no chip:
  * nothing is ever invented.
  */
-function chipsFor(index: number): MeasuredChip[] {
+const stepChips = computed<MeasuredChip[][]>(() => {
   const current = doc.value
   if (!current) return []
-  return measuredChipsForLines(current, scaledSteps.value[index]?.details ?? [], factor.value, unitSystem.value)
-}
+  return scaledSteps.value.map((step) =>
+    measuredChipsForLines(current, step.details ?? [], factor.value, unitSystem.value),
+  )
+})
 
 
 /** A 1s tick, alive only while a timer this sheet armed is counting. */
@@ -383,32 +385,50 @@ function syncTick(): void {
     tick = null
   }
 }
-watch([armedByStep, () => ui.stepTimers], syncTick, { deep: true, immediate: true })
+/**
+ * Forget mappings whose timer is gone from the shared store (expired, or
+ * dismissed from cooking mode's strip). This is the pruning stepCountdown
+ * used to do inline — a WRITE during render (the template calls it twice
+ * per step), which can trip Vue's recursive-update warning and re-fires
+ * the deep watch every render. The watch paths own it now: mapping and
+ * store changes prune immediately, the 1s tick prunes expirations, and
+ * the render reads.
+ */
+function pruneArms(): void {
+  if (!meta.value) return
+  const stale: number[] = []
+  for (const [index, id] of armedByStep.value) {
+    const t = ui.stepTimers[meta.value.id]?.[id]
+    if (t === undefined || remainingSeconds(t, now.value) <= 0) stale.push(index)
+  }
+  if (stale.length === 0) return
+  const next = new Map(armedByStep.value)
+  for (const index of stale) next.delete(index)
+  armedByStep.value = next
+}
+
+watch([armedByStep, () => ui.stepTimers], () => {
+  syncTick()
+  pruneArms()
+}, { deep: true, immediate: true })
+watch(now, pruneArms)
 onUnmounted(() => {
   if (tick !== null) clearInterval(tick)
 })
 
-/** Seconds left on the timer armed for one step, or null when none. */
+/**
+ * Seconds left on the timer armed for one step, or null when none. READ-
+ * ONLY — the template calls this during render, and a render that writes
+ * reactive state (the arm-mapping pruning this used to do inline) is the
+ * recursive-update hazard pruneArms now owns from the watch paths.
+ */
 function stepCountdown(index: number): string | null {
   const id = armedByStep.value.get(index)
   if (id === undefined || !meta.value) return null
   const timer = ui.stepTimers[meta.value.id]?.[id]
-  // The timer is gone from the shared store (expired, or dismissed from
-  // cooking mode's strip): forget the mapping too, or this step would
-  // stay marked armed with a working-but-pointless dismiss button.
-  if (!timer) {
-    const next = new Map(armedByStep.value)
-    next.delete(index)
-    armedByStep.value = next
-    return null
-  }
+  if (!timer) return null
   const left = remainingSeconds(timer, now.value)
-  if (left <= 0) {
-    const next = new Map(armedByStep.value)
-    next.delete(index)
-    armedByStep.value = next
-    return null
-  }
+  if (left <= 0) return null
   return formatCountdown(left)
 }
 
@@ -700,11 +720,15 @@ function startCooking() {
   stars) / Servings Scaler. Sodium is NOT a band cell — the authoritative
   render's four columns have no sodium, and the macro fractions already
   sum to 1, so sodium reads in the nutrition LEGEND below in its own
-  droplet hue (recorded in ADR-0077). Left-aligned cells, mono labels,
+  droplet hue (recorded in ADR-0077). FOUR cells over a 2-col phone grid
+  fills exactly — the container's border-coloured gap trick never paints
+  an empty slot (the older 3/5-cell band's trailing block was a review
+  finding against a superseded push; this construction cannot produce
+  it). Left-aligned cells, mono labels,
   bold values — the render's p-3 / gap-2 rhythm. Macro splits,
   difficulty, test counts and SKUs stay rejected fictions. -->
   <dl
-  class="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-border ring-1 ring-border"
+  class="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-border ring-1 ring-border sm:grid-cols-4"
   data-test="detail-metadata-strip"
   >
   <div class="flex flex-col gap-1 bg-surface px-3 py-2.5">
@@ -730,7 +754,12 @@ function startCooking() {
   <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted">Rating</dt>
   <dd class="flex items-center gap-1.5">
   <span v-if="ratingDisplay" class="text-headline-sm font-bold text-text">{{ ratingDisplay }}</span>
-  <RatingStars :variant-id="meta.id" :catalog-rating="meta.rating" :size="16" />
+  <RatingStars
+  :variant-id="meta.id"
+  :catalog-rating="meta.rating"
+  :size="16"
+  compact
+  />
   </dd>
   </div>
   <!-- Servings: the stepper is the control it has always been — same ref,
@@ -742,7 +771,7 @@ function startCooking() {
   <dd class="flex items-center">
   <div class="flex items-center rounded-lg ring-1 ring-border-strong">
   <button
-  class="flex size-8 items-center justify-center text-text-muted disabled:opacity-40"
+  class="flex size-11 items-center justify-center text-text-muted disabled:opacity-40"
   :disabled="servings <= 1"
   aria-label="Fewer servings"
   @click="setServings(servings - 1)"
@@ -751,7 +780,7 @@ function startCooking() {
   </button>
   <span class="w-7 text-center text-headline-sm font-bold text-brand-text">{{ servings }}</span>
   <button
-  class="flex size-8 items-center justify-center text-text-muted disabled:opacity-40"
+  class="flex size-11 items-center justify-center text-text-muted disabled:opacity-40"
   :disabled="!canMoreServings"
   aria-label="More servings"
   @click="setServings(servings + 1)"
@@ -1094,12 +1123,12 @@ function startCooking() {
   unit name`), the same string the cooking view prints, so the two
   surfaces cannot disagree about what a step measures. -->
   <ul
-  v-if="chipsFor(i).length"
+  v-if="stepChips[i]?.length"
   class="mt-2 ml-9 flex flex-wrap gap-1.5 border-t border-border pt-2"
   data-test="detail-measured-amounts"
   >
   <li
-  v-for="chip in chipsFor(i)"
+  v-for="chip in stepChips[i] ?? []"
   :key="`${i}:${chip.lineIndex}:${chip.label}`"
   class="rounded-lg bg-surface-sunken px-2 py-0.5 font-mono-data text-label-sm tabular-nums text-text-muted"
   data-test="detail-measured-chip"

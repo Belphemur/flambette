@@ -57,10 +57,22 @@ function closeShareSheet() {
  * the saved default-join code, so the household rejoins on next launch).
  */
 function confirmLeaveRoom() {
-  ui.showToast(`Leave room ${room.code ?? ''}? Your plan stops syncing with the household.`, {
+  // The toast lives 10s — long enough for the user to leave, join ANOTHER
+  // room (Settings, a share link) and press this still-visible Leave, which
+  // must never detach the room the toast did NOT name. Capture the target;
+  // the action leaves only if the CURRENT room is still that one.
+  const target = room.code
+  if (!target) return
+  ui.showToast(`Leave room ${target}? Your plan stops syncing with the household.`, {
     duration: 10_000,
     actions: [
-      { label: 'Leave', run: () => room.leave() },
+      {
+        label: 'Leave',
+        run: () => {
+          ui.dismissToast()
+          if (room.code === target) room.leave()
+        },
+      },
       { label: 'Cancel', run: () => ui.dismissToast() },
     ],
   })
