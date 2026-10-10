@@ -198,16 +198,20 @@ detail page against the mock and found two defects this pass fixes:
   same claim in the wrong composition. The owner's ruling (and BOTH renders):
   one segmented track whose protein/carbs/fat segments sit side by side,
   each width = the macro's fraction of calories, with the mono legend grid
-  beneath. This revises the composition only — ADR-0073's colour ruling
-  stands and is restated: segments stay on the BRAND ramp (a green protein
-  segment reads "vegetarian"; the energy/sodium hues stay reserved for the
-  facts that already wear them). The legend's grams come from the SHARED
+  beneath. This revises the composition; the COLOUR ruling below was
+  AMENDED later the same day (owner pixel ruling): the segments wear the
+  render's own colours, which ARE this repo's nutrition tokens. The
+  legend's grams come from the SHARED
   Atwater constant (`KCAL_PER_G`, lib/nutrition — fraction × kcal / 4|9),
   the same derivation the facts modal uses, never an inline converter;
-  sodium rides the legend in its own droplet hue with its existing hook.
+  sodium rides the legend as a `hue-meat` red dot with its existing hook.
 - **The metadata band is the mock's construction, not a stack of padded
-  boxes**: raised cells over a border-coloured gap (the divide trick) inside
-  one warm keyline, and the meta column stacking at the render's gap rhythm.
+  boxes**: the render's band is ONE lighter-base strip (`bg-paper-base`,
+  rounded, padded) with GAPped, LEFT-ALIGNED cells — no per-cell
+  backgrounds and no divide keylines. (The first draft's divide-trick
+  boxes read as cluttered cells — the owner's "looks bad" — and were
+  replaced by the plain band.) The meta column stacks at the render's gap
+  rhythm.
   A second review pass (same day, with the authoritative render attached)
   then superseded this pass's strip on two points, and the render's meta
   CARD is adopted whole: the tags, the title, the facts band, the actions
@@ -241,11 +245,14 @@ detail page against the mock and found two defects this pass fixes:
   fraction × kcal ÷ the Atwater factor, the arithmetic `macroSplit` runs
   in reverse — unit-tested against the render's own card (44g/48g/26g at
   620 kcal), so no surface re-derives grams inline.
-- **Segment colours stay on the BRAND ramp** (owner-confirmed via this
-  pass): the mock's purple/teal/olive/red segments collide with the
-  nutrition-hue semantics (ADR-0036) — purple reads as the protein token,
-  teal as the carbs token, and red as `hue-meat` ("contains meat") — so
-  the protein/carbs/fat segments keep `brand` / `brand-soft` / `brand/40`.
+- **Segment colours stay on the BRAND ramp**: ~~owner-confirmed via this
+  pass~~ **SUPERSEDED (owner pixel ruling, same day)** — the brand-ramp
+  draft produced the red/orange gradient the owner rejected. The render's
+  purple/teal/olive/red ARE this repo's own tokens (`nutrition-protein`,
+  `nutrition-carbs`, `nutrition-fat`, `hue-meat`), so adopting them adds
+  no hex and risks no ADR-0036 collision — that concern was about a GREEN
+  protein segment, which purple never risks. Segments wear the nutrition
+  tokens; sodium's legend dot wears `hue-meat`.
 
 ## Alternatives considered
 
@@ -262,7 +269,14 @@ detail page against the mock and found two defects this pass fixes:
   `sodium_mg`, which is exactly what a split needs. The addendum ADOPTS the
   render's one segmented bar (segments = the macro fractions, brand-ramp
   colours, grams in the legend via the shared `lib/nutrition` Atwater
-  helper, sodium in the legend). This entry is kept only for the decision
+  helper, sodium in the legend). COLOUR AMENDMENT (same day, owner pixel
+  ruling): the first draft rendered the segments on the BRAND ramp and
+  produced the red/orange gradient the owner rejected — the render's own
+  colours are this repo's existing nutrition tokens, adopted verbatim:
+  protein `nutrition-protein` (purple), carbs `nutrition-carbs` (teal),
+  fat `nutrition-fat` (olive), sodium's legend dot `hue-meat` (red). No
+  new hex; the earlier ADR-0036 objection targeted a GREEN protein
+  segment (vegetarian collision), which purple never risks. This entry is kept only for the decision
   trail — implement from the addendum, not from this rejection.
 - **Group History by DAY like the render**: rejected — ADR-0034's plan
   provenance is the app's real model (a cook event carries its plan id), and

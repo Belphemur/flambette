@@ -243,9 +243,9 @@ const macroSegments = computed(() => {
   if (!m) return []
   const kcal = meta.value!.calories
   return [
-  { label: 'Protein', value: m.protein, grams: macroGrams(m.protein, kcal, 'protein'), color: 'bg-brand' },
-  { label: 'Carbs', value: m.carbs, grams: macroGrams(m.carbs, kcal, 'carbs'), color: 'bg-brand-soft' },
-  { label: 'Fat', value: m.fats, grams: macroGrams(m.fats, kcal, 'fat'), color: 'bg-brand/40' },
+  { label: 'Protein', value: m.protein, grams: macroGrams(m.protein, kcal, 'protein'), color: 'bg-nutrition-protein' },
+  { label: 'Carbs', value: m.carbs, grams: macroGrams(m.carbs, kcal, 'carbs'), color: 'bg-nutrition-carbs' },
+  { label: 'Fat', value: m.fats, grams: macroGrams(m.fats, kcal, 'fat'), color: 'bg-nutrition-fat' },
   ]
 })
 
@@ -720,24 +720,23 @@ function startCooking() {
   stars) / Servings Scaler. Sodium is NOT a band cell — the authoritative
   render's four columns have no sodium, and the macro fractions already
   sum to 1, so sodium reads in the nutrition LEGEND below in its own
-  droplet hue (recorded in ADR-0077). FOUR cells over a 2-col phone grid
-  fills exactly — the container's border-coloured gap trick never paints
-  an empty slot (the older 3/5-cell band's trailing block was a review
-  finding against a superseded push; this construction cannot produce
-  it). Left-aligned cells, mono labels,
-  bold values — the render's p-3 / gap-2 rhythm. Macro splits,
+  droplet hue (recorded in ADR-0077). The band is the RENDER'S construction
+  (paste: `grid-cols-2 sm:grid-cols-4 gap py bg-paper-base rounded-lg px`):
+  a lighter base band with GAPped, LEFT-ALIGNED cells — no per-cell
+  backgrounds, no divide keylines (the gap-px/bg-border trick read as
+  cluttered boxes, the owner's "looks bad"). Macro splits,
   difficulty, test counts and SKUs stay rejected fictions. -->
   <dl
-  class="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-border ring-1 ring-border sm:grid-cols-4"
+  class="grid grid-cols-2 gap-3 rounded-lg bg-surface px-4 py-3 sm:grid-cols-4"
   data-test="detail-metadata-strip"
   >
-  <div class="flex flex-col gap-1 bg-surface px-3 py-2.5">
+  <div class="flex flex-col gap-1">
   <dt class="flex items-center gap-1 font-mono-data text-[11px] uppercase tracking-wider text-text-muted">
   <Clock :size="13" aria-hidden="true" />Total time
   </dt>
   <dd class="text-headline-sm font-bold text-text">{{ meta.cooking_minutes }} mins</dd>
   </div>
-  <div class="flex flex-col gap-1 bg-surface px-3 py-2.5">
+  <div class="flex flex-col gap-1">
   <dt class="flex items-center gap-1 font-mono-data text-[11px] uppercase tracking-wider text-text-muted">
   <HueIcon role="energy" :size="13" />Calories
   </dt>
@@ -750,13 +749,14 @@ function startCooking() {
        modifies (ADR-0031): the same RatingStars control, with the NUMBER
   the render prints beside it — household rating when one exists, the
   catalog Bayesian mean otherwise, the same precedence the stars show. -->
-  <div class="flex flex-col gap-1 bg-surface px-3 py-2.5" data-test="recipe-detail-rating">
+  <div class="flex flex-col gap-1" data-test="recipe-detail-rating">
   <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted">Rating</dt>
   <dd class="flex items-center gap-1.5">
   <span v-if="ratingDisplay" class="text-headline-sm font-bold text-text">{{ ratingDisplay }}</span>
   <RatingStars
   :variant-id="meta.id"
   :catalog-rating="meta.rating"
+  :fallback-rating="meta.rating"
   :size="16"
   compact
   />
@@ -766,7 +766,7 @@ function startCooking() {
        same clamp, same ADR-0037 write on every press — restyled into the
        band. The sr-only line is the accessible reading of the control
        ("serves 4"), which is what the specs and a screen reader want. -->
-  <div class="flex flex-col gap-1 bg-surface px-3 py-2.5">
+  <div class="flex flex-col gap-1">
   <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted">Servings scaler</dt>
   <dd class="flex items-center">
   <div class="flex items-center rounded-lg ring-1 ring-border-strong">
@@ -882,14 +882,14 @@ function startCooking() {
   </div>
   <div class="flex flex-col gap-2 sm:flex-row">
   <button
-  class="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-base font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong dark:ring-1 dark:ring-brand-soft"
+  class="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-brand px-4 text-base font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong dark:ring-1 dark:ring-brand-soft"
   data-test="start-cooking"
   @click="startCooking"
   >
   <ChefHat :size="18" aria-hidden="true" />Start cooking
   </button>
   <button
-  class="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-surface-raised px-4 text-sm font-semibold text-brand-text ring-1 ring-border-strong active:bg-surface-sunken"
+  class="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-surface-raised px-4 text-sm font-semibold text-brand-text ring-1 ring-border-strong active:bg-surface-sunken"
   data-test="add-to-plan"
   @click="addToPlan"
   >
@@ -909,8 +909,14 @@ function startCooking() {
   derivable (recorded in ADR-0077). -->
   <section class="border-t border-border pt-3" data-test="nutrition">
   <h3 class="text-body-sm font-semibold">Nutritional split (per serving)</h3>
-  <!-- The ONE split bar (ADR-0036: brand-ramp segments — a green protein
-  segment would read "vegetarian"). One image role, one sentence. -->
+  <!-- The ONE split bar. Segment colours are the OWNER'S OVERRIDE of this
+  addendum's first draft (which used the brand ramp and produced the
+  red/orange gradient the owner rejected): the render's colours ARE this
+  repo's own nutrition tokens — protein purple IS `nutrition-protein`,
+  carbs teal IS `nutrition-carbs`, fat olive IS `nutrition-fat` — so no
+  new hex and no collision; ADR-0036's identity concern was about a GREEN
+  protein (vegetarian), which purple never risks. Sodium's dot rides
+  `hue-meat` red per the render. One image role, one sentence. -->
   <div
   v-if="macroSegments.length"
   class="mt-2 flex h-2.5 w-full overflow-hidden rounded-full bg-surface"
@@ -926,7 +932,8 @@ function startCooking() {
   />
   </div>
   <!-- The legend: dot + label + value, mono, tabular — the render's
-  grid under the bar. Sodium keeps its droplet hue and its hook. -->
+  grid under the bar. Sodium's dot is `hue-meat` red (the render's), not
+  the droplet: the legend reads against the bar's own segment colours. -->
   <dl
   class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 font-mono-data text-label-sm tabular-nums sm:grid-cols-4"
   >
@@ -936,7 +943,7 @@ function startCooking() {
   <dd class="font-semibold text-text">{{ Math.round(seg.grams) }} g</dd>
   </div>
   <div v-if="meta.sodium_mg" class="flex items-center gap-1.5" data-test="nutrition-sodium">
-  <HueIcon role="sodium" :size="14" />
+  <span class="size-2.5 shrink-0 rounded-full bg-hue-meat" aria-hidden="true" />
   <dt class="text-text-muted">Sodium</dt>
   <dd class="font-semibold text-text">{{ Math.round(meta.sodium_mg) }} mg</dd>
   </div>
