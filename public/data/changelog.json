@@ -1,6 +1,27 @@
 {
-  "generatedAt": "2026-10-08T21:44:50Z",
+  "generatedAt": "2026-10-10T04:13:39Z",
   "versions": [
+    {
+      "version": "v2.6.0",
+      "date": "2026-10-10",
+      "title": "Warm Culinary Paper v2 \u2014 recipe detail redesign, editable ratings on history, live nutrition",
+      "features": [
+        {
+          "text": "Warm Culinary Paper v2 \u2014 recipe detail redesign, editable ratings on history, live nutrition",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ],
+      "fixes": [
+        {
+          "text": "Enter now closes the keyboard and shows your results",
+          "scope": "search",
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
     {
       "version": "v2.5.0",
       "date": "2026-10-08",
