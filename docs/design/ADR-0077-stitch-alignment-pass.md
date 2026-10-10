@@ -187,6 +187,30 @@ actions, checklist card, numbered steps). What still differs:
 - `docs/EXPERIENCE.md` §2/§6/§7 gain the alignment notes in the same commits
   as the surfaces they describe.
 
+## Addendum (2026-10-10): post-review fix pass — the ONE nutrition bar
+
+Dated change note; Status stays Accepted. The owner reviewed the rendered
+detail page against the mock and found two defects this pass fixes:
+
+- **The nutrition split is ONE bar, not three rows.** The alignment pass had
+  left ADR-0073's "macro split bar rejected" verdict standing while still
+  rendering the macro data as three stacked full-width rows — which is the
+  same claim in the wrong composition. The owner's ruling (and BOTH renders):
+  one segmented track whose protein/carbs/fat segments sit side by side,
+  each width = the macro's fraction of calories, with the mono legend grid
+  beneath. This revises the composition only — ADR-0073's colour ruling
+  stands and is restated: segments stay on the BRAND ramp (a green protein
+  segment reads "vegetarian"; the energy/sodium hues stay reserved for the
+  facts that already wear them). The legend's grams come from the SHARED
+  Atwater constant (`KCAL_PER_G`, lib/nutrition — fraction × kcal / 4|9),
+  the same derivation the facts modal uses, never an inline converter;
+  sodium rides the legend in its own droplet hue with its existing hook.
+- **The metadata band is the mock's construction, not a stack of padded
+  boxes**: raised cells over a border-coloured gap (the divide trick) inside
+  one warm keyline, tight cell padding, and the meta column stacking at the
+  render's gap rhythm (no extra band of air between title → strip →
+  actions).
+
 ## Alternatives considered
 
 - **Rebuild the detail from the render**: rejected — ADR-0073's composition is

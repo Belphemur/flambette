@@ -33,6 +33,7 @@ import {
   MAX_CONCURRENT_TIMERS,
 } from '../lib/stepTimer'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
+import { KCAL_PER_G } from '../lib/nutrition'
 import { usePlanStore } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
 import { useFavouritesStore } from '../stores/favourites'
@@ -218,18 +219,36 @@ const scaledSteps = computed<ScaledStep[]>(() =>
   doc.value ? localizeSteps(scaleSteps(doc.value, factor.value), unitSystem.value) : [],
 )
 
-const macroBars = computed(() => {
+/**
+ * The ONE segmented nutrition bar (ADR-0077 fix pass): the render's
+ * "Nutritional Split (per serving)" — a single track whose protein/carbs/
+ * fat segments sit SIDE BY SIDE, each width = the macro's fraction of
+ * calories (`meta.macros` sum to 1). Grams for the legend come from the
+ * SHARED Atwater constant (KCAL_PER_G, lib/nutrition): fraction × kcal /
+ * factor — the lib the facts modal derives with, never an inline
+ * converter. Segments stay on the BRAND ramp: a green protein segment
+ * would collide with the vegetarian food hue (which means "this is a
+ * vegetarian dish"), and the energy/sodium hues stay reserved for the
+ * facts that already wear them (ADR-0036).
+ */
+const macroSegments = computed(() => {
   const m = meta.value?.macros
   if (!m) return []
+  const kcal = meta.value!.calories
   return [
-  // Macro bars stay on the BRAND ramp only: a green "protein" bar would
-  // collide with the vegetarian food hue, which means "this is a
-  // vegetarian dish", and energy/sodium hues are reserved for the facts
-  // that already wear them.
-  { label: 'Protein', value: m.protein, color: 'bg-brand' },
-  { label: 'Carbs', value: m.carbs, color: 'bg-brand-soft' },
-  { label: 'Fat', value: m.fats, color: 'bg-brand/40' },
+  { label: 'Protein', value: m.protein, grams: (m.protein * kcal) / KCAL_PER_G.protein, color: 'bg-brand' },
+  { label: 'Carbs', value: m.carbs, grams: (m.carbs * kcal) / KCAL_PER_G.carbs, color: 'bg-brand-soft' },
+  { label: 'Fat', value: m.fats, grams: (m.fats * kcal) / KCAL_PER_G.fat, color: 'bg-brand/40' },
   ]
+})
+
+/** The bar's accessible reading: one image role, one sentence. */
+const macroAria = computed(() => {
+  const segs = macroSegments.value
+  if (segs.length === 0) return null
+  return `Nutritional split per serving: ${segs
+  .map((s) => `${s.label} ${Math.round(s.value * 100)}% of calories`)
+  .join(', ')}`
 })
 
 const inPlan = computed(() => (meta.value ? plan.planContains(meta.value.id) : false))
@@ -535,7 +554,7 @@ function startCooking() {
   shallow screen-wide ribbon. On phones the same cells simply
   stack in the order photo -> intro -> actions -> sections. -->
   <div
-  class="grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-start"
+  class="grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:items-start"
   data-test="detail-hero"
   >
   <figure class="relative -mx-4 lg:mx-0">
@@ -573,8 +592,11 @@ function startCooking() {
   </button>
   </figure>
 
-  <div class="space-y-4">
-  <header class="space-y-3">
+  <!-- ADR-0077 fix pass: the render's meta column stacks at gap-2.5 (10px
+  on the phone renders) — the strip belongs to the title, the actions to
+  the strip, no extra band of air between them. -->
+  <div class="space-y-3">
+  <header class="space-y-2.5">
   <div class="flex flex-wrap items-center gap-2 text-label-md text-text-muted">
   <span
   v-if="meta.is_pro"
@@ -656,18 +678,22 @@ function startCooking() {
        the household's stars (ADR-0031) and the servings stepper. Macro
        splits, difficulty, test counts and SKUs do not exist in the catalog
        and stay rejected fictions. -->
+  <!-- The band is the mock's construction exactly: raised cells over a
+  border-coloured gap (the divide trick), one warm keyline around the
+  whole band, tight p-2 cell padding — the render's gap-2 / p-3 rhythm,
+  not a stack of padded boxes. -->
   <dl
-  class="grid grid-cols-3 gap-px overflow-hidden rounded-xl bg-surface-sunken font-mono-data tabular-nums"
+  class="grid grid-cols-3 gap-px overflow-hidden rounded-xl bg-border font-mono-data tabular-nums ring-1 ring-border"
   :class="meta.sodium_mg ? 'lg:grid-cols-5' : 'lg:grid-cols-4'"
   data-test="detail-metadata-strip"
   >
-  <div class="flex flex-col items-center gap-0.5 bg-surface px-2 py-2.5 text-center">
+  <div class="flex flex-col items-center gap-0.5 bg-surface-raised px-2 py-2 text-center">
   <dt class="flex items-center gap-1 font-mono-data text-[11px] uppercase tracking-wider text-text-muted">
   <Clock :size="13" aria-hidden="true" />Total time
   </dt>
   <dd class="text-label-md font-bold text-text">{{ meta.cooking_minutes }} min</dd>
   </div>
-  <div class="flex flex-col items-center gap-0.5 bg-surface px-2 py-2.5 text-center">
+  <div class="flex flex-col items-center gap-0.5 bg-surface-raised px-2 py-2 text-center">
   <dt class="flex items-center gap-1 font-mono-data text-[11px] uppercase tracking-wider text-text-muted">
   <HueIcon role="energy" :size="13" />Energy
   </dt>
@@ -677,7 +703,7 @@ function startCooking() {
   </div>
   <div
   v-if="meta.sodium_mg"
-  class="flex flex-col items-center gap-0.5 bg-surface px-2 py-2.5 text-center"
+  class="flex flex-col items-center gap-0.5 bg-surface-raised px-2 py-2 text-center"
   >
   <dt class="flex items-center gap-1 font-mono-data text-[11px] uppercase tracking-wider text-text-muted">
   <HueIcon role="sodium" :size="13" />Sodium
@@ -688,7 +714,7 @@ function startCooking() {
        modifies (ADR-0031): the same RatingStars control, catalog
        Bayesian mean as its fallback display. -->
   <div
-  class="flex flex-col items-center gap-0.5 bg-surface px-2 py-2.5 text-center"
+  class="flex flex-col items-center gap-0.5 bg-surface-raised px-2 py-2 text-center"
   data-test="recipe-detail-rating"
   >
   <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted">Household</dt>
@@ -700,7 +726,7 @@ function startCooking() {
        same clamp, same ADR-0037 write on every press — restyled into the
        band. The sr-only line is the accessible reading of the control
        ("serves 4"), which is what the specs and a screen reader want. -->
-  <div class="flex flex-col items-center gap-0.5 bg-surface px-2 py-2.5 text-center">
+  <div class="flex flex-col items-center gap-0.5 bg-surface-raised px-2 py-2 text-center">
   <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted">Servings</dt>
   <dd class="flex items-center">
   <div class="flex items-center rounded-lg ring-1 ring-border-strong">
@@ -835,40 +861,53 @@ function startCooking() {
   </div>
 
   <!-- Nutrition comes AFTER the actions, never ahead of them
-  (DESIGN.md Recipe detail). Units and the supplied sodium are
-  kept: only the compact browse cards drop sodium. -->
+  (DESIGN.md Recipe detail). ADR-0077 fix pass: the render's ONE segmented
+  bar — a single track, protein/carbs/fat side by side by their fraction
+  of calories — with a mono LEGEND GRID beneath (grams via the shared
+  Atwater constant, sodium in its own hue via the droplet). The three
+  stacked full-width rows this replaces were not the mock's composition;
+  time and calories already live on the metadata strip, so they are not
+  repeated here. -->
   <section class="mt-6" data-test="nutrition">
-  <h3 class="mb-2 text-body-sm font-semibold">Nutrition</h3>
   <div class="rounded-xl bg-surface-sunken p-4">
-  <p class="flex flex-wrap gap-4 font-mono-data text-body-sm tabular-nums">
-  <span class="flex items-center gap-1.5">
-  <HueIcon role="energy" :size="18" />
-  <span>{{ Math.round(meta.calories) }} kcal / serving</span>
+  <div class="flex flex-wrap items-baseline justify-between gap-2">
+  <h3 class="text-body-sm font-semibold">Nutrition</h3>
+  <span class="font-mono-data text-label-sm tabular-nums text-text-muted">
+  {{ Math.round(meta.calories) }} kcal / serving
   </span>
-  <span class="flex items-center gap-1.5">
-  <Clock :size="18" aria-hidden="true" />
-  <span>{{ meta.cooking_minutes }} min</span>
-  </span>
-  <span v-if="meta.sodium_mg" class="flex items-center gap-1.5" data-test="nutrition-sodium">
-  <HueIcon role="sodium" :size="18" />
-  <span>{{ Math.round(meta.sodium_mg) }} mg sodium</span>
-  </span>
-  </p>
-  <div class="mt-3 space-y-1.5">
-  <div v-for="bar in macroBars" :key="bar.label" class="flex items-center gap-2">
-  <span class="w-16 text-label-md">{{ bar.label }}</span>
-  <div class="h-2.5 flex-1 overflow-hidden rounded-full bg-surface-raised">
+  </div>
+  <!-- The ONE split bar (ADR-0036: brand-ramp segments — a green protein
+  segment would read "vegetarian"). One image role, one sentence. -->
   <div
-  class="h-full rounded-full"
-  :class="bar.color"
-  :style="{ width: `${Math.round(bar.value * 100)}%` }"
+  v-if="macroSegments.length"
+  class="mt-2 flex h-2.5 w-full overflow-hidden rounded-full bg-surface"
+  role="img"
+  :aria-label="macroAria ?? 'Nutritional split per serving'"
+  >
+  <div
+  v-for="seg in macroSegments"
+  :key="seg.label"
+  class="h-full"
+  :class="seg.color"
+  :style="{ width: `${Math.round(seg.value * 100)}%` }"
   />
   </div>
-  <span class="w-10 shrink-0 text-right text-label-md font-medium font-mono-data tabular-nums">{{
-  Math.round(bar.value * 100)
-  }}%</span>
+  <!-- The legend: dot + label + value, mono, tabular — the render's
+  grid under the bar. Sodium keeps its droplet hue and its hook. -->
+  <dl
+  class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 font-mono-data text-label-sm tabular-nums sm:grid-cols-4"
+  >
+  <div v-for="seg in macroSegments" :key="seg.label" class="flex items-center gap-1.5">
+  <span class="size-2.5 shrink-0 rounded-full" :class="seg.color" aria-hidden="true" />
+  <dt class="text-text-muted">{{ seg.label }}</dt>
+  <dd class="font-semibold text-text">{{ Math.round(seg.grams) }} g</dd>
   </div>
+  <div v-if="meta.sodium_mg" class="flex items-center gap-1.5" data-test="nutrition-sodium">
+  <HueIcon role="sodium" :size="14" />
+  <dt class="text-text-muted">Sodium</dt>
+  <dd class="font-semibold text-text">{{ Math.round(meta.sodium_mg) }} mg</dd>
   </div>
+  </dl>
   <!-- The 66-row facts block would turn the detail into a wall, so the
   summary above stays and the rest opens on demand (ADR-0039). The
   trigger sits INSIDE the section: the section's position contract is
