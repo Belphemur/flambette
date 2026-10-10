@@ -5,6 +5,7 @@ import { STORE_SECTIONS } from '../lib/sections'
 import FilterDropdown from './FilterDropdown.vue'
 import type { FilterDropdownOption } from './FilterDropdown.vue'
 import { nameKey } from '../lib/grocery'
+import { aisleIcon } from '../lib/aisleRole'
 import {
   isSuggestionListVisible,
   suggestIngredients,
@@ -68,13 +69,26 @@ const canSubmit = computed(() => query.value.trim().length > 0)
  * "Pick a store category" placeholder is the FIRST entry so "no override
  * yet" stays expressible and the trigger reads as unset by default; the
  * rest comes from the canonical `STORE_SECTIONS` constant (no second copy
- * of the taxonomy).
+ * of the taxonomy) — rendered ALPHABETICALLY (owner ruling): the picker
+ * is a lookup, not a store walk, so the user scans for the aisle by
+ * name. The constant's own order is load-bearing (section rendering,
+ * heuristic priority, groupExtras) and is untouched; only this display
+ * copy sorts.
  */
 const CATEGORY_PLACEHOLDER = 'Pick a store category'
 const categoryOptions = computed<FilterDropdownOption[]>(() => [
   { value: '', label: CATEGORY_PLACEHOLDER },
-  ...STORE_SECTIONS.map((s) => ({ value: s, label: s })),
+  ...STORE_SECTIONS.map((s) => ({
+  value: s,
+  label: s,
+  icon: aisleIcon(s)?.glyph,
+  iconClass: aisleIcon(s)?.className,
+  })).sort((a, b) => a.label.localeCompare(b.label)),
 ])
+/** The option matching the explicit override, when one is set. */
+const selectedCategoryOption = computed(() =>
+  categoryOptions.value.find((o) => o.value === category.value) ?? null,
+)
 const categorySelectedIndex = computed(() =>
   Math.max(0, categoryOptions.value.findIndex((o) => o.value === category.value)),
 )
@@ -287,7 +301,7 @@ const ariaLabel = 'Add a custom grocery item'
   aria-autocomplete="list"
   :aria-controls="suggestionsVisible ? listboxId : undefined"
   :aria-activedescendant="suggestionsVisible && activeIndex >= 0 ? optionId(activeIndex) : undefined"
-  class="h-11 w-full rounded-xl border px-4 text-sm outline-none focus:border-brand-text"
+  class="field w-full px-4"
   data-test="add-bar-input"
   @input="onInput"
   @keydown="onKeydown"
@@ -322,7 +336,21 @@ const ariaLabel = 'Add a custom grocery item'
   menu-width="w-full"
   @select="(v) => (category = v)"
   @open="categoryMenuOpen = $event"
+  >
+  <!-- The closed trigger shows the selected department's glyph IN ITS
+  aisle hue (ADR-0076); the trigger's active tint paints the control,
+  never replaces the glyph's identity. -->
+  <template #icon>
+  <component
+  :is="selectedCategoryOption!.icon"
+  v-if="selectedCategoryOption?.icon"
+  :size="16"
+  :class="selectedCategoryOption.iconClass"
+  class="shrink-0"
+  aria-hidden="true"
   />
+  </template>
+  </FilterDropdown>
   </div>
 
   <ul
@@ -330,7 +358,7 @@ const ariaLabel = 'Add a custom grocery item'
   :id="listboxId"
   role="listbox"
   aria-label="Ingredient suggestions"
-  class="absolute z-30 left-0 right-0 mt-1 overflow-hidden rounded-xl bg-surface-raised shadow-lg ring-1 ring-border"
+  class="absolute z-30 left-0 right-0 mt-1 overflow-hidden rounded-xl bg-popover shadow-popover ring-1 ring-border"
   data-test="ingredient-suggestions"
   >
   <li
@@ -361,12 +389,22 @@ const ariaLabel = 'Add a custom grocery item'
   >
   <span v-if="rowAt(i)!.unit" class="shrink-0 text-xs text-text-muted">{{ rowAt(i)!.unit }}</span>
   <!-- Live category feedback (ADR-0014): visible on every row and
-  folded into the row's accessible name (not decorative). -->
+  folded into the row's accessible name (not decorative). The department
+  glyph rides the pill IN ITS aisle hue (ADR-0076); the pill text stays
+  the label. -->
   <span
-  class="shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold text-text-muted"
+  class="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold text-text-muted"
   data-test="suggestion-category"
-  >{{ rowAt(i)!.category }}</span
   >
+  <component
+  :is="aisleIcon(rowAt(i)!.category)!.glyph"
+  v-if="aisleIcon(rowAt(i)!.category)"
+  :size="12"
+  :class="aisleIcon(rowAt(i)!.category)!.className"
+  aria-hidden="true"
+  />
+  {{ rowAt(i)!.category }}
+  </span>
   </li>
   </ul>
   </div>

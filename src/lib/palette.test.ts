@@ -83,6 +83,21 @@ const COLOR_TOKENS: Record<string, string> = {
   'nutrition-fat-soft': '--color-nutrition-fat-soft',
   warning: '--color-warning',
   'warning-soft': '--color-warning-soft',
+  // v2 additions (ADR-0067): saffron (timers/heat/tips — non-food), the
+  // roasted-espresso chrome surface + its dark pair, the popover level and
+  // the LITERAL chrome foreground family (never flips — the nav bar is
+  // dark chrome in BOTH themes).
+  saffron: '--color-saffron',
+  'saffron-soft': '--color-saffron-soft',
+  espresso: '--color-espresso',
+  'espresso-dark': '--color-espresso-dark',
+  popover: '--color-popover',
+  'popover-dark': '--color-popover-dark',
+  'chrome-muted': '--color-chrome-muted',
+  'chrome-backplate': '--color-chrome-backplate',
+  'chrome-backplate-text': '--color-chrome-backplate-text',
+  'chrome-border': '--color-chrome-border',
+  'chrome-accent': '--color-chrome-accent',
   success: '--color-success',
   'success-soft': '--color-success-soft',
   // Foreground ON a success fill (the header chip's badge-dot, ADR-0049).
@@ -93,6 +108,38 @@ const COLOR_TOKENS: Record<string, string> = {
   'favourite-soft': '--color-favourite-soft',
   household: '--color-household',
   'household-soft': '--color-household-soft',
+  // Store DEPARTMENT identities (ADR-0076): 14 aisle pairs + the two
+  // registry reuses (Produce -> hue-vegetarian, Meat & Seafood ->
+  // hue-meat) are mapped through those existing tokens above. Aisle
+  // tokens never join ICON_ROLES — a department is a third question.
+  'aisle-gold': '--color-aisle-gold',
+  'aisle-gold-soft': '--color-aisle-gold-soft',
+  'aisle-crust': '--color-aisle-crust',
+  'aisle-crust-soft': '--color-aisle-crust-soft',
+  'aisle-sunrise': '--color-aisle-sunrise',
+  'aisle-sunrise-soft': '--color-aisle-sunrise-soft',
+  'aisle-coffee': '--color-aisle-coffee',
+  'aisle-coffee-soft': '--color-aisle-coffee-soft',
+  'aisle-husk': '--color-aisle-husk',
+  'aisle-husk-soft': '--color-aisle-husk-soft',
+  'aisle-slate': '--color-aisle-slate',
+  'aisle-slate-soft': '--color-aisle-slate-soft',
+  'aisle-royal': '--color-aisle-royal',
+  'aisle-royal-soft': '--color-aisle-royal-soft',
+  'aisle-ice': '--color-aisle-ice',
+  'aisle-ice-soft': '--color-aisle-ice-soft',
+  'aisle-leaf': '--color-aisle-leaf',
+  'aisle-leaf-soft': '--color-aisle-leaf-soft',
+  'aisle-rose': '--color-aisle-rose',
+  'aisle-rose-soft': '--color-aisle-rose-soft',
+  'aisle-violet': '--color-aisle-violet',
+  'aisle-violet-soft': '--color-aisle-violet-soft',
+  'aisle-wine': '--color-aisle-wine',
+  'aisle-wine-soft': '--color-aisle-wine-soft',
+  'aisle-lavender': '--color-aisle-lavender',
+  'aisle-lavender-soft': '--color-aisle-lavender-soft',
+  'aisle-stone': '--color-aisle-stone',
+  'aisle-stone-soft': '--color-aisle-stone-soft',
 }
 
 /** Non-colour tokens that must also stay in step. */
@@ -116,12 +163,18 @@ const EXTRA_THEME_COLORS: string[] = ['--color-brand-text']
  * values DESIGN.md declares, so the assertion is value equality.
  */
 const TYPOGRAPHY_TOKENS: Record<string, string> = {
+  'display-lg': '--text-display-lg',
   'headline-lg': '--text-headline-lg',
+  'headline-lg-mobile': '--text-headline-lg-mobile',
   'headline-md': '--text-headline-md',
+  'headline-sm': '--text-headline-sm',
   title: '--text-title',
+  'body-lg': '--text-body-lg',
   'body-md': '--text-body-md',
   'body-sm': '--text-body-sm',
   'label-md': '--text-label-md',
+  'label-sm': '--text-label-sm',
+  'mono-data': '--text-mono-data',
   'cooking-step': '--text-cooking-step',
 }
 
@@ -309,7 +362,8 @@ describe('the icon role registry (ADR-0036)', () => {
     // Reverse direction: a size variable outside the declared set is a
     // stray transcription (companion vars carry their parent's name).
     for (const v of themeTypeVars()) {
-      const isCompanion = /--(line-height|font-weight)$/.test(v)
+      // letter-spacing/font-family companions carry their parent's name too.
+      const isCompanion = /--(line-height|font-weight|letter-spacing|font-family)$/.test(v)
       if (!isCompanion) expect(Object.values(TYPOGRAPHY_TOKENS)).toContain(v)
     }
   })

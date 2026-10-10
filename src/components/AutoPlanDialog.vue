@@ -310,7 +310,7 @@ function setCategory(value: string) {
   <Teleport to="body">
   <div
   v-if="autoPlanOpen"
-  class="fixed inset-0 z-40 flex items-end justify-center bg-surface-dark/50"
+  class="fixed inset-0 z-40 flex items-end justify-center modal-scrim"
   @click.self="closeAutoPlan"
   >
   <!-- The panel is BOTTOM-anchored (`items-end` on the scrim), so when
@@ -320,13 +320,13 @@ function setCategory(value: string) {
   panel clamps and scrolls its own content, keeping BOTH ends reachable
   on a short window. -->
   <div
-  class="max-h-[85vh] w-full max-w-app space-y-4 overflow-y-auto rounded-t-2xl bg-surface-raised p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl"
+  class="max-h-[85vh] w-full max-w-app space-y-4 overflow-y-auto rounded-t-2xl bg-surface-raised p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
   role="dialog"
   aria-label="Generate an auto-plan"
   data-test="auto-plan-dialog"
   >
   <div class="flex items-center justify-between">
-  <h3 class="text-sm font-bold tracking-tight">Auto-Plan</h3>
+  <h3 class="text-headline-sm">Auto-Plan</h3>
   <button
   class="flex size-11 items-center justify-center rounded-full hover:bg-surface-sunken"
   aria-label="Close auto-plan"
@@ -343,8 +343,11 @@ function setCategory(value: string) {
 
   <div class="flex items-center justify-between gap-3">
   <span class="text-sm font-medium" id="auto-plan-mode-label">Mode</span>
+  <!-- Selection is a TINT, never a fill (ADR-0036/0069): this sheet's
+  ONE filled tomato belongs to Generate (and Confirm), not to the mode
+  radio. -->
   <div
-  class="flex rounded-lg border"
+  class="flex rounded-lg border border-border-strong"
   role="radiogroup"
   aria-labelledby="auto-plan-mode-label"
   data-test="auto-plan-mode"
@@ -356,7 +359,7 @@ function setCategory(value: string) {
   ]"
   :key="m.value"
   class="px-3 py-2 text-xs font-semibold first:rounded-l-lg last:rounded-r-lg"
-  :class="ui.autoPlanMode === m.value ? 'bg-brand text-on-brand' : ''"
+  :class="ui.autoPlanMode === m.value ? 'bg-brand-tint text-brand-text' : 'text-text-muted'"
   role="radio"
   :aria-checked="ui.autoPlanMode === m.value"
   :data-test="`auto-plan-mode-${m.value}`"
@@ -388,7 +391,7 @@ function setCategory(value: string) {
 
   <div class="flex items-center justify-between gap-3">
   <label class="text-sm font-medium" for="auto-plan-count">Meals</label>
-  <div class="flex items-center rounded-lg border">
+  <div class="flex items-center rounded-lg border border-border-strong">
   <button
   class="flex size-11 items-center justify-center disabled:opacity-40"
   :disabled="autoPlanCount <= MIN_MEALS"
@@ -401,7 +404,7 @@ function setCategory(value: string) {
   <input
   id="auto-plan-count"
   data-test="auto-plan-count"
-  class="w-10 bg-transparent text-center text-sm font-semibold focus:outline-none"
+  class="w-10 bg-transparent text-center font-mono-data text-sm font-semibold tabular-nums focus:outline-none"
   type="number"
   min="1"
   max="10"
@@ -436,7 +439,7 @@ function setCategory(value: string) {
   </div>
 
   <button
-  class="h-11 w-full rounded-xl bg-brand text-sm font-semibold text-on-brand active:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-60"
+  class="h-11 w-full rounded-xl bg-brand text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-60"
   data-test="auto-plan-generate"
   :disabled="autoPlanBusy"
   @click="generateAutoPlan"
@@ -444,7 +447,7 @@ function setCategory(value: string) {
   {{ autoPlanBusy ? 'Generating…' : pendingPlan ? 'Regenerate' : 'Generate' }}
   </button>
 
-  <div v-if="pendingPlan" class="ring-1 rounded-xl p-3 space-y-2" data-test="auto-plan-preview">
+  <div v-if="pendingPlan" class="ring-1 ring-border rounded-xl p-3 space-y-2" data-test="auto-plan-preview">
   <p class="text-xs">
   <template v-if="ui.autoPlanMode === 'add'">
   Adds {{ pendingPlan.variantIds.length }} new
@@ -475,7 +478,7 @@ function setCategory(value: string) {
   <li
   v-for="meal in pendingMeals"
   :key="meal.id"
-  class="group relative rounded-lg ring-1"
+  class="group relative rounded-lg bg-surface ring-1 ring-border"
   :data-test="`auto-plan-meal-${meal.id}`"
   >
   <img
@@ -498,12 +501,12 @@ function setCategory(value: string) {
   {{ meal.name }}
   </p>
   <TooltipBubble :text="meal.name" />
-  <p class="px-1.5 pb-1 text-[10px]">{{ meal.minutes }} min</p>
+  <p class="px-1.5 pb-1 font-mono-data text-[10px] tabular-nums">{{ meal.minutes }} min</p>
   </li>
   </ul>
   <div class="flex gap-2">
   <button
-  class="group relative h-11 flex-1 rounded-xl bg-brand text-sm font-semibold text-on-brand active:bg-brand-strong"
+  class="group relative h-11 flex-1 rounded-xl bg-brand text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
   data-test="auto-plan-confirm"
   :disabled="!previewComplete"
   @click="confirmAutoPlan"
@@ -520,7 +523,7 @@ function setCategory(value: string) {
   />
   </button>
   <button
-  class="h-11 flex-1 rounded-xl border text-sm font-medium"
+  class="h-11 flex-1 rounded-xl border border-border-strong bg-surface-raised text-sm font-medium text-text active:bg-surface-sunken"
   data-test="auto-plan-cancel"
   @click="pendingPlan = null"
   >

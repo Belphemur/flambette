@@ -5,14 +5,14 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**70 records.** One file per decision (`ADR-NNNN-slug.md`),
+**83 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
 
 ## In force
 
-The 57 accepted records below all still govern. Skim the ones
+The 70 accepted records below all still govern. Skim the ones
 near your change before proposing anything -- they encode *why* the
 architecture is shaped the way it is.
 
@@ -75,6 +75,19 @@ architecture is shaped the way it is.
 | [0062](ADR-0062-scroll-restoration-on-back.md) | Scroll restoration on back-from-recipe | 2026-10-08 |
 | [0063](ADR-0063-room-identity-presence-avatars.md) | Room identity — device UUIDv7, safe-word names, live relay presence, and hashvatar avatars | 2026-10-08 |
 | [0064](ADR-0064-search-component.md) | RecipeSearch component + mobile Enter dismissal | 2026-10-09 |
+| [0065](ADR-0065-full-bleed-header-sunken-fields.md) | Full-bleed desktop header and sunken-well input fields | 2026-10-09 |
+| [0066](ADR-0066-typography-self-hosted-fonts.md) | Typography — self-hosted Plus Jakarta Sans + JetBrains Mono | 2026-10-09 |
+| [0067](ADR-0067-colour-warm-culinary-paper.md) | Colour — adopt the Warm Culinary Paper values (token names kept) | 2026-10-09 |
+| [0068](ADR-0068-elevation-tonal-paper-layering.md) | Elevation — tonal paper layering + scoped modal blur | 2026-10-09 |
+| [0069](ADR-0069-chip-treatment-always-tinted.md) | Chip treatment — always-tinted dietary chips (amendment to ADR-0036) | 2026-10-09 |
+| [0070](ADR-0070-search-into-header.md) | Search moves into the header | 2026-10-09 |
+| [0071](ADR-0071-grocery-reading-surface.md) | Grocery tab is a reading surface — checked rows stay in place | 2026-10-09 |
+| [0072](ADR-0072-done-state-colour-success-family.md) | Completion colour is the success family, never a food hue | 2026-10-09 |
+| [0073](ADR-0073-recipe-detail-composition.md) | Recipe detail adopts the two-column composition; cooking keeps the command room | 2026-10-09 |
+| [0074](ADR-0074-explore-archive-composition.md) | Explore is the archive — count line, sort menu, and the card overlay grammar | 2026-10-09 |
+| [0075](ADR-0075-cross-surface-consistency-contract.md) | The Stitch grammar is one contract — cross-surface consistency sweep | 2026-10-09 |
+| [0076](ADR-0076-department-aisle-hues.md) | Department hues for every grocery category | 2026-10-09 |
+| [0077](ADR-0077-stitch-alignment-pass.md) | The Stitch alignment pass — closing the remaining structural gaps on four surfaces | 2026-10-10 |
 
 ## Not in force
 
@@ -112,8 +125,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0065**). Do not count the files -- that is how the
-   collisions above happened (70 files share 64 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0078**). Do not count the files -- that is how the
+   collisions above happened (83 files share 77 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.

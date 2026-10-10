@@ -60,12 +60,19 @@ test.describe('the container', () => {
       await page.setViewportSize({ width, height: 900 })
       await page.goto('/')
       await waitForCatalog(page)
-      const box = (await page.locator('[data-test="app-shell"]').boundingBox())!
-      expect(box.width).toBeLessThanOrEqual(width)
-      expect(box.width).toBeLessThanOrEqual(CONTAINER_PX)
-      if (width >= CONTAINER_PX + 64) expect(box.width).toBeCloseTo(CONTAINER_PX, 0)
+      // ADR-0065: the shell and the chrome BANDS span the window edge to
+      // edge; the CONTAINER-aligned elements are main content and the
+      // content rows inside the header band and the bottom nav. Those
+      // rows stay capped at 1100px and aligned with each other.
+      const shell = (await page.locator('[data-test="app-shell"]').boundingBox())!
+      expect(shell.width).toBeCloseTo(width, 0)
+      const main = (await page.locator('main').boundingBox())!
+      expect(main.width).toBeLessThanOrEqual(CONTAINER_PX)
+      if (width >= CONTAINER_PX + 64) expect(main.width).toBeCloseTo(CONTAINER_PX, 0)
+      const headerRow = (await page.locator('header > div').first().boundingBox())!
+      expect(headerRow.width).toBeCloseTo(main.width, 0)
       const navBox = (await page.locator('nav[aria-label="Main navigation"] > div').boundingBox())!
-      expect(navBox.width).toBeCloseTo(box.width, 0)
+      expect(navBox.width).toBeCloseTo(main.width, 0)
     }
   })
 
@@ -173,9 +180,10 @@ test.describe('the theme flip', () => {
       })
 
     const light = await read()
-    // Cream `#FFF8F0` body, white `#FFFFFF` card.
-    expect(light.body).toBe('rgb(255, 248, 240)')
-    expect(light.card).toBe('rgb(255, 255, 255)')
+    // Warm Culinary Paper (ADR-0067): `#FBF8F2` paper base, `#F4EFE6`
+    // paper card — tonal layering, no white slab.
+    expect(light.body).toBe('rgb(251, 248, 242)')
+    expect(light.card).toBe('rgb(244, 239, 230)')
 
     await page.getByRole('button', { name: 'Switch to dark mode' }).click()
     await expect(page.locator('html')).toHaveClass(/dark/)
@@ -201,11 +209,21 @@ test.describe('the theme flip', () => {
     const tab = page.locator('nav[aria-label="Main navigation"] button', { hasText: 'Recipes' })
     const backplate = tab.locator('span.rounded-full')
     await expect(backplate).toBeVisible()
-    // DESIGN.md `primary-tint` #FBEAE5 — a warm tint, and NOT the tomato.
+    // ADR-0067: the bar is roasted-espresso chrome in BOTH themes, so the
+    // active backplate is the LITERAL cream `chrome-backplate` #FBEAE5 —
+    // not the flipping `primary-tint` — and the label (which sits on the
+    // BAR below the backplate) is `chrome-accent` #F08A6A, never the dark
+    // `primary-strong` red (1.94:1 on espresso).
     expect(await backplate.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
       'rgb(251, 234, 229)',
     )
-    expect(await tab.evaluate((el) => getComputedStyle(el).color)).toBe('rgb(142, 44, 23)')
+    expect(await tab.evaluate((el) => getComputedStyle(el).color)).toBe('rgb(240, 138, 106)')
+    // …and the bar itself is espresso, not the old raised paper.
+    expect(
+      await page
+        .locator('nav[aria-label="Main navigation"]')
+        .evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe('rgb(43, 30, 26)')
   })
 })
 
@@ -419,7 +437,8 @@ test.describe('pinned widths in BOTH themes', () => {
       [1920, 4],
     ]
     const EXPECTED: Record<string, { body: string; card: string }> = {
-      light: { body: 'rgb(255, 248, 240)', card: 'rgb(255, 255, 255)' },
+      // Warm Culinary Paper values (ADR-0067); the dark ramp is unchanged.
+      light: { body: 'rgb(251, 248, 242)', card: 'rgb(244, 239, 230)' },
       dark: { body: 'rgb(23, 19, 16)', card: 'rgb(36, 28, 24)' },
     }
 

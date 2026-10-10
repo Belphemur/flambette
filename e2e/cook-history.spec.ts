@@ -57,7 +57,8 @@ test('cooking a planned meal records it in detail + history, and aggregates', as
   const rows = page.getByTestId('history-row')
   await expect(rows).toHaveCount(1)
   await expect(rows.first()).toContainText(name)
-  await expect(page.getByText('cooked once')).toBeVisible()
+  // ADR-0077: the count is the render's mono photo-disc — "Cooked N×".
+  await expect(page.getByText('Cooked 1×')).toBeVisible()
 
   // Cook the SAME recipe a second time. Cooking the last meal out ENDS
   // that plan, so the second cook belongs to a NEW one: the History tab
@@ -73,7 +74,7 @@ test('cooking a planned meal records it in detail + history, and aggregates', as
   await gotoTab(page, 'History')
   await expect(page.getByTestId('history-group-title')).toHaveCount(2)
   await expect(page.getByTestId('history-row')).toHaveCount(2)
-  await expect(page.getByText('cooked once')).toHaveCount(2)
+  await expect(page.getByText('Cooked 1×')).toHaveCount(2)
 
   await gotoTab(page, 'Recipes')
   await openRecipeDetail(page, name)
@@ -158,7 +159,7 @@ test('events written before plan provenance group as earlier cooks (ADR-0034)', 
   await page.goto('/history')
   await expect(page.getByTestId('history-group-title')).toContainText('Earlier cooks')
   await expect(page.getByTestId('history-row')).toHaveCount(1)
-  await expect(page.getByText('cooked 2 times')).toBeVisible()
+  await expect(page.getByText('Cooked 2×')).toBeVisible()
   await expectZeroMealimeRequests(page)
 })
 

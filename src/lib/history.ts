@@ -116,6 +116,47 @@ export function groupHistoryByPlan(events: CookedEntry[]): PlanHistoryGroup[] {
   )
 }
 
+/* ---------- Period window + summary (EXPERIENCE.md §7, History) ---------- */
+
+/**
+ * The cook events inside the last `days` days, or ALL events when `days`
+ * is null. A read-side window over the same events — nothing is filtered
+ * in storage and the grouping below re-derives from the window, so the
+ * period pills (All time / Past 30 days / Past 90 days) can never lose a
+ * cook: they only choose which slice the tab shows. `now` is injectable
+ * so the cutoff is testable without a clock mock.
+ */
+export function filterHistoryEvents(
+  events: CookedEntry[],
+  days: number | null,
+  now: number = Date.now(),
+): CookedEntry[] {
+  if (days === null) return events
+  const cutoff = now - days * 86_400_000
+  return events.filter((e) => e.cookedAt >= cutoff)
+}
+
+/** The three DATA numbers the history head states for the chosen window. */
+export interface HistorySummary {
+  /** Cook events in the window (a recipe cooked twice counts twice). */
+  total: number
+  /** Distinct recipes in the window. */
+  dishes: number
+  /** Most recent cook in the window, or null when the window is empty. */
+  lastAt: number | null
+}
+
+/** Summarize a slice of cook events — total, distinct dishes, most recent. */
+export function summarizeHistory(events: CookedEntry[]): HistorySummary {
+  const dishes = new Set<number>()
+  let lastAt: number | null = null
+  for (const e of events) {
+    dishes.add(e.variantId)
+    if (lastAt === null || e.cookedAt > lastAt) lastAt = e.cookedAt
+  }
+  return { total: events.length, dishes: dishes.size, lastAt }
+}
+
 /** Bind the selectors to the live plan store (reactive). */
 export function useCookHistory() {
   const plan = usePlanStore()

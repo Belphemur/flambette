@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
-import { ArrowUpDown, Clock, Crown, Heart, Layers, SearchX, Sparkles, UserRound } from 'lucide-vue-next'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
+import { ArrowUpDown, ChevronDown, Clock, Crown, Heart, Layers, SearchX, Sparkles, UserRound } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { catalog } from '../lib/catalog'
 import { useRestrictions } from '../composables/useRestrictions'
@@ -44,18 +45,29 @@ import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
 import { useUiStore } from '../stores/ui'
 import RecipeCard from './RecipeCard.vue'
-import RecipeSearch from './RecipeSearch.vue'
+import RecipeSearchField from './RecipeSearchField.vue'
 import FilterDropdown from './FilterDropdown.vue'
 import type { FilterDropdownOption } from './FilterDropdown.vue'
 import HueIcon from './HueIcon.vue'
+import { useRecipeSearch } from '../composables/useRecipeSearch'
+import { useSearchTips } from '../composables/useSearchTips'
 
-/** The search box stays device-local: it is a question, not a household
- *  preference (ADR-0027). Everything below it is shared.
- *
- *  The query is the search control's single source of truth (ADR-0064):
- *  RecipeSearch owns the input and both debounce pipelines, writes the
- *  model through, and never keeps its own copy of the string. */
-const query = ref('')
+/** ADR-0070: the query is EPHEMERAL state in a module-scope composable
+ *  (never persisted, never room-synced — a search is a question, not a
+ *  household preference, ADR-0027). Header well and this content field
+ *  read the same singleton; switching tabs keeps the query in memory. */
+const { query, searchResults, searchPending } = useRecipeSearch()
+
+/** The desktop breakpoint where the search well moves into the header.
+ *  Same lg: value as the Tailwind variant used in App.vue. */
+const isDesktop = useMediaQuery('(min-width: 1024px)')
+
+/** Search-tips disclosure: closed by default, user-toggled, device-local
+ *  (ADR-0027) — content-level, so it survives the field's header move.
+ *  The STATE is the module singleton in `useSearchTips`, shared with the
+ *  header's `?` affordance (ADR-0070 Addendum 1): the panel itself stays
+ *  here, with the content it explains. */
+const { showTips, toggleTips } = useSearchTips()
 
 const favourites = useFavouritesStore()
 const ui = useUiStore()
@@ -277,17 +289,10 @@ const DIET_ICONS: Record<DietId, { icon: Component; cls: string }> = Object.from
   }),
 ) as Record<DietId, { icon: Component; cls: string }>
 
-/* ---------- Result pipeline (owned by RecipeSearch, ADR-0064) ---------- */
+/* ---------- Result pipeline (owned by useRecipeSearch, ADR-0070) ---------- */
 
-/** Template ref to the search control: it owns the query watchers, both
- *  debounce timers and the tips disclosure. The exposed refs are unwrapped
- *  reactively by the expose proxy, so these computeds read them like
- *  ordinary local state and the rest of this component is unchanged. */
-const search = useTemplateRef<InstanceType<typeof RecipeSearch>>('search')
-const searchResults = computed<{ primary: number[]; fallback: number[] } | null>(
-  () => search.value?.searchResults ?? null,
-)
-const searchPending = computed(() => search.value?.searchPending ?? false)
+/* searchResults / searchPending come off the composable above — one
+ * pipeline shared with the header mount, never a per-instance copy. */
 
 /** Comparator for the current sortBy selection, used to sort primary and fallback separately. */
 function getSortComparator(sortBy: SortBy): (a: VariantMeta, b: VariantMeta) => number {
@@ -431,11 +436,54 @@ onUnmounted(() => observer?.disconnect())
 
 <template>
   <section class="space-y-3">
-  <!-- ADR-0064: the search control (input, suggest dropdown, tips
-  disclosure, both debounce pipelines) lives in ONE component; the
-  facets, sort and grid below stay here. The query's single source
-  of truth is this component's `query` ref, handed down with v-model. -->
-  <RecipeSearch ref="search" v-model="query" />
+  <!-- ADR-0064: the search control (input, suggest dropdown, both
+  debounce pipelines) lives in ONE component; the facets, sort and grid
+  below stay here. ADR-0070: below lg the field lives in-content; at lg+
+  it moves into the header well (App.vue) — one component, two mount
+  points, and v-if (not a CSS hide) so ids and data-test hooks never
+  duplicate. The query state is the module singleton both mounts share. -->
+  <RecipeSearchField v-if="!isDesktop" />
+
+  <!-- The tips disclosure is CONTENT, not a mount of the field: it
+  must stay available at lg+ (where the field moved to the header) and
+  it must not bloat the header band. Toggle state stays device-local
+  (ADR-0027), panel closed by default. At lg+ the header's `?`
+  affordance (RecipeSearchField) opens the SAME disclosure, so this
+  in-content toggle is the mobile/panel-mount face of one state. -->
+  <div v-if="!isDesktop" class="flex w-full justify-end">
+  <!-- A 44px hit target (DESIGN.md Controls), and the rotation belongs to
+       the CHEVRON: rotating the whole button turned the "Search tips"
+       label upside down. -->
+  <button
+  data-test="search-tips-toggle"
+  :aria-expanded="showTips"
+  aria-controls="search-tips-panel"
+  class="flex min-h-11 items-center gap-1 px-2 py-2 text-xs text-text-muted"
+  @click="toggleTips"
+  >
+  Search tips
+  <ChevronDown
+  :size="14"
+  aria-hidden="true"
+  class="transition-transform"
+  :class="showTips ? 'rotate-180' : ''"
+  />
+  </button>
+  </div>
+
+  <div
+  v-if="showTips"
+  id="search-tips-panel"
+  data-test="search-tips-panel"
+  class="rounded-xl border border-border bg-popover px-4 py-3 text-xs text-text-muted space-y-1"
+  >
+  <div><code>word word</code> — all words (AND)</div>
+  <div><code>rice OR quinoa</code> — either word</div>
+  <div><code>"tomato soup"</code> — exact phrase</div>
+  <div><code>-word</code> — exclude</div>
+  <div><code>word*</code> — starts with</div>
+  <div><code>soup (rice OR quinoa) -cream</code> — combine them</div>
+  </div>
 
   <!-- WS1: a 2-column GRID on phones, a wrapping flex row from `sm` up.
   Grid cells never orphan a control on a line of its own, which is
@@ -460,9 +508,15 @@ onUnmounted(() => observer?.disconnect())
   <template #icon><Clock :size="16" aria-hidden="true" /></template>
   </FilterDropdown>
 
+  <!-- ADR-0069: the favourites chip is always rose-tinted at rest
+  (8% favourite tint + favourite text) and brand-selected when on. -->
   <button
   class="flex h-11 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors"
-  :class="filters.favOnly ? 'border-favourite bg-brand-tint text-text' : ''"
+  :class="
+  filters.favOnly
+  ? 'border-brand-text bg-brand-tint text-brand-text'
+  : 'chip-tint border-transparent text-favourite'
+  "
   :aria-pressed="filters.favOnly"
   aria-label="Favourites only"
   data-test="favourites-filter"
@@ -560,13 +614,20 @@ onUnmounted(() => observer?.disconnect())
   aria-label="Protein filters"
   data-test="protein-filters"
   >
+  <!-- ADR-0069: chips are ALWAYS tinted. Idle = 8% hue tint + hue text
+  (the food hue IS the chip's identity at rest); selected = brand tint
+  + brand text + brand keyline. "Any" has no hue and stays neutral. -->
   <button
   v-for="p in PROTEIN_OPTIONS"
   :key="p.value || 'any'"
   type="button"
   :data-test="`protein-chip-${p.value || 'any'}`"
   class="flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-raised px-3 text-sm font-medium whitespace-nowrap transition-colors"
-  :class="filters.protein === p.value ? 'border-brand-text bg-brand-tint text-brand-text' : ''"
+  :class="
+  filters.protein === p.value
+  ? 'border-brand-text bg-brand-tint text-brand-text'
+  : [PROTEIN_ICONS[p.value].cls, 'chip-tint border-transparent']
+  "
   :aria-pressed="filters.protein === p.value"
   :aria-label="`Protein: ${p.label}`"
   @click="setProtein(p.value)"
@@ -587,13 +648,20 @@ onUnmounted(() => observer?.disconnect())
   aria-label="Diet filters"
   data-test="diet-filters"
   >
+  <!-- ADR-0069 always-tinted idle (8% hue tint + hue text; exclusions
+  keep their explicit wording beside the borrowed hue); selected is
+  brand tint + brand text, never a filled food hue. -->
   <button
   v-for="d in DIET_IDS"
   :key="d"
   type="button"
   :data-test="`diet-chip-${d}`"
   class="flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-raised px-3 text-sm font-medium whitespace-nowrap transition-colors"
-  :class="activeDiets.includes(d) ? 'border-brand-text bg-brand-tint text-brand-text' : ''"
+  :class="
+  activeDiets.includes(d)
+  ? 'border-brand-text bg-brand-tint text-brand-text'
+  : [DIET_ICONS[d].cls, 'chip-tint border-transparent']
+  "
   :aria-pressed="activeDiets.includes(d)"
   :aria-label="`${DIET_LABELS[d]}: ${DIET_DESCRIPTIONS[d]}`"
   @click="toggleDiet(d)"
@@ -612,7 +680,7 @@ onUnmounted(() => observer?.disconnect())
   </div>
   </div>
 
-  <p class="text-xs text-text-muted">
+  <p class="font-mono-data text-xs tabular-nums text-text-muted">
   {{ results.list.length }} recipe{{ results.list.length === 1 ? '' : 's' }}
   <button
   v-if="filtersActive"
@@ -669,8 +737,19 @@ onUnmounted(() => observer?.disconnect())
   <div v-if="results.list.length === 0 && !searchPending" class="py-16 text-center text-text-muted">
   <SearchX :size="40" class="mx-auto" aria-hidden="true" />
   <p class="mt-2 font-medium">No recipes match your filters</p>
-  <p v-if="query.trim()" data-test="search-empty-tip" class="mt-2 text-sm">
-    Tip: try fewer words, or "exact phrase", or -word to exclude.
+  <!-- ADR-0070 Addendum 1: the hint no longer dead-ends as static
+  text — it OPENS the disclosure, so a reader who got here with a
+  too-clever query has a way out of it. -->
+  <p v-if="query.trim()" class="mt-2 text-sm">
+  <button
+  class="rounded-lg px-2 py-1 font-medium text-brand-text underline hover:bg-surface-sunken"
+  data-test="search-empty-tip"
+  :aria-expanded="showTips"
+  aria-controls="search-tips-panel"
+  @click="toggleTips"
+  >
+  Show search tips
+  </button>
   </p>
   </div>
   </section>

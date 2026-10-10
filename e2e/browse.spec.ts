@@ -23,6 +23,25 @@ test('catalog loads and recipe cards are visible', async ({ page }) => {
   await expect(cards.first()).toContainText(/min/)
 })
 
+test('the search field is the tab’s biggest control', async ({ page }) => {
+  // ADR-0077: the render's search band is a single dominant well — leading
+  // glyph, 16px type, 48px tall — so the field reads FIRST on the tab.
+  // One component serves both mounts (ADR-0070), and the query role is what
+  // every spec addresses, so this asserts METRICS, not identity.
+  const field = page.getByRole('searchbox', { name: 'Search recipes or ingredients' })
+  await expect(field).toBeVisible()
+  const box = (await field.boundingBox())!
+  expect(box.height).toBeGreaterThanOrEqual(48)
+  expect(await field.evaluate((el) => getComputedStyle(el).fontSize)).toBe('16px')
+  // Bigger than the filter controls it sits above, and wider than any of
+  // them: the field, not a chip, is the tab's primary control.
+  const chip = (await page.getByTestId('favourites-filter').boundingBox())!
+  expect(box.height).toBeGreaterThan(chip.height)
+  if (!(await page.getByTestId('app-version').isVisible())) return
+  const version = (await page.getByTestId('app-version').boundingBox())!
+  expect(box.width).toBeGreaterThan(version.width)
+})
+
 test('search "lentil" narrows the results', async ({ page }) => {
   const before = await recipeCards(page).count()
   await page.getByRole('searchbox', { name: 'Search recipes or ingredients' }).fill('lentil')
@@ -178,7 +197,10 @@ test('detail sheet shows ingredients and instructions from the local JSON', asyn
   await openRecipeDetail(page, firstName!.trim())
   const sheet = page.getByRole('dialog')
   await expect(sheet.getByRole('heading', { level: 2 })).toHaveText(firstName!.trim())
-  await expect(sheet.getByText(/Ingredients \(\d+ servings\)/)).toBeVisible()
+  // ADR-0077: the checklist card's head is the H plus the "Scaled for N"
+  // pill (the servings live on the metadata strip now).
+  await expect(sheet.getByRole('heading', { name: 'Ingredients' })).toBeVisible()
+  await expect(sheet.getByTestId('ingredients-scaled-for')).toHaveText(/Scaled for \d+/)
   await expect(sheet.getByText('Instructions')).toBeVisible()
   // Scaled ingredient lines rendered from the per-variant local JSON document
   await expect(sheet.locator('li').filter({ hasText: /\S/ }).first()).toBeVisible()

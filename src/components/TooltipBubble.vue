@@ -262,8 +262,8 @@ const nudgeStyle = computed(() => {
  * Decision 3).
  */
 const PLACEMENTS = {
-  'above-center': 'bottom-full left-1/2 mb-1.5 w-max max-w-40 -translate-x-1/2 rounded-md text-[11px] leading-snug shadow-lg',
-  'below-right': 'top-full right-0 mt-1.5 w-max max-w-56 rounded-lg text-xs leading-snug shadow-md',
+  'above-center': 'bottom-full left-1/2 mb-1.5 w-max max-w-40 -translate-x-1/2 rounded-md text-[11px] leading-snug shadow-popover',
+  'below-right': 'top-full right-0 mt-1.5 w-max max-w-56 rounded-lg text-xs leading-snug shadow-popover',
 } as const
 
 const revealClasses = computed(() => {

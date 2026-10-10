@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test'
-import { aggregateHistory, cookCount, cookEventsFor, groupHistoryByPlan } from './history'
+import {
+  aggregateHistory,
+  cookCount,
+  cookEventsFor,
+  filterHistoryEvents,
+  groupHistoryByPlan,
+  summarizeHistory,
+} from './history'
 import type { CookedEntry } from '../stores/plan'
 
 /**
@@ -93,5 +100,41 @@ describe('groupHistoryByPlan (ADR-0034)', () => {
 
   test('an empty history is an empty grouping (not one empty group)', () => {
     expect(groupHistoryByPlan([])).toEqual([])
+  })
+})
+
+describe('filterHistoryEvents (the period pills)', () => {
+  const NOW = 100 * 86_400_000 // day 100
+  const day = (n: number) => NOW - n * 86_400_000
+
+  test('null keeps every event; a window keeps only recent cooks', () => {
+    const events = [event(1, day(5)), event(2, day(40)), event(3, day(120))]
+    expect(filterHistoryEvents(events, null, NOW)).toHaveLength(3)
+    expect(filterHistoryEvents(events, 90, NOW)).toHaveLength(2)
+    expect(filterHistoryEvents(events, 30, NOW)).toHaveLength(1)
+    expect(filterHistoryEvents(events, 30, NOW)[0].variantId).toBe(1)
+  })
+
+  test('the cutoff is inclusive of a cook exactly N days old', () => {
+    expect(filterHistoryEvents([event(1, day(30))], 30, NOW)).toHaveLength(1)
+    expect(filterHistoryEvents([event(1, day(31))], 30, NOW)).toHaveLength(0)
+  })
+
+  test('an empty window is empty — never a fake group', () => {
+    expect(filterHistoryEvents([], 30, NOW)).toEqual([])
+  })
+})
+
+describe('summarizeHistory (the DATA numbers in the head)', () => {
+  test('counts events, distinct dishes and the most recent cook', () => {
+    expect(summarizeHistory([event(1, 30), event(1, 10), event(2, 20)])).toEqual({
+      total: 3,
+      dishes: 2,
+      lastAt: 30,
+    })
+  })
+
+  test('an empty log summarizes to zeroes, not nulls beyond lastAt', () => {
+    expect(summarizeHistory([])).toEqual({ total: 0, dishes: 0, lastAt: null })
   })
 })

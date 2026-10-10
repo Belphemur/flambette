@@ -125,8 +125,8 @@ const energyDisplay = computed(() =>
 <template>
   <AppModal
     dialog-label="Nutrition facts"
-    overlay-class="z-50 flex items-end justify-center bg-surface-dark/50 sm:items-center"
-    panel-class="max-h-[85vh] w-full max-w-app overflow-y-auto rounded-t-2xl bg-surface-raised p-4 shadow-xl sm:rounded-2xl"
+    overlay-class="z-50 flex items-end justify-center modal-scrim sm:items-center"
+    panel-class="max-h-[85vh] w-full max-w-app overflow-y-auto rounded-t-2xl bg-surface-raised p-4 sm:rounded-2xl"
     panel-test="nutrition-modal"
     @close="close"
   >

@@ -45,8 +45,8 @@ const heading = computed(() => {
 <template>
   <AppModal
     dialog-label="People in this room"
-    overlay-class="z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center"
-    panel-class="mx-auto max-w-app w-full rounded-t-2xl bg-surface p-4 pb-8 shadow-xl sm:rounded-2xl"
+    overlay-class="z-50 flex items-end justify-center modal-scrim p-0 sm:items-center"
+    panel-class="mx-auto max-w-app w-full rounded-t-2xl bg-surface p-4 pb-8 sm:rounded-2xl"
     panel-test="roster-sheet"
     @close="emit('close')"
   >

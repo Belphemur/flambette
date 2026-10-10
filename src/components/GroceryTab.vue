@@ -1,19 +1,47 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChevronDown, ChevronRight, Eraser, ShoppingCart, Sparkles, X } from 'lucide-vue-next'
+import {
+  ChevronDown,
+  ChevronRight,
+  Eraser,
+  Receipt,
+  Recycle,
+  ShoppingCart,
+  Sparkles,
+  Users,
+  UtensilsCrossed,
+  X,
+} from 'lucide-vue-next'
 import { useGroceryList } from '../lib/useGroceryList'
 import { extraCollapseKey, groupExtras, storeCollapseKey } from '../lib/extraSections'
 import { extraCheckedKey } from '../lib/extraCheckedKeys'
 import type { GroceryItem } from '../lib/grocery'
+import { STORE_SECTIONS } from '../lib/sections'
+import { aisleIcon } from '../lib/aisleRole'
+import { imageSrc, onImgError } from '../lib/images'
+
 import { usePlanStore } from '../stores/plan'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
+import { useRoomStore } from '../stores/room'
 import IngredientAutocomplete from './IngredientAutocomplete.vue'
 
 const plan = usePlanStore()
 const router = useRouter()
-const { checked, loadError, loading, items, totalCount, checkedCount, sections, ensureDocs, confirmAndClearGrocery } =
-  useGroceryList()
+const room = useRoomStore()
+const {
+  checked,
+  loadError,
+  loading,
+  items,
+  totalCount,
+  checkedCount,
+  totalServings,
+  mealSummaries,
+  sections,
+  ensureDocs,
+  confirmAndClearGrocery,
+} = useGroceryList()
 
 /* ---------- Custom (free-form) grocery items ---------- */
 
@@ -26,6 +54,10 @@ const addForm = ref<InstanceType<typeof IngredientAutocomplete> | null>(null)
  * add makes customItems non-empty so that instance unmounts. Hand the
  * keyboard to the freshly mounted main-form instance instead of dropping
  * focus (the bulk-add loop never loses the keyboard, ADR-0014).
+ *
+ * ADR-0071 relocates the DESKTOP instance into the sidebar's Quick Extra
+ * Entry, so the handoff target is whichever instance is mounted: `isDesktop`
+ * selects between the sidebar slot and the in-content one, never both.
  */
 watch(
   () => plan.customItems.length > 0 || plan.plan.length > 0,
@@ -168,6 +200,67 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   return section.items.reduce((n, i) => n + i.lines.length, 0)
 }
 
+/* ---------- Aisle index (ADR-0071) ---------- */
+
+/**
+ * Walk order comes from `STORE_SECTIONS` itself (1-based), so the number
+ * beside a section name is the catalog's own aisle order and can never
+ * hand-drift when a section is added. Extras sub-sections deliberately
+ * carry NO number: they are a view (ADR-0050 §2), not an aisle.
+ */
+function aisleNumber(name: string): number {
+  return STORE_SECTIONS.indexOf(name as (typeof STORE_SECTIONS)[number]) + 1
+}
+
+/* ---------- Progress ---------- */
+
+const progressPct = computed(() =>
+  totalCount.value ? Math.round((checkedCount.value / totalCount.value) * 100) : 0,
+)
+
+/* ---------- Editorial header (ADR-0071 / ADR-0075 rule 1) ---------- */
+
+const headerCounts = computed(() => {
+  const meals = plan.plan.length
+  const servings = totalServings.value
+  const mealsText = `${meals} planned meal${meals === 1 ? '' : 's'}`
+  return `Derived from ${mealsText} (${servings} serving${servings === 1 ? '' : 's'}) · ${items.value.length} ingredient${items.value.length === 1 ? '' : 's'} merged across aisles`
+})
+
+/* ---------- Desktop sidebar (ADR-0071, lg+ only) ---------- */
+
+/**
+ * One `matchMedia`, one listener, one boolean — the sidebar exists only
+ * at `lg:`, where it also takes over the Quick Extra Entry slot so the
+ * add-row is never mounted twice (two mounted add-rows would fight over
+ * the ADR-0014 focus handoff and double-announce in AT).
+ */
+const desktopQuery = '(min-width: 1024px)'
+const isDesktop = ref(false)
+let media: MediaQueryList | null = null
+function onMediaChange(e: MediaQueryListEvent) {
+  isDesktop.value = e.matches
+}
+onMounted(() => {
+  if (typeof window === 'undefined' || !window.matchMedia) return
+  media = window.matchMedia(desktopQuery)
+  isDesktop.value = media.matches
+  media.addEventListener('change', onMediaChange)
+})
+onBeforeUnmount(() => media?.removeEventListener('change', onMediaChange))
+
+/**
+ * The room strip only exists for a joined room (owner ruling, ADR-0071) —
+ * and it only claims to be LIVE when the relay says so. `room.code` outlives
+ * a dropped connection (the client keeps the code so it can reconnect), and
+ * `room.peers` is null until the first `peers` frame: neither is evidence of
+ * a live shopper, so the strip states the connection honestly instead of
+ * inventing a headcount of one.
+ */
+const inRoom = computed(() => room.inRoom && room.code !== null)
+const roomLive = computed(() => room.status === 'live')
+/** null = "not told yet", which the strip says rather than guessing. */
+const shopperCount = computed(() => room.peers)
 </script>
 
 <template>
@@ -202,6 +295,62 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   </div>
 
   <template v-else>
+  <!-- Editorial header (ADR-0071 delta 2, ADR-0075 rule 1): an eyebrow, the
+  H1 and a derived-from subtitle built from REAL counts — the plan's meal
+  count, the servings it covers and the ingredients the aggregation
+  merged. Nothing here is invented, so the block carries no claim the
+  list cannot back. -->
+  <header class="space-y-1">
+  <p class="flex items-center gap-1.5 text-label-sm font-semibold tracking-wide text-brand-text uppercase">
+  <Receipt :size="16" aria-hidden="true" />
+  Household meal run
+  </p>
+  <h1 class="text-headline-sm text-text">Grocery List</h1>
+  <p class="text-body-sm text-text-muted" data-test="grocery-derived-from">
+  {{ headerCounts }}
+  </p>
+  </header>
+
+  <div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-12 lg:gap-6">
+  <!-- READING COLUMN ------------------------------------------------- -->
+  <div class="space-y-4 lg:col-span-8">
+  <!-- Progress card (the old toolbar, restyled): mono counts, percent,
+  bar, and the confirm-first Clear-checked action. Stays sticky under
+  the app header (ADR-0071 delta 2). -->
+  <div
+  v-if="totalCount > 0"
+  class="sticky top-12 z-10 flex items-center gap-3 rounded-xl bg-surface-raised px-3 py-2.5 ring-1 ring-border"
+  data-test="grocery-progress"
+  >
+  <p
+  class="min-w-0 flex-1 font-mono-data text-label-md font-semibold tabular-nums text-text"
+  data-test="grocery-progress-count"
+  aria-live="polite"
+  >
+  {{ checkedCount }} / {{ totalCount }} items
+  </p>
+  <div class="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-surface-sunken">
+  <div
+  class="h-full rounded-full bg-brand transition-all"
+  :style="{ width: `${progressPct}%` }"
+  />
+  </div>
+  <span
+  class="shrink-0 font-mono-data text-label-sm tabular-nums text-text-muted"
+  data-test="grocery-progress-percent"
+  >{{ progressPct }}%</span>
+  <button
+  v-if="checkedCount > 0"
+  class="flex h-11 shrink-0 items-center gap-1 rounded-lg px-2 text-label-sm font-medium text-text-muted hover:text-text"
+  data-test="clear-list"
+  aria-label="Clear grocery list"
+  @click="confirmAndClearGrocery()"
+  >
+  <Eraser :size="16" aria-hidden="true" class="mr-1 inline" />
+  Clear list
+  </button>
+  </div>
+
   <!-- Meals planned but every ingredient cleared (phase 9) -->
   <div
   v-if="totalCount === 0 && plan.plan.length > 0"
@@ -213,9 +362,11 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   <p class="mt-1 text-sm">They'll come back when you plan new recipes.</p>
   </div>
 
-  <template v-else>
+  <!-- Start the run: ONE filled tomato intent on this surface
+  (ADR-0072 — tomato is the START, never the completion). -->
   <button
-  class="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand text-base font-bold text-on-brand shadow-sm active:bg-brand-strong"
+  v-if="totalCount > 0"
+  class="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand text-base font-bold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong lg:w-auto lg:px-6"
   data-test="start-shopping"
   @click="router.push('/shop')"
   >
@@ -223,33 +374,28 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   Start shopping
   </button>
 
-  <!-- Solid surface, real border: DESIGN.md bans translucent control
-  surfaces, and without a fill the rows scrolled behind this toolbar
-  showed straight through the progress text. -->
+  <!-- Room strip (ADR-0071 delta 4): only for a joined room, from real
+  ADR-0063 presence — code + live member count. Never awaited on a
+  render path, and hidden entirely when solo. -->
   <div
-  class="sticky top-12 z-10 -mx-4 flex items-center justify-between border-b border-border bg-surface px-4 py-2"
+  v-if="inRoom"
+  class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-surface-raised px-3 py-2.5 text-label-md ring-1 ring-border"
+  data-test="grocery-room-strip"
   >
-  <p class="text-sm font-semibold" aria-live="polite">
-  {{ checkedCount }} / {{ totalCount }} items
-  </p>
-  <div class="h-1.5 w-24 overflow-hidden rounded-full bg-surface-sunken">
-  <div
-  class="h-full rounded-full bg-brand transition-all"
-  :style="{ width: totalCount ? `${(checkedCount / totalCount) * 100}%` : '0%' }"
+  <span class="flex items-center gap-2">
+  <span
+  v-if="roomLive"
+  class="size-2 shrink-0 rounded-full bg-success"
+  aria-hidden="true"
   />
+  <span class="text-text">{{ roomLive ? 'Synced live with room:' : 'Reconnecting to room:' }}</span>
+  <span class="font-mono-data text-text">{{ room.code }}</span>
+  </span>
+  <span v-if="shopperCount !== null" class="flex items-center gap-1 text-text-muted">
+  <Users :size="14" aria-hidden="true" />
+  {{ shopperCount }} active shopper{{ shopperCount === 1 ? '' : 's' }}
+  </span>
   </div>
-  <button
-  v-if="checkedCount > 0"
-  class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium"
-  data-test="clear-list"
-  aria-label="Clear grocery list"
-  @click="confirmAndClearGrocery()"
-  >
-  <Eraser :size="16" aria-hidden="true" class="mr-1 inline" />
-  Clear list
-  </button>
-  </div>
-  </template>
 
   <!-- EXTRA ITEMS (ADR-0015 -> ADR-0050): the group for free-form items --
   not part of any planned meal. It renders FIRST (above every real store
@@ -261,14 +407,25 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   tagged Produce lives in the extras group's Produce sub-section and must
   not appear in the recipe-derived Produce store section below. -->
   <div v-if="plan.customItems.length > 0" class="space-y-1.5" data-test="extra-section">
-  <h3 class="flex items-center gap-2 px-1 pt-2 text-xs font-bold tracking-wider text-text-muted uppercase">
-  Extra items
-  <span class="rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold text-text-muted">
-  {{ plan.customItems.length }}
-  </span>
+  <!-- The extras GROUP header is a group label, not an aisle: no
+  `(Aisle N)`, no hue glyph (ADR-0071 / ADR-0050 §2). It is a static
+  HEADING — the group itself never collapses (its sub-sections do), so
+  there is no toggle button and no chevron here. -->
+  <h3>
+  <div
+  class="flex items-center gap-2 overflow-hidden rounded-xl bg-surface-raised px-3 py-2.5 ring-1 ring-border"
+  >
+  <!-- The HEADING holds the label only: the count pill is a sibling, so
+  the group's accessible name is exactly "Extra items" (ADR-0050 §1's
+  pin) and a screen reader hears the count as the pill it is. -->
+  <span class="min-w-0 flex-1 text-label-md font-semibold text-text">Extra items</span>
+  <span
+  class="shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 font-mono-data text-label-sm tabular-nums text-text-muted"
+  >{{ plan.customItems.length }}</span>
+  </div>
   </h3>
 
-  <IngredientAutocomplete ref="addForm" />
+  <IngredientAutocomplete v-if="!isDesktop" ref="addForm" />
 
   <div
   v-for="group in extraGroups"
@@ -277,20 +434,39 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   data-test="extra-subsection"
   :data-extra-category="group.name"
   >
-  <h3 class="pt-2">
+  <!-- The sub-section band: same index-card grammar as an aisle band,
+  minus the aisle index (an extras sub-section is a view, not an aisle). -->
+  <div class="overflow-hidden rounded-xl bg-surface-raised ring-1 ring-border">
+  <h3>
   <button
-  class="flex w-full items-center justify-between text-left"
+  class="flex w-full items-center gap-2 border-b border-border bg-surface-sunken px-3 py-2.5 text-left"
   :aria-expanded="!isCollapsed(extraKey(group.name))"
   :aria-label="`${group.name}: ${extraDoneCount(group)} of ${group.items.length} checked`"
   data-test="extra-subsection-toggle"
   @click="toggleSection(extraKey(group.name))"
   >
-  <span class="text-xs font-bold tracking-wider text-text-muted uppercase">
+  <!-- Same glyph grammar as an aisle band (ADR-0076): department hue
+  where the name is a real department; `Uncategorized` is a view label,
+  not a department — no glyph (aisleIcon returns null there). -->
+  <component
+  :is="aisleIcon(group.name)!.glyph"
+  v-if="aisleIcon(group.name)"
+  :size="16"
+  :class="aisleIcon(group.name)!.className"
+  class="shrink-0"
+  aria-hidden="true"
+  />
+  <span class="min-w-0 flex-1 truncate text-label-md font-semibold text-text">
   {{ group.name }}
   </span>
-  <span class="flex items-center gap-2">
+  <span class="flex shrink-0 items-center gap-2">
   <span
-  class="rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold text-text-muted"
+  class="rounded-full px-2 py-0.5 font-mono-data text-label-sm tabular-nums"
+  :class="
+  extraDoneCount(group) === group.items.length
+  ? 'bg-success/12 text-success'
+  : 'bg-surface-sunken text-text-muted'
+  "
   data-test="section-count-pill"
   >{{ extraDoneCount(group) }}/{{ group.items.length }}</span>
   <ChevronRight v-if="isCollapsed(extraKey(group.name))" :size="16" aria-hidden="true" />
@@ -300,7 +476,7 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   </h3>
   <ul
   v-if="!isCollapsed(extraKey(group.name))"
-  class="divide-y rounded-xl ring-1"
+  class="divide-y divide-border"
   data-test="extra-subsection-rows"
   >
   <li
@@ -312,7 +488,7 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   <label class="flex min-w-0 flex-1 hovercap:cursor-pointer items-center gap-3">
   <input
   type="checkbox"
-  class="size-5 shrink-0 accent-brand"
+  class="check-box done"
   :checked="!!checked.map[extraCheckedKey(item.name)]"
   @change="checked.toggleChecked(extraCheckedKey(item.name))"
   />
@@ -320,8 +496,8 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   directly above IS the category, so a #Produce pill here would only
   repeat it. The heading carries the accessible name instead. -->
   <span
-  class="min-w-0 truncate text-sm"
-  :class="checked.map[extraCheckedKey(item.name)] ? 'text-text-muted line-through' : ''"
+  class="min-w-0 flex-1 truncate text-body-sm"
+  :class="checked.map[extraCheckedKey(item.name)] ? 'text-text-muted line-through' : 'text-text'"
   >{{ item.name }}</span>
   </label>
   <button
@@ -335,30 +511,61 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   </ul>
   </div>
   </div>
+  </div>
 
-  <!-- No extras yet: the same add-row, unheaded, at the very top. -->
-  <IngredientAutocomplete v-else ref="addForm" />
+  <!-- No extras yet: the same add-row, unheaded, at the very top (desktop
+  owns its copy in the sidebar's Quick Extra Entry). ONE mount at a time
+  — this row is the `v-else` of the extras block, so the add-bar never
+  exists twice (a second mounted add-row would fight the ADR-0014 focus
+  handoff and make every add-bar locator ambiguous). -->
+  <IngredientAutocomplete v-else v-if="!isDesktop" ref="addForm" />
 
+  <!-- STORE SECTIONS as aisle index cards (ADR-0071 delta 3): one rounded
+  `surface-raised` card per aisle with keyline dividers, a header BAND
+  carrying the section's registry hue glyph, the name, the derived aisle
+  index and the mono `N/M` pill. -->
   <div
   v-for="section in sections"
   :key="section.name"
-  class="space-y-1.5"
+  class="overflow-hidden rounded-xl bg-surface-raised ring-1 ring-border"
   data-test="grocery-section"
   >
-  <h3 class="pt-2">
+  <h3>
   <button
-  class="flex w-full items-center justify-between text-left"
+  class="flex w-full items-center gap-2 border-b border-border bg-surface-sunken px-3 py-2.5 text-left"
   :aria-expanded="!isCollapsed(sectionKey(section.name))"
   :aria-label="`${section.name}: ${sectionDoneCount(section)} of ${sectionTotalCount(section)} checked`"
   data-test="grocery-section-toggle"
   @click="toggleSection(sectionKey(section.name))"
   >
-  <span class="text-xs font-bold tracking-wider text-text-muted uppercase">
-  {{ section.name }}
+  <!-- EVERY aisle carries its glyph AND its department hue (ADR-0076):
+  Produce and Meat & Seafood wear the food registry's own tokens, the
+  rest the measured aisle family — kindred departments alias a token,
+  never adjacent. Decorative: the band's name is the accessible label. -->
+  <component
+  :is="aisleIcon(section.name)!.glyph"
+  :size="18"
+  :class="aisleIcon(section.name)!.className"
+  class="shrink-0"
+  aria-hidden="true"
+  />
+  <!-- Name and aisle index are SEPARATE elements: the name is what a
+  reader (and a spec) matches on, the index is the parenthetical.
+  Derived from STORE_SECTIONS order, never hand-numbered. -->
+  <span class="min-w-0 flex-1 truncate text-label-md font-semibold text-text">
+  <span>{{ section.name }}</span>
+  <span class="ml-1 font-normal text-text-muted">(Aisle {{ aisleNumber(section.name) }})</span>
   </span>
-  <span class="flex items-center gap-2">
+  <!-- Completion pill: `success`-tinted when the aisle is done, tonal
+  while it is open (ADR-0072). -->
+  <span class="flex shrink-0 items-center gap-2">
   <span
-  class="rounded-full bg-surface-sunken px-2 py-px text-[10px] font-semibold text-text-muted"
+  class="rounded-full px-2 py-0.5 font-mono-data text-label-sm tabular-nums"
+  :class="
+  sectionDoneCount(section) === sectionTotalCount(section)
+  ? 'bg-success/12 text-success'
+  : 'bg-surface-sunken text-text-muted'
+  "
   data-test="section-count-pill"
   >{{ sectionDoneCount(section) }}/{{ sectionTotalCount(section) }}</span>
   <ChevronRight v-if="isCollapsed(sectionKey(section.name))" :size="16" aria-hidden="true" />
@@ -366,12 +573,11 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   </span>
   </button>
   </h3>
-  <ul
-  v-if="!isCollapsed(sectionKey(section.name))"
-  class="divide-y rounded-xl ring-1"
-  data-test="grocery-section-rows"
-  >
+  <ul v-if="!isCollapsed(sectionKey(section.name))" class="divide-y divide-border" data-test="grocery-section-rows">
   <li v-for="item in section.items" :key="item.normalized">
+  <!-- READING, not a task queue: a checked row stays exactly where it
+  was checked, struck through and muted (ADR-0071 delta 1). The sink
+  lives on in ShopView, where "next tap at the top" is the point. -->
   <div
   v-for="line in item.lines"
   :key="line.key"
@@ -381,20 +587,18 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   <label class="flex min-w-0 flex-1 hovercap:cursor-pointer items-center gap-3">
   <input
   type="checkbox"
-  class="size-5 shrink-0 accent-brand"
+  class="check-box done"
   :checked="!!checked.map[line.key]"
+  :aria-label="line.text ? `${line.text} ${item.name}` : item.name"
   @change="checked.toggleChecked(line.key)"
   />
   <span
-  class="min-w-0 flex-1 truncate text-sm"
-  :class="checked.map[line.key] ? 'text-text-muted line-through' : ''"
+  class="min-w-0 flex-1 truncate text-body-sm"
+  :class="checked.map[line.key] ? 'text-text-muted line-through' : 'text-text'"
   >
-  <span
-  v-if="line.text"
-  class="mr-1.5 font-medium text-brand-text"
-  :class="checked.map[line.key] ? 'text-text-muted line-through' : ''"
-  >{{ line.text }}</span>
-  <span :class="checked.map[line.key] ? 'text-text-muted line-through' : ''">{{ item.name }}</span>
+  <!-- No quantity prefix (ADR-0071 delta 4): the amount is the row's
+  right-aligned mono badge below, not a bold run-on in the name. -->
+  <span>{{ item.name }}</span>
   </span>
   <!-- Provenance pill: a shrink-0 flex sibling OUTSIDE the
   truncating span, so the tooltip is never clipped by the
@@ -410,25 +614,104 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
   tabindex="0"
   role="note"
   :aria-label="`Used by ${item.recipes.length} planned meals: ${item.recipes.join(', ')}`"
-  class="cursor-help whitespace-nowrap rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand-text outline-none focus-visible:ring-2 focus-visible:ring-brand"
+  class="cursor-help whitespace-nowrap rounded-full bg-brand/10 px-2 py-0.5 text-label-sm font-semibold text-brand-text outline-none focus-visible:ring-2 focus-visible:ring-brand"
   >{{ item.recipes.length }} recipes</span>
   <span
-  class="pointer-events-none absolute bottom-full right-0 z-20 mb-1.5 hidden w-56 rounded-lg bg-surface-dark px-2.5 py-1.5 text-[11px] leading-snug text-on-brand shadow-lg group-hover/pill:block group-focus-within/pill:block"
+  class="pointer-events-none absolute bottom-full right-0 z-20 mb-1.5 hidden w-56 rounded-lg bg-surface-dark px-2.5 py-1.5 text-[11px] leading-snug text-on-brand shadow-popover group-hover/pill:block group-focus-within/pill:block"
   >
   <span class="block font-semibold">Used by {{ item.recipes.length }} planned meal{{ item.recipes.length === 1 ? '' : 's' }}:</span>
   {{ item.recipes.join(', ') }}
   </span>
   </span>
   </label>
+  <!-- Data voice: the merged amount, re-rendered from `line.text` — the
+  SAME string the unit system already produces (ADR-0047), never a new
+  parser, and always the canonical metric basis so a checked key can
+  never orphan itself. -->
+  <span
+  v-if="line.text"
+  class="shrink-0 rounded-md bg-surface-sunken px-2 py-1 font-mono-data text-label-sm tabular-nums"
+  :class="checked.map[line.key] ? 'text-text-muted' : 'text-text'"
+  data-test="grocery-qty"
+  >{{ line.text }}</span>
   </div>
   </li>
   </ul>
   </div>
+  </div>
 
-  <p class="pt-2 pb-4 text-center text-xs text-text-muted">
-  {{ plan.plan.length }} meal{{ plan.plan.length === 1 ? '' : 's' }} ·
-  {{ items.length }} ingredients shown
+  <!-- DESKTOP SIDEBAR (ADR-0071 delta 4) ---------------------------- -->
+  <aside
+  v-if="isDesktop"
+  class="sticky top-24 space-y-4 lg:col-span-4"
+  data-test="grocery-sidebar"
+  >
+  <!-- Contributing Meals: thumbnails, planned servings and the grocery
+  line counts from the SAME aggregation pass (`mealSummaries`), so the
+  card can never disagree with the list it explains. -->
+  <div class="rounded-xl bg-surface-raised p-3 ring-1 ring-border">
+  <div class="flex items-center justify-between gap-2">
+  <h2 class="flex items-center gap-1.5 text-label-md font-semibold text-text">
+  <UtensilsCrossed :size="16" aria-hidden="true" />
+  Contributing meals
+  </h2>
+  <span class="font-mono-data text-label-sm tabular-nums text-brand-text">{{
+  plan.plan.length
+  }} planned</span>
+  </div>
+  <ul v-if="mealSummaries.length" class="mt-2 space-y-1.5">
+  <li
+  v-for="meal in mealSummaries"
+  :key="meal.id"
+  class="flex items-center gap-2.5 rounded-lg bg-surface-sunken p-2"
+  data-test="contributing-meal"
+  >
+  <img
+  :src="imageSrc(meal.image)"
+  :alt="meal.name"
+  loading="lazy"
+  @error="onImgError"
+  class="size-14 shrink-0 rounded-md bg-surface-raised object-cover"
+  />
+  <div class="min-w-0 flex-1">
+  <p class="truncate text-label-md font-semibold text-text">{{ meal.name }}</p>
+  <p class="font-mono-data text-label-sm tabular-nums text-text-muted">
+  {{ meal.servings }} serving{{ meal.servings === 1 ? '' : 's' }} ·
+  {{ meal.lines }} grocery line{{ meal.lines === 1 ? '' : 's' }}
   </p>
+  </div>
+  </li>
+  </ul>
+  <p v-else-if="mealSummaries.length === 0 && plan.plan.length === 0" class="mt-2 text-body-sm text-text-muted">
+  No meals planned yet — the extras below are not tied to a recipe.
+  </p>
+  <p v-else class="mt-2 text-body-sm text-text-muted">Loading the plan's meals…</p>
+  </div>
+
+  <!-- Zero-waste explainer: ADR-0017's ceiling rule in prose, with NO
+  invented numbers (ADR-0071 rejected fictions). -->
+  <div class="rounded-xl bg-brand/8 p-3">
+  <h2 class="flex items-center gap-1.5 text-label-md font-bold text-text">
+  <Recycle :size="16" aria-hidden="true" class="text-success" />
+  Waste-aware ceiling logic
+  </h2>
+  <p class="mt-1 text-body-sm text-text">
+  Container measures — a package, a bunch, a head — round UP to the whole
+  container and merge across meals, so the list buys one package instead of
+  several part-used ones. Weights, volumes and spoons add up as usual.
+  </p>
+  </div>
+
+  <!-- Quick Extra Entry: the ONE add-row, relocated here at lg: (ADR-0071
+  delta 4). Mobile keeps it under the extras header. -->
+  <div class="rounded-xl bg-surface-raised p-3 ring-1 ring-border">
+  <h2 class="text-label-md font-semibold text-text">Quick extra entry</h2>
+  <div class="mt-2">
+  <IngredientAutocomplete v-if="isDesktop" ref="addForm" />
+  </div>
+  </div>
+  </aside>
+  </div>
   </template>
   </section>
 </template>

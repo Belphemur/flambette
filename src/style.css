@@ -5,6 +5,40 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ------------------------------------------------------------------ *
+ * Self-hosted typefaces (ADR-0066). Both families ship IN-REPO as
+ * latin-subset variable WOFF2 under `src/assets/fonts/` with their OFL
+ * licences beside them — possession, not a runtime request, satisfies
+ * the offline-first rule (e2e blocks every external request).
+ *
+ * Both files are VARIABLE fonts (Plus Jakarta Sans wght 200–800,
+ * JetBrains Mono wght 100–800), so a single file per family covers
+ * every weight the type ladder uses. `font-display: swap` keeps first
+ * paint on the metric-compatible system fallback while the subset
+ * loads (FOUT tolerated per ADR-0066).
+ * ------------------------------------------------------------------ */
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('./assets/fonts/plus-jakarta-sans-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('./assets/fonts/jetbrains-mono-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ------------------------------------------------------------------ *
  * DESIGN TOKENS — the mirror of DESIGN.md (repo root), per ADR-0036.
  *
  * `DESIGN.md` is the SINGLE SOURCE OF TRUTH for the visual identity:
@@ -56,14 +90,42 @@
   --color-brand-tint-dark: #44241d;
   --color-on-brand: #ffffff;
 
-  /* --- Light surfaces & neutrals (DESIGN.md `colors`) --- */
-  --color-surface: #fff8f0;
-  --color-surface-raised: #ffffff;
-  --color-surface-sunken: #fff0e6;
-  --color-border: #e5d8cb;
-  --color-border-strong: #8c7a6b;
-  --color-text: #292524;
-  --color-text-muted: #63574e;
+  /* --- Light surfaces & neutrals (DESIGN.md `colors`, Warm Culinary
+     Paper values per ADR-0067) --- */
+  --color-surface: #fbf8f2;
+  --color-surface-raised: #f4efe6;
+  --color-surface-sunken: #ede5d8;
+  --color-border: #e3d8c8;
+  /* Control keyline: measured pick #947E64 (ADR-0067's measured record) —
+     the warm-tan family line down to the first value ≥3:1 on BOTH the
+     card (3.38:1) and the sunken well (3.10:1). */
+  --color-border-strong: #947e64;
+  --color-text: #1c1c18;
+  --color-text-muted: #59413c;
+
+  /* --- New v2 families (ADR-0067). Saffron = timers/heat/tips, a
+     NON-food family (3.01:1 on the page — graphic/large-numeral role;
+     never a diet or category cue). Espresso = the SECONDARY chrome
+     surface (bottom nav, photo-scrim discs): literal dark chrome in
+     BOTH themes, dark pair re-pointed in the .dark flip. Popover white
+     is elevation level 2 (popovers/sticky bars) with the ONE warm
+     shadow. The chrome-* family is the light foreground ON that dark
+     chrome and never flips (the bar is dark in both themes). --- */
+  --color-saffron: #d97706;
+  --color-saffron-soft: #fcd34d;
+  --color-espresso: #2b1e1a;
+  --color-espresso-dark: #1e1512;
+  --color-popover: #ffffff;
+  --color-popover-dark: #2c231e;
+  --color-chrome-muted: #c7b5a6;
+  --color-chrome-backplate: #fbeae5;
+  --color-chrome-backplate-text: #8e2c17;
+  --color-chrome-border: #a28e80;
+  --color-chrome-accent: #f08a6a;
+
+  /* The ONE warm ambient shadow (ADR-0068): elevation level 2 only —
+     popovers, dropdowns, sticky bars. Cards never take a shadow. */
+  --shadow-popover: 0 8px 24px -4px rgb(43 30 26 / 0.08);
 
   /* --- Dark surfaces & neutrals. Declared here so `dark:` utilities
      exist for the rare component that needs the literal token (e.g. a
@@ -119,6 +181,43 @@
   --color-nutrition-fat: #7a5f0c;
   --color-nutrition-fat-soft: #e8c86a;
 
+  /* --- Store DEPARTMENT identities (DESIGN.md `aisle-*`, ADR-0076).
+     14 measured pairs over the 29 departments whose identity the food
+     registry does not already claim (Produce reuses `hue-vegetarian`,
+     Meat & Seafood `hue-meat`). Kindred departments deliberately ALIAS a
+     token — never adjacent in STORE_SECTIONS order — the glyph and the
+     printed name do the identity work inside the family. These never
+     join the IconRole registry: a department is a third question beside
+     "what kind of food" and "what does this number mean". --- */
+  --color-aisle-gold: #8f7d00;
+  --color-aisle-gold-soft: #ede795;
+  --color-aisle-crust: #7a3b10;
+  --color-aisle-crust-soft: #f0b49a;
+  --color-aisle-sunrise: #c25a14;
+  --color-aisle-sunrise-soft: #fce4c4;
+  --color-aisle-coffee: #5f4630;
+  --color-aisle-coffee-soft: #c2a075;
+  --color-aisle-husk: #5f6e1e;
+  --color-aisle-husk-soft: #bccb7e;
+  --color-aisle-slate: #46586e;
+  --color-aisle-slate-soft: #a6bacb;
+  --color-aisle-royal: #2c4fbe;
+  --color-aisle-royal-soft: #6f9cef;
+  --color-aisle-ice: #0c8cad;
+  --color-aisle-ice-soft: #a6dcf0;
+  --color-aisle-leaf: #55786a;
+  --color-aisle-leaf-soft: #a9d6c4;
+  --color-aisle-rose: #cb3d86;
+  --color-aisle-rose-soft: #f4a6ce;
+  --color-aisle-violet: #6c2bb0;
+  --color-aisle-violet-soft: #a08ce0;
+  --color-aisle-wine: #6b2137;
+  --color-aisle-wine-soft: #d391a5;
+  --color-aisle-lavender: #6c64a0;
+  --color-aisle-lavender-soft: #c8c2d8;
+  --color-aisle-stone: #635a46;
+  --color-aisle-stone-soft: #bfb4a0;
+
   /* --- Status. Not food identity: never a "what kind of food" cue. ---
      `success` is the live-room signal (ADR-0049) and is deliberately a
      DIFFERENT green from `hue-vegetarian` / `hue-vegan`: it lives in the
@@ -138,7 +237,12 @@
   --color-on-success: #ffffff;
   --color-danger: #b91c1c;
   --color-danger-soft: #fca5a5;
-  --color-favourite: #e11d48;
+  /* Favourite rose: darkened from #E11D48 to #C9183C at the v2 migration
+     (ADR-0067 measured record) — on the new paper card the old rose text
+     measured 4.10:1, below the 4.5:1 text bar the lint gate enforces; the
+     new rose clears 4.5:1 on ALL four light contexts. favourite-soft (the
+     heart fill) is unchanged. */
+  --color-favourite: #c9183c;
   --color-favourite-soft: #fb7185;
   --color-household: #86198f;
   --color-household-soft: #e879f9;
@@ -153,35 +257,66 @@
      full 9999px -> Tailwind's rounded-md / rounded-lg / rounded-xl /
      rounded-2xl / rounded-full. Recipe cards and dialogs take xl. --- */
 
-  /* --- Typography (DESIGN.md `typography`). The app is offline-first,
-     so the stack is system-ui: no webfont, no network request, no
-     claim that Inter exists on the user's device. Hierarchy comes from
-     these sizes, not from a second typeface. --- */
-  --text-headline-lg: 32px;
-  --text-headline-lg--line-height: 1.15;
+  /* --- Typography (DESIGN.md `typography`, the ADR-0066 ladder).
+     Plus Jakarta Sans is the voice; JetBrains Mono the DATA voice.
+     Both self-hosted (see the @font-face rules at the top). The
+     cooking view keeps its measured 20px/1.6 step. --- */
+  --text-display-lg: 48px;
+  --text-display-lg--line-height: 56px;
+  --text-display-lg--font-weight: 700;
+  --text-headline-lg: 36px;
+  --text-headline-lg--line-height: 44px;
   --text-headline-lg--font-weight: 700;
+  --text-headline-lg-mobile: 28px;
+  --text-headline-lg-mobile--line-height: 36px;
+  --text-headline-lg-mobile--font-weight: 700;
   --text-headline-md: 24px;
-  --text-headline-md--line-height: 1.25;
+  --text-headline-md--line-height: 32px;
   --text-headline-md--font-weight: 700;
+  --text-headline-sm: 20px;
+  --text-headline-sm--line-height: 28px;
+  --text-headline-sm--font-weight: 700;
   --text-title: 16px;
   --text-title--line-height: 1.4;
   --text-title--font-weight: 600;
+  --text-body-lg: 18px;
+  --text-body-lg--line-height: 28px;
+  --text-body-lg--font-weight: 400;
   --text-body-md: 16px;
   --text-body-md--line-height: 1.55;
   --text-body-md--font-weight: 400;
   --text-body-sm: 14px;
   --text-body-sm--line-height: 1.5;
   --text-body-sm--font-weight: 400;
-  --text-label-md: 12px;
+  --text-label-md: 14px;
   --text-label-md--line-height: 1.4;
-  --text-label-md--font-weight: 500;
+  --text-label-md--font-weight: 600;
+  /* Small DATA labels: JetBrains Mono 12/500, +0.04em. */
+  --text-label-sm: 12px;
+  --text-label-sm--line-height: 1.4;
+  --text-label-sm--font-weight: 500;
+  --text-label-sm--letter-spacing: 0.04em;
+  --text-label-sm--font-family: var(--font-mono-data);
+  /* The DATA voice: quantities, times, dates, counts, room codes,
+     aisle indices, versions — never prose. */
+  --text-mono-data: 13px;
+  --text-mono-data--line-height: 18px;
+  --text-mono-data--font-weight: 500;
+  --text-mono-data--font-family: var(--font-mono-data);
   --text-cooking-step: 20px;
   --text-cooking-step--line-height: 1.6;
   --text-cooking-step--font-weight: 500;
 
   --font-sans:
-    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    sans-serif;
+    'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+
+  /* The DATA voice (ADR-0066): quantities, times, dates, counts, room
+     codes, aisle indices, versions — never prose. Consumed via the
+     `font-mono-data` utility, not raw font-family. */
+  --font-mono-data:
+    'JetBrains Mono', ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', Menlo,
+    Consolas, monospace;
 }
 
 /* --- Theme flip: the DARK column of DESIGN.md. ------------------------ *
@@ -195,6 +330,12 @@
   --color-border-strong: var(--color-border-dark-strong);
   --color-text: var(--color-text-dark);
   --color-text-muted: var(--color-text-dark-muted);
+  /* The espresso chrome deepens a step in dark mode so the bar stays
+     distinct from the dark card surfaces; the chrome-* foregrounds are
+     LITERAL and never re-point (they must read on the dark bar in both
+     themes). */
+  --color-espresso: var(--color-espresso-dark);
+  --color-popover: var(--color-popover-dark);
 
   /* Hues keep their identity and become their legible dark variants. */
   --color-hue-meat: var(--color-hue-meat-soft, #f08a6a);
@@ -211,6 +352,21 @@
   --color-nutrition-protein: var(--color-nutrition-protein-soft, #c4a8f5);
   --color-nutrition-carbs: var(--color-nutrition-carbs-soft, #5cc0d8);
   --color-nutrition-fat: var(--color-nutrition-fat-soft, #e8c86a);
+  /* Aisle department hues keep their identity in dark mode (ADR-0076). */
+  --color-aisle-gold: var(--color-aisle-gold-soft, #ede795);
+  --color-aisle-crust: var(--color-aisle-crust-soft, #f0b49a);
+  --color-aisle-sunrise: var(--color-aisle-sunrise-soft, #fce4c4);
+  --color-aisle-coffee: var(--color-aisle-coffee-soft, #c2a075);
+  --color-aisle-husk: var(--color-aisle-husk-soft, #bccb7e);
+  --color-aisle-slate: var(--color-aisle-slate-soft, #a6bacb);
+  --color-aisle-royal: var(--color-aisle-royal-soft, #6f9cef);
+  --color-aisle-ice: var(--color-aisle-ice-soft, #a6dcf0);
+  --color-aisle-leaf: var(--color-aisle-leaf-soft, #a9d6c4);
+  --color-aisle-rose: var(--color-aisle-rose-soft, #f4a6ce);
+  --color-aisle-violet: var(--color-aisle-violet-soft, #a08ce0);
+  --color-aisle-wine: var(--color-aisle-wine-soft, #d391a5);
+  --color-aisle-lavender: var(--color-aisle-lavender-soft, #c8c2d8);
+  --color-aisle-stone: var(--color-aisle-stone-soft, #bfb4a0);
   --color-warning: var(--color-warning-soft, #fdba74);
   --color-success: var(--color-success-soft, #34d399);
   --color-on-success: #0a2e22;
@@ -285,6 +441,117 @@ input[type="radio"] {
 }
 
 /* ------------------------------------------------------------------ *
+ * THE one field class (ADR-0065): every free-text input and textarea
+ * is a sunken well — `surface-sunken` fill, 1px `border-strong`
+ * control keyline, 12px radius, 44px touch height. Focus deepens the
+ * keyline to the action-text colour (`brand-text`, which the theme
+ * flip carries to `brand-soft` in dark) beneath the global 2px
+ * focus-visible ring. Placeholder/hint text stays muted. Width and
+ * padding stay UTILITY-owned at the call site (a narrow number field
+ * and a full-width search share the class), so the class carries only
+ * the well itself. New inputs pick this up; per-view one-off field
+ * styling is retired.
+ * ------------------------------------------------------------------ */
+.field {
+  @apply h-11 rounded-xl border bg-surface-sunken text-sm text-text outline-none transition-colors;
+  border-color: var(--color-border-strong);
+}
+.field::placeholder {
+  @apply text-text-muted;
+}
+.field:focus {
+  border-color: var(--color-brand-text);
+}
+textarea.field {
+  @apply min-h-20 py-2.5;
+}
+
+/* ------------------------------------------------------------------
+ * THE search well (ADR-0077): the Recipes tab's PRIMARY control, so it
+ * is rendered one step larger than a generic field — 48px tall, 16px
+ * (`body-md`) type, and room for the leading search glyph. Same tokens
+ * as `.field`: the sunken fill, the `border-strong` control keyline and
+ * the tomato focus keyline are all inherited, so this is a METRIC
+ * variant, never a second field language. Two classes select the rule,
+ * so it determinately wins over `.field` regardless of source order —
+ * and a component can only adopt it by composing `.field .field-search`,
+ * which is what stops per-view re-spelling from coming back.
+ * Paddings stay utility-owned at the call site (this well carries
+ * trailing affordances: the clear button, the `/` hint and the tips
+ * `?`); only the metric that no utility can own is spelled here.
+ * ------------------------------------------------------------------ */
+.field.field-search {
+  @apply h-12 pl-11 text-base;
+}
+
+/* Modal scrim (ADR-0068 level 3): the espresso scrim + 6px blur — the
+   explicit, scoped exception to the no-global-blur rule. Modals and
+   sheets ONLY; plain page backgrounds never blur. Derived from the
+   espresso token (45% over the page) so there is one espresso source of
+   truth; static, never animated, so reduced-motion has nothing to
+   disarm. The dark theme's espresso-dark pair deepens the scrim
+   automatically through the flip. */
+.modal-scrim {
+  background-color: color-mix(in srgb, var(--color-espresso) 45%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Chip idle tint (ADR-0069): an ALWAYS-TINTED chip fills with 8% of its
+   semantic hue. One class does every hue: the chip's TEXT carries the hue
+   (text-hue-meat, …), so 8% of `currentColor` IS the hue tint — and the
+   theme flip re-points currentColor at the soft variant in dark mode for
+   free. Unlayered, so it overrides the chip's neutral `bg-surface-raised`
+   utility when both are present. Selected chips swap to `brand-tint` and
+   drop this class — selection is always brand (ADR-0036). */
+.chip-tint {
+  background-color: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+/* Checklist boxes (ADR-0068): 20px squares, 6px radius, `border-strong`
+   warm keyline. The NATIVE control stays (semantics, hit target and the
+   platform tick) — the global `accent-color: var(--color-brand)` rule
+   above paints the checked fill tomato and follows the theme flip, so
+   the box only needs its geometry and keyline here. Prep lists add the
+   `.prep` variant, which re-points the accent to the herb green. */
+input[type='checkbox'].check-box {
+  @apply size-5 shrink-0 rounded-sm border transition-colors;
+  border-color: var(--color-border-strong);
+  border-radius: var(--radius-sm, 6px);
+}
+/* COMPLETION (ADR-0072): a done-state box fills `success`, never a food
+   hue and never brand. One class for every completion call site — grocery
+   rows, extras rows, the shop-mode tick, the detail checklist — so no
+   checkbox family drifts (ADR-0075 rule 4). Prep lists keep the same
+   accent through `.prep`. */
+input[type='checkbox'].check-box.done,
+input[type='checkbox'].check-box.prep {
+  accent-color: var(--color-success);
+}
+input[type='checkbox'].check-box:disabled {
+  opacity: 0.5;
+}
+
+/* Button states (EXPERIENCE.md §6): primary hover deepens to
+   `primary-strong` (never an opacity fade) and the press scales to
+   0.98 — colour-only under prefers-reduced-motion. Secondary and
+   destructive keep their outlines; the shadow vocabulary never
+   reaches a button. */
+.btn-primary {
+  @apply rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand transition-[background-color,transform] active:scale-[0.98] active:bg-brand-strong;
+}
+.btn-secondary {
+  @apply rounded-xl border border-border-strong bg-surface-raised px-4 text-sm font-semibold text-brand-text transition-[background-color,transform] active:scale-[0.98];
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary,
+  .btn-secondary {
+    transform: none !important;
+    transition-property: background-color;
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * Clickable affordance: a pointer cursor on everything you can click.
  *
  * Scoped to `@media (hover: hover)` on purpose. A pointer is a MOUSE
@@ -340,7 +607,9 @@ input[type="radio"] {
   }
 
   /* Nav icon hover (DESIGN.md `nav-tab-icon-hover`): a 2px lift + a
-   * tint to the theme's brand foreground over 150ms ease. Same
+   * tint to the chrome accent over 150ms ease. The bar is espresso
+   * chrome in BOTH themes (ADR-0067), so the accent is the literal
+   * chrome-accent — there is no dark: branch to write. Same
    * reasoning as the cursor rule above — a hover state is a MOUSE
    * affordance, so the whole animation lives inside this media query
    * and can never be left stuck under a finger on touch. No hit area,
@@ -356,12 +625,7 @@ input[type="radio"] {
   .nav-tab:hover .nav-tab-icon,
   .nav-tab:focus-visible .nav-tab-icon {
     transform: translateY(-2px);
-    color: var(--color-brand);
-  }
-
-  .dark .nav-tab:hover .nav-tab-icon,
-  .dark .nav-tab:focus-visible .nav-tab-icon {
-    color: var(--color-brand-soft);
+    color: var(--color-chrome-accent);
   }
 }
 

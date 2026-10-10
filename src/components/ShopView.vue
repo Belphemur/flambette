@@ -6,6 +6,8 @@ import { useGroceryList } from '../lib/useGroceryList'
 import { extraCollapseKey, groupExtras, storeCollapseKey, type ExtraGroup } from '../lib/extraSections'
 import { sinkChecked } from '../lib/sink'
 import { extraCheckedKey } from '../lib/extraCheckedKeys'
+import { STORE_SECTIONS } from '../lib/sections'
+import { aisleIcon } from '../lib/aisleRole'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
 import IngredientAutocomplete from './IngredientAutocomplete.vue'
 
@@ -103,6 +105,15 @@ function extraKey(name: string): string {
 /** Collapse key for a recipe-derived store section. */
 function storeKey(name: string): string {
   return storeCollapseKey(name)
+}
+
+/**
+ * Walk order from `STORE_SECTIONS` (1-based) — the same derived index the
+ * Grocery tab prints, so a shopper reading either screen counts the same
+ * aisles (ADR-0071 delta 3, re-converged in ADR-0075's grammar sweep).
+ */
+function aisleNumber(name: string): number {
+  return STORE_SECTIONS.indexOf(name as (typeof STORE_SECTIONS)[number]) + 1
 }
 
 /**
@@ -208,7 +219,7 @@ function exitShopping() {
   >
   <div class="mx-auto flex max-w-app items-center gap-3 px-4 py-3">
   <button
-  class="flex h-11 shrink-0 items-center rounded-xl border px-3 text-sm font-medium active:bg-surface-sunken"
+  class="flex h-11 shrink-0 items-center rounded-xl border border-border-strong bg-surface-raised px-3 text-sm font-medium text-text active:bg-surface-sunken"
   data-test="exit-shopping"
   @click="exitShopping"
   >
@@ -216,11 +227,11 @@ function exitShopping() {
   Exit
   </button>
   <div class="min-w-0 flex-1">
-  <div class="flex items-center justify-between text-xs">
+  <div class="flex items-center justify-between font-mono-data text-xs tabular-nums">
   <span class="font-semibold" data-test="shopping-progress" aria-live="polite">
   {{ checkedCount }} / {{ totalCount }}
   </span>
-  <span class="">{{ progressPct }}%</span>
+  <span>{{ progressPct }}%</span>
   </div>
   <div class="mt-1 h-2 overflow-hidden rounded-full bg-surface-sunken">
   <div
@@ -231,7 +242,7 @@ function exitShopping() {
   </div>
   <button
   v-if="checkedCount > 0"
-  class="flex h-11 shrink-0 items-center gap-1 rounded-xl border px-3 text-sm font-medium active:bg-surface-sunken"
+  class="flex h-11 shrink-0 items-center gap-1 rounded-xl border border-border-strong bg-surface-raised px-3 text-sm font-medium text-text active:bg-surface-sunken"
   data-test="clear-list"
   aria-label="Clear grocery list"
   @click="confirmAndClearGrocery()"
@@ -274,40 +285,64 @@ function exitShopping() {
   class="mb-6"
   data-test="shop-custom-items"
   >
+  <!-- The outer "Extra items" GROUP header stays manual-only (it is a
+  group label, not a section) and keeps its own band grammar: same
+  index-card treatment as an aisle band, but NO aisle index — an extras
+  sub-section is a view, not an aisle (ADR-0050 §2, ADR-0075 rule 2). -->
+  <div class="overflow-hidden rounded-xl bg-surface-raised ring-1 ring-border">
   <button
-  class="flex w-full items-center justify-between rounded-lg py-2 text-left"
+  class="flex w-full items-center justify-between border-b border-border bg-surface-sunken px-3 py-2.5 text-left"
   :aria-expanded="!extrasGroupCollapsed"
   aria-label="Extra items"
   data-test="shop-section-toggle"
   @click="toggleExtrasGroup"
   >
-  <span class="text-lg font-bold tracking-tight">Extra items</span>
-  <span class="text-lg">
-  <ChevronRight v-if="extrasGroupCollapsed" :size="20" aria-hidden="true" />
-  <ChevronDown v-else :size="20" aria-hidden="true" />
+  <span class="text-label-md font-semibold text-text">Extra items</span>
+  <span class="flex items-center gap-2">
+  <span class="text-label-sm">
+  <ChevronRight v-if="extrasGroupCollapsed" :size="18" aria-hidden="true" />
+  <ChevronDown v-else :size="18" aria-hidden="true" />
+  </span>
   </span>
   </button>
-  <div v-if="!extrasGroupCollapsed" class="space-y-1">
+  <div v-if="!extrasGroupCollapsed" class="space-y-2 p-2">
   <div
   v-for="group in extraGroups"
   :key="group.name"
+  class="overflow-hidden rounded-xl bg-surface-raised ring-1 ring-border"
   data-test="shop-extra-subsection"
   :data-extra-category="group.name"
   >
   <button
-  class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left"
+  class="flex w-full items-center justify-between border-b border-border bg-surface-sunken px-3 py-2.5 text-left"
   :aria-expanded="!isCollapsed(extraKey(group.name))"
   :aria-label="`${group.name}: ${extraDoneCount(group)} of ${group.items.length} checked`"
   data-test="shop-extra-subsection-toggle"
   @click="toggleSection(extraKey(group.name))"
   >
-  <span class="text-base font-semibold">{{ group.name }}</span>
+  <!-- Same glyph grammar as the Grocery tab's extras band (ADR-0076):
+  department hue where the name is a real department; `Uncategorized`
+  (a view label) renders no glyph. -->
+  <component
+  :is="aisleIcon(group.name)!.glyph"
+  v-if="aisleIcon(group.name)"
+  :size="16"
+  :class="aisleIcon(group.name)!.className"
+  class="shrink-0"
+  aria-hidden="true"
+  />
+  <span class="min-w-0 flex-1 truncate text-label-md font-semibold text-text">{{ group.name }}</span>
   <span class="flex items-center gap-2">
   <span
-  class="rounded-full bg-surface-sunken px-2 py-px text-[10px] font-semibold text-text-muted"
+  class="rounded-full px-2 py-0.5 font-mono-data text-label-sm tabular-nums"
+  :class="
+  extraDoneCount(group) === group.items.length
+  ? 'bg-success/12 text-success'
+  : 'bg-surface-sunken text-text-muted'
+  "
   data-test="section-count-pill"
   >{{ extraDoneCount(group) }}/{{ group.items.length }}</span>
-  <span class="text-base">
+  <span class="text-label-sm">
   <ChevronRight v-if="isCollapsed(extraKey(group.name))" :size="18" aria-hidden="true" />
   <ChevronDown v-else :size="18" aria-hidden="true" />
   </span>
@@ -315,28 +350,28 @@ function exitShopping() {
   </button>
   <ul
   v-if="!isCollapsed(extraKey(group.name))"
-  class="divide-y"
+  class="divide-y divide-border"
   data-test="shop-extra-subsection-rows"
   >
   <!-- Checked items sink, stable within the sub-section — the same
   sink the store sections render through. -->
   <li v-for="item in sinkedExtraRows(group)" :key="item.name">
   <button
-  class="flex min-h-16 w-full items-center gap-4 py-2 text-left text-lg"
+  class="flex min-h-16 w-full items-center gap-3 px-3 py-2 text-left text-body-md"
   :class="checked.map[extraCheckedKey(item.name)] ? 'opacity-40' : ''"
   data-test="shop-row"
   @click="checked.toggleChecked(extraCheckedKey(item.name))"
   >
   <span
-  class="flex size-8 shrink-0 items-center justify-center rounded-full border-2 text-xl"
-  :class="checked.map[extraCheckedKey(item.name)] ? 'border-brand bg-brand text-on-brand' : ''"
+  class="flex size-6 shrink-0 items-center justify-center rounded-full border-2 border-border-strong"
+  :class="checked.map[extraCheckedKey(item.name)] ? 'border-success bg-success text-on-success' : ''"
   aria-hidden="true"
   >
-  <Check v-if="checked.map[extraCheckedKey(item.name)]" :size="18" />
+  <Check v-if="checked.map[extraCheckedKey(item.name)]" :size="16" />
   </span>
   <span
-  class="min-w-0 flex-1 truncate"
-  :class="checked.map[extraCheckedKey(item.name)] ? 'line-through' : ''"
+  class="min-w-0 flex-1 truncate text-body-md"
+  :class="checked.map[extraCheckedKey(item.name)] ? 'text-text-muted line-through' : 'text-text'"
   >{{ item.name }}</span
   >
   </button>
@@ -344,64 +379,93 @@ function exitShopping() {
   </ul>
   </div>
   </div>
+  </div>
   </section>
 
   <!-- Store sections: auto-collapse on done (ADR-0008 addendum), same
-  watcher contract as the Grocery tab, header + count pill stay. -->
+  watcher contract as the Grocery tab, header + count pill stay. The
+  band re-converges with the grocery reading surface (ADR-0071 delta 3,
+  ADR-0075 rule 2) — card, sunken band, derived aisle index, success-
+  tinted pill — while the ROW behaviour stays a task surface: the sink
+  order and the >=52px targets are untouched. -->
   <section
   v-for="section in sections"
   :key="section.name"
-  class="mb-6"
+  class="mb-6 overflow-hidden rounded-xl bg-surface-raised ring-1 ring-border"
   data-test="shop-section"
   >
+  <!-- The hue glyph sits OUTSIDE the toggle: the toggle's own svg count
+  is pinned at one (the chevron) by the shop auto-collapse spec, and a
+  decorative glyph must not become part of that count. Every department
+  wears its glyph + aisle hue (ADR-0076); the band's name span carries
+  the accessible label. -->
+  <div class="flex items-center gap-2 border-b border-border bg-surface-sunken px-3 py-2.5">
+  <component
+  :is="aisleIcon(section.name)!.glyph"
+  :size="18"
+  :class="aisleIcon(section.name)!.className"
+  class="shrink-0"
+  aria-hidden="true"
+  />
   <button
-  class="flex w-full items-center justify-between rounded-lg py-2 text-left"
+  class="flex min-w-0 flex-1 items-center justify-between text-left"
   :aria-expanded="!isCollapsed(storeKey(section.name))"
   :aria-label="`${section.name}: ${sectionDoneCount(section)} of ${sectionTotalCount(section)} checked`"
   data-test="shop-section-toggle"
   @click="toggleSection(storeKey(section.name))"
   >
-  <span class="text-lg font-bold tracking-tight">{{ section.name }}</span>
-  <span class="flex items-center gap-2">
+  <span class="min-w-0 flex-1 truncate text-label-md font-semibold text-text">
+  <span>{{ section.name }}</span>
+  <span class="ml-1 font-normal text-text-muted">(Aisle {{ aisleNumber(section.name) }})</span>
+  </span>
+  <span class="flex shrink-0 items-center gap-2">
   <span
-  class="rounded-full bg-surface-sunken px-2 py-px text-[10px] font-semibold text-text-muted"
+  class="rounded-full px-2 py-0.5 font-mono-data text-label-sm tabular-nums"
+  :class="
+  sectionDoneCount(section) === sectionTotalCount(section)
+  ? 'bg-success/12 text-success'
+  : 'bg-surface-sunken text-text-muted'
+  "
   data-test="section-count-pill"
   >{{ sectionDoneCount(section) }}/{{ sectionTotalCount(section) }}</span>
-  <span class="text-lg">
-  <ChevronRight v-if="isCollapsed(storeKey(section.name))" :size="20" aria-hidden="true" />
-  <ChevronDown v-else :size="20" aria-hidden="true" />
+  <span class="text-label-sm">
+  <ChevronRight v-if="isCollapsed(storeKey(section.name))" :size="18" aria-hidden="true" />
+  <ChevronDown v-else :size="18" aria-hidden="true" />
   </span>
   </span>
   </button>
+  </div>
   <template v-if="!isCollapsed(storeKey(section.name))">
-  <ul class="divide-y" data-test="shop-section-rows">
+  <ul class="divide-y divide-border" data-test="shop-section-rows">
   <!-- Unchecked first (checked items sink), stable within each group;
   the ordering lives once in src/lib/sink.ts, shared with the extras
   sub-sections above. -->
   <li v-for="entry in sinkedStoreRows(section)" :key="entry.line.key">
   <button
-  class="flex min-h-16 w-full items-center gap-4 py-2 text-left text-lg"
+  class="flex min-h-16 w-full items-center gap-3 px-3 py-2 text-left text-body-md"
   :class="checked.map[entry.line.key] ? 'opacity-40' : ''"
   data-test="shop-row"
   @click="checked.toggleChecked(entry.line.key)"
   >
   <span
-  class="flex size-8 shrink-0 items-center justify-center rounded-full border-2 text-xl"
-  :class="checked.map[entry.line.key] ? 'border-brand bg-brand text-on-brand' : ''"
+  class="flex size-6 shrink-0 items-center justify-center rounded-full border-2 border-border-strong"
+  :class="checked.map[entry.line.key] ? 'border-success bg-success text-on-success' : ''"
   aria-hidden="true"
   >
-  <Check v-if="checked.map[entry.line.key]" :size="18" />
+  <Check v-if="checked.map[entry.line.key]" :size="16" />
   </span>
-  <span class="min-w-0 flex-1 truncate">
+  <span
+  class="min-w-0 flex-1 truncate text-body-md"
+  :class="checked.map[entry.line.key] ? 'text-text-muted line-through' : 'text-text'"
+  >{{ entry.item.name }}</span
+  >
+  <!-- Data voice (ADR-0066/ADR-0075 rule 3): the quantity is a mono
+  badge, not a run-on prefix. -->
   <span
   v-if="entry.line.text"
-  class="mr-2 font-semibold text-brand-text"
-  :class="checked.map[entry.line.key] ? 'text-text-muted' : ''"
+  class="shrink-0 rounded-md bg-surface-sunken px-2 py-1 font-mono-data text-label-sm tabular-nums"
+  :class="checked.map[entry.line.key] ? 'text-text-muted' : 'text-text'"
   >{{ entry.line.text }}</span>
-  <span :class="checked.map[entry.line.key] ? 'text-text-muted line-through' : ''">{{
-  entry.item.name
-  }}</span>
-  </span>
   </button>
   </li>
   </ul>

@@ -25,6 +25,22 @@ import type { Nutrition } from './types'
 export const KCAL_PER_G = { fat: 9, carbs: 4, protein: 4 } as const
 
 /**
+ * Grams behind one macro FRACTION of a serving's energy (ADR-0077's
+ * nutrition legend). `variant_meta.macros` stores fractions of CALORIES
+ * (they sum to 1, verified over the catalog), so a gram figure is
+ * DERIVED, not authored: fraction × kcal ÷ the macro's Atwater factor —
+ * the same arithmetic `macroSplit` runs in reverse. One function, here,
+ * so no component re-derives it inline.
+ */
+export function macroGrams(
+  fraction: number,
+  kcal: number,
+  macro: keyof typeof KCAL_PER_G,
+): number {
+  return (fraction * kcal) / KCAL_PER_G[macro]
+}
+
+/**
  * Fiber's NET Atwater factor. USDA counts fiber at 4 kcal/g for the food
  * energy total, but a good part of it is not metabolised, so the 2 kcal/g
  * net factor is what the ESTIMATE uses: carbohydrate that is fiber is

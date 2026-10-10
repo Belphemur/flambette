@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useDark, useToggle } from '@vueuse/core'
+import { useDark, useMediaQuery, useToggle } from '@vueuse/core'
 import { CircleAlert, Moon, Sun, X } from 'lucide-vue-next'
 import ChangelogModal from './components/ChangelogModal.vue'
 import { checkVersion, type VersionState } from './lib/versionCheck'
@@ -19,6 +19,7 @@ import JoinCongratsModal from './components/JoinCongratsModal.vue'
 import RosterSheet from './components/RosterSheet.vue'
 import TooltipBubble from './components/TooltipBubble.vue'
 import { useIdentityStore } from './stores/identity'
+import RecipeSearchField from './components/RecipeSearchField.vue'
 
 /**
  * The app-level DEFAULT head (ADR-0048). Every app-shell route is served
@@ -135,6 +136,14 @@ const roomChip = computed(() => {
 
 /** The recipe detail view is full-bleed (edge-to-edge hero image). */
 const isRecipe = computed(() => route.name === 'recipe')
+
+/** ADR-0070 (Addendum 2): the search well is PERSISTENT — it renders in
+ *  the header band on EVERY tab at lg+, not only on Recipes. The media
+ *  query mirrors the `lg:` Tailwind variant so the v-if (not a CSS hide)
+ *  keeps exactly ONE search field in the document at any width, and the
+ *  fullscreen focus modes (cooking, shopping) keep their own chrome. */
+const isDesktop = useMediaQuery('(min-width: 1024px)')
+const showHeaderSearch = computed(() => isDesktop.value && !isFullscreenMode.value)
 
 /**
  * The roster sheet behind the room chip (ADR-0063): tapping the chip opens
@@ -413,7 +422,11 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <div class="mx-auto flex min-h-dvh max-w-app flex-col" data-test="app-shell">
+  <!-- ADR-0065: the SHELL is full-window and the chrome bars (header,
+       bottom nav) span the viewport edge to edge; main content and the
+       chrome content rows align to the 1100px container. Below 1100px
+       nothing changes — this was already the geometry. -->
+  <div class="flex min-h-dvh flex-col" data-test="app-shell">
   <!-- Stale-version banner (ADR-0061): fixed above the sticky header,
        never covering or shifting the bottom nav. role="status" so it is
        announced without interrupting. Session-only dismissal. -->
@@ -448,7 +461,9 @@ onBeforeUnmount(() => {
   :class="showBanner ? 'mt-12' : ''"
   :style="{ top: showBanner ? '48px' : '0px' }"  
   >
-  <div class="flex items-center justify-between px-4 py-2">
+  <!-- The content row aligns to the 1100px container (ADR-0065): the
+       BAND spans the window, the row does not. -->
+  <div class="mx-auto flex w-full max-w-app items-center justify-between px-4 py-2">
   <button
   type="button"
   data-test="home-link"
@@ -459,6 +474,14 @@ onBeforeUnmount(() => {
   <img src="/favicon.svg" alt="" width="22" height="22" class="inline" aria-hidden="true" />
   Flambette
   </button>
+  <!-- ADR-0070 (Addendum 2): the desktop search well in the header band —
+  a sunken field (ADR-0065), width-capped and aligned to the container,
+  mounted on EVERY tab. Typing while the grid is not on screen routes to
+  Recipes (RecipeSearchField), because the grid is the only results
+  surface. The query state and pipeline are the module singleton the
+  content field shares, so the field moves between mounts without losing
+  an in-flight search. -->
+  <RecipeSearchField v-if="showHeaderSearch" variant="header" class="hidden w-full max-w-md lg:block" />
   <div class="flex items-center gap-2">
   <button
   type="button"
@@ -586,7 +609,7 @@ onBeforeUnmount(() => {
 
   <main
   v-else
-  class="flex-1"
+  class="mx-auto w-full max-w-app flex-1"
   :class="isRecipe || isFullscreenMode ? '' : 'px-4 pt-4 pb-28'"
   >
   <RouterView v-slot="{ Component }">
@@ -600,7 +623,7 @@ onBeforeUnmount(() => {
   <div
   v-if="ui.toast"
   role="status"
-  class="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-surface-dark px-4 py-2 text-sm font-medium text-on-brand shadow-lg"
+  class="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-surface-dark px-4 py-2 text-sm font-medium text-on-brand shadow-popover"
   :data-test="ui.toast.kind ? `${ui.toast.kind}-toast` : 'toast'"
   >
   <span>{{ ui.toast.message }}</span>
@@ -617,26 +640,33 @@ onBeforeUnmount(() => {
   </div>
   </Transition>
 
+  <!-- ADR-0067: the bar is roasted-espresso chrome in BOTH themes — the
+       chrome-* foreground family is LITERAL (never flips), while the bar
+       itself deepens espresso → espresso-dark in dark mode. ADR-0016's
+       measured Pixel 7 fit (82px/tab) is untouched: same bar height,
+       same five labelled tabs, same hit areas. -->
   <nav
   v-if="!isFullscreenMode"
-  class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface-raised"
+  class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-chrome-border bg-espresso"
   aria-label="Main navigation"
   >
-  <div class="mx-auto flex max-w-app">
+  <div class="mx-auto flex w-full max-w-app">
   <button
   v-for="tab in TABS"
   :key="tab.id"
-  class="nav-tab flex min-h-14 flex-1 flex-col items-center justify-center gap-1 pt-1.5 text-label-md font-medium transition-colors"
-  :class="route.path === tab.to ? 'text-brand-text' : 'text-text-muted'"
+  class="nav-tab flex min-h-14 flex-1 flex-col items-center justify-center gap-1 pt-1.5 text-label-md transition-colors"
+  :class="route.path === tab.to ? 'text-chrome-accent' : 'text-chrome-muted'"
   :aria-current="route.path === tab.to ? 'page' : undefined"
   @click="router.push(tab.to)"
   >
   <!-- A tinted icon BACKPLATE marks the active tab (DESIGN.md
   Navigation): a colour change alone is too quiet, and the
-  backplate never resizes the tab or moves the label. -->
+  backplate never resizes the tab or moves the label. The LITERAL
+  chrome-backplate (cream) — the flipping brand-tint would turn
+  near-espresso in dark mode and vanish against the bar. -->
   <span
   class="flex h-8 w-14 items-center justify-center rounded-full transition-colors"
-  :class="route.path === tab.to ? 'bg-brand-tint' : ''"
+  :class="route.path === tab.to ? 'bg-chrome-backplate' : ''"
   >
   <component
   :is="tab.icon"

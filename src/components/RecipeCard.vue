@@ -2,17 +2,18 @@
 import { computed } from 'vue'
 import { imageSrc, onImgError } from '../lib/images'
 import RatingStars from './RatingStars.vue'
+import FavouriteButton from './FavouriteButton.vue'
 import HueIcon from './HueIcon.vue'
 import type { VariantMeta } from '../lib/types'
 import { catalog } from '../lib/catalog'
 import { isUserRecipeId, showNewBadge } from '../lib/userRecipes'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
-import { useFavouritesStore } from '../stores/favourites'
-import { Clock, Heart } from 'lucide-vue-next'
+import { useRatingStore } from '../stores/rating'
+import { Clock, Star } from 'lucide-vue-next'
 
 const props = defineProps<{ meta: VariantMeta }>()
 
-const favourites = useFavouritesStore()
+const ratings = useRatingStore()
 
 /** Categorical ingredient-TYPE hue (ADR-0036); null when the catalog
  *  publishes no category we have a hue for — no icon beats a wrong hue. */
@@ -29,7 +30,21 @@ const typeRole = computed(() =>
  */
 const mealTypeRole = computed(() => mealRole(props.meta.ruleset))
 
-const isFavourite = computed(() => favourites.isFavourite(props.meta.id))
+
+/**
+ * The rating disc's value (ADR-0074): the household's own stars when it
+ * has rated this recipe, else the catalog's Bayesian mean as the
+ * read-only fallback — the same precedence `RatingStars` uses, so the
+ * disc and the control below it can never print two different numbers.
+ */
+const ratingValue = computed(() => {
+  const mine = ratings.ratingFor(props.meta.id)
+  if (mine > 0) return mine
+  return Math.round(props.meta.rating * 5 * 10) / 10
+})
+const ratingSource = computed<'household' | 'catalog'>(() =>
+  ratings.ratingFor(props.meta.id) > 0 ? 'household' : 'catalog',
+)
 
 /**
  * ADR-0054: the NEW badge — this card's recipe was authored by the
@@ -60,8 +75,11 @@ const showNew = computed(() => {
   <!-- No `group/htt` here (ADR-0044): the icon tooltip is anchored by a
   hit-test on the icon's own rect, not by an ancestor group — hovering
   the card must NOT open it. -->
+  <!-- ADR-0068 level 1: an index card on the counter — paper fill, 1px
+  keyline, NO shadow. Hover strengthens the keyline (desktop only); the
+  card never lifts. -->
   <article
-  class="group relative overflow-hidden rounded-xl bg-surface-raised ring-1 ring-border transition-shadow hover:shadow-md"
+  class="group relative overflow-hidden rounded-xl bg-surface-raised ring-1 ring-border transition-shadow hovercap:hover:ring-border-strong"
   data-test="recipe-card"
   :data-variant-id="meta.id"
   >
@@ -73,35 +91,50 @@ const showNew = computed(() => {
   @error="onImgError"
   class="aspect-[4/3] w-full bg-surface-sunken object-cover"
   />
+  <!-- Corner marks sit on the photograph, so they ride the same
+  espresso disc chrome as the photo controls (ADR-0067). -->
   <span
   v-if="showNew"
-  class="absolute top-2 left-2 rounded bg-surface-dark px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-brand-soft"
+  class="absolute top-2 left-2 rounded bg-espresso px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-brand-soft"
   data-test="new-badge"
   >
   NEW
   </span>
   <span
   v-else-if="meta.is_pro"
-  class="absolute top-2 left-2 rounded bg-surface-dark px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-warning-soft"
+  class="absolute top-2 left-2 rounded bg-espresso px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-warning-soft"
   >
   PRO
   </span>
   <!-- A REAL control above the card's stretched link: the heart is not
   nested inside the link, it stops propagation, and it carries its
   own 44px hit area (DESIGN.md Components/Selection). -->
-  <button
-  class="absolute top-2 right-2 z-10 flex size-11 items-center justify-center rounded-full bg-surface-dark text-text-dark"
-  :aria-label="isFavourite ? 'Remove from favourites' : 'Add to favourites'"
-  :aria-pressed="isFavourite"
-  @click.stop="favourites.toggleFavourite(meta.id)"
+  <!-- DESIGN.md photo-control: a solid ESPRESSO disc (roasted espresso,
+  ADR-0067 — literal dark chrome over any photograph), white idle glyph,
+  favourite-soft heart when selected. -->
+  <!-- ADR-0074's card overlay grammar: the photo carries AT MOST the
+  espresso favourite heart and, when rated, an espresso rating disc
+  (star + mono value). The protein-hue type chip stays OFF the photo
+  and ON the facts row (an icon-only food chip on imagery fails
+  ADR-0036's label-stays rule). The disc is DECORATIVE — the value is
+  printed as text beside the star and the household's rating control
+  stays the star widget below it — so nothing about it is colour-only. -->
+  <span
+  v-if="ratingValue > 0"
+  class="absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded-full bg-espresso px-2 py-1 font-mono-data text-label-sm font-semibold tabular-nums text-on-brand"
+  :aria-label="
+  ratingSource === 'household'
+  ? `Your household rating: ${ratingValue} of 5 stars`
+  : `Catalog rating: ${ratingValue} of 5 stars`
+  "
+  data-test="card-rating-disc"
+  :data-rating="ratingValue"
+  :data-source="ratingSource"
   >
-  <Heart
-  :size="20"
-  :fill="isFavourite ? 'currentColor' : 'none'"
-  :class="isFavourite ? 'text-favourite-soft' : 'text-text-dark'"
-  aria-hidden="true"
-  />
-  </button>
+  <Star :size="14" :fill="'currentColor'" aria-hidden="true" />
+  {{ ratingValue }}
+  </span>
+  <FavouriteButton :variant-id="meta.id" class="absolute top-2 right-2 z-10" />
   </div>
 
   <div class="p-3 sm:p-4">
@@ -132,16 +165,24 @@ const showNew = computed(() => {
   <span v-if="mealTypeRole" class="flex items-center">
   <HueIcon :role="mealTypeRole" :size="16" :label="ICON_ROLES[mealTypeRole].label" />
   </span>
-  <span class="flex items-center gap-1 whitespace-nowrap" data-test="card-energy">
+  <!-- The DATA voice (ADR-0066): quantities and times render in
+  JetBrains Mono with tabular numerals — never prose. -->
+  <span class="flex items-center gap-1 whitespace-nowrap font-mono-data tabular-nums" data-test="card-energy">
   <HueIcon role="energy" :size="16" />{{ Math.round(meta.calories) }} kcal
   </span>
-  <span class="flex items-center gap-1 whitespace-nowrap" data-test="card-time">
+  <span class="flex items-center gap-1 whitespace-nowrap font-mono-data tabular-nums" data-test="card-time">
   <Clock :size="16" aria-hidden="true" />{{ meta.cooking_minutes }} min
   </span>
   </p>
 
   <div class="relative z-10 mt-1.5">
-  <RatingStars :variant-id="meta.id" :catalog-rating="meta.rating" :size="15" compact />
+  <RatingStars
+  :variant-id="meta.id"
+  :catalog-rating="meta.rating"
+  :fallback-rating="meta.rating"
+  :size="15"
+  compact
+  />
   </div>
   </div>
   </article>

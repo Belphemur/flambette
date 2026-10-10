@@ -22,6 +22,13 @@ const props = defineProps<{
   size?: number
   /** Card density: the card variant sits inside a tappable article. */
   compact?: boolean
+  /**
+   * Catalog mean 0..1 filling the stars when the household has not
+   * rated — the strip's number prints the SAME fallback (ADR-0031's
+   * precedence), so the value and the stars can never disagree. Without
+   * it (cards) the stars stay empty and the hint text carries the mean.
+   */
+  fallbackRating?: number
 }>()
 
 const ratingStore = useRatingStore()
@@ -38,7 +45,13 @@ const count = computed(() => ratingStore.countFor(props.variantId))
  * on the tap. Mouse-out/focus-out restores the committed value at once.
  */
 const hovered = ref<number | null>(null)
-const display = computed(() => hovered.value ?? mine.value)
+const display = computed(() => {
+  if (hovered.value !== null) return hovered.value
+  if (mine.value > 0) return mine.value
+  // No household opinion yet: the catalog mean fills the stars so the
+  // value printed beside them (the same fallback) and the fill agree.
+  return (props.fallbackRating ?? 0) * 5
+})
 
 /** Five slots, each split in two half-star targets. */
 const slots = [1, 2, 3, 4, 5].map((n) => ({ n, halves: [n - 0.5, n] }))
@@ -98,7 +111,7 @@ const previewLabel = computed(() =>
   role="presentation"
   aria-hidden="true"
   data-test="rating-preview"
-  class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-max -translate-x-1/2 rounded-md bg-surface-dark px-2 py-1 text-[11px] leading-snug text-on-brand shadow-lg hovercap:group-hover/htt:block hovercap:group-focus-within/htt:block"
+  class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-max -translate-x-1/2 rounded-md bg-surface-dark px-2 py-1 text-[11px] leading-snug text-on-brand shadow-popover hovercap:group-hover/htt:block hovercap:group-focus-within/htt:block"
   >
   {{ previewLabel }}
   </span>

@@ -45,8 +45,8 @@ function dismiss() {
   <AppModal
     dialog-label="Joined the household"
     :dismissable="false"
-    overlay-class="z-40 flex items-center justify-center bg-surface-dark/50 px-6"
-    panel-class="w-full max-w-sm space-y-4 rounded-2xl bg-surface-raised p-6 text-center shadow-xl"
+    overlay-class="z-40 flex items-center justify-center modal-scrim px-6"
+    panel-class="w-full max-w-sm space-y-4 rounded-2xl bg-surface-raised p-6 text-center"
     overlay-test="join-congrats"
     panel-test="join-congrats-dialog"
     @close="dismiss"

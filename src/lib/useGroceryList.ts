@@ -24,6 +24,19 @@ import { useRestrictions } from '../composables/useRestrictions'
  * aggregates the planned meals into store-section lines and tracks the
  * checked/total progress.
  */
+
+/** One row of the Grocery tab's Contributing Meals card (ADR-0071). */
+export interface MealLineSummary {
+  id: number
+  name: string
+  /** Thumbnail URL, resolved through the shared `imageSrc` path. */
+  image: string
+  /** Planned servings for THIS household entry, not the authored ones. */
+  servings: number
+  /** Grocery lines this meal contributes, from the SAME aggregation pass. */
+  lines: number
+}
+
 export function useGroceryList() {
   const plan = usePlanStore()
   const checked = useGroceryStore()
@@ -76,6 +89,48 @@ export function useGroceryList() {
   function entryServings(variantId: number): number {
     return plan.plan.find((e) => e.variantId === variantId)?.servings ?? 1
   }
+
+  /**
+   * Per-meal line counts for the desktop sidebar — derived from the ONE
+   * aggregation pass (`aggregateInputs`), never a second walk of the
+   * catalog: a sidebar that re-counted would drift from the list the
+   * moment a merge rule changed (ADR-0071 Consequences).
+   *
+   * The count is the meal's SURVIVING line count: an ingredient the
+   * household has cleared is dropped by `aggregateGroceries`, so the card
+   * must not keep advertising it (a card that says "6 grocery lines" over
+   * a list showing two is a lie the reader can check).
+   *
+   * Empty until every planned meal's doc has loaded, exactly like `items`:
+   * the card shows a skeleton rather than a partial count.
+   */
+  const mealSummaries = computed<MealLineSummary[]>(() => {
+    if (aggregateInputs.value.length !== plannedMetas.value.length) return []
+    return aggregateInputs.value.map((input) => {
+      // The SAME rows `aggregateGroceries` walks, normalised the SAME way
+      // (its overlay path is `keyName`; the base path derives it from the
+      // ingredient name), matched with the SAME cleared set — so the count
+      // cannot disagree with the list by construction.
+      const rows: readonly { keyName: string }[] =
+        input.displayLines ??
+        input.doc.line_items.map((li) => ({ keyName: nameKey(li.ingredient_name) }))
+      const lines = input.cleared
+        ? rows.filter((row) => !input.cleared!.has(row.keyName)).length
+        : rows.length
+      return {
+        id: input.doc.id,
+        name: input.recipeName,
+        image: input.doc.thumbnail_image_url,
+        servings: entryServings(input.doc.id),
+        lines,
+      }
+    })
+  })
+
+  /** Servings the plan covers — the editorial header's second real count. */
+  const totalServings = computed(() =>
+    plan.plan.reduce((n, entry) => n + (entry.servings ?? 1), 0),
+  )
 
   /**
    * The aggregated list, PLUS one localized rendering per line (ADR-0047).
@@ -209,6 +264,8 @@ export function useGroceryList() {
     items,
     totalCount,
     checkedCount,
+    totalServings,
+    mealSummaries,
     sections,
     ensureDocs,
     confirmAndClearGrocery,
