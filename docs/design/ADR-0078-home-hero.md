@@ -1,6 +1,6 @@
 # ADR-0078: The home page is a hero page
 
-Status: proposed
+Status: accepted (2026-10-10)
 
 ## Context
 
@@ -76,7 +76,7 @@ controls.
   the largest blast radius of the change: the full Playwright suite is
   re-pinned and runs ONCE, serially, at the END of the supervised run
   (standing rule); per-commit gates stay build + test:unit.
-- `goHome()` (the header logo) is redefined per the ruling below.
+- `goHome()` (the header logo) is redefined per Q3 in Resolved questions.
 - The prerendered `dist/index.html` (ADR-0048, `homeSeoHead()`) now
   describes the hero page — canonical-to-homepage becomes literally true.
 - Room links (`<origin>/plan?room=<code>`) are untouched: a link join lands
@@ -94,7 +94,19 @@ controls.
 
 ## Resolved questions
 
-(folded from the owner's answers — see below)
+- **Q1 — does `/` always show the hero?** YES, always: no "first visit"
+  state, no skip for returning users with a household or a plan. The home
+  page has no memory; nobody is ever redirected past it.
+- **Q2 — the app header on the hero route.** The header STAYS (logo,
+  version, room chip, dark toggle); ONLY the bottom nav is hidden on `/`.
+  The hero is not a fullscreen focus mode — the room chip must keep working
+  there.
+- **Q3 — the header logo (`goHome()`).** On `/recipes` it keeps the
+  scroll-to-top behavior (its aria-label stays "Back to top of recipes"
+  there). From every OTHER tab it navigates to the hero `/` (aria-label
+  "Home"). On `/` itself it scrolls to top. Consequence: the recipes list
+  is reachable from the hero in one tap ("Start planning"), and the hero is
+  reachable from any tab via the logo.
 
 ## Alternatives considered
 
