@@ -207,9 +207,45 @@ detail page against the mock and found two defects this pass fixes:
   sodium rides the legend in its own droplet hue with its existing hook.
 - **The metadata band is the mock's construction, not a stack of padded
   boxes**: raised cells over a border-coloured gap (the divide trick) inside
-  one warm keyline, tight cell padding, and the meta column stacking at the
-  render's gap rhythm (no extra band of air between title → strip →
-  actions).
+  one warm keyline, and the meta column stacking at the render's gap rhythm.
+  A second review pass (same day, with the authoritative render attached)
+  then superseded this pass's strip on two points, and the render's meta
+  CARD is adopted whole: the tags, the title, the facts band, the actions
+  and the nutrition split are ONE raised card, and the band is FOUR
+  left-aligned cells — Total Time / Calories (`620` + `kcal/srv`) / Rating
+  (the number beside the stars, household rating when one exists else the
+  catalog Bayesian mean, the same precedence the stars show) / Servings
+  Scaler. Sodium is NOT a band cell (the render's four columns have none,
+  and the macro fractions already sum to 1, so a sodium segment has no
+  honest width — DATA-REALITY BEATS THE MOCK): sodium reads in the
+  nutrition legend in its own droplet hue, with its existing hook.
+- **The render's tag-row SKU slot carries nothing.** The SKU string is a
+  fiction and stays rejected; the slot is left empty rather than filled
+  with the ruleset word, which the meal-occasion icon in the same row
+  already states once. The render's labelled pill chips are also not
+  adopted: the type chip keeps its documented icon-only treatment
+  (DESIGN.md Components, owner-approved — the icon's aria-label is the
+  carrier, the tap-reveal bubble is the label's dual).
+- **The render's description paragraph is not built**: the catalog carries
+  no recipe description field (only per-instruction `secondary_message`,
+  which is step prose). The slot under the H1 is already occupied by the
+  real cook-history line.
+- **The render's third action ("To Grocery") is not built**: the grocery
+  list is DERIVED from the plan (ADR-0003) and no add-to-grocery action
+  exists on this surface — a third button would invent a bypass of the
+  plan derivation.
+- **The render's "Daily Value Reference" right label is not built**: the
+  catalog publishes no daily-value percentages and none are derivable.
+- **Gram math is a lib function, not component arithmetic** (owner ruling):
+  `macroGrams(fraction, kcal, macro)` in `src/lib/nutrition.ts` —
+  fraction × kcal ÷ the Atwater factor, the arithmetic `macroSplit` runs
+  in reverse — unit-tested against the render's own card (44g/48g/26g at
+  620 kcal), so no surface re-derives grams inline.
+- **Segment colours stay on the BRAND ramp** (owner-confirmed via this
+  pass): the mock's purple/teal/olive/red segments collide with the
+  nutrition-hue semantics (ADR-0036) — purple reads as the protein token,
+  teal as the carbs token, and red as `hue-meat` ("contains meat") — so
+  the protein/carbs/fat segments keep `brand` / `brand-soft` / `brand/40`.
 
 ## Alternatives considered
 

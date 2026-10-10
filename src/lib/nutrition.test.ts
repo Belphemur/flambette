@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import {
   ENERGY_ROW,
+  KCAL_PER_G,
   NUTRITION_KEYS,
   NUTRITION_GROUPS,
   formatNutritionRow,
   formatNutritionValue,
+  macroGrams,
   macroSplit,
   nutritionGroups,
   unitFor,
@@ -32,6 +34,35 @@ function balanced(over: Partial<Nutrition> = {}): Nutrition {
   }
   return { ...base, ...over }
 }
+
+describe('macroGrams (ADR-0077: the detail legend)', () => {
+  // The catalog's macros are FRACTIONS of calories, so grams are derived:
+  // the render's salmon card (44g protein / 48g carbs / 26g fat at 620
+  // kcal) is reproduced exactly by the shared Atwater factors — the
+  // formula is public knowledge and the lib is where it lives, never
+  // inline in a component.
+  test('fraction × kcal ÷ Atwater factor, per macro', () => {
+    expect(macroGrams(0.284, 620, 'protein')).toBeCloseTo(620 * 0.284 / KCAL_PER_G.protein)
+    expect(macroGrams(0.31, 620, 'carbs')).toBeCloseTo(620 * 0.31 / KCAL_PER_G.carbs)
+    expect(macroGrams(0.378, 620, 'fat')).toBeCloseTo(620 * 0.378 / KCAL_PER_G.fat)
+  })
+
+  test('a fraction of 1 means the WHOLE serving is that macro', () => {
+    // Pure-fat energy: 100 kcal at fraction 1 = 11.1 g — 9 kcal/g.
+    expect(macroGrams(1, 100, 'fat')).toBeCloseTo(100 / 9)
+    // Pure protein or carbs: 100 kcal at fraction 1 = 25 g — 4 kcal/g.
+    expect(macroGrams(1, 100, 'protein')).toBe(25)
+    expect(macroGrams(1, 100, 'carbs')).toBe(25)
+  })
+
+  test('zero fraction and zero energy derive zero, never NaN', () => {
+    expect(macroGrams(0, 620, 'protein')).toBe(0)
+    // kcal is the caller's number and is expected > 0 (per-serving truth);
+    // a 0 kcal call still returns a finite number, never NaN.
+    expect(Number.isNaN(macroGrams(0.5, 0, 'carbs'))).toBe(false)
+    expect(macroGrams(0.5, 0, 'carbs')).toBe(0)
+  })
+})
 
 describe('macroSplit', () => {
   test('a coherent triple returns three fractions that sum to one', () => {

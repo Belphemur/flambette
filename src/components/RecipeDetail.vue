@@ -33,10 +33,11 @@ import {
   MAX_CONCURRENT_TIMERS,
 } from '../lib/stepTimer'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
-import { KCAL_PER_G } from '../lib/nutrition'
+import { macroGrams } from '../lib/nutrition'
 import { usePlanStore } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
 import { useFavouritesStore } from '../stores/favourites'
+import { useRatingStore } from '../stores/rating'
 import RatingStars from './RatingStars.vue'
 import NutritionModal from './NutritionModal.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
@@ -62,6 +63,9 @@ import { isUserRecipeId } from '../lib/userRecipes'
 
 const plan = usePlanStore()
 const favourites = useFavouritesStore()
+// The strip's rating NUMBER reads the same store the stars control
+// (ADR-0031): one precedence, so the digits and the glyphs cannot drift.
+const ratingStore = useRatingStore()
 const router = useRouter()
 
 /** Recipe variant id, passed as a route prop from /recipe/:id. */
@@ -223,23 +227,40 @@ const scaledSteps = computed<ScaledStep[]>(() =>
  * The ONE segmented nutrition bar (ADR-0077 fix pass): the render's
  * "Nutritional Split (per serving)" — a single track whose protein/carbs/
  * fat segments sit SIDE BY SIDE, each width = the macro's fraction of
- * calories (`meta.macros` sum to 1). Grams for the legend come from the
- * SHARED Atwater constant (KCAL_PER_G, lib/nutrition): fraction × kcal /
- * factor — the lib the facts modal derives with, never an inline
- * converter. Segments stay on the BRAND ramp: a green protein segment
- * would collide with the vegetarian food hue (which means "this is a
- * vegetarian dish"), and the energy/sodium hues stay reserved for the
- * facts that already wear them (ADR-0036).
+ * calories (`meta.macros` sum to 1). Legend grams come from the SHARED
+ * lib helper (`macroGrams`, lib/nutrition — fraction × kcal ÷ the
+ * Atwater factor, the derivation the facts modal runs in reverse), never
+ * an inline converter. Sodium has NO honest segment width — the macro
+ * fractions already sum to 1 — so it renders in the LEGEND only
+ * (data-reality beats the mock; the deviation is recorded in ADR-0077).
+ * Segments stay on the BRAND ramp: a green protein segment would collide
+ * with the vegetarian food hue (which means "this is a vegetarian
+ * dish"), and the energy/sodium hues stay reserved for the facts that
+ * already wear them (ADR-0036).
  */
 const macroSegments = computed(() => {
   const m = meta.value?.macros
   if (!m) return []
   const kcal = meta.value!.calories
   return [
-  { label: 'Protein', value: m.protein, grams: (m.protein * kcal) / KCAL_PER_G.protein, color: 'bg-brand' },
-  { label: 'Carbs', value: m.carbs, grams: (m.carbs * kcal) / KCAL_PER_G.carbs, color: 'bg-brand-soft' },
-  { label: 'Fat', value: m.fats, grams: (m.fats * kcal) / KCAL_PER_G.fat, color: 'bg-brand/40' },
+  { label: 'Protein', value: m.protein, grams: macroGrams(m.protein, kcal, 'protein'), color: 'bg-brand' },
+  { label: 'Carbs', value: m.carbs, grams: macroGrams(m.carbs, kcal, 'carbs'), color: 'bg-brand-soft' },
+  { label: 'Fat', value: m.fats, grams: macroGrams(m.fats, kcal, 'fat'), color: 'bg-brand/40' },
   ]
+})
+
+/**
+ * The number beside the strip's stars (the render's "4.9 ★★★★"): the
+ * household's own rating when one exists, the catalog Bayesian mean
+ * otherwise — the SAME precedence RatingStars displays, so the number and
+ * the stars can never disagree (ADR-0074's addendum). Null when neither
+ * exists: an unrated recipe with no catalog score prints nothing.
+ */
+const ratingDisplay = computed(() => {
+  if (!meta.value) return null
+  const mine = ratingStore.ratingFor(meta.value.id)
+  const value = mine > 0 ? mine : meta.value.rating * 5
+  return value > 0 ? value.toFixed(1) : null
 })
 
 /** The bar's accessible reading: one image role, one sentence. */
@@ -592,10 +613,13 @@ function startCooking() {
   </button>
   </figure>
 
-  <!-- ADR-0077 fix pass: the render's meta column stacks at gap-2.5 (10px
-  on the phone renders) — the strip belongs to the title, the actions to
-  the strip, no extra band of air between them. -->
-  <div class="space-y-3">
+  <!-- The render's meta CARD (the intro's right column): tags, title,
+  facts band, actions and the nutrition split are ONE card on the paper —
+  the owner's review found the pass had left them as loosely-stacked
+  blocks with air between. ADR-0077 fix pass: one card, the render's
+  internal rhythm (gap-3), the actions row and the nutrition split
+  keeping their data-test hooks for the geometry specs. -->
+  <div class="flex flex-col gap-3 rounded-xl bg-surface-raised p-4 ring-1 ring-border md:p-5">
   <header class="space-y-2.5">
   <div class="flex flex-wrap items-center gap-2 text-label-md text-text-muted">
   <span
@@ -670,64 +694,51 @@ function startCooking() {
   <h2 class="text-headline-md sm:text-headline-lg" data-test="detail-title">
   {{ meta.name }}
   </h2>
-  <!-- Metadata strip (ADR-0073, banded by ADR-0077): the render puts the
-       recipe's facts in ONE keylined band — 3 cells across a phone
-       (time / energy / servings), 4-5 across desktop — with the values in
-       the mono data voice. The strip now carries what ADR-0073 always said
-       it should: total time, per-serving calories (never scaled), sodium,
-       the household's stars (ADR-0031) and the servings stepper. Macro
-       splits, difficulty, test counts and SKUs do not exist in the catalog
-       and stay rejected fictions. -->
-  <!-- The band is the mock's construction exactly: raised cells over a
-  border-coloured gap (the divide trick), one warm keyline around the
-  whole band, tight p-2 cell padding — the render's gap-2 / p-3 rhythm,
-  not a stack of padded boxes. -->
+  <!-- Metadata strip (ADR-0073, banded by ADR-0077): the render's KEY
+       METADATA ROW — FOUR columns, one band, divide-x between the cells:
+  Total Time / Calories (kcal/srv, never scaled) / Rating (value +
+  stars) / Servings Scaler. Sodium is NOT a band cell — the authoritative
+  render's four columns have no sodium, and the macro fractions already
+  sum to 1, so sodium reads in the nutrition LEGEND below in its own
+  droplet hue (recorded in ADR-0077). Left-aligned cells, mono labels,
+  bold values — the render's p-3 / gap-2 rhythm. Macro splits,
+  difficulty, test counts and SKUs stay rejected fictions. -->
   <dl
-  class="grid grid-cols-3 gap-px overflow-hidden rounded-xl bg-border font-mono-data tabular-nums ring-1 ring-border"
-  :class="meta.sodium_mg ? 'lg:grid-cols-5' : 'lg:grid-cols-4'"
+  class="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-border ring-1 ring-border"
   data-test="detail-metadata-strip"
   >
-  <div class="flex flex-col items-center gap-0.5 bg-surface-raised px-2 py-2 text-center">
+  <div class="flex flex-col gap-1 bg-surface px-3 py-2.5">
   <dt class="flex items-center gap-1 font-mono-data text-[11px] uppercase tracking-wider text-text-muted">
   <Clock :size="13" aria-hidden="true" />Total time
   </dt>
-  <dd class="text-label-md font-bold text-text">{{ meta.cooking_minutes }} min</dd>
+  <dd class="text-headline-sm font-bold text-text">{{ meta.cooking_minutes }} mins</dd>
   </div>
-  <div class="flex flex-col items-center gap-0.5 bg-surface-raised px-2 py-2 text-center">
+  <div class="flex flex-col gap-1 bg-surface px-3 py-2.5">
   <dt class="flex items-center gap-1 font-mono-data text-[11px] uppercase tracking-wider text-text-muted">
-  <HueIcon role="energy" :size="13" />Energy
+  <HueIcon role="energy" :size="13" />Calories
   </dt>
-  <dd class="text-label-md font-bold text-text" data-test="detail-metadata-calories">
-  {{ Math.round(meta.calories) }} kcal
+  <dd class="flex items-baseline gap-1" data-test="detail-metadata-calories">
+  <span class="text-headline-sm font-bold text-text">{{ Math.round(meta.calories) }}</span>
+  <span class="font-mono-data text-label-sm text-text-muted">kcal/srv</span>
   </dd>
   </div>
-  <div
-  v-if="meta.sodium_mg"
-  class="flex flex-col items-center gap-0.5 bg-surface-raised px-2 py-2 text-center"
-  >
-  <dt class="flex items-center gap-1 font-mono-data text-[11px] uppercase tracking-wider text-text-muted">
-  <HueIcon role="sodium" :size="13" />Sodium
-  </dt>
-  <dd class="text-label-md font-bold text-text">{{ Math.round(meta.sodium_mg) }} mg</dd>
-  </div>
   <!-- The household's verdict rides the strip beside the facts it
-       modifies (ADR-0031): the same RatingStars control, catalog
-       Bayesian mean as its fallback display. -->
-  <div
-  class="flex flex-col items-center gap-0.5 bg-surface-raised px-2 py-2 text-center"
-  data-test="recipe-detail-rating"
-  >
-  <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted">Household</dt>
-  <dd class="flex items-center">
-  <RatingStars :variant-id="meta.id" :catalog-rating="meta.rating" :size="18" />
+       modifies (ADR-0031): the same RatingStars control, with the NUMBER
+  the render prints beside it — household rating when one exists, the
+  catalog Bayesian mean otherwise, the same precedence the stars show. -->
+  <div class="flex flex-col gap-1 bg-surface px-3 py-2.5" data-test="recipe-detail-rating">
+  <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted">Rating</dt>
+  <dd class="flex items-center gap-1.5">
+  <span v-if="ratingDisplay" class="text-headline-sm font-bold text-text">{{ ratingDisplay }}</span>
+  <RatingStars :variant-id="meta.id" :catalog-rating="meta.rating" :size="16" />
   </dd>
   </div>
   <!-- Servings: the stepper is the control it has always been — same ref,
        same clamp, same ADR-0037 write on every press — restyled into the
        band. The sr-only line is the accessible reading of the control
        ("serves 4"), which is what the specs and a screen reader want. -->
-  <div class="flex flex-col items-center gap-0.5 bg-surface-raised px-2 py-2 text-center">
-  <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted">Servings</dt>
+  <div class="flex flex-col gap-1 bg-surface px-3 py-2.5">
+  <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted">Servings scaler</dt>
   <dd class="flex items-center">
   <div class="flex items-center rounded-lg ring-1 ring-border-strong">
   <button
@@ -738,7 +749,7 @@ function startCooking() {
   >
   <Minus :size="15" aria-hidden="true" />
   </button>
-  <span class="w-7 text-center text-label-md font-bold text-brand-text">{{ servings }}</span>
+  <span class="w-7 text-center text-headline-sm font-bold text-brand-text">{{ servings }}</span>
   <button
   class="flex size-8 items-center justify-center text-text-muted disabled:opacity-40"
   :disabled="!canMoreServings"
@@ -800,16 +811,16 @@ function startCooking() {
   </div>
   </header>
 
-  <!-- Action panel (DESIGN.md Selection and actions): ONE filled
-  primary CTA (the tab's single tomato) and the outlined secondary,
-  grouped in ONE row the way the render's action bar does. Not sticky: a
-  sticky bar here would sit under the app header and cover the content
-  it is meant to serve. The unit system control (ADR-0047) stays above
-  them: it is an account setting, not a recipe fact. -->
-  <div
-  class="space-y-3 rounded-xl bg-surface-raised p-4 ring-1 ring-border"
-  data-test="detail-actions"
-  >
+  <!-- Action row (DESIGN.md Selection and actions): ONE filled primary
+  CTA (the tab's single tomato) and the outlined secondary, grouped in
+  ONE row the way the render's action bar does. Not sticky: a sticky bar
+  here would sit under the app header and cover the content it is meant
+  to serve. The unit system control (ADR-0047) stays above them: it is
+  an account setting, not a recipe fact. The render's THIRD button ("To
+  Grocery") is OMITTED: the grocery list is DERIVED from the plan
+  (ADR-0003) and no add-to-grocery action exists on this surface — the
+  deviation is recorded in ADR-0077. -->
+  <div class="space-y-2" data-test="detail-actions">
   <!-- Unit system (ADR-0047): a compact three-option segmented control in
   the ACTIONS panel, so a reader who shops in oz/lb does not have to leave
   the recipe to fix it. It writes the SAME ui member as the Settings card,
@@ -857,25 +868,18 @@ function startCooking() {
   </button>
   </div>
   </div>
-  </div>
-  </div>
 
-  <!-- Nutrition comes AFTER the actions, never ahead of them
-  (DESIGN.md Recipe detail). ADR-0077 fix pass: the render's ONE segmented
-  bar — a single track, protein/carbs/fat side by side by their fraction
-  of calories — with a mono LEGEND GRID beneath (grams via the shared
-  Atwater constant, sodium in its own hue via the droplet). The three
-  stacked full-width rows this replaces were not the mock's composition;
-  time and calories already live on the metadata strip, so they are not
-  repeated here. -->
-  <section class="mt-6" data-test="nutrition">
-  <div class="rounded-xl bg-surface-sunken p-4">
-  <div class="flex flex-wrap items-baseline justify-between gap-2">
-  <h3 class="text-body-sm font-semibold">Nutrition</h3>
-  <span class="font-mono-data text-label-sm tabular-nums text-text-muted">
-  {{ Math.round(meta.calories) }} kcal / serving
-  </span>
-  </div>
+  <!-- Nutrition: at the bottom of the SAME card, after the actions
+  (DESIGN.md Recipe detail). ADR-0077 fix pass: the render's ONE
+  segmented bar — a single track, protein/carbs/fat side by side by
+  their fraction of calories — with a mono LEGEND GRID beneath (grams
+  via the shared lib helper, sodium in its own hue via the droplet). The
+  three stacked full-width rows this replaces were not the mock's
+  composition; the render's right-hand "Daily Value Reference" label is
+  OMITTED — the catalog publishes no daily-value percentages and none are
+  derivable (recorded in ADR-0077). -->
+  <section class="border-t border-border pt-3" data-test="nutrition">
+  <h3 class="text-body-sm font-semibold">Nutritional split (per serving)</h3>
   <!-- The ONE split bar (ADR-0036: brand-ramp segments — a green protein
   segment would read "vegetarian"). One image role, one sentence. -->
   <div
@@ -914,7 +918,7 @@ function startCooking() {
   unchanged. -->
   <button
   v-if="doc"
-  class="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-surface-raised px-4 text-sm font-semibold text-brand-text ring-1 ring-border-strong active:bg-surface-sunken sm:w-auto sm:px-3"
+  class="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-surface px-4 text-sm font-semibold text-brand-text ring-1 ring-border-strong active:bg-surface-sunken sm:w-auto sm:px-3"
   aria-label="Full nutrition facts"
   aria-haspopup="dialog"
   data-test="nutrition-open"
@@ -922,8 +926,9 @@ function startCooking() {
   >
   <BookOpen :size="16" aria-hidden="true" />Full nutrition facts
   </button>
-  </div>
   </section>
+  </div>
+  </div>
 
   <Teleport to="body">
   <NutritionModal
