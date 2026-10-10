@@ -31,10 +31,15 @@ every other surface must match:
   column, 16px gutters.
 - Metadata strip on the intro card: total time, per-serving calories
   (never scaled), household rating, servings stepper, sodium droplet —
-  real catalog data only (ADR-0073's rejected-fictions list).
-- Measured-amount chips beneath steps; one-tap timers always visible once
-  running; servings stepper on the facts row; detail previews steps as
-  numbered cards whose timer-hint steps carry the inline timer.
+  real catalog data only (ADR-0073's rejected-fictions list). The strip
+  is ONE keylined band with divided cells (ADR-0077): three across a
+  phone, four–five across desktop, values in the mono data voice.
+- Measured-amount chips beneath steps — on the detail's step preview as
+  well as in cooking (ADR-0077), derived from the same pure helper
+  (ADR-0022); one-tap timers always visible once running; servings
+  stepper on the facts row; detail previews steps as numbered cards
+  with ESPRESSO number badges (the sheet's one tomato is Start cooking)
+  whose timer-hint steps carry the authored duration on the right.
 - ONE filled intent per surface, and the intents split by colour: TOMATO
   = begin (Start cooking / Cook again), SUCCESS = complete (Finish
   cooking, ADR-0072); favourite is the espresso-disc heart over the
@@ -119,7 +124,9 @@ paper and every affected pair re-measured.
   the group's hue glyph, name, and mono count pill; walk-order groups
   carry an aisle index (ADR-0071). Every tab opens with an EDITORIAL
   header block (eyebrow → H1 → derived-from subtitle, real counts only
-  — ADR-0075's grammar inventory).
+  — ADR-0075's grammar inventory); the H1 takes the display step of the
+  ladder, the metadata strips are keyline-divided cell bands, and the
+  search field is the Recipes tab's biggest control (ADR-0077).
 - Buttons: primary tomato 12px radius (pill allowed on compact), hover
   `primary-strong`, active scale 0.98 (reduced-motion: colour only);
   secondary outline; destructive danger outline + confirm.
@@ -147,10 +154,14 @@ paper and every affected pair re-measured.
   mono step counter + Finish cooking in SUCCESS (ADR-0072).
 - Detail: ADR-0073's composition — checklist card, metadata strip,
   step-list preview; rejected render fictions never ship.
-- History: plan-grouped log, mono dates/counts, period pills, sharing
-  note, honest empty state, no gamification.
-- Settings: identity / household sync / preferences / backup / about;
-  danger leave; validate-first import.
+- History: display-step head, sharing chip, keyline-divided 3-cell mono
+  stat strip, period pills + name filter (both ephemeral), plan-grouped
+  log (ADR-0034) of photo cards with the cooked count on the photo as the
+  espresso mono disc, honest empty state, no gamification (ADR-0077).
+- Settings: editorial head over a 12-column card grid — kitchen identity
+  (5) / household room (7), units & servings (6) / restrictions (6),
+  backup (6) / Mealime import (6), about (12); every section a card, none
+  dropped, none invented; danger leave; validate-first import (ADR-0077).
 - Room: live chip → roster sheet (hashvatars); one-tap share link.
 
 ## 8. What does NOT change
