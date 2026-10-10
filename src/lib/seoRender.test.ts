@@ -12,7 +12,7 @@ import {
   w3cDate,
   xmlEscape,
 } from './seoRender'
-import { SITE_URL, homeSeoHead, recipeJsonLd, recipeSeoHead } from './seo'
+import { SITE_URL, homeSeoHead, recipeJsonLd, recipeSeoHead, recipesSeoHead, recipesUrl } from './seo'
 import type { RecipeDoc, VariantMeta } from './types'
 
 /* ---------- fixtures ---------- */
@@ -136,9 +136,26 @@ describe('renderHeadBlock / injectHead', () => {
   test('the app-shell head is self-canonical and carries no JSON-LD', () => {
     const html = injectHead(BASE_HTML, renderHeadBlock(homeSeoHead()))
     expect(html).toContain(`<link rel="canonical" href="${SITE_URL}/">`)
-    expect(html).toContain('<title>Flambette</title>')
+    // ADR-0078: the homepage IS the hero, so the app-shell head describes
+    // the hero promise — the "2,500+" literal, never an exact count.
+    expect(html).toContain('<title>Flambette — meal planning for your household</title>')
+    expect(html).toContain('2,500+ hand-curated recipes')
     expect(html).not.toContain('ld+json')
     expect(html).not.toContain('name="robots"')
+  })
+
+  test('the recipes-list head is self-canonical on the trailing-slash form, no JSON-LD', () => {
+    const html = injectHead(BASE_HTML, renderHeadBlock(recipesSeoHead()))
+    // The canonical must name the URL the surface is SERVED at (nginx
+    // try_files $uri/, Cloudflare auto-trailing-slash) — the same rule
+    // recipeUrl() established for the per-recipe pages.
+    expect(html).toContain(`<link rel="canonical" href="${SITE_URL}/recipes/">`)
+    expect(html).toContain(`<meta property="og:url" content="${SITE_URL}/recipes/">`)
+    expect(html.match(/<title>/g)).toHaveLength(1)
+    expect(html).not.toContain('ld+json')
+    expect(html).not.toContain('name="robots"')
+    // A sitemap entry must never contradict the canonical it points at.
+    expect(recipesUrl()).toBe(`${SITE_URL}/recipes/`)
   })
 
   test('a base without </head> is a loud error, not silent output', () => {
@@ -146,8 +163,8 @@ describe('renderHeadBlock / injectHead', () => {
   })
 
   test('is idempotent: injecting the head twice still yields one title', () => {
-    const once = injectHead(BASE_HTML, renderHeadBlock(homeSeoHead()))
-    const twice = injectHead(once, renderHeadBlock(homeSeoHead()))
+    const once = injectHead(BASE_HTML, renderHeadBlock(recipesSeoHead()))
+    const twice = injectHead(once, renderHeadBlock(recipesSeoHead()))
     expect(twice.match(/<title>/g)).toHaveLength(1)
   })
 

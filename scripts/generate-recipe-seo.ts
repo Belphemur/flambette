@@ -16,9 +16,17 @@
  * Also writes:
  *   - `dist/index.html`    — the app-shell head (self-canonical), because
  *                            every app-shell route is served this file.
- *   - `dist/sitemap.xml`   — the homepage + every recipe URL (absolute,
- *                            using SITE_URL; lastmod is the catalog's own
- *                            first_published_at).
+ *                            ADR-0078: that head describes the HERO (the
+ *                            homepage IS the hero page now).
+ *   - `dist/recipes/index.html` — the recipes-list head (ADR-0078 Decision
+ *                            9): `/recipes` is its own indexable surface,
+ *                            canonical `<siteUrl>/recipes/`, and the
+ *                            sitemap entry ships in the same commit — a
+ *                            sitemap entry must never contradict the
+ *                            canonical it points at.
+ *   - `dist/sitemap.xml`   — the homepage, /recipes/ and every recipe URL
+ *                            (absolute, using SITE_URL; lastmod is the
+ *                            catalog's own first_published_at).
  *   - `dist/robots.txt`    — allow-all + the sitemap pointer.
  *
  * The body is NOT prerendered: `<div id="app">` stays the single render
@@ -41,6 +49,8 @@ import {
   homeSeoHead,
   recipeSeoHead,
   recipeUrl,
+  recipesSeoHead,
+  recipesUrl,
 } from '../src/lib/seo'
 import {
   injectHead,
@@ -111,7 +121,10 @@ function main(): number {
   mkdirSync(recipeDir, { recursive: true })
 
   const docMissing: number[] = []
-  const sitemap: SitemapUrl[] = [{ loc: `${siteUrl}/` }]
+  // ADR-0078 Decision 9: /recipes is a REAL sitemap URL, second only to
+  // the homepage — and its canonical (recipesSeoHead) names the SAME
+  // slash form, so the entry never contradicts the page it points at.
+  const sitemap: SitemapUrl[] = [{ loc: `${siteUrl}/` }, { loc: recipesUrl(siteUrl) }]
   for (const id of ids) {
     const meta = metaById.get(id)!
     let doc: RecipeDoc | undefined = userDocById.get(id)
@@ -143,6 +156,16 @@ function main(): number {
   // self-canonical, because the SPA fallback serves this file for /plan,
   // /grocery, … too and the canonical is what dedupes them.
   writeFileSync(join(DIST, 'index.html'), injectHead(baseHtml, renderHeadBlock(homeSeoHead(siteUrl))))
+  // The recipes-list surface gets its OWN prerendered page (ADR-0078
+  // Decision 9): nginx's try_files $uri/ serves dist/recipes/index.html
+  // before the SPA fallback, and Cloudflare static assets do the same
+  // for the trailing-slash form.
+  const recipesDir = join(DIST, 'recipes')
+  mkdirSync(recipesDir, { recursive: true })
+  writeFileSync(
+    join(recipesDir, 'index.html'),
+    injectHead(baseHtml, renderHeadBlock(recipesSeoHead(siteUrl))),
+  )
   writeFileSync(join(DIST, 'sitemap.xml'), sitemapXml(sitemap))
   writeFileSync(join(DIST, 'robots.txt'), robotsTxt(siteUrl))
 
@@ -152,7 +175,7 @@ function main(): number {
     console.warn(`WARNING: ${docMissing.length} feasible variants have no doc file (skipped):`)
     console.warn(`  ${docMissing.slice(0, 10).join(', ')}${docMissing.length > 10 ? ' …' : ''}`)
   }
-  console.log(`wrote dist/sitemap.xml (${sitemap.length} urls) and dist/robots.txt`)
+  console.log(`wrote dist/recipes/index.html, dist/sitemap.xml (${sitemap.length} urls) and dist/robots.txt`)
   return 0
 }
 
