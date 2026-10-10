@@ -6,7 +6,11 @@ import TooltipBubble from './TooltipBubble.vue'
 import { eventsDocView, restrictedDocView } from '../lib/restrictions'
 import { useRestrictions } from '../composables/useRestrictions'
 import { imageSrc, onImgError } from '../lib/images'
-import { measuredQuantity } from '../lib/measuredAmounts'
+import {
+  measuredChipsForLines,
+  measuredQuantity,
+  type MeasuredChip,
+} from '../lib/measuredAmounts'
 import {
   localizeQuantity,
   localizeSteps,
@@ -51,7 +55,6 @@ import {
   NotebookPen,
   Plus,
   Timer,
-  Utensils,
   X,
 } from 'lucide-vue-next'
 import { isUserRecipeId } from '../lib/userRecipes'
@@ -307,6 +310,19 @@ watch(
 function hintAt(index: number): TimerHint | null {
   if (!hints.value) return null
   return hintForStep(hints.value, [index])
+}
+
+/**
+ * Measured amounts for one step's detail lines (ADR-0022) — the SAME pure
+ * helper the cooking view renders, so a step can never claim an amount on
+ * one surface and a different one on the other. The chips preview here;
+ * the cooking view's disclosure is the workspace. No match means no chip:
+ * nothing is ever invented.
+ */
+function chipsFor(index: number): MeasuredChip[] {
+  const current = doc.value
+  if (!current) return []
+  return measuredChipsForLines(current, scaledSteps.value[index]?.details ?? [], factor.value, unitSystem.value)
 }
 
 
@@ -632,36 +648,82 @@ function startCooking() {
   <h2 class="text-headline-md sm:text-headline-lg" data-test="detail-title">
   {{ meta.name }}
   </h2>
-  <div class="flex flex-wrap items-center gap-3" data-test="recipe-detail-rating">
-  <RatingStars :variant-id="meta.id" :catalog-rating="meta.rating" :size="20" />
-  <span class="text-label-md text-text-muted">rate it for your household</span>
-  <span class="flex items-center gap-1 text-label-md text-text-muted" data-test="serves-label">
-  <Utensils :size="16" aria-hidden="true" />serves {{ servings }}
-  </span>
-  </div>
-  <!-- Metadata strip (ADR-0073): REAL catalog facts only — total time,
-  calories per serving (never scaled), sodium. Macro splits, difficulty,
-  test counts and SKUs do not exist in the catalog and are rejected
-  fictions, so they are not here. The strip is data voice: mono,
-  tabular, with the ADR-0036 semantic hues on the two nutrition facts. -->
+  <!-- Metadata strip (ADR-0073, banded by ADR-0077): the render puts the
+       recipe's facts in ONE keylined band — 3 cells across a phone
+       (time / energy / servings), 4-5 across desktop — with the values in
+       the mono data voice. The strip now carries what ADR-0073 always said
+       it should: total time, per-serving calories (never scaled), sodium,
+       the household's stars (ADR-0031) and the servings stepper. Macro
+       splits, difficulty, test counts and SKUs do not exist in the catalog
+       and stay rejected fictions. -->
   <dl
-  class="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono-data text-label-md tabular-nums text-text-muted"
+  class="grid grid-cols-3 gap-px overflow-hidden rounded-xl bg-surface-sunken font-mono-data tabular-nums"
+  :class="meta.sodium_mg ? 'lg:grid-cols-5' : 'lg:grid-cols-4'"
   data-test="detail-metadata-strip"
   >
-  <div class="flex items-center gap-1.5">
-  <Clock :size="16" aria-hidden="true" />
-  <dt class="sr-only">Total time</dt>
-  <dd>{{ meta.cooking_minutes }} min</dd>
+  <div class="flex flex-col items-center gap-0.5 bg-surface px-2 py-2.5 text-center">
+  <dt class="flex items-center gap-1 font-mono-data text-[11px] uppercase tracking-wider text-text-muted">
+  <Clock :size="13" aria-hidden="true" />Total time
+  </dt>
+  <dd class="text-label-md font-bold text-text">{{ meta.cooking_minutes }} min</dd>
   </div>
-  <div class="flex items-center gap-1.5">
-  <HueIcon role="energy" :size="16" />
-  <dt class="sr-only">Calories per serving</dt>
-  <dd data-test="detail-metadata-calories">{{ Math.round(meta.calories) }} kcal / serving</dd>
+  <div class="flex flex-col items-center gap-0.5 bg-surface px-2 py-2.5 text-center">
+  <dt class="flex items-center gap-1 font-mono-data text-[11px] uppercase tracking-wider text-text-muted">
+  <HueIcon role="energy" :size="13" />Energy
+  </dt>
+  <dd class="text-label-md font-bold text-text" data-test="detail-metadata-calories">
+  {{ Math.round(meta.calories) }} kcal
+  </dd>
   </div>
-  <div v-if="meta.sodium_mg" class="flex items-center gap-1.5">
-  <HueIcon role="sodium" :size="16" />
-  <dt class="sr-only">Sodium per serving</dt>
-  <dd>{{ Math.round(meta.sodium_mg) }} mg</dd>
+  <div
+  v-if="meta.sodium_mg"
+  class="flex flex-col items-center gap-0.5 bg-surface px-2 py-2.5 text-center"
+  >
+  <dt class="flex items-center gap-1 font-mono-data text-[11px] uppercase tracking-wider text-text-muted">
+  <HueIcon role="sodium" :size="13" />Sodium
+  </dt>
+  <dd class="text-label-md font-bold text-text">{{ Math.round(meta.sodium_mg) }} mg</dd>
+  </div>
+  <!-- The household's verdict rides the strip beside the facts it
+       modifies (ADR-0031): the same RatingStars control, catalog
+       Bayesian mean as its fallback display. -->
+  <div
+  class="flex flex-col items-center gap-0.5 bg-surface px-2 py-2.5 text-center"
+  data-test="recipe-detail-rating"
+  >
+  <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted">Household</dt>
+  <dd class="flex items-center">
+  <RatingStars :variant-id="meta.id" :catalog-rating="meta.rating" :size="18" />
+  </dd>
+  </div>
+  <!-- Servings: the stepper is the control it has always been — same ref,
+       same clamp, same ADR-0037 write on every press — restyled into the
+       band. The sr-only line is the accessible reading of the control
+       ("serves 4"), which is what the specs and a screen reader want. -->
+  <div class="flex flex-col items-center gap-0.5 bg-surface px-2 py-2.5 text-center">
+  <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted">Servings</dt>
+  <dd class="flex items-center">
+  <div class="flex items-center rounded-lg ring-1 ring-border-strong">
+  <button
+  class="flex size-8 items-center justify-center text-text-muted disabled:opacity-40"
+  :disabled="servings <= 1"
+  aria-label="Fewer servings"
+  @click="setServings(servings - 1)"
+  >
+  <Minus :size="15" aria-hidden="true" />
+  </button>
+  <span class="w-7 text-center text-label-md font-bold text-brand-text">{{ servings }}</span>
+  <button
+  class="flex size-8 items-center justify-center text-text-muted disabled:opacity-40"
+  :disabled="!canMoreServings"
+  aria-label="More servings"
+  @click="setServings(servings + 1)"
+  >
+  <Plus :size="15" aria-hidden="true" />
+  </button>
+  </div>
+  <span class="sr-only" data-test="serves-label">serves {{ servings }}</span>
+  </dd>
   </div>
   </dl>
   <p
@@ -713,38 +775,15 @@ function startCooking() {
   </header>
 
   <!-- Action panel (DESIGN.md Selection and actions): ONE filled
-  primary CTA, 48px tall, white label, with the dark-theme
-  keyline. Add/Update in plan is a real outlined secondary
-  action. Not sticky: a sticky bar here would sit under the
-  app header and cover the content it is meant to serve. -->
+  primary CTA (the tab's single tomato) and the outlined secondary,
+  grouped in ONE row the way the render's action bar does. Not sticky: a
+  sticky bar here would sit under the app header and cover the content
+  it is meant to serve. The unit system control (ADR-0047) stays above
+  them: it is an account setting, not a recipe fact. -->
   <div
   class="space-y-3 rounded-xl bg-surface-raised p-4 ring-1 ring-border"
   data-test="detail-actions"
   >
-  <div class="flex items-center justify-between gap-3">
-  <span class="text-sm font-medium">Servings</span>
-  <div class="flex items-center rounded-lg ring-1 ring-border-strong">
-  <button
-  class="flex size-11 items-center justify-center text-lg"
-  :disabled="servings <= 1"
-  aria-label="Fewer servings"
-  @click="setServings(servings - 1)"
-  >
-  <Minus :size="18" aria-hidden="true" />
-  </button>
-  <span class="w-8 text-center text-sm font-semibold font-mono-data tabular-nums">{{
-  servings
-  }}</span>
-  <button
-  class="flex size-11 items-center justify-center text-lg"
-  :disabled="!canMoreServings"
-  :aria-label="`More servings`"
-  @click="setServings(servings + 1)"
-  >
-  <Plus :size="18" aria-hidden="true" />
-  </button>
-  </div>
-  </div>
   <!-- Unit system (ADR-0047): a compact three-option segmented control in
   the ACTIONS panel, so a reader who shops in oz/lb does not have to leave
   the recipe to fix it. It writes the SAME ui member as the Settings card,
@@ -775,20 +814,22 @@ function startCooking() {
   </button>
   </div>
   </div>
+  <div class="flex flex-col gap-2 sm:flex-row">
   <button
-  class="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 text-base font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong dark:ring-1 dark:ring-brand-soft"
+  class="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-base font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong dark:ring-1 dark:ring-brand-soft"
   data-test="start-cooking"
   @click="startCooking"
   >
   <ChefHat :size="18" aria-hidden="true" />Start cooking
   </button>
   <button
-  class="flex h-11 w-full items-center justify-center rounded-lg bg-surface-raised px-4 text-sm font-semibold text-brand-text ring-1 ring-border-strong active:bg-surface-sunken"
+  class="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-surface-raised px-4 text-sm font-semibold text-brand-text ring-1 ring-border-strong active:bg-surface-sunken"
   data-test="add-to-plan"
   @click="addToPlan"
   >
   {{ inPlan ? 'Update in plan' : 'Add to plan' }}
   </button>
+  </div>
   </div>
   </div>
   </div>
@@ -876,20 +917,6 @@ function startCooking() {
   </div>
 
   <template v-else-if="doc">
-  <!-- Cookwares -->
-  <section v-if="doc.cookwares.length" class="mt-6">
-  <h3 class="mb-2 text-body-sm font-semibold">Cookware</h3>
-  <ul class="flex flex-wrap gap-2">
-  <li
-  v-for="cw in doc.cookwares"
-  :key="cw.id"
-  class="rounded-full bg-surface-sunken px-3 py-1 text-label-md"
-  >
-  {{ cw.name }}
-  </li>
-  </ul>
-  </section>
-
   <!-- Ingredients + Instructions (DESIGN.md Layout): the ingredient
   list is a reference beside the prose at roughly 1:1.5, instead
   of one 1100px ribbon. Below `lg` it is the phone layout. -->
@@ -901,20 +928,20 @@ function startCooking() {
   the mono data voice, each row checkable with the ADR-0072 success
   state. The checks are EPHEMERAL view state — never persisted, never
   room-synced; the household's checklist is the grocery list. Sticky on
-  desktop so a long step list never scrolls the mise en place away. -->
+  desktop so a long step list never scrolls the mise en place away.
+  ADR-0077: the render's card head is an H plus a mono "Scaled for N"
+  pill, and "Mark all ready" is the card's bottom affordance rather
+  than a header button — the header says what the card is, the footer
+  acts on the whole of it. -->
   <section class="lg:sticky lg:top-24">
   <div class="mb-2 flex items-center justify-between gap-2">
-  <h3 class="text-body-sm font-semibold">
-  Ingredients ({{ servings }} servings)
-  </h3>
-  <button
-  class="flex h-11 items-center rounded-lg px-2 text-label-md font-semibold text-brand-text hover:bg-surface-sunken"
-  :aria-pressed="allReady"
-  data-test="mark-all-ready"
-  @click="toggleAllReady"
+  <h3 class="text-headline-sm">Ingredients</h3>
+  <span
+  class="rounded-full bg-brand-tint px-2.5 py-0.5 font-mono-data text-label-sm font-semibold text-brand-text"
+  data-test="ingredients-scaled-for"
   >
-  {{ allReady ? 'All ready' : 'Mark all ready' }}
-  </button>
+  Scaled for {{ servings }}
+  </span>
   </div>
   <ul
   class="divide-y divide-border rounded-xl bg-surface-raised ring-1 ring-border"
@@ -945,10 +972,49 @@ function startCooking() {
   >{{ item.quantity || '—' }}</span>
   </li>
   </ul>
+  <!-- The card's whole-row action, as the render arranges it (ADR-0077):
+       a dotted-underline affordance centred under the list, still a 44px
+       hit target. It toggles every row. -->
+  <div class="mt-1 flex justify-center">
+  <button
+  class="flex min-h-11 items-center px-2 text-label-md font-medium text-text-muted underline decoration-dotted underline-offset-4 hover:text-text"
+  :aria-pressed="allReady"
+  data-test="mark-all-ready"
+  @click="toggleAllReady"
+  >
+  {{ allReady ? 'All ready' : 'Mark all ready' }}
+  </button>
+  </div>
+  <!-- Cookware (ADR-0077): the render's reading column carries the
+       recipe's own equipment under the checklist. This is REAL data —
+       `doc.cookwares` ships with the recipe document — so the POSITION
+       is adopted and nothing is invented (a specific pan size, which the
+       render prints, is fiction). -->
+  <section v-if="doc.cookwares.length" class="mt-6">
+  <h3 class="mb-2 text-headline-sm">Cookware</h3>
+  <ul class="flex flex-wrap gap-2">
+  <li
+  v-for="cw in doc.cookwares"
+  :key="cw.id"
+  class="rounded-full bg-surface-sunken px-3 py-1 text-label-md"
+  >
+  {{ cw.name }}
+  </li>
+  </ul>
+  </section>
   </section>
 
   <section>
-  <h3 class="mb-2 text-body-sm font-semibold">Instructions</h3>
+  <!-- ADR-0077: the render's step-column head carries a mono total beside
+       the H — the count is real (`scaledSteps.length`); the render's
+       "Preparation Steps" wording is NOT adopted, because "Instructions"
+       is the catalog's own word for this prose. -->
+  <div class="mb-2 flex items-center justify-between gap-2">
+  <h3 class="text-headline-sm">Instructions</h3>
+  <span class="font-mono-data text-label-md tabular-nums text-text-muted">
+  {{ scaledSteps.length }} steps total
+  </span>
+  </div>
   <ol class="space-y-3">
   <li
   v-for="(step, i) in scaledSteps"
@@ -956,19 +1022,52 @@ function startCooking() {
   class="rounded-xl bg-surface-raised p-4 ring-1 ring-border"
   data-test="detail-step"
   >
-  <div class="flex gap-3">
+  <!-- ADR-0077: the render's step header — number badge, then the
+       AUTHORED duration on the right in mono. The badge is an ESPRESSO
+       disc, not a brand fill: the one tomato on this sheet is Start
+       cooking (ADR-0036's one-filled-intent rule), and a filled badge on
+       every step would spend it once per step. The render's step TITLES
+       ("Prep Station") are fiction — the catalog has no step titles — and
+       stay out. -->
+  <div class="flex items-center justify-between gap-2">
   <span
-  class="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand font-mono-data text-xs font-bold text-on-brand"
+  class="flex size-7 shrink-0 items-center justify-center rounded-full bg-espresso font-mono-data text-label-md font-bold text-on-brand lg:size-8 lg:text-headline-sm"
   >
   {{ i + 1 }}
   </span>
-  <p class="text-body-md">{{ step.primary }}</p>
+  <span
+  v-if="hintAt(i)"
+  class="font-mono-data text-label-md tabular-nums text-text-muted"
+  data-test="detail-step-duration"
+  >~{{ suggestionFromHint(hintAt(i)!).minutes }} min</span
+  >
   </div>
+  <p class="mt-2 text-body-md lg:text-body-lg">{{ step.primary }}</p>
+  <!-- Measured amounts under the step text (ADR-0022, on the detail per
+  ADR-0077): the same chips the cooking view derives, INLINE here because
+  this is a preview. A step whose lines are all precise renders nothing —
+  never a guessed amount. The label is the lib's verbatim (`measured: N
+  unit name`), the same string the cooking view prints, so the two
+  surfaces cannot disagree about what a step measures. -->
+  <ul
+  v-if="chipsFor(i).length"
+  class="mt-2 ml-9 flex flex-wrap gap-1.5 border-t border-border pt-2"
+  data-test="detail-measured-amounts"
+  >
+  <li
+  v-for="chip in chipsFor(i)"
+  :key="`${i}:${chip.lineIndex}:${chip.label}`"
+  class="rounded-lg bg-surface-sunken px-2 py-0.5 font-mono-data text-label-sm tabular-nums text-text-muted"
+  data-test="detail-measured-chip"
+  >
+  {{ chip.label }}
+  </li>
+  </ul>
   <!-- Inline timer affordance (ADR-0073): ONLY where the recipe's own
   sidecar reports a duration for this step — never a guessed one
   (ADR-0022). The press ARMS the duration in the shared timer store,
   so cooking mode picks it up; nothing auto-starts (ADR-0041 §4). -->
-  <div v-if="hintAt(i)" class="mt-2 ml-9 flex items-center gap-2">
+  <div v-if="hintAt(i)" class="mt-2 flex items-center gap-2">
   <button
   class="flex h-11 items-center gap-1.5 rounded-lg bg-surface-sunken px-2.5 text-label-md font-medium text-text hover:bg-surface disabled:opacity-50 disabled:hover:bg-surface-sunken"
   :aria-label="`Start a ${suggestionFromHint(hintAt(i)!).minutes} minute timer for step ${i + 1}`"
@@ -1001,7 +1100,7 @@ function startCooking() {
   </div>
   <ul
   v-if="step.details.length"
-  class="mt-2 ml-9 space-y-0.5 border-l-2 border-border pl-3 text-body-sm text-text-muted"
+  class="mt-2 space-y-0.5 border-l-2 border-border pl-3 text-body-sm text-text-muted"
   >
   <li v-for="(d, j) in step.details" :key="j">{{ d }}</li>
   </ul>

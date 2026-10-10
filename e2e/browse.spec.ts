@@ -197,7 +197,10 @@ test('detail sheet shows ingredients and instructions from the local JSON', asyn
   await openRecipeDetail(page, firstName!.trim())
   const sheet = page.getByRole('dialog')
   await expect(sheet.getByRole('heading', { level: 2 })).toHaveText(firstName!.trim())
-  await expect(sheet.getByText(/Ingredients \(\d+ servings\)/)).toBeVisible()
+  // ADR-0077: the checklist card's head is the H plus the "Scaled for N"
+  // pill (the servings live on the metadata strip now).
+  await expect(sheet.getByRole('heading', { name: 'Ingredients' })).toBeVisible()
+  await expect(sheet.getByTestId('ingredients-scaled-for')).toHaveText(/Scaled for \d+/)
   await expect(sheet.getByText('Instructions')).toBeVisible()
   // Scaled ingredient lines rendered from the per-variant local JSON document
   await expect(sheet.locator('li').filter({ hasText: /\S/ }).first()).toBeVisible()
