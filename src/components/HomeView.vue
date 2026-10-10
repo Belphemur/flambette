@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { BookOpen, Lock, UserX, Users, Utensils } from 'lucide-vue-next'
+import { BookOpen, Lock, UserX, Users } from 'lucide-vue-next'
 import AppModal from './AppModal.vue'
 import { generateRoomCode } from '../lib/roomWords'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
 import { useRoomStore } from '../stores/room'
-import { useUiStore } from '../stores/ui'
 
 /**
  * The home hero (ADR-0078). `/` is a statement of what the app is — no
@@ -34,7 +33,6 @@ import { useUiStore } from '../stores/ui'
 
 const router = useRouter()
 const room = useRoomStore()
-const ui = useUiStore()
 const { shareRoomLink } = useShareRoomLink()
 
 /** ADR-0078 Decision 3: the hero's primary route into the catalog. */
@@ -95,14 +93,6 @@ function browseRecipes() {
   modalOpen.value = false
   void router.push({ name: 'recipes' })
 }
-
-/**
- * The illustration card's code chip: the device's REAL saved household
- * room when it has one (real ADR-0063 data, where the surface can have
- * it), otherwise an explicit "none yet" — never a fabricated code, never
- * a live-looking pill.
- */
-const illustrationCode = computed(() => ui.householdRoom || 'no household yet')
 </script>
 
 <template>
@@ -170,7 +160,15 @@ const illustrationCode = computed(() => ui.householdRoom || 'no household yet')
             <div
               class="mb-3 flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-lg bg-surface-sunken"
             >
-              <Utensils :size="48" aria-hidden="true" class="text-border-strong" />
+              <!-- The hero recipe-card illustration: a real food photograph
+                   from the Stitch screen, shipped as webp (repo image norm). -->
+              <img
+                src="/img/hero/recipe-card.webp"
+                alt="Sheet-pan halloumi and roasted vegetables"
+                class="h-full w-full object-cover"
+                loading="lazy"
+                decoding="async"
+              />
             </div>
             <div class="px-1 pb-1">
               <h3 class="text-[15px] font-semibold leading-snug text-brand-text">
@@ -180,33 +178,51 @@ const illustrationCode = computed(() => ui.householdRoom || 'no household yet')
             </div>
           </div>
 
-          <!-- FRONT CARD — the household room-code affordance -->
+          <!-- FRONT CARD — the household room-code affordance. This is a
+             MARKETING illustration of the feature: a fake code with the
+             first word redacted and two static presence dots. It must
+             NOT read the device's real room and MUST NOT claim a room is
+             "live" — the real code is only ever produced by the modal's
+             room.create(). ADR-0078 Decision 5. -->
           <div
-            class="relative z-10 mt-24 w-[94%] -rotate-[1.5deg] rounded-xl border border-border bg-surface-raised p-5 sm:mt-28"
+            class="relative z-10 mt-24 w-[94%] -rotate-[1.5deg] rounded-xl border border-border bg-surface-raised p-5 shadow-lg transition-transform duration-300 hover:rotate-0 sm:mt-28 motion-reduce:transition-none"
           >
             <div class="mb-4 border-b border-border pb-3.5">
-              <span class="text-base font-semibold text-brand-text">Your household</span>
+              <div class="flex items-center gap-2.5">
+                <span class="text-base font-semibold text-brand-text"
+                  >Your household</span
+                >
+                <!-- Two static illustrative presence dots (NOT live state). -->
+                <div class="flex -space-x-1.5">
+                  <span
+                    class="flex size-5 items-center justify-center rounded-full border-2 border-surface text-[10px] font-bold text-text-muted"
+                    aria-label="Alex"
+                    title="Alex"
+                    >A</span
+                  >
+                  <span
+                    class="flex size-5 items-center justify-center rounded-full border-2 border-surface text-[10px] font-bold text-brand-text"
+                    aria-label="Sam"
+                    title="Sam"
+                    >S</span
+                  >
+                </div>
+              </div>
             </div>
 
             <div class="my-3 text-center">
               <div
-                class="rounded-lg border border-border bg-popover px-4 py-3"
+                class="inline-block rounded-lg border border-border bg-surface-sunken px-4 py-3 font-mono text-lg font-semibold tracking-tight text-brand-text select-all"
               >
-                <span
-                  data-test="hero-household-chip"
-                  class="select-all font-mono text-lg font-semibold tracking-tight"
-                  :class="ui.householdRoom ? 'text-brand-text' : 'text-text-muted lowercase'"
-                  >{{ illustrationCode }}</span
-                >
+                <!-- Demo code: first word redacted with a unicode block,
+                     the other two illustrative (not a real room). The modal
+                     shows the REAL code from room.create(). -->
+                <span aria-hidden="true">██████████</span>-basin-saffron
               </div>
             </div>
 
             <p class="mt-2.5 text-center text-[13px] text-text-muted">
-              {{
-                ui.householdRoom
-                  ? 'Share this code — the plan syncs instantly.'
-                  : 'Create a household — you get a three-word code to share.'
-              }}
+              Share this code — the plan syncs instantly.
             </p>
           </div>
         </div>
