@@ -3,27 +3,40 @@ import { computed, ref, watch } from 'vue'
 import {
   Bean,
   CircleDot,
+  ClipboardPaste,
+  CheckCircle2,
+  Database,
   Download,
   Dices,
   Egg,
   Fish,
   FlaskConical,
+  Info,
   Link,
   Milk,
   Minus,
   Nut,
   Plus,
+  Salad,
   Scale,
   Shrimp,
+  SlidersHorizontal,
   Sprout,
   TestTubeDiagonal,
   Upload,
+  User,
+  Users,
   Utensils,
   Wheat,
   Cherry,
   type LucideIcon,
 } from 'lucide-vue-next'
-import { applyBackup, backupFileName, buildBackupZip } from '../lib/backup'
+import {
+  applyBackup,
+  backupFileName,
+  buildBackupZip,
+  STORE_SLICES,
+} from '../lib/backup'
 import { appVersion } from '../lib/appVersion'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
 import { MAX_SERVINGS, MIN_SERVINGS } from '../lib/servings'
@@ -63,6 +76,18 @@ const room = useRoomStore()
 // and avatar preview, and the rename push while connected.
 const identity = useIdentityStore()
 const { shareRoomLink, shareableCode } = useShareRoomLink()
+
+/* ---------- Card grammar (ADR-0077) ----------
+ *
+ * The Settings tab is the render's 12-column CARD GRID: every existing
+ * section becomes a card in it (none dropped, none invented), and each card
+ * shares one shell (the ADR-0068 index card) and one head (title + one-line
+ * subtitle, with a keylined icon tile at the right). One spelling each, so
+ * the cards cannot drift apart the way the old per-view field classes did.
+ */
+const CARD = 'rounded-xl bg-surface-raised p-4 ring-1 ring-border md:p-5'
+const TILE =
+  'flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-sunken text-text-muted'
 
 /* ---------- Your name (ADR-0063) ---------- */
 
@@ -589,29 +614,44 @@ async function importMealimeFavourites(): Promise<void> {
 </script>
 
 <template>
-  <section class="space-y-4 pb-4">
-  <!-- Page head (EXPERIENCE.md §7): what the tab is, before the
-       sections. The sections carry their own heads at the same step. -->
-  <header class="space-y-1">
-  <h1 class="text-headline-sm">Settings</h1>
-  <p class="text-body-sm text-text-muted">
+  <section class="space-y-6 pb-4">
+  <!-- Editorial head (ADR-0075 rule 1 / ADR-0077): eyebrow → H1 at the
+       display step → the same one-line subtitle. The mobile render carries
+       only the eyebrow + subtitle (its app header owns the title); this
+       app's header is a wordmark, so the H1 stays. -->
+  <header class="space-y-1 border-b border-border pb-4">
+  <p class="flex items-center gap-1.5 text-label-md font-semibold text-brand-text">
+  <SlidersHorizontal :size="15" aria-hidden="true" />
+  <span class="text-[11px] font-semibold uppercase tracking-wider">Settings</span>
+  </p>
+  <h1 class="text-headline-lg-mobile sm:text-headline-lg">Settings</h1>
+  <p class="max-w-md text-body-sm text-text-muted">
   How this device behaves — its identity, its household, its display and its data.
   </p>
   </header>
 
-  <!-- Unit system (ADR-0047): how quantities, grocery lines and oven
-  temperatures READ on this device. The catalog stays canonical; only the
-  display converts, so nothing stored ever changes. `dual` — the default —
-  is the catalog exactly as authored. -->
-  <!-- ADR-0068 level 1: every section is an index card — paper fill,
-       1px keyline, 12px radius, NO shadow (the old flat `bg-surface`
-       block became the raised card). -->
-  <div class="space-y-2.5 rounded-xl bg-surface-raised p-4 ring-1 ring-border" data-test="unit-system-card">
-  <h2 class="text-headline-sm">Unit system</h2>
-  <p class="text-body-sm text-text-muted">
-  Convert ingredient amounts, grocery lines and oven temperatures on this device. Your recipes, plan and checked items are
-  stored in metric and stay that way.
+  <!-- ADR-0077: the render's 12-column CARD GRID, with EVERY existing
+       section as a card in it — none dropped, none invented. Widths follow
+       the render's arrangement: identity 5 / household 7, preferences 6 /
+       restrictions 6, backup 6 / mealime 6, about 12. -->
+  <div class="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-6">
+
+  <!-- Units & servings (ADR-0047 + ADR-0037) — the render's Preferences
+  card: how quantities, grocery lines and oven temperatures READ on this
+  device, and the remembered count they start from, as two keylined rows.
+  The catalog stays canonical; only the display converts, so nothing stored
+  ever changes. `dual` — the default — is the catalog exactly as authored.
+  The card-level hooks survive so any spec keeps resolving. -->
+  <div :class="CARD" class="space-y-2.5 lg:col-span-6" data-test="unit-system-card">
+  <div class="flex items-start justify-between gap-3">
+  <div class="min-w-0">
+  <h2 class="text-headline-sm">Units &amp; servings</h2>
+  <p class="mt-0.5 text-body-sm text-text-muted">
+  How amounts read on this device — and where they start.
   </p>
+  </div>
+  <span :class="TILE"><SlidersHorizontal :size="16" aria-hidden="true" /></span>
+  </div>
   <div
   class="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-sunken px-3 py-2"
   data-test="unit-system-row"
@@ -644,12 +684,12 @@ async function importMealimeFavourites(): Promise<void> {
   <p class="text-body-sm text-text-muted" data-test="unit-system-note">
   {{ UNIT_SYSTEM_NOTE[ui.unitSystem] }}
   </p>
-  </div>
-
   <!-- Default servings (ADR-0037): the remembered starting count. Set it
-  once here, or just change servings on any recipe and this follows. -->
-  <div class="space-y-2.5 rounded-xl bg-surface-raised p-4 ring-1 ring-border" data-test="default-servings-card">
-  <h2 class="text-headline-sm">Default servings</h2>
+  once here, or just change servings on any recipe and this follows. The
+  render puts the stepper in the same Preferences card, so it lives here
+  as the card's second row rather than a second card. -->
+  <div class="space-y-2.5 border-t border-border pt-3" data-test="default-servings-card">
+  <h3 class="text-body-sm font-semibold">Default servings</h3>
   <p class="text-body-sm text-text-muted">
   New recipes, generated plans and re-planned meals start at this number. Changing servings on a recipe or on a planned meal
   remembers it here for next time.
@@ -693,14 +733,21 @@ async function importMealimeFavourites(): Promise<void> {
   Recipes already in your plan keep the servings they were added with.
   </p>
   </div>
+  </div>
 
   <!-- Dietary restrictions (the restriction ADR): upstream's own verdicts.
   A restricted recipe is REMOVED from discovery (recipes, search,
   Auto-Plan) and every surviving recipe displays upstream's own substituted
   ingredients. Recipes already in the plan stay. Not synced to the
   household room (deliberately deferred). -->
-  <div class="space-y-2.5 rounded-xl bg-surface-raised p-4 ring-1 ring-border" data-test="dietary-restrictions">
+  <div :class="CARD" class="space-y-2.5 lg:col-span-6" data-test="dietary-restrictions">
+  <div class="flex items-start justify-between gap-3">
+  <div class="min-w-0">
   <h2 class="text-headline-sm">Dietary restrictions</h2>
+  <p class="mt-0.5 text-body-sm text-text-muted">What never shows up on the table.</p>
+  </div>
+  <span :class="TILE"><Salad :size="16" aria-hidden="true" /></span>
+  </div>
   <p class="text-body-sm text-text-muted">
   Recipes containing these are hidden from Recipes, search and Auto-Plan, and ingredients are swapped to restriction-safe substitutes the way Mealime itself does it. Recipes already in your plan stay.
   </p>
@@ -737,32 +784,23 @@ async function importMealimeFavourites(): Promise<void> {
   </p>
   </div>
 
-  <!-- Household sync: set a room code once and this device re-joins it
-  on every launch, so the other phone needs no share link. The room
-  itself is unchanged (ephemeral relay, LWW state, ADR-0006/0011) —
-  this is only a persisted default join target (ADR-0019). -->
-  <div class="space-y-2.5 rounded-xl bg-surface-raised p-4 ring-1 ring-border" data-test="household-card">
-  <h2 class="text-headline-sm">Household sync</h2>
-  <p class="text-body-sm text-text-muted">
-  Sync your plan, grocery checks, extras and recipe filters with the other phone. Join once — this device re-joins the room automatically every time the app opens.
-  </p>
-  <!-- Status is shown only while CONNECTED (ADR-0049): "active" while the
-       socket is down would be a claim the relay has not made. The headcount
-       is the relay's number, and `null` (not told yet) is worded as
-       absence rather than as one person. -->
-  <p
-  v-if="householdConnected"
-  class="text-body-sm font-semibold text-text"
-  data-test="household-room-status"
-  >
-  Household sync active — <span class="font-mono-data">{{ householdCode }}</span><template v-if="room.peers"> · <span class="font-mono-data tabular-nums">{{ room.peers }}</span> in room</template>
-  </p>
-  <!-- ADR-0063: THIS device's identity — the avatar preview hashes the
-       same display name the room sees, and the rename clamps exactly
-       like the relay (one shared sanitizer on the store action) then
-       pushes a `profile` frame while connected. Editing never touches
-       the id. The input is the ONE field class (ADR-0065). -->
-  <div class="flex items-center gap-3">
+  <!-- Kitchen identity (ADR-0063, on its own card per ADR-0077 — the
+  render's col-span-5 card): THIS device's face in the room. The avatar
+  preview hashes the same display name the room sees, and the rename
+  clamps exactly like the relay (one shared sanitizer on the store
+  action) then pushes a `profile` frame while connected. Editing never
+  touches the id. The input is the ONE field class (ADR-0065). The
+  render's device-id footer is OMITTED: the UUIDv7 is an internal id,
+  not a user-facing string (ADR-0077). -->
+  <div :class="CARD" class="space-y-2.5 lg:col-span-5" data-test="identity-card">
+  <div class="flex items-start justify-between gap-3">
+  <div class="min-w-0">
+  <h2 class="text-headline-sm">Kitchen identity</h2>
+  <p class="mt-0.5 text-body-sm text-text-muted">How the others see this device.</p>
+  </div>
+  <span :class="TILE"><User :size="16" aria-hidden="true" /></span>
+  </div>
+  <div class="flex items-center gap-3 rounded-lg border border-border bg-surface-sunken p-3">
   <PersonAvatar :name="identity.displayName" data-test="identity-avatar" />
   <label class="min-w-0 flex-1 text-body-sm">
   <span class="mb-1 block font-medium">Your name</span>
@@ -774,14 +812,42 @@ async function importMealimeFavourites(): Promise<void> {
   :placeholder="identity.displayName"
   aria-label="Your display name in the household room"
   data-test="identity-name-input"
-  class="field w-full px-3"
+  class="field w-full bg-surface px-3"
   @input="onNameInput"
   @blur="onNameBlur"
   @keydown.enter="($event.target as HTMLInputElement).blur()"
   />
-  <span class="mt-1 block text-text-muted">Shown to the others in your room. Changes update everyone live.</span>
   </label>
   </div>
+  <p class="text-body-sm text-text-muted">Shown to the others in your room. Changes update everyone live.</p>
+  </div>
+
+  <!-- Household room: set a room code once and this device re-joins it
+  on every launch, so the other phone needs no share link. The room
+  itself is unchanged (ephemeral relay, LWW state, ADR-0006/0011) —
+  this is only a persisted default join target (ADR-0019). The render's
+  col-span-7 card: status, join, sharing, leave. -->
+  <div :class="CARD" class="space-y-2.5 lg:col-span-7" data-test="household-card">
+  <div class="flex items-start justify-between gap-3">
+  <div class="min-w-0">
+  <h2 class="text-headline-sm">Household room</h2>
+  <p class="mt-0.5 text-body-sm text-text-muted">
+  Sync your plan, grocery checks, extras and recipe filters with the other phone. Join once — this device re-joins the room automatically every time the app opens.
+  </p>
+  </div>
+  <span :class="TILE"><Users :size="16" aria-hidden="true" /></span>
+  </div>
+  <!-- Status is shown only while CONNECTED (ADR-0049): "active" while the
+       socket is down would be a claim the relay has not made. The headcount
+       is the relay's number, and `null` (not told yet) is worded as
+       absence rather than as one person. -->
+  <p
+  v-if="householdConnected"
+  class="text-body-sm font-semibold text-text"
+  data-test="household-room-status"
+  >
+  Household sync active — <span class="font-mono-data">{{ householdCode }}</span><template v-if="room.peers"> · <span class="font-mono-data tabular-nums">{{ room.peers }}</span> in room</template>
+  </p>
   <!-- Always rendered, never behind a saved-room condition: the note
   on the History tab points here, and a member in a Plan-tab
   room (or with no household code yet) must still be able to
@@ -873,12 +939,20 @@ async function importMealimeFavourites(): Promise<void> {
   </div>
 
   <!-- Backup & restore: ALWAYS rendered (restoring a backup is precisely
-  what a fresh device needs, and this view is reachable on one). -->
-  <div class="space-y-2.5 rounded-xl bg-surface-raised p-4 ring-1 ring-border">
+  what a fresh device needs, and this view is reachable on one). The
+  render's "What's included" list is the REAL registry — the same
+  STORE_SLICES labels the export zips and the import confirm lists, so it
+  can never drift from what a backup actually carries (ADR-0077). -->
+  <div :class="CARD" class="space-y-2.5 lg:col-span-6">
+  <div class="flex items-start justify-between gap-3">
+  <div class="min-w-0">
   <h2 class="text-headline-sm">Backup &amp; restore</h2>
-  <p class="text-body-sm text-text-muted">
-  Save everything (plan, groceries, history, favourites, settings) to a file — or restore one. Works fully offline.
+  <p class="mt-0.5 text-body-sm text-text-muted">
+  Save everything to a file — or restore one. Works fully offline.
   </p>
+  </div>
+  <span :class="TILE"><Database :size="16" aria-hidden="true" /></span>
+  </div>
   <div class="flex gap-2">
   <button
   class="flex h-11 flex-1 items-center justify-center rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
@@ -908,6 +982,20 @@ async function importMealimeFavourites(): Promise<void> {
   data-test="import-settings-input"
   @change="onBackupInputChange"
   />
+  <!-- What's included (ADR-0077): the REAL registry, not a hand-typed
+  list — the same STORE_SLICES the export zips and the import confirm
+  reads, so this can never promise a file the backup does not carry. -->
+  <div class="rounded-lg border border-border bg-surface p-3">
+  <p class="mb-2 font-mono-data text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+  What's included
+  </p>
+  <ul class="space-y-1.5 text-body-sm text-text">
+  <li v-for="slice in STORE_SLICES" :key="slice.file" class="flex items-start gap-1.5">
+  <CheckCircle2 :size="14" aria-hidden="true" class="mt-0.5 shrink-0 text-success" />
+  <span class="min-w-0">{{ slice.label }}</span>
+  </li>
+  </ul>
+  </div>
   </div>
 
   <!-- Import from Mealime (ADR-0058): a one-shot migration before
@@ -915,12 +1003,17 @@ async function importMealimeFavourites(): Promise<void> {
   user's bookmarks bar and clicked on my.mealime.com, where it copies the
   favourites payload to the clipboard; the paste box here is the only
   ingress — this app never contacts mealime.com. -->
-  <div class="space-y-2.5 rounded-xl bg-surface-raised p-4 ring-1 ring-border" data-test="mealime-import-section">
+  <div :class="CARD" class="space-y-2.5 lg:col-span-6" data-test="mealime-import-section">
+  <div class="flex items-start justify-between gap-3">
+  <div class="min-w-0">
   <h2 class="text-headline-sm">Import from Mealime</h2>
-  <p class="text-body-sm font-semibold" data-test="mealime-import-notice">
+  <p class="mt-0.5 text-body-sm font-semibold" data-test="mealime-import-notice">
   Mealime closes on 21 October 2026 — import your favourites before then. They sync to your
   household like any favourites you star here.
   </p>
+  </div>
+  <span :class="TILE"><ClipboardPaste :size="16" aria-hidden="true" /></span>
+  </div>
   <ol class="list-decimal space-y-1 pl-4 text-body-sm text-text-muted" aria-label="How to import your Mealime favourites">
   <li>
   Show your browser's bookmarks bar
@@ -981,7 +1074,7 @@ async function importMealimeFavourites(): Promise<void> {
   </p>
   </div>
 
-  <p class="px-1 text-body-sm text-text-muted">
+  <p class="px-1 text-body-sm text-text-muted lg:col-span-12">
   Everything lives on this device — the app never talks to a server about your data, so a backup file is the
   only way to move it.
   </p>
@@ -992,7 +1085,8 @@ async function importMealimeFavourites(): Promise<void> {
        LABEL, not a control — the changelog lives on the header's
        version button (ADR-0060), which this card points to in words
        rather than faking a second trigger. -->
-  <div class="space-y-2.5 rounded-xl bg-surface-raised p-4 ring-1 ring-border" data-test="about-card">
+  <div :class="CARD" class="space-y-2.5 lg:col-span-12" data-test="about-card">
+  <div class="flex items-start justify-between gap-3">
   <div class="flex flex-wrap items-center gap-2">
   <h2 class="text-headline-sm">About Flambette</h2>
   <span
@@ -1000,12 +1094,15 @@ async function importMealimeFavourites(): Promise<void> {
   data-test="about-version"
   >{{ appVersion }}</span>
   </div>
+  <span :class="TILE"><Info :size="16" aria-hidden="true" /></span>
+  </div>
   <p class="text-body-sm text-text-muted">
   100% offline-first — the whole catalog, its photos and this device's settings stay on this
   device and never reach a server. Household sync is the one exception you choose: joining a room
   shares your plan, grocery list and preferences through the room relay so the other devices see
   them. The header's version tells you what is running; tapping it opens the changelog.
   </p>
+  </div>
   </div>
 
   <!-- Import-backup confirm dialog -->
