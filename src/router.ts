@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import HomeView from './components/HomeView.vue'
 import RecipesTab from './components/RecipesTab.vue'
 import PlanTab from './components/PlanTab.vue'
 import GroceryTab from './components/GroceryTab.vue'
@@ -15,11 +16,19 @@ import SettingsTab from './components/SettingsTab.vue'
  * `serving_count`, so the plan-membership gate only made deep links and
  * "Start cooking" from the Recipes tab bounce. Only a non-numeric id is
  * refused, and it lands on the detail view, which owns the not-found state.
+ *
+ * ADR-0078: `/` is the HOME HERO (name `home`) — a new visitor lands on a
+ * statement of what the app is, not a dense grid. The recipes list moved
+ * to `/recipes` and KEEPS the route name `recipes`: every
+ * `router.push({ name: 'recipes' })` (the freshJoin landing watcher, the
+ * post-join landing, tab targets) keeps working unchanged. The catch-all
+ * still redirects to `/` — unknown URLs land on the hero.
  */
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/', name: 'recipes', component: RecipesTab },
+    { path: '/', name: 'home', component: HomeView },
+    { path: '/recipes', name: 'recipes', component: RecipesTab },
     { path: '/plan', name: 'plan', component: PlanTab },
     { path: '/history', name: 'history', component: HistoryView },
     { path: '/grocery', name: 'grocery', component: GroceryTab },
