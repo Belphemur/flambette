@@ -15,7 +15,7 @@ import {
  */
 
 async function planARecipe(page: Page): Promise<string> {
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   const name = await openFirstRecipeDetail(page)
   await page.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()

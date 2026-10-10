@@ -58,7 +58,7 @@ async function openSourceMenu(page: Page) {
 test.describe('user recipes and the source filter (ADR-0054)', () => {
   test.beforeEach(async ({ page }) => {
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await dismissJoinCongrats(page)
     await waitForCatalog(page)
   })
@@ -117,7 +117,7 @@ test.describe('user recipes and the source filter (ADR-0054)', () => {
       // The retired member: carries `true -> 'pro'` on hydration.
       proOnly: true,
     })
-    await page.goto('/')
+    await page.goto('/recipes')
     await dismissJoinCongrats(page)
     await waitForCatalog(page)
     await expect(page.getByTestId('source-button')).toContainText('PRO')

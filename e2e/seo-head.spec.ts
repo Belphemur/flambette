@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { SITE_URL, recipeDescription } from '../src/lib/seo'
 import type { VariantMeta } from '../src/lib/types'
-import { blockExternalRequests, expectZeroMealimeRequests, gotoTab } from './helpers'
+import { blockExternalRequests, expectZeroMealimeRequests, gotoTab, waitForCatalog } from './helpers'
 
 /**
  * ADR-0048 — the client-side head.
@@ -109,11 +109,31 @@ test('leaving the recipe restores the app-shell default head', async ({ page }) 
 
   // Unhead drops RecipeDetail's scoped entries on unmount, so the app-level
   // default (App.vue) resurfaces — this is the assertion the design leans on.
-  await expect(page).toHaveTitle('Flambette')
+  // ADR-0078: the default head describes the HERO (the homepage IS the
+  // hero page), so the title is the hero promise, not a bare "Flambette".
+  await expect(page).toHaveTitle('Flambette — meal planning for your household')
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${SITE_URL}/`)
   // The recipe's own tags are gone, not merely overridden.
   expect(await absentMetaContent(page, 'meta[name="robots"]')).toBeNull()
   expect(await absentMetaContent(page, 'meta[property="og:type"]')).toBe('website')
+  expect(await ldJson(page)).toEqual([])
+})
+
+test('hydrating the PRERENDERED /recipes/ page keeps the recipes-list head', async ({ page }) => {
+  // ADR-0078 Decision 9: /recipes is its own indexable surface. The
+  // trailing-slash URL is the form both production surfaces serve from
+  // dist/recipes/index.html (nginx try_files $uri/, Cloudflare
+  // auto-trailing-slash), and RecipesTab's scoped useHead re-asserts the
+  // SAME head client-side — hydration must not let the homepage head win.
+  await page.goto('/recipes/')
+  await waitForCatalog(page)
+
+  await expect(page).toHaveTitle('Browse the recipes — Flambette')
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+    'href',
+    `${SITE_URL}/recipes/`,
+  )
+  expect(await metaContent(page, 'meta[property="og:url"]')).toBe(`${SITE_URL}/recipes/`)
   expect(await ldJson(page)).toEqual([])
 })
 

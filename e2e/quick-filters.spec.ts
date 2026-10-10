@@ -81,7 +81,7 @@ async function startLiveRoom(page: Page): Promise<string> {
 
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 })
 
@@ -271,7 +271,7 @@ test.describe('filter sync and join reconciliation (WS3 + WS4)', () => {
     await dismissJoinCongrats(b)
 
     // Device A changes the household selection.
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
     await page.getByTestId('protein-chip-fish').click()
     await page.getByTestId('diet-chip-no-shellfish').click()

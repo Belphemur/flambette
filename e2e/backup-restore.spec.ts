@@ -47,7 +47,7 @@ async function exportBackup(page: Page): Promise<{ filename: string; bytes: Uint
  *  item, remember a custom ingredient, favourite, dark theme. Returns
  *  names of { planned, cooked, custom } for the assertions. */
 async function backupSeed(page: Page): Promise<{ planned: string; cooked: string; custom: string; checkedKeys: string[] }> {
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 
   // Planned (stays in plan) + cooked (vanishes from plan, into history).
@@ -280,7 +280,7 @@ test('invalid files are rejected atomically — state untouched', async ({ brows
   const page = await ctx.newPage()
   await blockExternalRequests(page)
   // Seed SOME state first so we can prove the import doesn't touch it.
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   const planned = await openFirstRecipeDetail(page)
   await page.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
@@ -366,7 +366,7 @@ test('invalid files are rejected atomically — state untouched', async ({ brows
 
 test('unregistered persisted slices make export fail loudly (AGENTS.md rule)', async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   // Forge a persisted store key that no slice covers.
   await page.evaluate(() =>

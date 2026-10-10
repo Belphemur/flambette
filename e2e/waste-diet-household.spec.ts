@@ -23,7 +23,7 @@ import {
 
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 })
 
@@ -157,7 +157,7 @@ async function addVariantToPlan(page: Page, variantId: number) {
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible({ timeout: 15_000 })
   await dialog.getByRole('button', { name: 'Add to plan' }).click()
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 }
 
