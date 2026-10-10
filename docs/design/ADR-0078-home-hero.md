@@ -69,6 +69,23 @@ controls.
 8. **Catch-all** `/:pathMatch(.*)*` keeps redirecting to `/` — unknown URLs
    land on the home page, which is now the hero.
 
+9. **SEO: `/recipes` becomes a real sitemap URL.** Today
+   `scripts/generate-recipe-seo.ts` emits only `/` + every `/recipe/<id>`
+   (the other app-shell routes are SPA-fallback pages whose canonical is
+   `/`, ADR-0048 — that is what keeps them OUT of the sitemap). With the
+   recipes list at `/recipes` as its own indexable surface:
+   - `src/lib/seo.ts` gains a recipes-list head builder whose canonical is
+     `<siteUrl>/recipes`;
+   - the prerenderer writes `dist/recipes/index.html` with THAT head
+     (nginx's try-files serves it before the SPA fallback), and the
+     sitemap gains `{ loc: <siteUrl>/recipes }` — a sitemap entry must
+     never contradict the canonical it points at, which is why the
+     canonical change ships in the SAME step;
+   - the hero route keeps the app-shell default head (canonical `/`) —
+     it IS the homepage;
+   - `src/lib/seoRender.ts` unit tests extend to the new entry (the
+     sitemap builder is pure and golden-tested under `test:unit`).
+
 ## Consequences
 
 - Every e2e spec that navigates to `/` and expects the catalog must move to
