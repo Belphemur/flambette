@@ -233,7 +233,7 @@ const hasAnyCook = computed(() => plan.cookedHistory.length > 0)
          the no-matches feedback lives in the list branch, so a visible
          search here is a control that silently does nothing (kody +
          coderabbit). The pills stay: they are the way back to "All time". -->
-    <div v-if="groups.length > 0" class="relative sm:w-72">
+    <div v-if="windowedEvents.length > 0" class="relative sm:w-72">
       <Search
         :size="16"
         aria-hidden="true"
