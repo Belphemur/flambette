@@ -36,7 +36,6 @@ import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { macroGrams } from '../lib/nutrition'
 import { usePlanStore } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
-import { useFavouritesStore } from '../stores/favourites'
 import { useRatingStore } from '../stores/rating'
 import RatingStars from './RatingStars.vue'
 import NutritionModal from './NutritionModal.vue'
@@ -44,6 +43,7 @@ import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
 import { recipeSeoHead } from '../lib/seo'
 import HueIcon from './HueIcon.vue'
+import FavouriteButton from './FavouriteButton.vue'
 import { onMounted, onUnmounted } from 'vue'
 import { useHead } from '@unhead/vue'
 import {
@@ -52,7 +52,7 @@ import {
   ChefHat,
   ChevronDown,
   Clock,
-  Heart,
+  Donut,
   Minus,
   NotebookPen,
   Plus,
@@ -62,7 +62,6 @@ import {
 import { isUserRecipeId } from '../lib/userRecipes'
 
 const plan = usePlanStore()
-const favourites = useFavouritesStore()
 // The strip's rating NUMBER reads the same store the stars control
 // (ADR-0031): one precedence, so the digits and the glyphs cannot drift.
 const ratingStore = useRatingStore()
@@ -618,19 +617,7 @@ function startCooking() {
   >
   <ArrowLeft :size="20" aria-hidden="true" />
   </button>
-  <button
-  class="absolute top-3 right-3 flex size-11 items-center justify-center rounded-full bg-espresso text-on-brand"
-  :aria-label="favourites.isFavourite(meta.id) ? 'Remove from favourites' : 'Add to favourites'"
-  :aria-pressed="favourites.isFavourite(meta.id)"
-  @click="favourites.toggleFavourite(meta.id)"
-  >
-  <Heart
-  :size="22"
-  aria-hidden="true"
-  :fill="favourites.isFavourite(meta.id) ? 'currentColor' : 'none'"
-  :class="favourites.isFavourite(meta.id) ? 'text-favourite-soft' : ''"
-  />
-  </button>
+  <FavouriteButton :variant-id="meta.id" :glyph="22" class="absolute top-3 right-3" />
   </figure>
 
   <!-- The render's meta CARD (the intro's right column): tags, title,
@@ -922,32 +909,35 @@ function startCooking() {
   value, unit beneath. Sodium keeps its OWN hue (`nutrition-sodium`
   indigo — owner: sodium stays separate, never a macro colour). -->
   <div class="flex items-baseline justify-between gap-2 sm:hidden">
-  <h3 class="text-body-sm font-semibold">Nutrition Summary</h3>
+  <h3 class="flex items-center gap-1.5 text-body-sm font-semibold">
+  <Donut :size="16" aria-hidden="true" class="shrink-0 text-text-muted" />
+  Nutrition Summary
+  </h3>
   <span class="font-mono-data text-label-sm font-normal text-text-muted whitespace-nowrap">Per serving</span>
   </div>
   <div v-if="meta" class="mt-2 grid grid-cols-5 gap-1.5 sm:hidden" data-test="nutrition-stat-boxes">
-  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface-raised px-1 py-2 text-center">
-  <span class="font-mono-data text-[10px] font-semibold uppercase tracking-wide text-text-muted">Energy</span>
+  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface px-1 py-2 text-center">
+  <span class="text-[10px] font-semibold text-text-muted">Energy</span>
   <span class="text-headline-sm font-bold text-text">{{ Math.round(meta.calories) }}</span>
   <span class="font-mono-data text-[10px] text-text-muted">kcal</span>
   </div>
-  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface-raised px-1 py-2 text-center">
-  <span class="font-mono-data text-[10px] font-semibold uppercase tracking-wide text-nutrition-protein">Protein</span>
+  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface px-1 py-2 text-center">
+  <span class="text-[10px] font-semibold text-nutrition-protein">Protein</span>
   <span class="text-headline-sm font-bold text-text">{{ Math.round(macroGrams(macroSegments[0]?.value ?? 0, meta.calories, 'protein')) }}</span>
   <span class="font-mono-data text-[10px] text-text-muted">g</span>
   </div>
-  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface-raised px-1 py-2 text-center">
-  <span class="font-mono-data text-[10px] font-semibold uppercase tracking-wide text-nutrition-carbs">Carbs</span>
+  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface px-1 py-2 text-center">
+  <span class="text-[10px] font-semibold text-nutrition-carbs">Carbs</span>
   <span class="text-headline-sm font-bold text-text">{{ Math.round(macroGrams(macroSegments[1]?.value ?? 0, meta.calories, 'carbs')) }}</span>
   <span class="font-mono-data text-[10px] text-text-muted">g</span>
   </div>
-  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface-raised px-1 py-2 text-center">
-  <span class="font-mono-data text-[10px] font-semibold uppercase tracking-wide text-nutrition-fat">Fat</span>
+  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface px-1 py-2 text-center">
+  <span class="text-[10px] font-semibold text-nutrition-fat">Fat</span>
   <span class="text-headline-sm font-bold text-text">{{ Math.round(macroGrams(macroSegments[2]?.value ?? 0, meta.calories, 'fat')) }}</span>
   <span class="font-mono-data text-[10px] text-text-muted">g</span>
   </div>
-  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface-raised px-1 py-2 text-center" data-test="nutrition-sodium-box">
-  <span class="font-mono-data text-[10px] font-semibold uppercase tracking-wide text-nutrition-sodium">Sodium</span>
+  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface px-1 py-2 text-center" data-test="nutrition-sodium-box">
+  <span class="text-[10px] font-semibold text-nutrition-sodium">Sodium</span>
   <span class="text-headline-sm font-bold text-text">{{ Math.round(meta.sodium_mg) }}</span>
   <span class="font-mono-data text-[10px] text-text-muted">mg</span>
   </div>
@@ -991,7 +981,7 @@ function startCooking() {
   <div v-if="meta.sodium_mg" class="flex items-center gap-1.5 whitespace-nowrap" data-test="nutrition-sodium">
   <HueIcon role="sodium" :size="14" />
   <dt class="text-text-muted">Sodium:</dt>
-  <dd class="font-semibold text-text">{{ Math.round(meta.sodium_mg) }} mg</dd>
+  <dd class="font-semibold text-text">{{ Math.round(meta.sodium_mg) }}mg</dd>
   </div>
   </dl>
   <!-- The 66-row facts block would turn the detail into a wall, so the

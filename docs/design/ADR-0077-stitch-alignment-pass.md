@@ -256,6 +256,22 @@ detail page against the mock and found two defects this pass fixes:
   tokens. Sodium is SEPARATE (owner override, same day): it is not a
  calorie macro, so it never joins the bar's segments nor wears a legend
  dot — it keeps its own droplet icon (`hue-sodium`) as before.
+- **History rows carry the household's preference controls** (owner
+  addition, riding ADR-0031's stores): each cook-history card renders the
+  star widget (the SAME `RatingStars` the recipe cards use, `:size="14"`,
+  same household-else-catalog precedence) and a favourite toggle — the
+  SHARED `FavouriteButton` (the espresso-disc heart the cards and the
+  detail sheet already render), EXTRACTED rather than copied a third
+  time: one control, one store write, three surfaces. Cook timestamps
+  and the date row are untouched. No "To Grocery" button is added to the
+  detail (owner: should not be added — the grocery list is derived).
+- **Mobile nutrition is the render's stat boxes** (owner's mobile
+  render): a "Nutrition Summary / Per serving" header (with the donut
+  glyph) and FIVE equal boxes — Energy / Protein / Carbs / Fat / Sodium —
+  each a coloured label over a bold value over a unit line (kcal / g / g
+  / g / mg — no DV percentages, which the catalog does not publish);
+  the split bar + legend stay `sm:`-only. Boxes render one step lighter
+  than their card (`surface` on `surface-raised`), like the band.
 
 ## Alternatives considered
 

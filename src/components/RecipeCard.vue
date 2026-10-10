@@ -2,18 +2,17 @@
 import { computed } from 'vue'
 import { imageSrc, onImgError } from '../lib/images'
 import RatingStars from './RatingStars.vue'
+import FavouriteButton from './FavouriteButton.vue'
 import HueIcon from './HueIcon.vue'
 import type { VariantMeta } from '../lib/types'
 import { catalog } from '../lib/catalog'
 import { isUserRecipeId, showNewBadge } from '../lib/userRecipes'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
-import { useFavouritesStore } from '../stores/favourites'
 import { useRatingStore } from '../stores/rating'
-import { Clock, Heart, Star } from 'lucide-vue-next'
+import { Clock, Star } from 'lucide-vue-next'
 
 const props = defineProps<{ meta: VariantMeta }>()
 
-const favourites = useFavouritesStore()
 const ratings = useRatingStore()
 
 /** Categorical ingredient-TYPE hue (ADR-0036); null when the catalog
@@ -31,7 +30,6 @@ const typeRole = computed(() =>
  */
 const mealTypeRole = computed(() => mealRole(props.meta.ruleset))
 
-const isFavourite = computed(() => favourites.isFavourite(props.meta.id))
 
 /**
  * The rating disc's value (ADR-0074): the household's own stars when it
@@ -136,19 +134,7 @@ const showNew = computed(() => {
   <Star :size="14" :fill="'currentColor'" aria-hidden="true" />
   {{ ratingValue }}
   </span>
-  <button
-  class="absolute top-2 right-2 z-10 flex size-11 items-center justify-center rounded-full bg-espresso text-on-brand"
-  :aria-label="isFavourite ? 'Remove from favourites' : 'Add to favourites'"
-  :aria-pressed="isFavourite"
-  @click.stop="favourites.toggleFavourite(meta.id)"
-  >
-  <Heart
-  :size="20"
-  :fill="isFavourite ? 'currentColor' : 'none'"
-  :class="isFavourite ? 'text-favourite-soft' : ''"
-  aria-hidden="true"
-  />
-  </button>
+  <FavouriteButton :variant-id="meta.id" class="absolute top-2 right-2 z-10" />
   </div>
 
   <div class="p-3 sm:p-4">

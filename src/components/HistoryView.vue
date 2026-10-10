@@ -14,6 +14,8 @@ import { imageSrc, onImgError } from '../lib/images'
 import type { VariantMeta } from '../lib/types'
 import { usePlanStore } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
+import RatingStars from './RatingStars.vue'
+import FavouriteButton from './FavouriteButton.vue'
 import TooltipBubble from './TooltipBubble.vue'
 import HueIcon from './HueIcon.vue'
 import { ICON_ROLES, ingredientRole } from '../lib/palette'
@@ -405,6 +407,21 @@ const hasAnyCook = computed(() => plan.cookedHistory.length > 0)
   {{ formatRelative(row.lastAt) }}
   <TooltipBubble :text="formatAbsolute(row.lastAt)" placement="below-right" />
   </p>
+  <!-- Household preferences on the SAME stores as the recipe cards
+  (ADR-0031 / owner ruling): the star widget and the favourite toggle —
+  the SHARED FavouriteButton, so a card and a history row write the same
+  tombstoned state and look identical doing it. Same precedence too:
+  the stars show the household's rating, the catalog mean as fallback. -->
+  <div class="flex items-center justify-between gap-2 pt-0.5">
+  <RatingStars
+  :variant-id="row.variantId"
+  :catalog-rating="row.meta.rating"
+  :fallback-rating="row.meta.rating"
+  :size="14"
+  compact
+  />
+  <FavouriteButton :variant-id="row.variantId" />
+  </div>
   <div class="mt-1 flex items-center justify-between gap-2 border-t border-border pt-2.5">
   <span class="font-mono-data text-label-md tabular-nums text-text-muted">
   {{ row.meta.cooking_minutes }} min
