@@ -567,6 +567,15 @@ The entry surface is **Explore** (find food). Plan and grocery are **Operate**
 (one step, ingredients and timers at arm's length). Settings is **Configure**.
 Compose for the job of each surface, not one repeated card template. No marketing
 hero, weekday calendar, engagement streaks, invented savings dashboard or AI branding.
+The ONE permitted exception is the home hero at `/` (ADR-0078 supersedes this
+clause in part): `/` is a statement of what the app is — "Plan dinner together.
+No account needed.", the three-word household code affordance and the value strip
+— built strictly from the tokens below (`surface` canvas, `surface-raised` cards
+with 1px `border` keylines, `brand-text` headlines with a `brand` emphasis
+phrase, `text-muted` body copy, JetBrains Mono for the room code, `brand` for
+the single filled "Start planning" action). The Recipes-tab rule SURVIVES
+verbatim: **no promotional hero above the controls** — the hero lives at `/`,
+never above the recipe controls.
 
 ### Product basis and precedence
 
