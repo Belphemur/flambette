@@ -478,7 +478,7 @@ onBeforeUnmount(() => {
   type="button"
   data-test="home-link"
   class="flex items-center gap-2 py-1 text-lg font-bold tracking-tight text-brand-text"
-  :aria-label="route.name === 'recipes' ? 'Back to top of recipes' : 'Recipes list'"
+  :aria-label="route.name === 'recipes' ? 'Back to top of recipes' : 'Home'"
   @click="goHome()"
   >
   <img src="/favicon.svg" alt="" width="22" height="22" class="inline" aria-hidden="true" />
@@ -628,7 +628,7 @@ onBeforeUnmount(() => {
        measured Pixel 7 fit (82px/tab) is untouched: same bar height,
        same five labelled tabs, same hit areas. -->
   <nav
-  v-if="!isFullscreenMode"
+  v-if="!isFullscreenMode && !isHome"
   class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-chrome-border bg-espresso"
   aria-label="Main navigation"
   >

@@ -25,7 +25,7 @@ const firstRow = (page: Page) => page.locator('[data-test=add-suggestion-first]'
 
 /** Plan one recipe so the grocery list has real store sections below EXTRA ITEMS. */
 async function planFirstRecipe(page: Page): Promise<void> {
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   await openFirstRecipeDetail(page)
   await page.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
@@ -35,7 +35,7 @@ async function planFirstRecipe(page: Page): Promise<void> {
 test.describe('Settings tab (data surface)', () => {
   test('five labelled tabs fit the bar at Pixel 7 width — no label is dropped', async ({ page }) => {
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
 
     const nav = page.getByRole('navigation', { name: 'Main navigation' })

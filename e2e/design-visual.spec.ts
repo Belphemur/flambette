@@ -58,7 +58,7 @@ test.describe('the container', () => {
     await blockExternalRequests(page)
     for (const width of [1024, 1440, 1920]) {
       await page.setViewportSize({ width, height: 900 })
-      await page.goto('/')
+      await page.goto('/recipes')
       await waitForCatalog(page)
       // ADR-0065: the shell and the chrome BANDS span the window edge to
       // edge; the CONTAINER-aligned elements are main content and the
@@ -83,7 +83,7 @@ test.describe('the container', () => {
     test.skip(isMobile === true, 'presentation contract, asserted on desktop')
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
 
     // Plan -> a planned recipe -> its sheet -> Start cooking.
@@ -110,7 +110,7 @@ test.describe('the food grid', () => {
     await blockExternalRequests(page)
     for (const step of GRID_COLUMNS) {
       await page.setViewportSize({ width: step.width, height: 900 })
-      await page.goto('/')
+      await page.goto('/recipes')
       await waitForCatalog(page)
       expect(await firstRowCount(page), `columns at ${step.width}px`).toBe(step.columns)
 
@@ -128,7 +128,7 @@ test.describe('the food grid', () => {
     test.skip(isMobile === true, 'presentation contract, asserted on desktop')
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
 
     const card = page.locator('[data-test="recipe-card"]').first()
@@ -151,7 +151,7 @@ test.describe('the food grid', () => {
     test.skip(isMobile === true, 'presentation contract, asserted on desktop')
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
 
     const card = page.locator('[data-test="recipe-card"]').first()
@@ -169,7 +169,7 @@ test.describe('the theme flip', () => {
     test.skip(isMobile === true, 'presentation contract, asserted on desktop')
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
 
     const read = () =>
@@ -203,7 +203,7 @@ test.describe('the theme flip', () => {
     test.skip(isMobile === true, 'presentation contract, asserted on desktop')
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
 
     const tab = page.locator('nav[aria-label="Main navigation"] button', { hasText: 'Recipes' })
@@ -232,7 +232,7 @@ test.describe('the recipe detail', () => {
     test.skip(isMobile === true, 'presentation contract, asserted on desktop')
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
 
     await page.locator('[data-test="recipe-card-link"]').first().click()
@@ -267,7 +267,7 @@ test.describe('the recipe detail', () => {
     test.skip(isMobile === true, 'presentation contract, asserted on desktop')
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
     await page.locator('[data-test="recipe-card-link"]').first().click()
     const dialog = page.getByRole('dialog')
@@ -292,7 +292,7 @@ test.describe('the recipe detail', () => {
     test.skip(isMobile === true, 'presentation contract, asserted on desktop')
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
     await page.locator('[data-test="recipe-card-link"]').first().click()
     const dialog = page.getByRole('dialog')
@@ -317,7 +317,7 @@ test.describe('the recipe detail', () => {
     // this case is about the donut rather than about which recipe the
     // default sort happens to surface. The refusal path is unit-tested
     // in `src/lib/nutrition.test.ts`.
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
     await page.locator('[data-variant-id="21756"] [data-test="recipe-card-link"]').first().click()
     const detail = page.getByRole('dialog')
@@ -386,7 +386,7 @@ test.describe('the recipe detail', () => {
 
   test('the facts modal TRAPS focus and puts it back on close', async ({ page }) => {
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
     await page.locator('[data-variant-id="21756"] [data-test="recipe-card-link"]').first().click()
     const detail = page.getByRole('dialog')
@@ -444,7 +444,7 @@ test.describe('pinned widths in BOTH themes', () => {
 
     for (const [width, columns] of steps) {
       await page.setViewportSize({ width, height: 900 })
-      await page.goto('/')
+      await page.goto('/recipes')
       await waitForCatalog(page)
       for (const theme of ['light', 'dark'] as const) {
         if (theme === 'dark') {
@@ -483,7 +483,7 @@ test.describe('pinned widths in BOTH themes', () => {
     // device pixel ratio — which is exactly this configuration, so the
     // reflow is exercised for real rather than simulated with `zoom`.
     await page.setViewportSize({ width: 640, height: 450 })
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
 
     // Nothing scrolls sideways, and the shell fits the narrowed window.
@@ -518,7 +518,7 @@ test.describe('computed accessibility', () => {
     test.skip(isMobile === true, 'presentation contract, asserted on desktop')
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
 
     for (const theme of ['light', 'dark'] as const) {
@@ -603,7 +603,7 @@ test.describe('computed accessibility', () => {
     test.skip(isMobile === true, 'presentation contract, asserted on desktop')
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
     await page.locator('[data-test="recipe-card-link"]').first().click()
     const dialog = page.getByRole('dialog')
@@ -627,7 +627,7 @@ test.describe('nav icon hover (pointer)', () => {
     test.skip(isMobile === true, 'pointer affordance only')
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
 
     const tab = page.locator('nav[aria-label="Main navigation"] button', { hasText: 'Plan' })
@@ -676,7 +676,7 @@ test.describe('nav icon hover (pointer)', () => {
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await blockExternalRequests(page)
     await page.emulateMedia({ reducedMotion: 'reduce' })
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
 
     const tab = page.locator('nav[aria-label="Main navigation"] button', { hasText: 'Plan' })
@@ -704,7 +704,7 @@ test.describe('touch viewport never gets the hover affordance', () => {
   }) => {
     test.skip(isMobile !== true, 'touch project only')
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
 
     const icon = page.locator('nav[aria-label="Main navigation"] svg.nav-tab-icon').first()
@@ -746,7 +746,7 @@ test.describe('icon tooltips (pointer)', () => {
     test.skip(isMobile === true, 'pointer affordance only')
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
 
     // A card's type icon is the BARE icon that carries the meaning on its
@@ -803,7 +803,7 @@ test.describe('icon tooltips (pointer)', () => {
     test.skip(isMobile === true, 'pointer affordance only')
     await page.setViewportSize(DESKTOP_VIEWPORT)
     await blockExternalRequests(page)
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
 
     // Open the first card — the one the browse case proves carries a

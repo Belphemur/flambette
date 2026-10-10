@@ -20,7 +20,7 @@ import {
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 })
 

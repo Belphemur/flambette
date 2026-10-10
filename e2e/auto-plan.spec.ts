@@ -503,7 +503,7 @@ test('room sync: generated plan reaches the second context', async ({ browser })
 })
 
 test('diet chip active → generated plan respects it', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   await page.getByTestId('diet-chip-vegetarian').click()
   await gotoTab(page, 'Plan')
