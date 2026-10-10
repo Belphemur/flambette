@@ -481,7 +481,7 @@ onBeforeUnmount(() => {
   surface. The query state and pipeline are the module singleton the
   content field shares, so the field moves between mounts without losing
   an in-flight search. -->
-  <RecipeSearchField v-if="showHeaderSearch" variant="header" class="hidden w-full max-w-72 lg:block" />
+  <RecipeSearchField v-if="showHeaderSearch" variant="header" class="hidden w-full max-w-md lg:block" />
   <div class="flex items-center gap-2">
   <button
   type="button"

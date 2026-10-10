@@ -9,7 +9,7 @@ import {
   watch,
 } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CircleHelp, X } from 'lucide-vue-next'
+import { CircleHelp, Search, X } from 'lucide-vue-next'
 import { suggest } from '../lib/search'
 import { useRecipeSearch } from '../composables/useRecipeSearch'
 import { useSearchTips } from '../composables/useSearchTips'
@@ -31,6 +31,13 @@ import { useSearchTips } from '../composables/useSearchTips'
  * always has. The `/` affordance is desktop-only and mounted-field-only:
  * the global keydown listener lives on the instance, so exactly one input
  * answers it wherever the field currently is.
+ *
+ * ADR-0077: the field is the tab's BIGGEST control on both mounts. The
+ * render's search band is a single dominant well — leading 22px glyph,
+ * 16px type, the whole width of the bar — so the well is one step larger
+ * than a generic field (48px, `body-md`, `.field-search`). ONE variant,
+ * chosen HERE, so the header mount and the in-content mount cannot drift
+ * apart again (ADR-0070's two-mount rule).
  */
 const props = withDefaults(defineProps<{ variant?: 'header' | 'panel' }>(), {
   variant: 'panel',
@@ -241,14 +248,22 @@ onUnmounted(() => {
   belongs to the content column, and the header row's own gap does the
   spacing). -->
   <div :class="variant === 'panel' ? 'space-y-3' : ''">
+  <!-- ADR-0077: the leading search glyph — decorative, so the input's own
+  aria-label stays the ONE carrier. It is what makes the well read as a
+  search FIRST and a text box second, which is the render's arrangement. -->
   <div class="relative">
+  <Search
+  :size="18"
+  aria-hidden="true"
+  class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted"
+  />
   <input
   ref="input"
   v-model="query"
   type="search"
   enterkeyhint="search"
   placeholder="Search recipes or ingredients…"
-  class="field w-full px-4 pr-20"
+  class="field field-search w-full pr-20"
   aria-label="Search recipes or ingredients"
   :aria-expanded="suggestions.length > 0"
   :aria-controls="'search-suggest'"

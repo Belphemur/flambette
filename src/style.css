@@ -466,6 +466,24 @@ textarea.field {
   @apply min-h-20 py-2.5;
 }
 
+/* ------------------------------------------------------------------
+ * THE search well (ADR-0077): the Recipes tab's PRIMARY control, so it
+ * is rendered one step larger than a generic field — 48px tall, 16px
+ * (`body-md`) type, and room for the leading search glyph. Same tokens
+ * as `.field`: the sunken fill, the `border-strong` control keyline and
+ * the tomato focus keyline are all inherited, so this is a METRIC
+ * variant, never a second field language. Two classes select the rule,
+ * so it determinately wins over `.field` regardless of source order —
+ * and a component can only adopt it by composing `.field .field-search`,
+ * which is what stops per-view re-spelling from coming back.
+ * Paddings stay utility-owned at the call site (this well carries
+ * trailing affordances: the clear button, the `/` hint and the tips
+ * `?`); only the metric that no utility can own is spelled here.
+ * ------------------------------------------------------------------ */
+.field.field-search {
+  @apply h-12 pl-11 text-base;
+}
+
 /* Modal scrim (ADR-0068 level 3): the espresso scrim + 6px blur — the
    explicit, scoped exception to the no-global-blur rule. Modals and
    sheets ONLY; plain page backgrounds never blur. Derived from the
