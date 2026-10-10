@@ -190,7 +190,13 @@ const showNew = computed(() => {
   </p>
 
   <div class="relative z-10 mt-1.5">
-  <RatingStars :variant-id="meta.id" :catalog-rating="meta.rating" :size="15" compact />
+  <RatingStars
+  :variant-id="meta.id"
+  :catalog-rating="meta.rating"
+  :fallback-rating="meta.rating"
+  :size="15"
+  compact
+  />
   </div>
   </div>
   </article>

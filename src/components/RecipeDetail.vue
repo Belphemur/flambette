@@ -740,7 +740,7 @@ function startCooking() {
   <dt class="flex items-center gap-1 font-mono-data text-[11px] uppercase tracking-wider text-text-muted">
   <HueIcon role="energy" :size="13" />Calories
   </dt>
-  <dd class="flex items-baseline gap-1" data-test="detail-metadata-calories">
+  <dd class="flex items-baseline gap-1 whitespace-nowrap" data-test="detail-metadata-calories">
   <span class="text-headline-sm font-bold text-text">{{ Math.round(meta.calories) }}</span>
   <span class="font-mono-data text-label-sm text-text-muted">kcal/srv</span>
   </dd>
@@ -751,13 +751,15 @@ function startCooking() {
   catalog Bayesian mean otherwise, the same precedence the stars show. -->
   <div class="flex flex-col gap-1" data-test="recipe-detail-rating">
   <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted">Rating</dt>
-  <dd class="flex items-center gap-1.5">
+  <dd class="flex items-center gap-1">
   <span v-if="ratingDisplay" class="text-headline-sm font-bold text-text">{{ ratingDisplay }}</span>
+  <!-- Owner sizing: the mock's stars ride `text-xs` beside the number —
+  size 12 so the strip never reads star-dominant. -->
   <RatingStars
   :variant-id="meta.id"
   :catalog-rating="meta.rating"
   :fallback-rating="meta.rating"
-  :size="16"
+  :size="12"
   compact
   />
   </dd>
@@ -767,27 +769,28 @@ function startCooking() {
        band. The sr-only line is the accessible reading of the control
        ("serves 4"), which is what the specs and a screen reader want. -->
   <div class="flex flex-col gap-1">
-  <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted">Servings scaler</dt>
-  <dd class="flex items-center">
-  <div class="flex items-center rounded-lg ring-1 ring-border-strong">
+  <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted whitespace-nowrap">Servings scaler</dt>
+  <!-- The render's stepper: two ROUND raised buttons flanking the number
+  (w-7 h-7 rounded-full bg-paper-elevated) — no ring container. Same
+  ref, same clamp, same ADR-0037 write on every press. -->
+  <dd class="flex items-center gap-1.5">
   <button
-  class="flex size-11 items-center justify-center text-text-muted disabled:opacity-40"
+  class="flex size-11 items-center justify-center rounded-full bg-surface-raised text-sm font-bold text-text transition-[background-color,transform] hover:bg-surface-sunken active:scale-95 disabled:opacity-40 sm:size-7"
   :disabled="servings <= 1"
   aria-label="Fewer servings"
   @click="setServings(servings - 1)"
   >
-  <Minus :size="15" aria-hidden="true" />
+  <Minus :size="13" aria-hidden="true" />
   </button>
-  <span class="w-7 text-center text-headline-sm font-bold text-brand-text">{{ servings }}</span>
+  <span class="min-w-6 px-1 text-center text-headline-sm font-bold text-brand-text">{{ servings }}</span>
   <button
-  class="flex size-11 items-center justify-center text-text-muted disabled:opacity-40"
+  class="flex size-11 items-center justify-center rounded-full bg-surface-raised text-sm font-bold text-text transition-[background-color,transform] hover:bg-surface-sunken active:scale-95 disabled:opacity-40 sm:size-7"
   :disabled="!canMoreServings"
   aria-label="More servings"
   @click="setServings(servings + 1)"
   >
-  <Plus :size="15" aria-hidden="true" />
+  <Plus :size="13" aria-hidden="true" />
   </button>
-  </div>
   <span class="sr-only" data-test="serves-label">serves {{ servings }}</span>
   </dd>
   </div>
@@ -905,21 +908,62 @@ function startCooking() {
   via the shared lib helper, sodium in its own hue via the droplet). The
   three stacked full-width rows this replaces were not the mock's
   composition; the render's right-hand "Daily Value Reference" label is
-  OMITTED — the catalog publishes no daily-value percentages and none are
-  derivable (recorded in ADR-0077). -->
+  a PRESENTATIONAL caption — it names what the bar shows (the per-serving
+  split), not computed percentages — so it rides the heading row,
+  right-aligned (render fidelity; ADR-0077 fix pass 2). -->
   <section class="border-t border-border pt-3" data-test="nutrition">
+  <!-- sm+ header: the render's split-bar pair. -->
+  <div class="hidden items-baseline justify-between gap-2 sm:flex">
   <h3 class="text-body-sm font-semibold">Nutritional split (per serving)</h3>
+  <span class="font-mono-data text-label-sm font-normal text-text-muted whitespace-nowrap">Daily Value Reference</span>
+  </div>
+  <!-- Mobile header + stat row: the owner's mobile render — FIVE equal
+  boxes (Energy/Protein/Carbs/Fat/Sodium), coloured small label, bold
+  value, unit beneath. Sodium keeps its OWN hue (`nutrition-sodium`
+  indigo — owner: sodium stays separate, never a macro colour). -->
+  <div class="flex items-baseline justify-between gap-2 sm:hidden">
+  <h3 class="text-body-sm font-semibold">Nutrition Summary</h3>
+  <span class="font-mono-data text-label-sm font-normal text-text-muted whitespace-nowrap">Per serving</span>
+  </div>
+  <div v-if="meta" class="mt-2 grid grid-cols-5 gap-1.5 sm:hidden" data-test="nutrition-stat-boxes">
+  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface-raised px-1 py-2 text-center">
+  <span class="font-mono-data text-[10px] font-semibold uppercase tracking-wide text-text-muted">Energy</span>
+  <span class="text-headline-sm font-bold text-text">{{ Math.round(meta.calories) }}</span>
+  <span class="font-mono-data text-[10px] text-text-muted">kcal</span>
+  </div>
+  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface-raised px-1 py-2 text-center">
+  <span class="font-mono-data text-[10px] font-semibold uppercase tracking-wide text-nutrition-protein">Protein</span>
+  <span class="text-headline-sm font-bold text-text">{{ Math.round(macroGrams(macroSegments[0]?.value ?? 0, meta.calories, 'protein')) }}</span>
+  <span class="font-mono-data text-[10px] text-text-muted">g</span>
+  </div>
+  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface-raised px-1 py-2 text-center">
+  <span class="font-mono-data text-[10px] font-semibold uppercase tracking-wide text-nutrition-carbs">Carbs</span>
+  <span class="text-headline-sm font-bold text-text">{{ Math.round(macroGrams(macroSegments[1]?.value ?? 0, meta.calories, 'carbs')) }}</span>
+  <span class="font-mono-data text-[10px] text-text-muted">g</span>
+  </div>
+  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface-raised px-1 py-2 text-center">
+  <span class="font-mono-data text-[10px] font-semibold uppercase tracking-wide text-nutrition-fat">Fat</span>
+  <span class="text-headline-sm font-bold text-text">{{ Math.round(macroGrams(macroSegments[2]?.value ?? 0, meta.calories, 'fat')) }}</span>
+  <span class="font-mono-data text-[10px] text-text-muted">g</span>
+  </div>
+  <div class="flex flex-col items-center gap-0.5 rounded-lg bg-surface-raised px-1 py-2 text-center" data-test="nutrition-sodium-box">
+  <span class="font-mono-data text-[10px] font-semibold uppercase tracking-wide text-nutrition-sodium">Sodium</span>
+  <span class="text-headline-sm font-bold text-text">{{ Math.round(meta.sodium_mg) }}</span>
+  <span class="font-mono-data text-[10px] text-text-muted">mg</span>
+  </div>
+  </div>
   <!-- The ONE split bar. Segment colours are the OWNER'S OVERRIDE of this
   addendum's first draft (which used the brand ramp and produced the
   red/orange gradient the owner rejected): the render's colours ARE this
   repo's own nutrition tokens — protein purple IS `nutrition-protein`,
   carbs teal IS `nutrition-carbs`, fat olive IS `nutrition-fat` — so no
   new hex and no collision; ADR-0036's identity concern was about a GREEN
-  protein (vegetarian), which purple never risks. Sodium's dot rides
-  `hue-meat` red per the render. One image role, one sentence. -->
+  protein (vegetarian), which purple never risks. Sodium NEVER joins the
+  bar or the legend dots (owner override: it is not a calorie macro) —
+  it keeps its droplet icon. One image role, one sentence. -->
   <div
   v-if="macroSegments.length"
-  class="mt-2 flex h-2.5 w-full overflow-hidden rounded-full bg-surface"
+  class="mt-2 hidden h-2.5 w-full overflow-hidden rounded-full bg-surface sm:flex"
   role="img"
   :aria-label="macroAria ?? 'Nutritional split per serving'"
   >
@@ -931,20 +975,22 @@ function startCooking() {
   :style="{ width: `${Math.round(seg.value * 100)}%` }"
   />
   </div>
-  <!-- The legend: dot + label + value, mono, tabular — the render's
-  grid under the bar. Sodium's dot is `hue-meat` red (the render's), not
-  the droplet: the legend reads against the bar's own segment colours. -->
+  <!-- The legend: dot + label: value, mono, tabular — the render's
+  grid under the bar (colons after the label, values never wrap).
+  Sodium stays SEPARATED with its OWN icon (owner override, fix pass 2):
+  the droplet HueIcon as before — sodium is not a calorie macro, so it
+  never joins the bar's segment colours nor the legend's dots. -->
   <dl
-  class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 font-mono-data text-label-sm tabular-nums sm:grid-cols-4"
+  class="mt-2 hidden grid-cols-2 gap-x-3 gap-y-1.5 font-mono-data text-label-sm tabular-nums sm:grid sm:grid-cols-4"
   >
-  <div v-for="seg in macroSegments" :key="seg.label" class="flex items-center gap-1.5">
+  <div v-for="seg in macroSegments" :key="seg.label" class="flex items-center gap-1.5 whitespace-nowrap">
   <span class="size-2.5 shrink-0 rounded-full" :class="seg.color" aria-hidden="true" />
-  <dt class="text-text-muted">{{ seg.label }}</dt>
-  <dd class="font-semibold text-text">{{ Math.round(seg.grams) }} g</dd>
+  <dt class="text-text-muted">{{ seg.label }}:</dt>
+  <dd class="font-semibold text-text">{{ Math.round(seg.grams) }}g</dd>
   </div>
-  <div v-if="meta.sodium_mg" class="flex items-center gap-1.5" data-test="nutrition-sodium">
-  <span class="size-2.5 shrink-0 rounded-full bg-hue-meat" aria-hidden="true" />
-  <dt class="text-text-muted">Sodium</dt>
+  <div v-if="meta.sodium_mg" class="flex items-center gap-1.5 whitespace-nowrap" data-test="nutrition-sodium">
+  <HueIcon role="sodium" :size="14" />
+  <dt class="text-text-muted">Sodium:</dt>
   <dd class="font-semibold text-text">{{ Math.round(meta.sodium_mg) }} mg</dd>
   </div>
   </dl>

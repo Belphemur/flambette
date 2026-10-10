@@ -204,7 +204,8 @@ detail page against the mock and found two defects this pass fixes:
   legend's grams come from the SHARED
   Atwater constant (`KCAL_PER_G`, lib/nutrition — fraction × kcal / 4|9),
   the same derivation the facts modal uses, never an inline converter;
-  sodium rides the legend as a `hue-meat` red dot with its existing hook.
+  sodium rides the legend with its OWN droplet icon and existing hook
+  (owner override: sodium is not a calorie macro — it stays separate).
 - **The metadata band is the mock's construction, not a stack of padded
   boxes**: the render's band is ONE lighter-base strip (`bg-paper-base`,
   rounded, padded) with GAPped, LEFT-ALIGNED cells — no per-cell
@@ -249,10 +250,12 @@ detail page against the mock and found two defects this pass fixes:
   pass~~ **SUPERSEDED (owner pixel ruling, same day)** — the brand-ramp
   draft produced the red/orange gradient the owner rejected. The render's
   purple/teal/olive/red ARE this repo's own tokens (`nutrition-protein`,
-  `nutrition-carbs`, `nutrition-fat`, `hue-meat`), so adopting them adds
+  `nutrition-carbs`, `nutrition-fat`), so adopting them adds
   no hex and risks no ADR-0036 collision — that concern was about a GREEN
   protein segment, which purple never risks. Segments wear the nutrition
-  tokens; sodium's legend dot wears `hue-meat`.
+  tokens. Sodium is SEPARATE (owner override, same day): it is not a
+ calorie macro, so it never joins the bar's segments nor wears a legend
+ dot — it keeps its own droplet icon (`hue-sodium`) as before.
 
 ## Alternatives considered
 
