@@ -137,6 +137,11 @@ const roomChip = computed(() => {
 /** The recipe detail view is full-bleed (edge-to-edge hero image). */
 const isRecipe = computed(() => route.name === 'recipe')
 
+/** ADR-0078: `/` is the home hero — the bottom nav is hidden there (the
+ *  header STAYS per Q2) and the hero owns its own padding, like the
+ *  fullscreen modes do. */
+const isHome = computed(() => route.name === 'home')
+
 /** ADR-0070 (Addendum 2): the search well is PERSISTENT — it renders in
  *  the header band on EVERY tab at lg+, not only on Recipes. The media
  *  query mirrors the `lg:` Tailwind variant so the v-if (not a CSS hide)
@@ -152,16 +157,17 @@ const showHeaderSearch = computed(() => isDesktop.value && !isFullscreenMode.val
  */
 const rosterOpen = ref(false)
 
-/** Clicking the header logo always returns to the recipes list (the
- * homepage). ADR-0048: app-shell routes share one head, so the recipes
- * route is the canonical home — never navigate away from it when already
- * there. */
+/** Clicking the header logo goes home (ADR-0078 Q3): on `/recipes` it
+ *  keeps the scroll-to-top behaviour (the list is the destination from
+ *  the hero already — a no-op push would discard the reader's scroll);
+ *  the hero IS the destination everywhere else. From a tab it navigates
+ *  to `/`; from `/` itself it scrolls to top. */
 function goHome() {
-  if (route.name === 'recipes') {
+  if (route.name === 'recipes' || route.name === 'home') {
     // Same page: scroll to top instead of a no-op navigation.
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
   } else {
-    void router.push({ name: 'recipes', query: route.query.room ? {} : undefined })
+    void router.push({ name: 'home', query: route.query.room ? {} : undefined })
   }
 }
 
@@ -281,6 +287,10 @@ watch(
     if (plan.plan.length > 0) return
     if (isFullscreenMode.value) return
     if (route.name === 'recipes' || route.name === 'settings') return
+    // ADR-0078 Decision 7: a create or join made FROM the hero must not
+    // navigate away while the household modal is open — the modal IS the
+    // confirmation surface.
+    if (route.name === 'home') return
     void router.push({ name: 'recipes' })
   },
 )
@@ -610,7 +620,7 @@ onBeforeUnmount(() => {
   <main
   v-else
   class="mx-auto w-full max-w-app flex-1"
-  :class="isRecipe || isFullscreenMode ? '' : 'px-4 pt-4 pb-28'"
+  :class="isRecipe || isFullscreenMode || isHome ? '' : 'px-4 pt-4 pb-28'"
   >
   <RouterView v-slot="{ Component }">
   <KeepAlive include="RecipesTab,PlanTab,GroceryTab,SettingsTab">
