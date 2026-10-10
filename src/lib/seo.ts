@@ -21,11 +21,14 @@
  *    marketing copy, no keyword stuffing. The description is one factual
  *    sentence assembled from the recipe's own name, meal occasion,
  *    cooking time and ingredient count.
- *  - Recipe pages are the indexable SURFACE. Every app-shell route
- *    (`/plan`, `/grocery`, …) is served the SPA fallback, so they all
- *    share ONE default head (`homeSeoHead`) whose canonical is the
- *    homepage — the canonical, not a `noindex`, is what keeps those
- *    routes from competing with the homepage in search.
+ *  - Recipe pages and the recipes list (`/recipes`, ADR-0078 Decision 9)
+ *    are the indexable SURFACES. Every other app-shell route (`/plan`,
+ *    `/grocery`, …) is served the SPA fallback, so they all share ONE
+ *    default head (`homeSeoHead`) whose canonical is the homepage — the
+ *    canonical, not a `noindex`, is what keeps those routes from
+ *    competing with the homepage in search. `/recipes` carries its OWN
+ *    head (`recipesSeoHead`) with a self-canonical, because it is its
+ *    own surface and its sitemap entry must agree with that canonical.
  *  - The JSON-LD is `Recipe` schema.org with the catalog's actual
  *    ingredients, instructions, yield and nutrition. A field the catalog
  *    does not publish (prep time, cuisine, author person) is OMITTED —
@@ -83,12 +86,16 @@ export function isoDuration(minutes: number): string {
  *  head (`App.vue`) and the prerendered `dist/index.html`. Kept here
  *  because it is the SAME single-source rule as the recipe payloads: two
  *  hand-written copies would eventually disagree, and a disagreeing home
- *  title is exactly what a crawler sees first. */
-export const HOME_TITLE = 'Flambette'
+ *  title is exactly what a crawler sees first. ADR-0078: `/` is the hero
+ *  page, so this head describes the hero promise — no account, household
+ *  planning, the "2,500+" count the owner ruled must never claim
+ *  accuracy, and "works even with no connection" (never "offline"). */
+export const HOME_TITLE = 'Flambette — meal planning for your household'
 
 export const HOME_DESCRIPTION =
-  'Flambette — the frozen Mealime recipe catalog: browse 2,700+ quick recipes, ' +
-  'plan your week and cook with step-by-step timers.'
+  'Plan dinner together — no account needed. Browse 2,500+ hand-curated recipes, ' +
+  'build a waste-aware plan and one grocery list, and share it with your household ' +
+  'using a three-word code. Works even with no connection.'
 
 /**
  * Absolute URL for a recipe route, for canonical / OG / JSON-LD `@id`.
@@ -104,6 +111,18 @@ export const HOME_DESCRIPTION =
  */
 export function recipeUrl(variantId: number, siteUrl: string = SITE_URL): string {
   return `${siteUrl}/recipe/${variantId}/`
+}
+
+/** Absolute URL of the recipes-list surface (ADR-0078 Decision 9).
+ *
+ *  The SAME trailing-slash rule as `recipeUrl`: the prerendered page is
+ *  a directory index (`dist/recipes/index.html`), nginx serves it via
+ *  `try_files $uri $uri/`, and Cloudflare's `html_handling:
+ *  "auto-trailing-slash"` 308-redirects the slash-less form — so the
+ *  canonical and the sitemap entry must both name the slash form, the
+ *  URL the surface is served at with no redirect on either host. */
+export function recipesUrl(siteUrl: string = SITE_URL): string {
+  return `${siteUrl}/recipes/`
 }
 
 /**
@@ -365,6 +384,40 @@ export function homeSeoHead(siteUrl: string = SITE_URL): SeoHeadInput {
       { property: 'og:url', content: `${siteUrl}/` },
     ],
     link: [{ rel: 'canonical', href: `${siteUrl}/` }],
+    script: [],
+  }
+}
+
+/**
+ * The head for the recipes-list surface (`/recipes`, ADR-0078 Decision 9).
+ *
+ * The recipes list is its OWN indexable surface now, not an app-shell
+ * fallback duplicate of the homepage: the prerenderer writes
+ * `dist/recipes/index.html` with THIS head, whose canonical is
+ * `recipesUrl` — a sitemap entry must never contradict the canonical it
+ * points at, which is why the entry and this builder ship together. The
+ * description is one factual sentence about the surface (browse, filter,
+ * plan, cook) — no invented claims. No JSON-LD: the list has no single
+ * entity to describe, and the per-recipe `Recipe` objects already cover
+ * the catalog. The hero route keeps `homeSeoHead` (canonical `/`) — it
+ * IS the homepage.
+ */
+export function recipesSeoHead(siteUrl: string = SITE_URL): SeoHeadInput {
+  const url = recipesUrl(siteUrl)
+  const title = 'Browse the recipes — Flambette'
+  const description =
+    'Browse 2,500+ hand-curated recipes — filter by diet, protein, cooking time ' +
+    'and meal type, plan a week of dinners and cook with step-by-step timers.'
+  return {
+    title,
+    meta: [
+      { name: 'description', content: description },
+      { property: 'og:type', content: 'website' },
+      { property: 'og:title', content: title },
+      { property: 'og:description', content: description },
+      { property: 'og:url', content: url },
+    ],
+    link: [{ rel: 'canonical', href: url }],
     script: [],
   }
 }
