@@ -38,7 +38,7 @@ test.describe('retired one-time plan links (ADR-0051)', () => {
   test('the room half of the share sheet is untouched', async ({ page }) => {
     // The Plan tab renders an EMPTY state (no Share button at all) until a
     // meal is planned, so seed one first.
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
     await openFirstRecipeDetail(page)
     await page.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()

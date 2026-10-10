@@ -3,7 +3,7 @@ import { blockExternalRequests, gotoTab, openFirstRecipeDetail, waitForCatalog }
 
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   await openFirstRecipeDetail(page)
   await page.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()

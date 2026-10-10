@@ -30,7 +30,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('a fresh install still starts at the authored 6', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   await openFirstRecipeDetail(page)
   expect(await detailServings(page)).toBe(6)
@@ -38,7 +38,7 @@ test('a fresh install still starts at the authored 6', async ({ page }) => {
 })
 
 test('changing servings on a recipe is remembered for the NEXT recipe', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 
   // Drop the first recipe to 4.
@@ -51,7 +51,7 @@ test('changing servings on a recipe is remembered for the NEXT recipe', async ({
   // than relying on Escape to reveal the cards underneath it.
   await page.keyboard.press('Escape')
   await expect(sheet).toBeHidden()
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 
   // A DIFFERENT recipe now opens at 4, not at the authored 6.
@@ -62,7 +62,7 @@ test('changing servings on a recipe is remembered for the NEXT recipe', async ({
 })
 
 test('the remembered default survives a reload', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   await openFirstRecipeDetail(page)
   const sheet = page.getByRole('dialog')
@@ -71,7 +71,7 @@ test('the remembered default survives a reload', async ({ page }) => {
 
   // Reload the GRID: the detail sheet is its own route, so reloading it
   // would only prove the sheet re-seeded, not that the value persisted.
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   await openFirstRecipeDetail(page)
   await expect(page.getByRole('dialog').getByTestId('serves-label')).toHaveText('serves 4')
@@ -79,7 +79,7 @@ test('the remembered default survives a reload', async ({ page }) => {
 })
 
 test('the default is editable in Settings and drives new recipes', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 
   await gotoTab(page, 'Settings')
@@ -96,7 +96,7 @@ test('the default is editable in Settings and drives new recipes', async ({ page
 })
 
 test('a meal already in the plan keeps the servings it was added with', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 
   // Plan a recipe at 6, then lower the DEFAULT to 2. The planned meal is
@@ -116,7 +116,7 @@ test('a meal already in the plan keeps the servings it was added with', async ({
 })
 
 test('scaling a planned meal up becomes the new default', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   const name = await openFirstRecipeDetail(page)
   await page.getByRole('dialog').getByRole('button', { name: /Add to plan|Update in plan/ }).click()
@@ -135,7 +135,7 @@ test('scaling a planned meal up becomes the new default', async ({ page }) => {
 })
 
 test('the Settings control cannot be walked below one serving', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   await gotoTab(page, 'Settings')
 
@@ -155,7 +155,7 @@ test('an Auto-Plan pack lands at the remembered default, not the authored 6', as
   // The third newly-routed surface. Without this, a regression that sent
   // the pack back to a hardcoded 6 would pass: the existing auto-plan
   // spec only ever runs on a fresh install, where the default IS 6.
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 
   await gotoTab(page, 'Settings')
@@ -189,7 +189,7 @@ test('an unplanned cook scales to the remembered default', async ({ page }) => {
     const blob = { defaultServings: 4, stepTimers: {} }
     localStorage.setItem('mealime-planner:v1:ui', JSON.stringify(blob))
   })
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   await openFirstRecipeDetail(page)
   // No plan entry exists, so the sheet itself shows the remembered default.
@@ -238,7 +238,7 @@ test('a hand-edited default is repaired on load, never scaled by', async ({ page
       JSON.stringify({ defaultServings: 0, stepTimers: {} }),
     )
   })
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 
   await gotoTab(page, 'Settings')

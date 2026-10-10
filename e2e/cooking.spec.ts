@@ -11,7 +11,7 @@ import {
 
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 })
 
@@ -203,7 +203,7 @@ test('marking mid-cook does not rescale the cook (ADR-0034)', async ({ page }) =
   // would fall back to the recipe's base serving_count and silently
   // rescale every remaining step under the user mid-recipe.
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   const [id] = await visibleVariantIds(page)
   await page.evaluate((variantId) => {

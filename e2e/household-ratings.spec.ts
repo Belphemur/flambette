@@ -76,14 +76,14 @@ async function startLiveRoom(page: Page): Promise<string> {
   const url = `${page.url().replace(/\/plan.*$/, '')}/plan?room=${code}`
   // The share sheet is a modal that would swallow the next nav click; the
   // room survives a full navigation (the code lives in sessionStorage).
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   return url
 }
 
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 })
 

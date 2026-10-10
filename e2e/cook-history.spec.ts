@@ -23,7 +23,7 @@ import {
  */
 
 async function planAndCook(page: Page): Promise<string> {
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   const name = await openFirstRecipeDetail(page)
   await page.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
@@ -111,7 +111,7 @@ test('the per-event spoiler lists every cook, relative AND absolute (ADR-0034)',
 
 test('an ad-hoc cook is its own one-recipe plan (ADR-0034)', async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   const name = await openFirstRecipeDetail(page)
   // No plan at all — the Recipes tab is a complete entry point to cooking.
@@ -137,7 +137,7 @@ test('an ad-hoc cook is its own one-recipe plan (ADR-0034)', async ({ page }) =>
 
 test('events written before plan provenance group as earlier cooks (ADR-0034)', async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   const ids = await visibleVariantIds(page)
   // A history written by an older build: rows with no planId at all.
