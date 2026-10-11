@@ -376,6 +376,8 @@ describe('the global timer list (ADR-0041)', () => {
       remaining: 720,
       running: true,
       startedAt: 111,
+      // Legacy payloads (no `total`) inherit their remaining value.
+      total: 720,
     })
   })
 
@@ -390,10 +392,48 @@ describe('the global timer list (ADR-0041)', () => {
       remaining: 60,
       running: true,
       startedAt: 123,
+      total: 60,
     })
     // A junk member is dropped, a good one kept (validation-first import).
     ui.applySettings({ stepTimers: { 7: { nope: { remaining: 60, running: true, startedAt: 1 } } } })
     expect(ui.stepTimers[7]).toBeUndefined()
+  })
+
+  test('pause and resume keep the ARM total; an explicit restart re-arms it (kody round 4)', () => {
+    const ui = useUiStore()
+    ui.addTimer(7, 'Oven', 25 * 60)
+    // The cook pauses 10 minutes in: the frozen remaining replaces the
+    // segment base, but the armed total must survive it.
+    ui.pauseTimer(7, 1, 15 * 60)
+    const paused = ui.timerById(7, 1)
+    expect(paused?.remaining).toBe(15 * 60)
+    expect(paused?.total).toBe(25 * 60)
+    // Resuming (no seconds override — the view's restart press) keeps the
+    // arm total, so the progress bar never snaps back to 100%.
+    ui.startTimer(7, 1)
+    const resumed = ui.timerById(7, 1)
+    expect(resumed?.remaining).toBe(15 * 60)
+    expect(resumed?.total).toBe(25 * 60)
+    // An explicit seconds value is a NEW armed duration.
+    ui.startTimer(7, 1, 5 * 60)
+    expect(ui.timerById(7, 1)?.total).toBe(5 * 60)
+  })
+
+  test('restarting an EXPIRED timer re-arms the armed duration, not the last segment (kody round 5)', () => {
+    const ui = useUiStore()
+    ui.addTimer(7, 'Rice', 25 * 60)
+    // Simulate a pause at 10 minutes remaining, then let it expire while
+    // paused (remaining hits 0, total stays 1500).
+    ui.pauseTimer(7, 1, 0)
+    const before = ui.timerById(7, 1)
+    expect(before?.total).toBe(25 * 60)
+    // The view's Restart press passes NO seconds — the re-arm base must be
+    // the armed 25 min, never the frozen 0 segment (or an invented 300).
+    ui.startTimer(7, 1)
+    const restarted = ui.timerById(7, 1)
+    expect(restarted?.remaining).toBe(25 * 60)
+    expect(restarted?.total).toBe(25 * 60)
+    expect(restarted?.running).toBe(true)
   })
 })
 

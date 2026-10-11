@@ -170,7 +170,12 @@ typography:
     fontFamily: Plus Jakarta Sans
     fontSize: 20px
     fontWeight: 500
-    lineHeight: 1.6
+    lineHeight: 30px
+  cooking-step-lg:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 22px
+    fontWeight: 500
+    lineHeight: 34px
 rounded:
   sm: 6px
   md: 8px
@@ -829,7 +834,8 @@ The ladder (Stitch's scale; `cooking-step` survives ADR-0009):
 | `label-md` | 14/1.4 600 | PJS | Labels, nav tabs, chips |
 | `label-sm` | 12/1.4 500 +0.04em | JBM | Small uppercase-style data labels |
 | `mono-data` | 13/18 500 | JBM | The DATA voice |
-| `cooking-step` | 20/1.6 500 | PJS | The cooking view's one step |
+| `cooking-step` | 20/30 500 | PJS | The cooking view's one step (ADR-0081) |
+| `cooking-step-lg` | 22/34 500 | PJS | The same step at desktop — the `lg:` growth INSIDE the 672px measure (ADR-0081) |
 
 - **Mono is a ROLE, not a decoration:** quantities, cook times, dates, counts,
   room codes, device ids, versions, aisle indices — always `font-mono-data` +

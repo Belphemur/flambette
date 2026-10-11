@@ -16,10 +16,12 @@ import { clampServings, FALLBACK_SERVINGS, isServings, MIN_SERVINGS } from '../l
 import {
   MAX_CONCURRENT_TIMERS,
   clampSeconds,
+  isFinished,
   isStepTimer,
   nextTimerId,
   newCookTimer,
   normalizeTimerLabel,
+  remainingSeconds,
   type CookTimer,
 } from '../lib/stepTimer'
 // The offered occasions are the ONE taxonomy (ADR-0046 §2.2/2.3): the
@@ -178,6 +180,19 @@ export const useUiStore = defineStore(
      * changing. Not part of the room payload.
      */
     const unitSystem = ref<UnitSystem>(DEFAULT_UNIT_SYSTEM)
+    /**
+     * Timer completion alerts (ADR-0081 timer-alert amendment): whether a
+     * timer reaching zero chimes and/or vibrates. BOTH default ON — the
+     * owner's ruling. Persisted in this slice, so backups carry them.
+     *
+     * Device-local on purpose (ADR-0037's defaultServings reasoning,
+     * recorded in the ADR so nobody "fixes" it into the room payload):
+     * sound and vibration are per-device capabilities — a desktop has no
+     * vibrator and may be muted — and one household member must not
+     * configure another phone's alerts. NEVER part of the room payload.
+     */
+    const timerAlertSound = ref(true)
+    const timerAlertVibrate = ref(true)
     /** Persistent household room code the app auto-joins on start (ADR-0019). */
     const householdRoom = ref('')
     /**
@@ -256,14 +271,32 @@ export const useUiStore = defineStore(
 
     /**
      * Start (or restart) one timer. `seconds` defaults to the timer's own
-     * remaining value, so a paused timer resumes where it stopped.
+     * remaining value, so a paused timer resumes where it stopped. An
+     * omitted `seconds` is a RESUME and preserves the ARM's total — the
+     * stable progress denominator (kody round 4) — while an explicit
+     * `seconds` is a new armed duration.
      */
     function startTimer(variantId: number, id: number, seconds?: number): void {
       const forRecipe = { ...(stepTimers.value[variantId] ?? {}) }
       const existing = forRecipe[id]
       if (!existing) return
-      const base = seconds === undefined ? existing.remaining : seconds
-      forRecipe[id] = newCookTimer(id, existing.label, base || 300, true, Date.now())
+      const now = Date.now()
+      // ONE arm rule (kody round 4, revising its round-3 `total` fix): a
+      // no-seconds press RESUMES the frozen segment while the timer is
+      // still live, and RE-ARMS the whole armed duration once it has
+      // expired — `remaining` on an expired timer is the last countdown
+      // segment, not the duration. Restart at 300 would be an invented
+      // number; the armed duration is the only honest base.
+      const base =
+        seconds !== undefined
+          ? clampSeconds(seconds)
+          : isFinished(existing, now) || (remainingSeconds(existing, now) <= 0 && existing.total && existing.total > 0)
+            ? existing.total!
+            : existing.remaining > 0
+              ? existing.remaining
+              : (existing.total && existing.total > 0 ? existing.total : 300)
+      const total = seconds !== undefined ? clampSeconds(seconds) : Math.max(base, existing.total ?? 0)
+      forRecipe[id] = { ...newCookTimer(id, existing.label, base, true, now), total }
       stepTimers.value = { ...stepTimers.value, [variantId]: forRecipe }
     }
 
@@ -320,6 +353,8 @@ export const useUiStore = defineStore(
       autoPlanGeneration?: unknown
       defaultServings?: unknown
       unitSystem?: unknown
+      timerAlertSound?: unknown
+      timerAlertVibrate?: unknown
       dietaryRestrictionIds?: unknown
     }): void {
       if (typeof prefs.shareCookedHistory === 'boolean') {
@@ -369,6 +404,13 @@ export const useUiStore = defineStore(
       // here, so an unknown string simply leaves the current value in
       // place rather than disabling the display transform entirely.
       if (isUnitSystem(prefs.unitSystem)) unitSystem.value = prefs.unitSystem
+      // ADR-0081 amendment: absent is a valid "don't touch" (a pre-amendment
+      // backup keeps the owner defaults, which the refs already hold); a
+      // present value must be a real boolean — the slice validator rejects
+      // anything else before this runs.
+      if (typeof prefs.timerAlertSound === 'boolean') timerAlertSound.value = prefs.timerAlertSound
+      if (typeof prefs.timerAlertVibrate === 'boolean')
+        timerAlertVibrate.value = prefs.timerAlertVibrate
       // A backup without the key means "don't touch" (the standing import
       // rule) — the device keeps its own restrictions. A present value is
       // normalized by the sole writer, dropping ids the artifacts do not
@@ -530,6 +572,9 @@ export const useUiStore = defineStore(
             remaining: clampSeconds(timer.remaining),
             running: timer.running,
             startedAt: timer.startedAt === null ? null : timer.startedAt,
+            // Legacy payloads (pre-`total`) inherit their remaining value
+            // as the progress denominator — never undefined.
+            total: clampSeconds((timer as CookTimer).total ?? timer.remaining),
           }
         }
         if (Object.keys(timers).length > 0) out[Number(variantRaw)] = timers
@@ -618,6 +663,8 @@ export const useUiStore = defineStore(
     return {
       cookingStepIndex,
       shareCookedHistory,
+      timerAlertSound,
+      timerAlertVibrate,
       historyShareDefaultMigrated,
       quickFilters,
       householdRoom,
@@ -687,6 +734,11 @@ export const useUiStore = defineStore(
         // The device's dietary restrictions: device-local (household sync
         // deliberately deferred), restored on the next launch.
         'dietaryRestrictionIds',
+        // Timer completion alerts (ADR-0081 amendment): device-local
+        // toggles, restored on the next launch — and carried by the
+        // settings.json backup through the registered slice.
+        'timerAlertSound',
+        'timerAlertVibrate',
       ],
       // Hydration has already run when this fires, so a v0.12 blob (which
       // has no `quickFilters` and therefore patched nothing) can still be

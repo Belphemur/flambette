@@ -28,6 +28,11 @@ export interface MeasuredChip {
   lineIndex: number
   /** `measured: 3 lemons` */
   label: string
+  /** The measured, scaled quantity on its own — the checklist card's
+   * bold mono amount (ADR-0081). Same derivation as `label`, only split. */
+  quantity: string
+  /** The matched ingredient name, verbatim from the line item. */
+  ingredient: string
 }
 
 function escapeRegExp(text: string): string {
@@ -154,9 +159,13 @@ export function measuredChipsForLines(
     for (const item of matchLineItems(text, items)) {
       const quantity = measuredQuantity(item, factor, doc.serving_count)
       if (!quantity) continue
+      const rendered = localizeQuantity(quantity, system)
+      const name = item.ingredient_name.trim()
       chips.push({
         lineIndex,
-        label: `measured: ${localizeQuantity(quantity, system)} ${item.ingredient_name.trim()}`,
+        label: `measured: ${rendered} ${name}`,
+        quantity: rendered,
+        ingredient: name,
       })
     }
   })

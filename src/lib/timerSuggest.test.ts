@@ -53,6 +53,76 @@ describe('getTimerHints (per-recipe sidecar, on demand)', () => {
     expect(hints).toEqual([])
     expect(fetchCalls).toHaveLength(1)
   })
+
+  test('a FAILED fetch resolves to null — "unknown", never a false "no cook time" (ADR-0081 §4)', async () => {
+    globalThis.fetch = (async () => {
+      throw new TypeError('network down')
+    }) as typeof fetch
+    try {
+      const hints = await getTimerHints(424242)
+      expect(hints).toBeNull()
+      // The failure is cached too: no retry storm behind a dead network.
+      await getTimerHints(424242)
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
+  test('a 200 whose body is the SPA fallback (vite preview / nginx serving HTML for a missing .json) is an EMPTY list — the missing-file form, not "unknown"', async () => {
+    globalThis.fetch = (async () =>
+      new Response('<!doctype html><html>…</html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      })) as typeof fetch
+    try {
+      const hints = await getTimerHints(424243)
+      expect(hints).toEqual([])
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
+  test('a 200 served as JSON whose body will not PARSE is null — a corrupt artifact is never a false "no cook time" (ADR-0081 §4)', async () => {
+    globalThis.fetch = (async () =>
+      new Response('{"steps":[{"step":0,"sec', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })) as typeof fetch
+    try {
+      const hints = await getTimerHints(424244)
+      expect(hints).toBeNull()
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
+  test('parseable JSON that is NOT the sidecar shape is null too — corrupt, not "none authored"', async () => {
+    globalThis.fetch = (async () =>
+      new Response('{"oops":true}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })) as typeof fetch
+    try {
+      const hints = await getTimerHints(424245)
+      expect(hints).toBeNull()
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
+  test('a sidecar with an EMPTY steps array is a real "none authored" — an EMPTY list', async () => {
+    globalThis.fetch = (async () =>
+      new Response('{"steps":[]}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })) as typeof fetch
+    try {
+      const hints = await getTimerHints(424246)
+      expect(hints).toEqual([])
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
 })
 
 describe('hintForStep (lookup by view)', () => {

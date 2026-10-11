@@ -239,6 +239,7 @@ describe('settings import (ADR-0013 registry)', () => {
       remaining: 60,
       running: true,
       startedAt: 123,
+      total: 60,
     })
   })
 

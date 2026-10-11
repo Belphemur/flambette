@@ -8,6 +8,7 @@ import { checkVersion, type VersionState } from './lib/versionCheck'
 import { TABS, useUiStore } from './stores/ui'
 import { getCatalog } from './lib/catalog'
 import { useShareRoomLink } from './composables/useShareRoomLink'
+import { ensureTimerAlertPolling } from './lib/timerAlertHost'
 import { usePlanStore } from './stores/plan'
 import { useRoomStore, type RoomStatus } from './stores/room'
 import { initFavourites } from './stores/favourites'
@@ -418,6 +419,11 @@ function stopBannerChecks() {
 
 onMounted(async () => {
   await router.isReady()
+  // The device-level timer-completion host (ADR-0081 amendment): watches
+  // the persisted step timers for the whole app session, so a timer that
+  // reaches zero outside the cooking route still alerts. Starting here
+  // also SEEDS every already-expired persisted timer as alerted, silently.
+  ensureTimerAlertPolling()
   // Resume a room from a previous page load; a fresh ?room= link wins.
   if (!room.resume()) void joinRoomFromLink()
   retireSharedPlanLink()
