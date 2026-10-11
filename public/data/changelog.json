@@ -1,6 +1,25 @@
 {
-  "generatedAt": "2026-10-10T04:13:39Z",
+  "generatedAt": "2026-10-11T02:01:09Z",
   "versions": [
+    {
+      "version": "v2.7.0",
+      "date": "2026-10-11",
+      "title": "Home hero page with household room flow on /",
+      "features": [
+        {
+          "text": "home hero page with household room flow on /",
+          "scope": "hero",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "the roster sheet names the room and shares the link; chip drops its tooltip",
+          "scope": "room",
+          "pr": null,
+          "adr": "ADR-0079"
+        }
+      ]
+    },
     {
       "version": "v2.6.0",
       "date": "2026-10-10",
