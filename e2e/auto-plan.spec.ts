@@ -261,6 +261,61 @@ test('proposals: the cheapest card is pre-selected and every card shows its pack
   await expectZeroMealimeRequests(page)
 })
 
+test('proposals: the Choose-your-plan header, letter titles and the FEWEST PACKAGES badge (ADR-0080 amendment)', async ({
+  page,
+}) => {
+  await page.goto('/plan')
+  await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
+  await page.getByTestId('auto-plan-button').first().click()
+  await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+  await page.getByTestId('auto-plan-generate').click()
+  await expect(page.getByTestId('auto-plan-confirm')).toBeVisible({ timeout: 20_000 })
+
+  // The multiple-options fact is STATED, never implied (ADR-0080
+  // amendment): a section header + the generated-count line.
+  await expect(page.getByTestId('auto-plan-choose-heading')).toHaveText('Choose your plan')
+  await expect(page.getByTestId('auto-plan-preview').getByText('We generated 3 plans for your week.')).toBeVisible()
+
+  // Cards read as pick-one-of-N: letter titles in RANKED order (letters
+  // are positional) and letter-form accessible names.
+  const cards = page.locator('[data-test="auto-plan-proposal"], [data-test="auto-plan-proposal-selected"]')
+  await expect(cards).toHaveCount(3)
+  for (let i = 0; i < 3; i++) {
+    await expect(cards.nth(i)).toHaveAccessibleName(
+      new RegExp(`^Plan ${'ABC'[i]}: \\d+ meals?, buys \\d+ packages?$`),
+    )
+  }
+
+  // The radio indicator is visible on the selected card only (filled
+  // tomato dot in a ring; the unselected cards carry no dot).
+  const selected = page.getByTestId('auto-plan-proposal-selected')
+  await expect(selected).toHaveCount(1)
+  await expect(selected.locator('span.bg-brand').first()).toBeVisible()
+  for (let i = 0; i < 3; i++) {
+    if (await cards.nth(i).getAttribute('data-test').then((t) => t !== 'auto-plan-proposal-selected')) {
+      expect(await cards.nth(i).locator('span.bg-brand').count()).toBe(0)
+    }
+  }
+
+  // The FEWEST PACKAGES pill sits on the pre-selected (cheapest) card
+  // and nowhere else (ADR-0080 amendment: metadata, not state).
+  const badges = page.getByTestId('auto-plan-proposal-badge-fewest')
+  await expect(badges).toHaveCount(1)
+  await expect(selected.getByTestId('auto-plan-proposal-badge-fewest')).toHaveText('Fewest packages')
+
+  // Selecting Plan B switches the selection to that letter's card.
+  await cards.nth(1).click()
+  await expect(page.getByTestId('auto-plan-proposal-selected')).toHaveCount(1)
+  await expect(page.getByTestId('auto-plan-proposal-selected')).toHaveAccessibleName(/^Plan B:/)
+  // The pill follows the CHEAPEST card, not the selection.
+  const afterClick = page.getByTestId('auto-plan-proposal-selected')
+  if ((await cards.nth(0).getAttribute('data-test')) !== 'auto-plan-proposal-selected') {
+    await expect(cards.nth(0).getByTestId('auto-plan-proposal-badge-fewest')).toHaveCount(1)
+    await expect(afterClick.getByTestId('auto-plan-proposal-badge-fewest')).toHaveCount(0)
+  }
+  await expectZeroMealimeRequests(page)
+})
+
 test('proposals: selecting a different card changes what Confirm applies (ADR-0080)', async ({
   page,
 }) => {
