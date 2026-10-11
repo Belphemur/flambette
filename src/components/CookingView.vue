@@ -29,6 +29,7 @@ import {
   type CookTimer,
 } from '../lib/stepTimer'
 import { getTimerHints, hintForStep, suggestionFromHint, type TimerSuggestion } from '../lib/timerSuggest'
+import { createTimerAlerts } from '../lib/timerAlert'
 import type { RecipeDoc } from '../lib/types'
 import { usePlanStore, type CookedEntry, type PlanEntry, type PlanIdentity } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
@@ -345,6 +346,7 @@ const hintsLoaded = computed(() => hints.value !== null)
 function armSuggestion() {
   const s = suggestion.value
   if (!s || !meta.value) return
+  alerts.unlock()
   if (ui.addTimer(meta.value.id, s.label, s.minutes * 60) === null) {
     pendingArm.value = { label: s.label, seconds: s.minutes * 60 }
     return
@@ -392,6 +394,9 @@ const manageOpen = ref(false)
  */
 function arm(seconds: number, replacingId?: number): boolean {
   if (!meta.value) return false
+  // The arm is the user gesture: create/resume the AudioContext here so
+  // the completion chime is allowed to play later (ADR-0081 amendment).
+  alerts.unlock()
   const label = nameInput.value.trim() || suggestion.value?.label || ''
   if (replacingId !== undefined) ui.replaceTimer(meta.value.id, replacingId, label, seconds)
   else if (ui.addTimer(meta.value.id, label, seconds) === null) {
@@ -414,6 +419,44 @@ function confirmArm() {
   const minutes = pendingMinutes.value
   if (minutes > 0) arm(minutes * 60)
 }
+
+/** The alert engine: one per session, prefs read live from the store. */
+const alerts = createTimerAlerts(() => ({
+  sound: ui.timerAlertSound,
+  vibrate: ui.timerAlertVibrate,
+}))
+
+/**
+ * Completion detection (ADR-0081 amendment): a timer whose derived
+ * countdown crosses to zero fires the alert ONCE — chime + vibration per
+ * the settings, ON TOP of the live region's "Time's up" (three channels:
+ * visible, audible, haptic). Restarting (or clearing and re-arming) a
+ * timer re-arms its alert. The tick runs every 500 ms, so this watcher is
+ * cheap; the transition guard is what keeps it from re-firing every tick.
+ */
+const alertedTimers = ref(new Set<number>())
+
+watch(
+  () => timers.value.map((t) => ({ id: t.id, left: remainingOf(t) })),
+  (snapshots) => {
+    const seen = new Set<number>()
+    for (const s of snapshots) {
+      seen.add(s.id)
+      if (s.left <= 0) {
+        if (!alertedTimers.value.has(s.id)) {
+          alertedTimers.value.add(s.id)
+          alerts.fire()
+        }
+      } else {
+        alertedTimers.value.delete(s.id)
+      }
+    }
+    // A cleared timer forgets its alert entirely.
+    for (const id of [...alertedTimers.value]) {
+      if (!seen.has(id)) alertedTimers.value.delete(id)
+    }
+  },
+)
 
 /** One tap pause / resume (or restart once the countdown hit zero). */
 function toggle(t: CookTimer) {

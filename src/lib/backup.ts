@@ -288,6 +288,11 @@ export const STORE_SLICES: SliceDef<any>[] = [
         // like every other ui preference (the registry rule), so a restored
         // device keeps reading recipes in the system it read them in.
         unitSystem: ui.unitSystem,
+        // ADR-0081 amendment: the timer-alert toggles travel with a backup
+        // like every other ui preference (device-LOCAL, so never the room
+        // payload — but the device's own backup is its own).
+        timerAlertSound: ui.timerAlertSound,
+        timerAlertVibrate: ui.timerAlertVibrate,
         // The dietary restrictions travel too (the restriction ADR): the
         // ids are normalized on import by the store's sole writer.
         dietaryRestrictionIds: [...ui.dietaryRestrictionIds],
@@ -368,6 +373,15 @@ export const STORE_SLICES: SliceDef<any>[] = [
       if (v.unitSystem !== undefined && !isUnitSystem(v.unitSystem)) {
         return `settings.json unitSystem must be one of ${UNIT_SYSTEMS.join('/')}`
       }
+      // ADR-0081 amendment: absent is a valid "don't touch" (a pre-amendment
+      // backup); present must be a boolean, because import is validation-
+      // first and a malformed value would silently disable an alert channel.
+      if (v.timerAlertSound !== undefined && typeof v.timerAlertSound !== 'boolean') {
+        return 'settings.json timerAlertSound must be a boolean'
+      }
+      if (v.timerAlertVibrate !== undefined && typeof v.timerAlertVibrate !== 'boolean') {
+        return 'settings.json timerAlertVibrate must be a boolean'
+      }
       // The restriction ADR: absent is a valid "don't touch" (a pre-
       // restriction backup); present must be an array of integer ids —
       // import is validation-first, and unknown ids are DROPPED at write
@@ -394,6 +408,8 @@ export const STORE_SLICES: SliceDef<any>[] = [
         autoPlanGeneration?: unknown
         defaultServings?: unknown
         unitSystem?: unknown
+        timerAlertSound?: unknown
+        timerAlertVibrate?: unknown
         dietaryRestrictionIds?: unknown
       }
       useUiStore().applySettings({
@@ -417,6 +433,12 @@ export const STORE_SLICES: SliceDef<any>[] = [
         // device's — "absent = don't touch" keeps a restore from silently
         // flipping a metric device to imperial (or the reverse).
         unitSystem: v.unitSystem,
+        // ADR-0081 amendment: deliberately NOT defaulted (the unitSystem
+        // rule) — a backup that predates the amendment says nothing about
+        // this device's alert toggles, and "absent = don't touch" keeps a
+        // restore from silently flipping them.
+        timerAlertSound: v.timerAlertSound,
+        timerAlertVibrate: v.timerAlertVibrate,
         // Deliberately NOT defaulted (the ADR-0047 rule): a backup that
         // predates restrictions says nothing about the device's — absent
         // means "don't touch", never a wipe.

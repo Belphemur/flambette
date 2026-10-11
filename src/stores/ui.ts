@@ -178,6 +178,19 @@ export const useUiStore = defineStore(
      * changing. Not part of the room payload.
      */
     const unitSystem = ref<UnitSystem>(DEFAULT_UNIT_SYSTEM)
+    /**
+     * Timer completion alerts (ADR-0081 timer-alert amendment): whether a
+     * timer reaching zero chimes and/or vibrates. BOTH default ON — the
+     * owner's ruling. Persisted in this slice, so backups carry them.
+     *
+     * Device-local on purpose (ADR-0037's defaultServings reasoning,
+     * recorded in the ADR so nobody "fixes" it into the room payload):
+     * sound and vibration are per-device capabilities — a desktop has no
+     * vibrator and may be muted — and one household member must not
+     * configure another phone's alerts. NEVER part of the room payload.
+     */
+    const timerAlertSound = ref(true)
+    const timerAlertVibrate = ref(true)
     /** Persistent household room code the app auto-joins on start (ADR-0019). */
     const householdRoom = ref('')
     /**
@@ -320,6 +333,8 @@ export const useUiStore = defineStore(
       autoPlanGeneration?: unknown
       defaultServings?: unknown
       unitSystem?: unknown
+      timerAlertSound?: unknown
+      timerAlertVibrate?: unknown
       dietaryRestrictionIds?: unknown
     }): void {
       if (typeof prefs.shareCookedHistory === 'boolean') {
@@ -369,6 +384,13 @@ export const useUiStore = defineStore(
       // here, so an unknown string simply leaves the current value in
       // place rather than disabling the display transform entirely.
       if (isUnitSystem(prefs.unitSystem)) unitSystem.value = prefs.unitSystem
+      // ADR-0081 amendment: absent is a valid "don't touch" (a pre-amendment
+      // backup keeps the owner defaults, which the refs already hold); a
+      // present value must be a real boolean — the slice validator rejects
+      // anything else before this runs.
+      if (typeof prefs.timerAlertSound === 'boolean') timerAlertSound.value = prefs.timerAlertSound
+      if (typeof prefs.timerAlertVibrate === 'boolean')
+        timerAlertVibrate.value = prefs.timerAlertVibrate
       // A backup without the key means "don't touch" (the standing import
       // rule) — the device keeps its own restrictions. A present value is
       // normalized by the sole writer, dropping ids the artifacts do not
@@ -618,6 +640,8 @@ export const useUiStore = defineStore(
     return {
       cookingStepIndex,
       shareCookedHistory,
+      timerAlertSound,
+      timerAlertVibrate,
       historyShareDefaultMigrated,
       quickFilters,
       householdRoom,
