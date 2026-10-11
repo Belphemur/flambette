@@ -711,6 +711,11 @@ export const useUiStore = defineStore(
         // The device's dietary restrictions: device-local (household sync
         // deliberately deferred), restored on the next launch.
         'dietaryRestrictionIds',
+        // Timer completion alerts (ADR-0081 amendment): device-local
+        // toggles, restored on the next launch — and carried by the
+        // settings.json backup through the registered slice.
+        'timerAlertSound',
+        'timerAlertVibrate',
       ],
       // Hydration has already run when this fires, so a v0.12 blob (which
       // has no `quickFilters` and therefore patched nothing) can still be
