@@ -1,6 +1,10 @@
-import { beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { createPinia, setActivePinia } from 'pinia'
-import { scanTimerCompletions, unlockTimerAlertAudio } from '../lib/timerAlertHost'
+import {
+  scanTimerCompletions,
+  stopTimerAlertHost,
+  unlockTimerAlertAudio,
+} from '../lib/timerAlertHost'
 import { useUiStore } from './ui'
 import type { StepTimer, StepTimersMap } from '../lib/stepTimer'
 
@@ -34,6 +38,12 @@ function setTimers(map: StepTimersMap) {
 beforeEach(() => {
   setActivePinia(createPinia())
   vibrateCalls.length = 0
+})
+
+afterEach(() => {
+  // A scan that saw armed timers starts the real 1 s interval — the suite
+  // drives scans directly, so it must stop the loop between tests.
+  stopTimerAlertHost()
 })
 
 test('a timer this session watched reaching zero fires ONCE (the pattern)', () => {

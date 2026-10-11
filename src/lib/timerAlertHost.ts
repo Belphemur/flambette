@@ -85,19 +85,27 @@ function tick(now: number): void {
       armed.delete(key)
     }
   }
-  if (!live && alerted.size === seen.size) stopTimerAlertHost()
+  if (!live && alerted.size === seen.size) {
+    stopTimerAlertHost()
+  } else if (armed.size > 0 && handle === undefined) {
+    // Something is counting (again): own the 1 s cadence. Decided HERE, at
+    // the tail of every tick, so any entry point (App mount, an arm press)
+    // heals a stopped loop — a timer armed after the previous start call
+    // still gets watched.
+    handle = setInterval(() => tick(Date.now()), 1000)
+  }
 }
 
-/** Start the 1 s polling loop (idempotent). */
+/**
+ * Run one scan now (idempotent with a running loop). The 1 s interval is
+ * started BY tick() itself when armed timers exist — callers may run before
+ * the timer they are arming is added to the store (the arm presses call
+ * this before `ui.addTimer`), so starting the loop here would be too early.
+ */
 export function ensureTimerAlertPolling(): void {
   if (handle !== undefined) return
   // Seed immediately: timers already expired at start never fire.
   tick(Date.now())
-  // tick() may have stopped the loop (nothing to watch); only keep the
-  // interval alive when something is actually live.
-  if (armed.size > 0 && handle === undefined) {
-    handle = setInterval(() => tick(Date.now()), 1000)
-  }
 }
 
 /**
@@ -109,7 +117,8 @@ export function scanTimerCompletions(now: number): void {
   tick(now)
 }
 
-function stopTimerAlertHost(): void {
+/** Stop the 1 s loop (also the unit suite's afterEach cleanup). */
+export function stopTimerAlertHost(): void {
   if (handle !== undefined) {
     clearInterval(handle)
     handle = undefined

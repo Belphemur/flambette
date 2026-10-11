@@ -67,6 +67,16 @@ describe('getTimerHints (per-recipe sidecar, on demand)', () => {
       globalThis.fetch = realFetch
     }
   })
+
+  test('a 200 whose body is not the sidecar (vite preview / nginx SPA fallback serving HTML for a missing .json) is an EMPTY list — the missing-file form, not "unknown"', async () => {
+    globalThis.fetch = (async () => new Response('<!doctype html><html>…</html>', { status: 200 })) as typeof fetch
+    try {
+      const hints = await getTimerHints(424243)
+      expect(hints).toEqual([])
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
 })
 
 describe('hintForStep (lookup by view)', () => {

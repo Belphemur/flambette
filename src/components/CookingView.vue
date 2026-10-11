@@ -352,11 +352,14 @@ function armSuggestion() {
   const s = suggestion.value
   if (!s || !meta.value) return
   unlockTimerAlertAudio()
-  ensureTimerAlertPolling()
   if (ui.addTimer(meta.value.id, s.label, s.minutes * 60) === null) {
     pendingArm.value = { label: s.label, seconds: s.minutes * 60 }
     return
   }
+  // AFTER the store mutation: the host's scan must SEE the armed timer to
+  // keep the 1 s completion loop alive (an arm-time call before addTimer
+  // scans an empty map and never starts the interval).
+  ensureTimerAlertPolling()
   pendingArm.value = null
   nameInput.value = ''
   minutesInput.value = ''
@@ -401,10 +404,8 @@ const manageOpen = ref(false)
 function arm(seconds: number, replacingId?: number, labelOverride?: string): boolean {
   if (!meta.value) return false
   // The arm is the user gesture: create/resume the AudioContext here so
-  // the completion chime is allowed to play later (ADR-0081 amendment),
-  // and make sure the device-level completion host is watching.
+  // the completion chime is allowed to play later (ADR-0081 amendment).
   unlockTimerAlertAudio()
-  ensureTimerAlertPolling()
   // Precedence is explicit: an override (replace flows) wins; otherwise the
   // typed name, then the suggestion's label (an accepted suggestion arms
   // with its own name), never an invented one.
@@ -415,6 +416,9 @@ function arm(seconds: number, replacingId?: number, labelOverride?: string): boo
     pendingArm.value = { label, seconds }
     return false
   }
+  // AFTER the store mutation (see armSuggestion): the host's scan must SEE
+  // the armed timer to keep the 1 s completion loop alive.
+  ensureTimerAlertPolling()
   pendingArm.value = null
   nameInput.value = ''
   minutesInput.value = ''
@@ -447,10 +451,11 @@ function toggle(t: CookTimer) {
   if (isRunning(t)) ui.pauseTimer(meta.value.id, t.id, remainingOf(t))
   else {
     // Restarting is ALSO a user gesture: unlock the audio here so a
-    // restarted timer's completion can chime (qodo round 1).
+    // restarted timer's completion can chime (qodo round 1). The host is
+    // re-engaged AFTER startTimer for the same ordering reason as arm().
     unlockTimerAlertAudio()
-    ensureTimerAlertPolling()
     ui.startTimer(meta.value.id, t.id, remainingOf(t))
+    ensureTimerAlertPolling()
   }
 }
 

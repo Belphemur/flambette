@@ -135,8 +135,19 @@ test('a finished timer buzzes when vibration is ON and stays silent when OFF —
   expect(await vibrateCalls(page)).toEqual([])
   await armPreset1(page)
   await expectCompletion(page)
-  const calls = await vibrateCalls(page)
-  expect(calls.length).toBeGreaterThan(0)
+  // The completion HOST ticks on its own 1 s cadence — its fire() can land
+  // up to a second after the chip's 500 ms tick first shows "Time's up" —
+  // so the vibration is polled, never read once.
+  let calls: unknown[] = []
+  await expect
+    .poll(
+      async () => {
+        calls = await vibrateCalls(page)
+        return calls.length
+      },
+      { timeout: 15_000 },
+    )
+    .toBeGreaterThan(0)
   expect(calls[0]).toEqual([200, 140, 200, 140, 400])
   await expectZeroMealimeRequests(page)
 })
