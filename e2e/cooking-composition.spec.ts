@@ -86,6 +86,14 @@ test('the two-card row is side by side at desktop and stacked on a phone', async
 test('the timer card labels its quick-start pills, never as detections', async ({ page }) => {
   const cooking = await startCookingRecipe(page, 5132)
   const card = cooking.getByTestId('timer-card')
+  // Collapsed default (states amendment): the fresh card is its
+  // "Set a Timer" disclosure row alone.
+  const disclose = cooking.getByTestId('timer-disclose')
+  await expect(disclose).toContainText('Set a Timer')
+  await expect(disclose).toContainText('No timer running for this step.')
+  await expect(disclose).toHaveAttribute('aria-expanded', 'false')
+  await disclose.click()
+  await expect(disclose).toHaveAttribute('aria-expanded', 'true')
   await expect(card).toContainText('Quick start')
   // The render's pills: mono digits, "1 min" / "3 min" / "5 min".
   await expect(card.getByTestId('timer-preset-1')).toContainText('1 min')

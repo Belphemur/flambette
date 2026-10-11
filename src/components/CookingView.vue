@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Check,
+  ChevronDown,
   Clock,
   ChevronLeft,
   ChevronRight,
@@ -11,6 +12,7 @@ import {
   PartyPopper,
   Pause,
   Play,
+  Plus,
   X,
 } from 'lucide-vue-next'
 import { catalog, getRecipe } from '../lib/catalog'
@@ -256,6 +258,15 @@ function remainingOf(t: CookTimer): number {
   return remainingSeconds(t, now.value)
 }
 
+/** Slim progress-bar width for a card timer row: the FRACTION still
+ * remaining over the duration the timer was armed with. Derived through
+ * the same honest countdown arithmetic as the number beside it. */
+function timerProgress(t: CookTimer): string {
+  if (!Number.isFinite(t.remaining) || t.remaining <= 0) return '0%'
+  const pct = Math.min(100, Math.max(0, (remainingOf(t) / t.remaining) * 100))
+  return `${pct.toFixed(1)}%`
+}
+
 /**
  * Derived, not trusted from the persisted `running` flag (qodo
  * 4128519641): a timer whose countdown has reached zero is finished, no
@@ -281,6 +292,10 @@ watch(viewKey, () => {
   pendingArm.value = null
   nameInput.value = ''
   minutesInput.value = ''
+  // The timer card's creation form is step-scoped too (ADR-0081 states
+  // amendment): a fresh view starts COLLAPSED, never carrying the
+  // previous step's open form.
+  timerFormOpen.value = false
   // The checklist is per-step ephemeral (ADR-0081) — a new view starts
   // with every row unchecked.
   checkedIngredients.value = new Set()
@@ -363,6 +378,10 @@ function armSuggestion() {
   pendingArm.value = null
   nameInput.value = ''
   minutesInput.value = ''
+  // A timer now exists: the card auto-expands to the RUNNING view and
+  // the creation form collapses back behind "Set another timer"
+  // (ADR-0081 states amendment).
+  timerFormOpen.value = false
 }
 
 const nameInput = ref('')
@@ -374,6 +393,15 @@ const minutesInput = ref('')
  * the user re-enter it.
  */
 const pendingArm = ref<{ label: string; seconds: number } | null>(null)
+
+/**
+ * The timer card's creation-form disclosure (ADR-0081 states amendment):
+ * COLLAPSED by default in BOTH card states — expanding it is ALWAYS an
+ * explicit tap ("Set a Timer" when the step has none, "Set another timer"
+ * once one runs); the card never opens the form unprompted. Step-scoped
+ * like the draft fields, so a form never follows the cook between steps.
+ */
+const timerFormOpen = ref(false)
 
 /** Minutes the confirm button would arm right now (0 = nothing to arm). */
 const pendingMinutes = computed(() => {
@@ -422,6 +450,9 @@ function arm(seconds: number, replacingId?: number, labelOverride?: string): boo
   pendingArm.value = null
   nameInput.value = ''
   minutesInput.value = ''
+  // Same states-amendment rule as armSuggestion: armed = running view,
+  // form collapsed.
+  timerFormOpen.value = false
   return true
 }
 
@@ -854,8 +885,8 @@ function onTouchEnd(e: TouchEvent) {
   </ul>
   </section>
 
-  <!-- "Timers for this step" (ADR-0081): the per-step ADD affordance,
-  one control per row. ADR-0020's state semantics are untouched — one
+  <!-- "Timers for this step" (ADR-0081 + states amendment): a TWO-STATE
+  disclosure. ADR-0020's state semantics are untouched — one
   timer per step VIEW, `{remaining, running, startedAt}`, countdown
   derived from `startedAt`, polite live region, never the toast. The
   SUGGESTION row is honest (ADR-0081 decision 4): a detected duration
@@ -866,9 +897,107 @@ function onTouchEnd(e: TouchEvent) {
   data-test="timer-card"
   aria-label="Timers for this step"
   >
+  <!-- RUNNING state (ADR-0081 states amendment): when the step has a
+  timer the card AUTO-EXPANDS and the running timers are the dominant
+  content — large mono tomato countdown, name, slim progress bar,
+  Pause (tonal) + Cancel (outlined). Timers are recipe-scoped named
+  chips (ADR-0041), so the card shows the same armed set the global
+  strip carries, in the richer per-step presentation. -->
+  <template v-if="timers.length">
   <h2 class="text-[13px] font-bold tracking-wider text-text uppercase">Timers for this step</h2>
+  <ul class="flex flex-col gap-2 pt-3" data-test="card-timers">
+  <li
+  v-for="t in timers"
+  :key="t.id"
+  class="rounded-xl border border-border bg-surface p-3"
+  :data-test="`card-timer-${t.id}`"
+  >
+  <div class="flex items-center justify-between gap-3">
+  <span class="min-w-0 truncate text-sm font-semibold" data-test="card-timer-name">{{ t.label }}</span>
+  <span
+  class="shrink-0 font-mono-data text-2xl font-bold tabular-nums text-brand"
+  data-test="card-timer-count"
+  :aria-label="`${t.label} timer, ${formatCountdown(remainingOf(t))} left`"
+  >{{ formatCountdown(remainingOf(t)) }}</span
+  >
+  </div>
+  <div class="mt-2 h-1 overflow-hidden rounded-full bg-border/60">
+  <div
+  class="h-full rounded-full bg-brand transition-[width] duration-500"
+  :style="{ width: timerProgress(t) }"
+  ></div>
+  </div>
+  <div class="mt-2.5 flex items-center gap-2">
+  <button
+  class="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-surface-sunken text-sm font-semibold text-text transition-colors hover:bg-border/40"
+  :data-test="`card-timer-toggle-${t.id}`"
+  :aria-label="
+  isRunning(t)
+  ? `Pause the ${t.label} timer, ${formatCountdown(remainingOf(t))} left`
+  : `Start the ${t.label} timer, ${formatCountdown(remainingOf(t))} left`
+  "
+  @click="toggle(t)"
+  >
+  <Pause v-if="isRunning(t)" :size="15" aria-hidden="true" />
+  <Play v-else :size="15" aria-hidden="true" />
+  {{ isRunning(t) ? 'Pause' : remainingOf(t) > 0 ? 'Resume' : 'Restart' }}
+  </button>
+  <button
+  class="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border-strong bg-surface-raised text-sm font-semibold text-text transition-colors hover:bg-surface-sunken"
+  :data-test="`card-timer-cancel-${t.id}`"
+  :aria-label="`Cancel the ${t.label} timer`"
+  @click="clear(t)"
+  >
+  <X :size="15" aria-hidden="true" />
+  Cancel
+  </button>
+  </div>
+  </li>
+  </ul>
+  </template>
 
-  <div class="flex flex-col gap-3 pt-3">
+  <!-- The disclosure row — present in BOTH card states, and the form
+  below it is collapsed by default in BOTH: customization is never
+  ambient (ADR-0081 states amendment). Title differs per state; the
+  chevron carries the open state. -->
+  <button
+  type="button"
+  class="flex min-h-[56px] w-full items-center justify-between gap-3 text-left"
+  :class="timers.length ? 'mt-3 border-t border-border pt-3' : ''"
+  data-test="timer-disclose"
+  :aria-expanded="timerFormOpen"
+  aria-controls="timer-create-form"
+  @click="timerFormOpen = !timerFormOpen"
+  >
+  <span class="flex min-w-0 flex-col">
+  <span class="text-[16px] font-semibold text-text">{{
+  timers.length ? 'Set another timer' : 'Set a Timer'
+  }}</span>
+  <span v-if="!timers.length" class="mt-0.5 text-[12px] text-text-muted">
+  No timer running for this step.
+  </span>
+  </span>
+  <span class="flex shrink-0 items-center gap-1 text-text-muted">
+  <Plus :size="20" aria-hidden="true" />
+  <ChevronDown
+  :size="20"
+  aria-hidden="true"
+  class="transition-transform"
+  :class="timerFormOpen ? 'rotate-180' : ''"
+  />
+  </span>
+  </button>
+
+  <!-- The creation form — collapsed by default in BOTH states. The
+  suggestion banner's honesty rule (ADR-0081 decision 4) applies only
+  while the form is EXPANDED: the saffron rows never render over a
+  running timer's card (a timer already exists; the card says so). -->
+  <div
+  v-if="timerFormOpen"
+  id="timer-create-form"
+  class="flex flex-col gap-3 border-t border-border pt-3"
+  data-test="timer-create-form"
+  >
   <!-- The honest suggestion row: saffron tint (the timers/heat/tips
   family, ADR-0067), copy in ink — saffron is a graphic colour, never
   13px prose. -->
