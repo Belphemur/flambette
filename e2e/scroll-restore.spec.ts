@@ -98,7 +98,11 @@ test('push navigations still land at the top', async ({ page }) => {
   expect(yAfterHome).toBe(0)
 
   // Tab switch: Plan then back to Recipes is a PUSH both ways — no
-  // savedPosition — so the list starts at the top again.
+  // savedPosition — so the list starts at the top again. The bottom
+  // nav only exists OUTSIDE the hero (ADR-0078), so this leg starts
+  // from the catalog.
+  await page.goto('/recipes')
+  await waitForCatalog(page)
   await page.evaluate(() => window.scrollTo(0, 2000))
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
   await gotoTab(page, 'Plan')
