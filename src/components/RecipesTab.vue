@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
-import { useHead } from '@unhead/vue'
 import { ArrowUpDown, ChevronDown, Clock, Crown, Heart, Layers, SearchX, Sparkles, UserRound } from 'lucide-vue-next'
 import type { Component } from 'vue'
-import { recipesSeoHead } from '../lib/seo'
 import { catalog } from '../lib/catalog'
 import { useRestrictions } from '../composables/useRestrictions'
 import {
@@ -61,13 +59,12 @@ import { useSearchTips } from '../composables/useSearchTips'
 const { query, searchResults, searchPending } = useRecipeSearch()
 
 /** ADR-0078 Decision 9: the recipes list is its OWN indexable surface.
- *  The prerendered `dist/recipes/index.html` carries `recipesSeoHead`,
- *  and this scoped `useHead` re-asserts the SAME head client-side — the
- *  ADR-0048 parity rule: a hydrating browser must reproduce the head a
- *  crawler read, instead of letting the app-shell default (the hero's
- *  homepage head) win after hydration. Unhead drops these scoped entries
- *  on unmount, so every other tab falls back to the app-shell default. */
-useHead(computed(() => recipesSeoHead()))
+ *  The prerendered `dist/recipes/index.html` carries `recipesSeoHead`;
+ *  the client-side assertion of that SAME head lives in App.vue, gated on
+ *  the route — NOT here. This tab is KeepAlive-CACHED, so a scoped
+ *  `useHead` registered for the component's lifetime would survive
+ *  deactivation and keep overriding the shell head on every other tab
+ *  (unhead only drops scoped entries on unmount). */
 
 /** The desktop breakpoint where the search well moves into the header.
  *  Same lg: value as the Tailwind variant used in App.vue. */

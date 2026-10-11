@@ -155,7 +155,7 @@ function canMore(meal: PlannedMeal): boolean {
   Browse recipes is the outlined secondary. -->
   <button
   class="rounded-xl border border-border-strong bg-surface-raised px-4 py-2.5 text-sm font-semibold text-brand-text active:bg-surface-sunken"
-  @click="router.push('/')"
+  @click="router.push('/recipes')"
   >
   Browse recipes
   </button>

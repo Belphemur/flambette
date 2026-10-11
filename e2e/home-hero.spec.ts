@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { blockExternalRequests, expectZeroMealimeRequests, waitForCatalog } from './helpers'
+import { blockExternalRequests, expectZeroMealimeRequests, liveRoomCode, waitForCatalog } from './helpers'
 
 /**
  * The home hero (ADR-0078): `/` is a statement of what the app is, never
@@ -48,6 +48,38 @@ test('"Start planning" routes to the recipes list', async ({ page }) => {
   await waitForCatalog(page)
 })
 
+test('the empty-state "Browse recipes" buttons land on the catalog, not the hero', async ({
+  page,
+}) => {
+  // ADR-0078 moved the catalog off `/` — the hero lives there now — so
+  // the Plan/Grocery/History empty states must route to /recipes
+  // directly: one press reaches the catalog, no second hop through the
+  // hero.
+  for (const path of ['/plan', '/grocery', '/history'] as const) {
+    await page.goto(path)
+    await page.getByRole('button', { name: 'Browse recipes' }).click()
+    await expect(page).toHaveURL(/\/recipes$/)
+    await waitForCatalog(page)
+  }
+})
+
+test('the Recipes tab keeps its highlight at the canonical /recipes/ URL', async ({ page }) => {
+  // /recipes/ (trailing slash) is the canonical form production serves —
+  // Cloudflare 308s to it and nginx serves it as the directory index —
+  // so the active-tab check keys on the ROUTE NAME, never on a strict
+  // path comparison: everyone arriving from search, the sitemap, a
+  // bookmark or a reload still sees the tab marked and aria-current set.
+  await page.goto('/recipes/')
+  await waitForCatalog(page)
+  const tab = page
+    .getByRole('navigation', { name: 'Main navigation' })
+    .getByRole('button', { name: 'Recipes' })
+  await expect(tab).toHaveAttribute('aria-current', 'page')
+  await expect(tab).toHaveClass(/text-chrome-accent/)
+  // The tinted backplate is a child span of the tab (DESIGN.md Navigation).
+  await expect(tab.locator('span.bg-chrome-backplate')).toBeVisible()
+})
+
 test('the household modal flow against the relay: create → code → copy link → browse', async ({
   page,
 }) => {
@@ -63,6 +95,14 @@ test('the household modal flow against the relay: create → code → copy link 
   await expect(code).toHaveText(/^[a-z]+-[a-z]+-[a-z]+$/)
   await expect(code).not.toHaveText('olive-basin-saffron')
   expect(await code.evaluate((el) => getComputedStyle(el).fontFamily)).toMatch(/mono/i)
+
+  // The relay must CONFIRM the room before the link is shareable: the
+  // copy affordance stays disabled while the dial is unanswered (a
+  // code_taken re-roll would make the displayed code a refused one), so
+  // the pending hint clears before the copy press (ADR-0023's verified
+  // write shares a link that WORKS).
+  await expect(page.getByTestId('household-copy-link')).toBeEnabled({ timeout: 15_000 })
+  await expect(page.getByTestId('household-pending')).toHaveCount(0)
 
   // Copy room link: the verified-write path ALWAYS says something
   // (ADR-0023) — success toast or the hand-copy fallback, never silence.
@@ -107,9 +147,9 @@ test('the create button re-joins a SAVED household instead of rolling a new code
   })
 
   // Back on the hero: the button now READS "Join your household" — the
-  // label and the press share ONE source of truth (ui.householdRoom) —
-  // and the press reconnects: the code in the modal is the SAVED one,
-  // byte for byte, not a fresh roll.
+  // label and the press share ONE source of truth — and the press
+  // reconnects: the code in the modal is the SAVED one, byte for byte,
+  // not a fresh roll.
   await page.goto('/')
   await expect(page.getByTestId('hero-create-household')).toHaveAccessibleName(
     'Join your household',
@@ -117,6 +157,40 @@ test('the create button re-joins a SAVED household instead of rolling a new code
   await page.getByTestId('hero-create-household').click()
   await expect(page.getByTestId('household-modal')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByTestId('household-code')).toHaveText(code)
+})
+
+test('a device LIVE in a room reopens THAT room — never a re-roll', async ({ page }) => {
+  // The owner's repro: a device standing in a room whose code was never
+  // persisted as the household room (a Plan-tab room, or a session
+  // resume). The store resumes from sessionStorage and dials the relay,
+  // so the header chip goes LIVE — but `ui.householdRoom` is empty, and
+  // a persisted-setting-only membership test would label the button
+  // "Create a household" and re-roll on press, orphaning the room the
+  // device is standing in. Membership is room.inRoom OR the saved
+  // setting; the live room wins the press.
+  const code = 'quartz-lantern-otter'
+  await page.addInitScript(
+    ([key, value]) => sessionStorage.setItem(key!, value!),
+    ['mealime-planner:v1:room-code', code] as const,
+  )
+  await page.goto('/')
+
+  // LIVE in the room (the chip's aria-label names it, ADR-0049), and the
+  // saved household setting is still empty.
+  const chipCode = await liveRoomCode(page)
+  expect(chipCode).toBe(code)
+  await expect(page.getByTestId('hero-create-household')).toHaveAccessibleName(
+    'Join your household',
+  )
+
+  // The press reopens the room we are standing in — the SAME code, and
+  // the live socket is untouched (the chip keeps counting this device).
+  await page.getByTestId('hero-create-household').click()
+  await expect(page.getByTestId('household-modal')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('household-code')).toHaveText(code)
+  expect(await liveRoomCode(page)).toBe(code)
+  // A live room is already confirmed: sharing is available at once.
+  await expect(page.getByTestId('household-copy-link')).toBeEnabled()
 })
 
 test('the hero flips with the theme via tokens, not dark: pairs', async ({ page }) => {

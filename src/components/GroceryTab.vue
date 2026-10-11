@@ -274,7 +274,7 @@ const shopperCount = computed(() => room.peers)
   <p class="mt-1 text-sm">Add meals to your plan and the grocery list builds itself.</p>
   <button
   class="mt-4 mb-8 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-on-brand"
-  @click="router.push('/')"
+  @click="router.push('/recipes')"
   >
   Browse recipes
   </button>

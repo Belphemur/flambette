@@ -123,8 +123,9 @@ test('hydrating the PRERENDERED /recipes/ page keeps the recipes-list head', asy
   // ADR-0078 Decision 9: /recipes is its own indexable surface. The
   // trailing-slash URL is the form both production surfaces serve from
   // dist/recipes/index.html (nginx try_files $uri/, Cloudflare
-  // auto-trailing-slash), and RecipesTab's scoped useHead re-asserts the
-  // SAME head client-side — hydration must not let the homepage head win.
+  // auto-trailing-slash), and App.vue's route-gated useHead re-asserts
+  // the SAME head client-side — hydration must not let the homepage head
+  // win.
   await page.goto('/recipes/')
   await waitForCatalog(page)
 
@@ -135,6 +136,20 @@ test('hydrating the PRERENDERED /recipes/ page keeps the recipes-list head', asy
   )
   expect(await metaContent(page, 'meta[property="og:url"]')).toBe(`${SITE_URL}/recipes/`)
   expect(await ldJson(page)).toEqual([])
+})
+
+test('leaving /recipes to another CACHED tab restores the homepage head', async ({ page }) => {
+  // The regression the route-gated head exists for: RecipesTab is
+  // KeepAlive-CACHED, so leaving the route deactivates it without
+  // unmounting — a scoped `useHead` registered for the component's
+  // lifetime would keep overriding the shell head on every other tab.
+  await page.goto('/recipes/')
+  await waitForCatalog(page)
+  await expect(page).toHaveTitle('Browse the recipes — Flambette')
+
+  await gotoTab(page, 'Plan')
+  await expect(page).toHaveTitle('Flambette — meal planning for your household')
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${SITE_URL}/`)
 })
 
 test('a second recipe page carries its own head, never the previous one', async ({ page }) => {

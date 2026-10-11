@@ -22,9 +22,10 @@ import { useUiStore } from '../stores/ui'
  * (the real app shell is the ONLY header), the sample room code
  * `olive-basin-saffron` (the modal shows the REAL rolled code), presence
  * avatars and a `live` pill in the illustration card (a static
- * illustration never pretends a room is live — the card shows the
- * device's actual saved household room, or says none exists yet), and any
- * exact recipe count (the literal "2,500+" is an owner ruling).
+ * illustration never pretends a room is live — the card is a static
+ * MARKETING demo with a redacted code that never reads the device's real
+ * room state, ADR-0078 Decision 5), and any exact recipe count (the
+ * literal "2,500+" is an owner ruling).
  *
  * ONE filled intent per surface (ADR-0072): "Start planning" is THE
  * tomato on the hero; "Create a household" is outlined. Inside the
@@ -43,64 +44,140 @@ function startPlanning() {
 }
 
 /**
- * The hero's household button branches on the persisted ADR-0019
- * household setting — "Create a household" for a device with none,
- * "Join your household" (a deliberate re-join, never a re-roll) for one
- * that already belongs — ONE source of truth for both label and press.
+ * The hero's household button has ONE branch point with three outcomes —
+ * a device standing in a room, a device with a saved household, and a
+ * stranger — "Create a household" only for the last. ONE source of truth
+ * (`hasHousehold`) drives both label and press.
  *
- * The press branches the same way: a create rolls the code CLIENT-side
- * (ADR-0021) so the modal IS the confirmation surface (Decision 7, which
- * is why the freshJoin landing watcher never navigates away from `/`); a
- * re-join adopts the saved code synchronously. A create that fails is
- * reported by App.vue's room-error toast (ADR-0019: toast, never block);
- * this view only closes the modal again so a dead attempt cannot read as
- * success. Nothing here awaits a room operation on the render path.
+ * The press never rolls a code while the device holds a room: a create
+ * rolls CLIENT-side (ADR-0021) so the modal IS the confirmation surface
+ * (Decision 7, which is why the freshJoin landing watcher never
+ * navigates away from `/`); a re-join adopts the saved code
+ * synchronously. A create that fails is reported by App.vue's room-error
+ * toast (ADR-0019: toast, never block); this view only closes the modal
+ * again so a dead attempt cannot read as success. Nothing here awaits a
+ * room operation on the render path.
  */
 const modalOpen = ref(false)
-const rolledCode = ref('')
 const creating = ref(false)
 
 /**
- * ONE source of truth for "this device belongs to a household" — the
- * persisted ADR-0019 setting. The button label and the press both read
- * the same computed, so the affordance can never say one thing and do
- * another.
+ * ONE source of truth for "this device belongs to a household": the room
+ * the device is STANDING IN (`room.inRoom`) OR the persisted ADR-0019
+ * setting. The persisted setting alone lags reality — it is written by
+ * the confirm watcher below, by App.vue's link-join adoption and by
+ * Settings, never by a Plan-tab room or a session resume — so a device
+ * live in a room whose code was never persisted would otherwise read
+ * (and press) as a stranger. The label and the press read the same
+ * computed, so the affordance can never say one thing and do another.
  */
-const hasHousehold = computed(() => ui.householdRoom !== '')
+const hasHousehold = computed(() => room.inRoom || ui.householdRoom !== '')
+
+/**
+ * The code this press ASKED the relay for — a fresh roll (create) or a
+ * saved re-join; null when the press found a live room (no dial at all).
+ */
+const askedCode = ref<string | null>(null)
+
+/**
+ * True while this press's dial (create or saved re-join) is UNANSWERED:
+ * the modal shows the asked code as pending and sharing stays disabled
+ * until the relay confirms — a `code_taken` re-roll means the room the
+ * device ends up in is not the one it asked for, and a link copied
+ * before the answer would name a code nobody can join.
+ */
+const dialing = ref(false)
 
 function createHousehold() {
   if (creating.value) return
   creating.value = true
+  // ONE branch point, three outcomes — the LIVE room wins. Standing in a
+  // room IS membership: the press never rolls and never re-dials (a
+  // re-roll would orphan the room the device is in), the modal shows
+  // `room.code` as-is, and the code is adopted as the household room so
+  // the next launch re-joins it (ADR-0019) — the same save-and-confirm
+  // Settings does for a device already live in its room.
+  if (room.inRoom && room.code) {
+    askedCode.value = null
+    dialing.value = false
+    ui.setHouseholdRoom(room.code)
+    modalOpen.value = true
+    return
+  }
   const saved = ui.householdRoom
   if (saved) {
-    // Already in a household: reconnect, never re-roll. `join()` sets
-    // `room.code` synchronously, so the modal shows the saved code at
-    // once; a deliberate join is safe here because the freshJoin landing
-    // watcher never navigates away from `/` (ADR-0078 Decision 7).
-    rolledCode.value = ''
+    // Already has a saved household: a deliberate re-join, never a
+    // re-roll. `join()` sets `room.code` synchronously; a deliberate
+    // join is safe here because the freshJoin landing watcher never
+    // navigates away from `/` (ADR-0078 Decision 7).
+    askedCode.value = saved
+    dialing.value = true
     room.join(saved)
   } else {
-    rolledCode.value = generateRoomCode()
-    room.create(rolledCode.value)
+    // A create rolls the code CLIENT-side (ADR-0021) so the modal IS the
+    // confirmation surface (Decision 7, which is why the freshJoin
+    // landing watcher never navigates away from `/`). The roll persists
+    // immediately (same shape as Settings' join flow) and the confirm
+    // watcher below adopts whatever code the relay actually honoured —
+    // a `code_taken` re-roll lands in a DIFFERENT room than the roll.
+    const rolled = generateRoomCode()
+    askedCode.value = rolled
+    dialing.value = true
+    ui.setHouseholdRoom(rolled)
+    room.create(rolled)
   }
   modalOpen.value = true
 }
 
 /**
- * The code the modal displays. Optimistically the code this client
- * rolled; once the relay answers `created` the store's live code takes
- * over — which also covers a `code_taken` re-roll, so the chip never
- * shows a code the relay refused. `null` before any answer falls back to
- * the roll, which is what the relay was asked to honour.
+ * The code the modal displays. The relay's confirmed answer always wins
+ * — the live room's code, which also covers a `code_taken` re-roll. A
+ * dial in flight shows the code we asked for, marked pending by
+ * `dialing` (and NOT shareable — see `canShare`).
  */
-const displayCode = computed(() => room.code ?? rolledCode.value)
+const displayCode = computed(() => {
+  if (room.status === 'live' && room.code) return room.code
+  return askedCode.value ?? ''
+})
+
+/**
+ * Sharing is a promise about the room this device actually JOINED, so it
+ * unlocks only on the confirmed live code — never on an unanswered roll
+ * or a refused one.
+ */
+const canShare = computed(() => !dialing.value && room.status === 'live' && !!room.code)
 
 // A failed create (relay down, refused) closes the modal; the toast came
-// from the store's error watcher. The retry is a fresh press.
+// from the store's error watcher (ADR-0019: toast, never block). The
+// retry is a fresh press.
 watch(
   () => room.status,
   (status) => {
-    if (status === 'error' && modalOpen.value) modalOpen.value = false
+    if (status === 'error') {
+      dialing.value = false
+      if (modalOpen.value) modalOpen.value = false
+    }
+  },
+)
+
+// The dial's answer. A LIVE frame confirms the code this device actually
+// ended up in (create or re-join, re-rolls included): sharing unlocks,
+// pending clears, and the household room is adopted so the next launch
+// re-joins the room we are standing in (ADR-0019) — a hero-created
+// household must not evaporate at the first page load. `error`/`idle`
+// end the wait with no code to adopt (the status watcher above closed
+// the modal on `error`).
+watch(
+  () => [room.status, room.code] as const,
+  ([status, code]) => {
+    if (!dialing.value) return
+    if (status === 'live' && code) {
+      dialing.value = false
+      askedCode.value = null
+      if (ui.householdRoom !== code) ui.setHouseholdRoom(code)
+    } else if (status === 'error' || status === 'idle') {
+      dialing.value = false
+    }
   },
 )
 watch(modalOpen, (open) => {
@@ -169,14 +246,17 @@ function browseRecipes() {
 
         <div class="flex items-center gap-2 text-sm text-text-muted">
           <Lock :size="16" aria-hidden="true" />
-          <span>Your data stays on your devices.</span>
+          <span
+            >Your data stays on your devices. Only a household room syncs —
+            your plan, through your own three-word code.</span
+          >
         </div>
       </div>
 
       <!-- RIGHT: the stacked two-card composition. An illustration of the
            FEATURE — the household room-code affordance — never fake live
-           state: the code chip shows the device's actual saved room, or
-           says none exists yet. -->
+           state: the code chip is a STATIC redacted demo code that never
+           reads the device's real room (ADR-0078 Decision 5). -->
       <div class="relative flex items-center justify-center py-6 lg:col-span-5">
         <div class="relative w-full max-w-[400px]">
           <!-- BACK CARD — recipe-card illustration -->
@@ -250,7 +330,7 @@ function browseRecipes() {
             </div>
 
             <p class="mt-2.5 text-center text-[13px] text-text-muted">
-              Share this code — the plan syncs instantly.
+              A sample, not a real room — Create a household to get yours.
             </p>
           </div>
         </div>
@@ -320,11 +400,18 @@ function browseRecipes() {
       >
         {{ displayCode }}
       </p>
+      <!-- Pending dial: the code above is what we ASKED for, not what the
+           relay honoured yet — a code_taken re-roll can still change it,
+           so the share affordance stays disabled until the live frame. -->
+      <p v-if="dialing" data-test="household-pending" class="text-xs text-text-muted">
+        Connecting to the relay…
+      </p>
       <button
         type="button"
         data-test="household-copy-link"
-        class="h-11 w-full rounded-xl border border-border bg-transparent px-3 text-sm font-semibold text-text transition-colors hover:bg-surface-sunken"
+        class="h-11 w-full rounded-xl border border-border bg-transparent px-3 text-sm font-semibold text-text transition-colors enabled:hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-50"
         aria-label="Copy room link"
+        :disabled="!canShare"
         @click="copyRoomLink()"
       >
         Copy room link
