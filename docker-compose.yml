@@ -14,7 +14,7 @@
 #     docker compose up -d --build
 services:
   web:
-    image: ghcr.io/belphemur/flambette:2.6.0
+    image: ghcr.io/belphemur/flambette:2.7.0
     # build: .
     ports:
       # host:container — nginx listens on 80 inside the image.
@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   relay:
-    image: ghcr.io/belphemur/flambette-relay:2.6.0
+    image: ghcr.io/belphemur/flambette-relay:2.7.0
     # Build from the REPO ROOT, not ./server: the relay core re-exports the
     # canonical room-code helper from src/lib/roomWords.ts (ADR-0040).
     # build:
