@@ -152,6 +152,42 @@ be in the settings how the timer acts. Default vibrate and sound." Decision
    AudioContext path is guarded so headless runs (no audio device) take
    the silent branch without failing.
 
+## Timer-card states amendment (2026-10-11, owner ruling)
+
+The timer card is a TWO-STATE disclosure, per the four approved Stitch
+renders (the two original screens EDITED to the running state; two NEW
+collapsed-state screens — project 2725470430841257407):
+
+- **Collapsed (no timer defined for the step).** The card shows ONLY its
+  header as a ~56px tappable disclosure row: title **"Set a Timer"**
+  (16px, espresso) with the hint "No timer running for this step."
+  (12px muted), plus-glyph + chevron-down on the right. ALL creation
+  controls (suggestion banner, preset pills, name field, minutes input,
+  Start button) are HIDDEN. New screens: mobile `79f82643171e44d28572a3bb778c49c1`,
+  desktop `91ae09e1c2e64db8ad2e96b1eeedfa4c`.
+- **Expanded (the step has a timer).** The card OPENS AUTOMATICALLY: the
+  running timer is the dominant content — large mono tomato countdown,
+  timer name, slim progress bar, Pause (tonal) + Cancel (outlined) — and
+  the CREATION form is collapsed by default behind a **"Set another
+  timer"** disclosure row. The saffron "No cook time mentioned" banner
+  does NOT render in this state (a timer already exists; the banner's
+  honesty rule from §Decision 4 applies only while the creation form is
+  expanded). Edited renders: mobile `fc73bab0a78344f3b27243c0fbe57c20`,
+  desktop `0104c9f526a642ac8c45d665f4cc5e7f`.
+- **Customization is never ambient.** In BOTH states the creation form is
+  collapsed by default; expanding it is always an explicit user action
+  ("Set a Timer" when empty, "Set another timer" when one runs). A step
+  shows ONLY the timer(s) linked to it, never the form unprompted.
+- Timer state semantics (ADR-0020) are untouched — this is presentation
+  state around them; the ephemeral expanded/collapsed flag lives with the
+  other dialog-local view state.
+- e2e: collapsed default on a fresh step; tap expands the form; starting
+  a timer auto-expands the card to the running view; "Set another timer"
+  toggles the form; the suggestion banner never renders while a timer
+  runs.
+- Rejected render fiction, standing: the "ACTION STEP" badge reappeared in
+  the generated collapsed-state screens — still rejected (§Decision 7).
+
 ## Alternatives considered
 
 - **Status quo strip with more padding.** Rejected: the row is
