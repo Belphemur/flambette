@@ -118,3 +118,58 @@ test('the hero flips with the theme via tokens, not dark: pairs', async ({ page 
   expect(dark.card).toBe('rgb(36, 28, 24)')
   expect(dark.card).not.toBe(light.card)
 })
+
+test.describe('mobile hero (Stitch "Home Page Hero (Mobile)")', () => {
+  // Phone-shaped on BOTH projects (the Pixel 7 device viewport): the
+  // stacking below is viewport-gated, so forcing the viewport keeps the
+  // assertions deterministic no matter which project runs the file.
+  test.use({ viewport: { width: 412, height: 915 } })
+
+  test('CTAs stack full-width and the value strip is a single column', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('home-hero')).toBeVisible()
+
+    // The CTA row is a COLUMN of full-width buttons below sm (640px).
+    const ctaRow = page.getByTestId('hero-start-planning').locator('xpath=..')
+    expect(await ctaRow.evaluate((el) => getComputedStyle(el).flexDirection)).toBe('column')
+    const startBtn = page.getByTestId('hero-start-planning')
+    const createBtn = page.getByTestId('hero-create-household')
+    // Full-width on the phone: both buttons span the row's content box.
+    expect(await startBtn.evaluate((el) => el.offsetWidth)).toBeGreaterThan(300)
+    const startBox = await startBtn.boundingBox()
+    const createBox = await createBtn.boundingBox()
+    expect(createBox!.y).toBeGreaterThan(startBox!.y + startBox!.height - 1)
+
+    // The value strip is ONE column on the phone (never a 3-col grid).
+    const strip = page
+      .locator('[data-test="home-hero"] section')
+      .filter({ hasText: 'No account. Ever.' })
+    await expect(strip).toHaveCount(1)
+    const cols = await strip.first().evaluate((el) => getComputedStyle(el).gridTemplateColumns)
+    expect(cols.split(' ').length).toBe(1)
+
+    // The stacked cards stay centred within a phone-width column.
+    const cards = page.locator('[data-test="home-hero"] .max-w-\\[400px\\]')
+    await expect(cards).toBeVisible()
+    const cardBox = await cards.boundingBox()
+    expect(cardBox!.width).toBeLessThanOrEqual(400)
+  })
+
+  test('the household illustration keeps the demo code on mobile', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByTestId('home-hero')).toBeVisible()
+
+    // The static marketing illustration (ADR-0078 Decision 5): the demo
+    // code with the redacted first word, NO live state, on BOTH
+    // breakpoints.
+    const card = page.getByTestId('hero-household-card')
+    const demo = page.getByTestId('hero-demo-code')
+    await expect(demo).toContainText('-basin-saffron')
+    await expect(demo).not.toHaveText(/^[a-z]+-[a-z]+-[a-z]+$/)
+    // No "live" claim in the ILLUSTRATION (the value-strip copy may say
+    // the plan "syncs live" — that is a feature description, not a
+    // fake-live badge).
+    await expect(card).not.toContainText(/\blive\b/i)
+    await expect(card).toContainText('Your household')
+  })
+})
