@@ -61,6 +61,14 @@ export interface CookTimer extends StepTimer {
   id: number
   /** User- or recipe-authored chip label, ≤ `MAX_TIMER_LABEL`. */
   label: string
+  /**
+   * The duration the timer was ARMED with — the stable denominator for
+   * progress presentation (ADR-0081's slim bar). `remaining` is a mutable
+   * segment base (pause/start overwrite it), so progress must never
+   * divide by it; legacy payloads without `total` fall back to their
+   * remaining value at sanitization.
+   */
+  total: number
 }
 
 /**
@@ -110,6 +118,7 @@ export function newCookTimer(
     ...newStepTimer(seconds),
     running,
     startedAt,
+    total: clampSeconds(seconds),
   }
 }
 

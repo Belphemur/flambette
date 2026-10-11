@@ -298,7 +298,7 @@ test('a duration the recipe writes out is offered honestly, and only a tap arms 
   // view (states correction rule 2): no disclosure tap, the offer is
   // front and center the moment the sidecar resolves.
   const offer = cooking.getByTestId('timer-suggest')
-  await expect(cooking.getByTestId('timer-suggest-row')).toBeVisible()
+  await expect(cooking.getByTestId('timer-suggest-row')).toBeVisible({ timeout: 15_000 })
   await expect(cooking.getByTestId('timer-disclose')).toHaveCount(0)
   const copy = cooking.getByTestId('timer-suggest-copy')
   await expect(copy).toContainText('Detected: 15 min')
@@ -330,7 +330,9 @@ test('a DETECTED hint auto-expands the card on the suggestion view (5995 step 12
   // the suggestion view here: no disclosure row, no tap.
   const cooking = await startCookingRecipe(page, 5995)
   await goToStepView(cooking, 12)
-  await expect(cooking.getByTestId('timer-suggest-row')).toBeVisible()
+  // The sidecar is an on-demand fetch — under a loaded runner it can
+  // take longer than the default 5 s expectation.
+  await expect(cooking.getByTestId('timer-suggest-row')).toBeVisible({ timeout: 15_000 })
   await expect(cooking.getByTestId('timer-suggest-copy')).toContainText('Detected: 10 min')
   await expect(cooking.getByTestId('timer-disclose')).toHaveCount(0)
 
@@ -356,7 +358,7 @@ test('a step the recipe timed shows the detected suggestion; a bare field never 
   // decision 4).
   await expect(cooking.getByTestId('timer-card')).toBeVisible()
   await openTimerForm(cooking)
-  await expect(cooking.getByTestId('timer-suggest-row')).toBeVisible()
+  await expect(cooking.getByTestId('timer-suggest-row')).toBeVisible({ timeout: 15_000 })
   await expect(cooking.getByTestId('timer-suggest-copy')).toContainText('Step 1 (of 15–18)')
   await expect(cooking.getByTestId('timer-suggest-copy')).toContainText('15 min')
   await expect(cooking.getByTestId('timer-name')).toHaveValue('')

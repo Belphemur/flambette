@@ -156,7 +156,7 @@ describe('newCookTimer', () => {
   test('a CookTimer is a StepTimer plus an id and a label (one countdown engine)', () => {
     const t = newCookTimer(2, 'Rice', 720, true, 1000)
     expect(isStepTimer(t)).toBe(true)
-    expect(t).toEqual({ id: 2, label: 'Rice', remaining: 720, running: true, startedAt: 1000 })
+    expect(t).toEqual({ id: 2, label: 'Rice', remaining: 720, running: true, startedAt: 1000, total: 720 })
     expect(remainingSeconds(t, 1000 + 60_000)).toBe(660)
     expect(isFinished(t, 1000 + 720_000)).toBe(true)
   })

@@ -259,11 +259,13 @@ function remainingOf(t: CookTimer): number {
 }
 
 /** Slim progress-bar width for a card timer row: the FRACTION still
- * remaining over the duration the timer was armed with. Derived through
- * the same honest countdown arithmetic as the number beside it. */
+ * remaining over the duration the timer was ARMED with (`total`, not the
+ * mutable segment base `remaining` — pause/start overwrite that). Derived
+ * through the same honest countdown arithmetic as the number beside it. */
 function timerProgress(t: CookTimer): string {
-  if (!Number.isFinite(t.remaining) || t.remaining <= 0) return '0%'
-  const pct = Math.min(100, Math.max(0, (remainingOf(t) / t.remaining) * 100))
+  const total = t.total || t.remaining
+  if (!Number.isFinite(total) || total <= 0) return '0%'
+  const pct = Math.min(100, Math.max(0, (remainingOf(t) / total) * 100))
   return `${pct.toFixed(1)}%`
 }
 
@@ -514,10 +516,12 @@ function toggle(t: CookTimer) {
   if (isRunning(t)) ui.pauseTimer(meta.value.id, t.id, remainingOf(t))
   else {
     // Restarting is ALSO a user gesture: unlock the audio here so a
-    // restarted timer's completion can chime (qodo round 1). The host is
+    // restarted timer's completion can chime (qodo round 1). The store
+    // resumes from the timer's own frozen value (no seconds override),
+    // which preserves the ARM's total for the progress bar. The host is
     // re-engaged AFTER startTimer for the same ordering reason as arm().
     unlockTimerAlertAudio()
-    ui.startTimer(meta.value.id, t.id, remainingOf(t))
+    ui.startTimer(meta.value.id, t.id)
     ensureTimerAlertPolling()
   }
 }

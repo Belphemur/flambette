@@ -269,14 +269,24 @@ export const useUiStore = defineStore(
 
     /**
      * Start (or restart) one timer. `seconds` defaults to the timer's own
-     * remaining value, so a paused timer resumes where it stopped.
+     * remaining value, so a paused timer resumes where it stopped. An
+     * omitted `seconds` is a RESUME and preserves the ARM's total — the
+     * stable progress denominator (kody round 4) — while an explicit
+     * `seconds` is a new armed duration.
      */
     function startTimer(variantId: number, id: number, seconds?: number): void {
       const forRecipe = { ...(stepTimers.value[variantId] ?? {}) }
       const existing = forRecipe[id]
       if (!existing) return
-      const base = seconds === undefined ? existing.remaining : seconds
-      forRecipe[id] = newCookTimer(id, existing.label, base || 300, true, Date.now())
+      const frozen = seconds === undefined ? existing.remaining : seconds
+      const base = frozen > 0 ? frozen : 300
+      const total =
+        seconds === undefined
+          ? existing.total && existing.total > 0
+            ? existing.total
+            : base
+          : clampSeconds(seconds)
+      forRecipe[id] = { ...newCookTimer(id, existing.label, base, true, Date.now()), total }
       stepTimers.value = { ...stepTimers.value, [variantId]: forRecipe }
     }
 
@@ -552,6 +562,9 @@ export const useUiStore = defineStore(
             remaining: clampSeconds(timer.remaining),
             running: timer.running,
             startedAt: timer.startedAt === null ? null : timer.startedAt,
+            // Legacy payloads (pre-`total`) inherit their remaining value
+            // as the progress denominator — never undefined.
+            total: clampSeconds((timer as CookTimer).total ?? timer.remaining),
           }
         }
         if (Object.keys(timers).length > 0) out[Number(variantRaw)] = timers
