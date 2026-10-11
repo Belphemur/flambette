@@ -546,8 +546,10 @@ function setCategory(value: string) {
   multiple-options fact OUT LOUD — the chooser must read as a choice
   between plans, never a single pack with decoration. Desktop copy
   says "Pick one" via an lg:-gated span (ONE component, two wordings,
-  ADR-0027's mobile-first grammar). -->
-  <div class="space-y-1">
+  ADR-0027's mobile-first grammar). Gated with the cards below: an
+  EMPTY proposal set reads as the warning above, never as an (empty)
+  chooser (kody round 2). -->
+  <div v-if="pendingProposals.proposals.length > 0" class="space-y-1">
   <h4 class="text-title" data-test="auto-plan-choose-heading">Choose your plan</h4>
   <p class="text-xs text-text-muted">
   We generated {{ pendingProposals.proposals.length }}
@@ -570,7 +572,14 @@ function setCategory(value: string) {
   (image left, name + minutes right). Card content is phrasing-only
   (spans) because a <button> cannot contain a <ul>; the tile GRAMMAR
   (image, clamped name, bubble, minutes) is unchanged. -->
-  <div role="radiogroup" aria-label="Plan proposals" data-test="auto-plan-proposals" class="grid grid-cols-1 gap-2 lg:grid-cols-3 lg:gap-4" @keydown="onProposalsKeydown">
+  <div
+  v-if="pendingProposals.proposals.length > 0"
+  role="radiogroup"
+  aria-label="Plan proposals"
+  data-test="auto-plan-proposals"
+  class="grid grid-cols-1 gap-2 lg:grid-cols-3 lg:gap-4"
+  @keydown="onProposalsKeydown"
+  >
   <button
   v-for="(proposal, pi) in pendingProposals.proposals"
   :key="proposal.seedId"
@@ -580,7 +589,7 @@ function setCategory(value: string) {
   class="block w-full rounded-xl border-2 p-2 text-left transition-colors lg:p-3"
   :class="selectedProposal === pi ? 'bg-brand-tint border-brand' : 'bg-surface border-border hover:bg-surface-sunken'"
   :aria-checked="selectedProposal === pi"
-  :aria-label="`Plan ${planLetter(pi)}: ${proposal.variantIds.length} ${proposal.variantIds.length === 1 ? 'meal' : 'meals'}, buys ${proposal.packagesBought} ${proposal.packagesBought === 1 ? 'package' : 'packages'}`"
+  :aria-label="`Plan ${planLetter(pi)}: ${proposal.variantIds.length} ${proposal.variantIds.length === 1 ? 'meal' : 'meals'}, buys ${proposal.packagesBought} ${proposal.packagesBought === 1 ? 'package' : 'packages'}${proposal.kind === 'continuity' ? ', extends your plan' : ''}`"
   :data-test="selectedProposal === pi ? 'auto-plan-proposal-selected' : 'auto-plan-proposal'"
   @click="selectedProposal = pi"
   >

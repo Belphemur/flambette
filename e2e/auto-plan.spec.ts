@@ -281,6 +281,9 @@ test('proposals: the Choose-your-plan header, letter titles and the FEWEST PACKA
   const cards = page.locator('[data-test="auto-plan-proposal"], [data-test="auto-plan-proposal-selected"]')
   await expect(cards).toHaveCount(3)
   for (let i = 0; i < 3; i++) {
+    // The continuity card's radio name carries its "Extends your plan"
+    // marker (coderabbit round 2) — the badge is not enough for AT.
+    // This test runs REPLACE mode (empty plan), so no card carries it.
     await expect(cards.nth(i)).toHaveAccessibleName(
       new RegExp(`^Plan ${'ABC'[i]}: \\d+ meals?, buys \\d+ packages?$`),
     )
@@ -448,6 +451,11 @@ test('rotation: add mode — Regenerate changes the pre-selected continuity pack
   // The dialog's first press keeps the stored generation (the apply
   // above advanced it); the Regenerate press rolls it.
   await pressGenerate(page)
+  // The continuity card's radio name carries its "Extends your plan"
+  // marker (coderabbit round 2) — the visible badge is not enough for AT.
+  await expect(page.getByTestId('auto-plan-proposal-selected')).toHaveAccessibleName(
+    /, extends your plan$/,
+  )
   const first = await previewIds(page)
   await expect(page.getByTestId('auto-plan-generate')).toHaveText('Regenerate')
   await pressGenerate(page)
