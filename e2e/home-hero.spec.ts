@@ -106,9 +106,14 @@ test('the create button re-joins a SAVED household instead of rolling a new code
     timeout: 20_000,
   })
 
-  // Back on the hero: the press reconnects — the code in the modal is the
-  // SAVED one, byte for byte, not a fresh roll.
+  // Back on the hero: the button now READS "Join your household" — the
+  // label and the press share ONE source of truth (ui.householdRoom) —
+  // and the press reconnects: the code in the modal is the SAVED one,
+  // byte for byte, not a fresh roll.
   await page.goto('/')
+  await expect(page.getByTestId('hero-create-household')).toHaveAccessibleName(
+    'Join your household',
+  )
   await page.getByTestId('hero-create-household').click()
   await expect(page.getByTestId('household-modal')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByTestId('household-code')).toHaveText(code)

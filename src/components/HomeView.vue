@@ -43,24 +43,30 @@ function startPlanning() {
 }
 
 /**
- * "Create a household" → `room.create()` (ADR-0021: the CODE is rolled
- * CLIENT-side, so it can be shown before anyone joins) and the modal
- * opens at once — the modal IS the confirmation surface (Decision 7,
- * which is why the freshJoin landing watcher never navigates away from
- * `/`). A create that fails is reported by App.vue's room-error toast
- * (the ADR-0019 room-failure pattern: toast, never block); this view
- * only closes the modal again so a dead attempt cannot read as success.
- * Nothing here awaits a room operation on the render path.
+ * The hero's household button branches on the persisted ADR-0019
+ * household setting — "Create a household" for a device with none,
+ * "Join your household" (a deliberate re-join, never a re-roll) for one
+ * that already belongs — ONE source of truth for both label and press.
  *
- * A device that ALREADY has a saved household (ADR-0019 `ui.householdRoom`)
- * must never roll a fresh code — that would orphan the household the
- * device belongs to. The button re-connects to the saved room instead
- * (a deliberate join, join-or-create per ADR-0026) and the modal shows
- * the REAL saved code, which `join()` adopts synchronously.
+ * The press branches the same way: a create rolls the code CLIENT-side
+ * (ADR-0021) so the modal IS the confirmation surface (Decision 7, which
+ * is why the freshJoin landing watcher never navigates away from `/`); a
+ * re-join adopts the saved code synchronously. A create that fails is
+ * reported by App.vue's room-error toast (ADR-0019: toast, never block);
+ * this view only closes the modal again so a dead attempt cannot read as
+ * success. Nothing here awaits a room operation on the render path.
  */
 const modalOpen = ref(false)
 const rolledCode = ref('')
 const creating = ref(false)
+
+/**
+ * ONE source of truth for "this device belongs to a household" — the
+ * persisted ADR-0019 setting. The button label and the press both read
+ * the same computed, so the affordance can never say one thing and do
+ * another.
+ */
+const hasHousehold = computed(() => ui.householdRoom !== '')
 
 function createHousehold() {
   if (creating.value) return
@@ -154,10 +160,10 @@ function browseRecipes() {
             type="button"
             data-test="hero-create-household"
             class="inline-flex h-12 w-full items-center justify-center rounded-xl border border-border bg-transparent px-7 text-[15px] font-semibold text-text transition-colors hover:bg-surface-raised active:scale-[0.98] motion-reduce:active:scale-100 sm:w-auto"
-            aria-label="Create a household"
+            :aria-label="hasHousehold ? 'Join your household' : 'Create a household'"
             @click="createHousehold()"
           >
-            Create a household
+            {{ hasHousehold ? 'Join your household' : 'Create a household' }}
           </button>
         </div>
 
