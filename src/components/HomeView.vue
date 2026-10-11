@@ -120,11 +120,13 @@ function browseRecipes() {
           using a three-word code. No sign-up, no email, nothing to remember.
         </p>
 
-        <div class="mb-5 flex flex-wrap items-center gap-4">
+        <!-- Mobile: the two CTAs stack FULL-WIDTH (Stitch mobile spec);
+             from sm they sit side-by-side again. -->
+        <div class="mb-5 flex w-full flex-col items-stretch gap-4 sm:w-auto sm:flex-row sm:items-center">
           <button
             type="button"
             data-test="hero-start-planning"
-            class="inline-flex h-12 items-center justify-center rounded-xl bg-brand px-7 text-[15px] font-semibold text-on-brand transition-all hover:bg-brand-strong active:scale-[0.98] motion-reduce:active:scale-100"
+            class="inline-flex h-12 w-full items-center justify-center rounded-xl bg-brand px-7 text-[15px] font-semibold text-on-brand transition-all hover:bg-brand-strong active:scale-[0.98] motion-reduce:active:scale-100 sm:w-auto"
             aria-label="Start planning"
             @click="startPlanning()"
           >
@@ -133,7 +135,7 @@ function browseRecipes() {
           <button
             type="button"
             data-test="hero-create-household"
-            class="inline-flex h-12 items-center justify-center rounded-xl border border-border bg-transparent px-7 text-[15px] font-semibold text-text transition-colors hover:bg-surface-raised active:scale-[0.98] motion-reduce:active:scale-100"
+            class="inline-flex h-12 w-full items-center justify-center rounded-xl border border-border bg-transparent px-7 text-[15px] font-semibold text-text transition-colors hover:bg-surface-raised active:scale-[0.98] motion-reduce:active:scale-100 sm:w-auto"
             aria-label="Create a household"
             @click="createHousehold()"
           >
@@ -185,6 +187,7 @@ function browseRecipes() {
              "live" — the real code is only ever produced by the modal's
              room.create(). ADR-0078 Decision 5. -->
           <div
+            data-test="hero-household-card"
             class="relative z-10 mt-24 w-[94%] -rotate-[1.5deg] rounded-xl border border-border bg-surface-raised p-5 shadow-lg transition-transform duration-300 hover:rotate-0 sm:mt-28 motion-reduce:transition-none"
           >
             <div class="mb-4 border-b border-border pb-3.5">
@@ -212,6 +215,7 @@ function browseRecipes() {
 
             <div class="my-3 text-center">
               <div
+                data-test="hero-demo-code"
                 class="inline-block rounded-lg border border-border bg-surface-sunken px-4 py-3 font-mono text-lg font-semibold tracking-tight text-brand-text select-all"
               >
                 <!-- Demo code: first word redacted with a unicode block,

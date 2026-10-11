@@ -97,7 +97,7 @@ test('the join toast shares the link without a second tap', async ({ page, brows
   const ctxSeed = await browser.newContext()
   const seed = await ctxSeed.newPage()
   await blockExternalRequests(seed)
-  await seed.goto('/')
+  await seed.goto('/recipes')
   await waitForCatalog(seed)
   await openFirstRecipeDetail(seed)
   await seed.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()

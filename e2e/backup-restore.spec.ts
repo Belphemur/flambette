@@ -27,7 +27,9 @@ const decoder = new TextDecoder()
  *  Always reachable, even with an empty plan, which is exactly when you
  *  restore. Navigate there for export/import. */
 async function openBackup(page: Page): Promise<void> {
-  await gotoTab(page, 'Settings')
+  // ADR-0078: `/` is the hero and hides the bottom nav, so a fresh context
+  // cannot tab-click its way here — navigate to the Settings route directly.
+  await page.goto('/settings')
   await expect(page.getByTestId('export-settings')).toBeVisible()
 }
 
