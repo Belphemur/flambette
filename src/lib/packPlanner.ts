@@ -118,6 +118,26 @@ export interface PackPlan {
   warnings?: string[]
 }
 
+export interface PackProposal {
+  /** The anchor (seed) recipe the completion grew from. */
+  seedId: number
+  /** NEWLY picked variant ids in pick order (base meals NOT included). */
+  variantIds: number[]
+  /** Whole packages bought for the FULL pack (base + additions in add mode). */
+  packagesBought: number
+  /** Distinct non-pantry ingredient nameKeys in the FULL pack. */
+  scoredIngredients: number
+  /**
+   * 'continuity' — add mode's pinned proposal #1, anchored on the eligible
+   * candidate with the LOWEST marginal package cost against the base ledger
+   * (ADR-0080 Decision 3). 'rated' — anchored on a rating-ranked window seed.
+   */
+  kind: 'continuity' | 'rated'
+}
+
+/** Proposals per press (ADR-0080 Decision 2). */
+export const PROPOSAL_COUNT = 3
+
 export const MIN_MEALS = 1
 export const MAX_MEALS = 10
 
@@ -152,33 +172,26 @@ function cmpAscendingId(a: number, b: number): number {
 }
 
 /**
- * Greedy waste-first packer (v2, ADR-0027).
- *
- * Base meals (add mode) commit their footprints first — additions share
- * their packages — and are never re-picked. The seed ROTATES across
- * generations over the top-ROTATION_K candidates ranked by rating desc
- * (generation 0 = highest rating, ties → lowest id). Slots 2..N minimize
- * `marginalPackages + RATING_WEIGHT*(1-rating) + TAG_WEIGHT*tagOverlap
- * - FAVORITE_BONUS*isFavourite`;
- * ties → higher rating, then lower id. No randomness anywhere: the same
- * (index, request incl. generation) → identical output.
+ * Pack state shared by every completion of one request: running container
+ * totals keyed by (ingredient, container), the set of non-pantry ingredient
+ * keys already present, and the pool of variety tags present on picked
+ * meals (base included).
  */
-export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan {
-  const count = Math.min(MAX_MEALS, Math.max(MIN_MEALS, Math.floor(req.count)))
-  const pantry = new Set(index.pantryStaples)
-  const excluded = req.excludeIds ? new Set(req.excludeIds) : null
-  const ratings = req.ratings
-  const tags = req.tags
-  const favorites = req.favoriteIds ?? null
+interface PackLedger {
+  pantry: Set<string>
+  totals: Map<number, number>
+  scored: Set<number>
+  tagPool: Set<number>
+  commit(id: number, factor?: number): void
+  baseIds: number[]
+}
 
-  // Pack state: running container totals keyed by (ingredient, container),
-  // the set of non-pantry ingredient keys already present, and the pool of
-  // variety tags present on picked meals (base included).
+function createLedger(index: PackIndex, req: PackPlanRequest): PackLedger {
+  const pantry = new Set(index.pantryStaples)
   const totals = new Map<number, number>()
   const scored = new Set<number>()
   const tagPool = new Set<number>()
-  const pack: number[] = []
-  const picked = new Set<number>()
+  const tags = req.tags
 
   /** Commit a recipe's footprint + tags into the ledger (base OR pick). */
   function commit(id: number, factor = 1): void {
@@ -202,11 +215,55 @@ export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan 
   for (const id of baseIds) {
     const servings = req.baseServings?.get(id)
     commit(id, servings && servings > 0 ? servings / AUTHORED_SERVINGS : 1)
-    picked.add(id)
   }
 
-  // Eligible candidate ids, deterministically ordered (index keys are
-  // strings — sort numerically so iteration order is id order).
+  return { pantry, totals, scored, tagPool, commit, baseIds }
+}
+
+/**
+ * Marginal whole-package cost of adding a candidate's rows to the
+ * current pack (containers ceil-merge per ADR-0017; linear measures add
+ * freely). Pantry rows are free by definition.
+ */
+function marginalPackagesOf(
+  index: PackIndex,
+  pantry: Set<string>,
+  totals: Map<number, number>,
+  id: number,
+): number {
+  let marginal = 0
+  for (const [keyId, amount, unitId, isContainer] of index.recipes[String(id)]?.i ?? []) {
+    if (!isContainer || amount <= 0) continue
+    if (pantry.has(index.ingredientKeys[keyId])) continue
+    const key = containerKeyId(keyId, unitId)
+    const current = totals.get(key) ?? 0
+    marginal += Math.ceil(current + amount - EPS) - Math.ceil(current - EPS)
+  }
+  return marginal
+}
+
+/** Distinct candidate tags already present on picked meals (base incl.). */
+function tagOverlapOf(
+  tags: ReadonlyMap<number, ReadonlyArray<number>> | undefined,
+  tagPool: Set<number>,
+  id: number,
+): number {
+  const candidateTags = tags?.get(id)
+  if (!candidateTags || tagPool.size === 0) return 0
+  let overlap = 0
+  for (const tag of candidateTags) if (tagPool.has(tag)) overlap += 1
+  return overlap
+}
+
+/**
+ * Eligible candidate ids, deterministically ordered (index keys are
+ * strings — sort numerically so iteration order is id order).
+ */
+function collectCandidates(
+  index: PackIndex,
+  picked: Set<number>,
+  excluded: Set<number> | null,
+): number[] {
   const candidates: number[] = []
   for (const idStr of Object.keys(index.recipes)) {
     const id = Number(idStr)
@@ -214,9 +271,45 @@ export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan 
     candidates.push(id)
   }
   candidates.sort(cmpAscendingId)
+  return candidates
+}
+
+/** Non-finite or negative generations (a hostile backup import) degrade
+ * to 0 so `gen % k` can never produce NaN → an undefined seed (qodo
+ * round 2). Shared by the rotation seed and the proposal window. */
+function sanitizeGeneration(raw: number | undefined): number {
+  const generation = raw ?? 0
+  return typeof generation === 'number' && Number.isFinite(generation) && generation >= 0
+    ? Math.floor(generation)
+    : 0
+}
+
+/**
+ * ONE seeded greedy completion (the ADR-0080 refactor of the v2 body).
+ * The seed is either FORCED (a proposal's anchor) or the rotating
+ * rating-rank seed (ADR-0027). Slots 2..N minimize
+ * `marginalPackages + RATING_WEIGHT*(1-rating) + TAG_WEIGHT*tagOverlap
+ * - FAVORITE_BONUS*isFavourite`; ties → higher rating, then lower id.
+ * No randomness anywhere: the same (index, request incl. generation) →
+ * identical output.
+ */
+function runPack(index: PackIndex, req: PackPlanRequest, forcedSeedId: number | null): PackPlan {
+  const count = Math.min(MAX_MEALS, Math.max(MIN_MEALS, Math.floor(req.count)))
+  const ratings = req.ratings
+  const tags = req.tags
+  const favorites = req.favoriteIds ?? null
+  const ledger = createLedger(index, req)
+  const { pantry, totals, scored, tagPool, commit } = ledger
+  const picked = new Set(ledger.baseIds)
+  const candidates = collectCandidates(
+    index,
+    picked,
+    req.excludeIds ? new Set(req.excludeIds) : null,
+  )
+  const pack: number[] = []
 
   const warnings: string[] = []
-  if (candidates.length === 0 && baseIds.length === 0) {
+  if (candidates.length === 0 && ledger.baseIds.length === 0) {
     return {
       variantIds: [],
       packagesBought: 0,
@@ -227,50 +320,20 @@ export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan 
 
   const ratingOf = (id: number): number => ratings?.get(id) ?? 0
 
-  /**
-   * Marginal whole-package cost of adding a candidate's rows to the
-   * current pack (containers ceil-merge per ADR-0017; linear measures add
-   * freely). Pantry rows are free by definition.
-   */
-  function marginalPackages(id: number): number {
-    let marginal = 0
-    for (const [keyId, amount, unitId, isContainer] of index.recipes[String(id)]?.i ?? []) {
-      if (!isContainer || amount <= 0) continue
-      if (pantry.has(index.ingredientKeys[keyId])) continue
-      const key = containerKeyId(keyId, unitId)
-      const current = totals.get(key) ?? 0
-      marginal += Math.ceil(current + amount - EPS) - Math.ceil(current - EPS)
-    }
-    return marginal
-  }
-
-  /** Distinct candidate tags already present on picked meals (base incl.). */
-  function tagOverlap(id: number): number {
-    const candidateTags = tags?.get(id)
-    if (!candidateTags || tagPool.size === 0) return 0
-    let overlap = 0
-    for (const tag of candidateTags) if (tagPool.has(tag)) overlap += 1
-    return overlap
-  }
-
   // Rotating seed (ADR-0027): rank candidates by rating desc, ties →
   // lower id. candidates are ascending by id and Array.sort is stable, so
   // a descending-rating sort keeps the lowest id first within a rating
   // tie. Generation g seeds rank (g mod ROTATION_K); generation 0 lands
-  // on rank 0 = the v1 "highest rating" seed.
+  // on rank 0 = the v1 "highest rating" seed. A forced seed (a proposal
+  // anchor, always an eligible candidate) overrides the rotation.
   const byRating = [...candidates].sort((a, b) => ratingOf(b) - ratingOf(a))
   const k = Math.min(ROTATION_K, byRating.length)
-  // Guard: with a base pack and an empty candidate pool there is no seed
-  // (and no slots) — fall through to the partial-pack warning. Non-finite
-  // or negative generations (a hostile backup import) degrade to 0 so
-  // `gen % k` can never produce NaN → an undefined seed (qodo round 2).
   if (k > 0) {
-    const rawGeneration = req.seedGeneration ?? 0
-    const generation =
-      typeof rawGeneration === 'number' && Number.isFinite(rawGeneration) && rawGeneration >= 0
-        ? Math.floor(rawGeneration)
-        : 0
-    const seed = byRating[generation % k]
+    const forced =
+      forcedSeedId != null && candidates.includes(forcedSeedId) && !picked.has(forcedSeedId)
+        ? forcedSeedId
+        : null
+    const seed = forced ?? byRating[sanitizeGeneration(req.seedGeneration) % k]
     commit(seed)
     pack.push(seed)
     picked.add(seed)
@@ -285,9 +348,9 @@ export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan 
       if (picked.has(id)) continue
       const rating = ratingOf(id)
       const score =
-        marginalPackages(id) +
+        marginalPackagesOf(index, pantry, totals, id) +
         RATING_WEIGHT * (1 - rating) +
-        TAG_WEIGHT * tagOverlap(id) -
+        TAG_WEIGHT * tagOverlapOf(tags, tagPool, id) -
         (favorites?.has(id) ? FAVORITE_BONUS : 0)
       // Ties → higher rating, then lower id. Candidates are iterated in
       // ascending id order, so strict-improvement comparisons keep the
@@ -321,4 +384,118 @@ export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan 
   }
   if (warnings.length > 0) plan.warnings = warnings
   return plan
+}
+
+/**
+ * Greedy waste-first packer (v2, ADR-0027).
+ *
+ * Base meals (add mode) commit their footprints first — additions share
+ * their packages — and are never re-picked. The seed ROTATES across
+ * generations over the top-ROTATION_K candidates ranked by rating desc
+ * (generation 0 = highest rating, ties → lowest id).
+ *
+ * Bit-for-bit v2: the v2 body now lives in `runPack`; this wrapper passes
+ * no forced seed, so absent `buildAutoPlanProposals` the lib behaves
+ * exactly as before (every existing unit pin stays valid).
+ */
+export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan {
+  return runPack(index, req, null)
+}
+
+/**
+ * Multi-proposal Auto-Plan preview (ADR-0080): up to PROPOSAL_COUNT
+ * DISTINCT packs, each ONE seed greedy-completed with the SAME v2 slot
+ * arithmetic (`runPack`) — the scorer is never forked.
+ *
+ * Seeds come from the top-ROTATION_K smoothed-rated candidates, ranked
+ * rating desc (ties → lower id) — the ranking the rotation uses today.
+ * Ranking of the RETURNED list is waste-first (ADR-0080 Decision 1):
+ * packagesBought ASC, then seed rating DESC, then seed id ASC — except
+ * the CONTINUITY seed (add mode, non-empty baseIds), which is PINNED at
+ * position #1 (Decision 4): the eligible candidate with the LOWEST
+ * marginal package cost against the base ledger (ties → rating desc →
+ * lower id). The favourite bonus stays inside the slot scores; it never
+ * reorders proposals.
+ *
+ * Regenerate rotates the WINDOW: start = generation mod
+ * (ROTATION_K − PROPOSAL_COUNT + 1). Replace mode shows window seeds
+ * [w, w+1, w+2]; add mode shows the continuity proposal plus window
+ * seeds [w, w+1], deduplicated against the continuity seed by taking the
+ * next distinct window seed. `baseIds` footprints pre-commit into EVERY
+ * proposal's ledger (add mode semantics — `packagesBought` describes
+ * base + additions, exactly as `buildAutoPlan` does).
+ *
+ * Determinism: same (index, request incl. generation) → identical list.
+ */
+export function buildAutoPlanProposals(index: PackIndex, req: PackPlanRequest): PackProposal[] {
+  const ledger = createLedger(index, req)
+  const candidates = collectCandidates(
+    index,
+    new Set(ledger.baseIds),
+    req.excludeIds ? new Set(req.excludeIds) : null,
+  )
+  if (candidates.length === 0) return []
+
+  const ratingOf = (id: number): number => req.ratings?.get(id) ?? 0
+  const byRating = [...candidates].sort((a, b) => ratingOf(b) - ratingOf(a))
+  const windowSeeds = byRating.slice(0, Math.min(ROTATION_K, byRating.length))
+
+  // Continuity seed (add mode): the eligible candidate with the LOWEST
+  // marginal package cost against the BASE ledger (ties → smoothed
+  // rating desc → lower id; candidates iterate in ascending id order, so
+  // strict-improvement keeps the lower id on an exact tie).
+  let continuitySeed: number | null = null
+  if (ledger.baseIds.length > 0) {
+    let bestMarginal = Infinity
+    let bestRating = -1
+    for (const id of candidates) {
+      const marginal = marginalPackagesOf(index, ledger.pantry, ledger.totals, id)
+      const rating = ratingOf(id)
+      if (
+        marginal < bestMarginal - 1e-12 ||
+        (Math.abs(marginal - bestMarginal) <= 1e-12 && rating > bestRating + EPS)
+      ) {
+        continuitySeed = id
+        bestMarginal = marginal
+        bestRating = rating
+      }
+    }
+  }
+
+  // Window rotation (ADR-0080 Decision 4): every press shows a different
+  // deterministic set of window seeds.
+  const start = sanitizeGeneration(req.seedGeneration) % (ROTATION_K - PROPOSAL_COUNT + 1)
+  const chosen: Array<{ seedId: number; kind: PackProposal['kind'] }> = []
+  if (continuitySeed != null) chosen.push({ seedId: continuitySeed, kind: 'continuity' })
+  for (let i = start; i < windowSeeds.length && chosen.length < PROPOSAL_COUNT; i++) {
+    // Deduplicate: a window seed that coincides with the continuity seed
+    // is skipped for the NEXT distinct window seed, so all cards differ.
+    if (!chosen.some((c) => c.seedId === windowSeeds[i])) {
+      chosen.push({ seedId: windowSeeds[i], kind: 'rated' })
+    }
+  }
+
+  const continuity: PackProposal[] = []
+  const rated: PackProposal[] = []
+  for (const { seedId, kind } of chosen) {
+    const plan = runPack(index, req, seedId)
+    const proposal: PackProposal = {
+      seedId,
+      variantIds: plan.variantIds,
+      packagesBought: plan.packagesBought,
+      scoredIngredients: plan.scoredIngredients,
+      kind,
+    }
+    ;(kind === 'continuity' ? continuity : rated).push(proposal)
+  }
+
+  // Waste-first ranking (Decision 1) among the rated proposals; the
+  // continuity proposal stays pinned at #1 in add mode (Decision 4).
+  rated.sort(
+    (a, b) =>
+      a.packagesBought - b.packagesBought ||
+      ratingOf(b.seedId) - ratingOf(a.seedId) ||
+      a.seedId - b.seedId,
+  )
+  return [...continuity, ...rated]
 }
