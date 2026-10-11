@@ -3,7 +3,6 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Check,
-  ChevronDown,
   Clock,
   ChevronLeft,
   ChevronRight,
@@ -182,8 +181,6 @@ function close() {
  * Chips are per detail line, in step order, scaled by the current factor
  * with the SAME container/linear split the grocery list uses.
  */
-const measuredOpen = ref(false)
-
 const visibleMeasured = computed(() =>
   visibleSteps.value.map((vs) => ({
   partner: vs.partner,
@@ -193,8 +190,33 @@ const visibleMeasured = computed(() =>
   })),
 )
 
-function toggleMeasured() {
-  measuredOpen.value = !measuredOpen.value
+/**
+ * The checklist card's rows (ADR-0081): every measured amount of the
+ * WHOLE view — a Meanwhile pair is one view (ADR-0010) — flattened in
+ * step order, each with a stable ephemeral key.
+ */
+const checklistRows = computed(() =>
+  visibleMeasured.value.flatMap((vm, i) =>
+  vm.chips.map((chip) => ({ key: chipKey(i, chip), chip })),
+  ),
+)
+
+/**
+ * Checked state is EPHEMERAL per-step view state (ADR-0081): the chips
+ * were never persisted and the checklist is a "did I add this yet" aid,
+ * not household state. Cleared on every step-view change by the §timer
+ * `viewKey` watcher below.
+ */
+const checkedIngredients = ref<Set<string>>(new Set())
+
+function isChecked(key: string): boolean {
+  return checkedIngredients.value.has(key)
+}
+
+function toggleChecked(key: string) {
+  const next = new Set(checkedIngredients.value)
+  if (!next.delete(key)) next.add(key)
+  checkedIngredients.value = next
 }
 
 function chipKey(index: number, chip: MeasuredChip) {
@@ -256,6 +278,9 @@ watch(viewKey, () => {
   pendingArm.value = null
   nameInput.value = ''
   minutesInput.value = ''
+  // The checklist is per-step ephemeral (ADR-0081) — a new view starts
+  // with every row unchecked.
+  checkedIngredients.value = new Set()
 })
 
 /** The recipe's own total cooking time, offered on the FIRST view only. */
@@ -666,28 +691,34 @@ function onTouchEnd(e: TouchEvent) {
   aria-modal="true"
   :aria-label="`Cooking ${meta.name}`"
   >
-  <!-- Header: name, servings, progress + thin progress bar -->
+  <!-- Slim header (ADR-0081): title truncate + mono progress line on the
+  left, close on the right, thin tomato progress bar under both. -->
   <header class="border-b border-border">
-  <div class="mx-auto flex max-w-reading items-center justify-between gap-2 px-4 py-3">
+  <div class="mx-auto flex max-w-reading items-center justify-between gap-3 px-4 pt-3 pb-2">
+  <div class="min-w-0 flex-1">
+  <p class="truncate text-sm font-bold tracking-tight">{{ meta.name }}</p>
+  <p
+  class="mt-0.5 font-mono-data text-xs tabular-nums text-text-muted"
+  aria-live="polite"
+  data-test="cook-serves"
+  >
+  serves {{ servings }} ·
+  <span class="font-semibold text-text" data-test="step-counter">{{ counterLabel }}</span>
+  </p>
+  </div>
   <button
-  class="flex size-11 shrink-0 items-center justify-center rounded-full text-lg"
+  class="flex size-11 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-surface-raised hover:text-text"
+  data-test="cook-close"
   aria-label="Close cooking mode"
   @click="confirmTimerBeforeLeaving() && close()"
   >
   <X :size="20" aria-hidden="true" />
   </button>
-  <div class="min-w-0 flex-1 text-center">
-  <p class="truncate text-sm font-bold tracking-tight">{{ meta.name }}</p>
-  <p class="font-mono-data text-xs tabular-nums" aria-live="polite" data-test="cook-serves">
-  serves {{ servings }} ·
-  <span class="font-semibold" data-test="step-counter">{{ counterLabel }}</span>
-  </p>
   </div>
-  <span class="size-11 shrink-0" aria-hidden="true"></span>
-  </div>
-  <div class="mx-auto mb-2 h-1 max-w-reading overflow-hidden rounded-full">
+  <!-- The thin tomato bar: progress is a LINE, not a meter. -->
+  <div class="mx-auto h-[3px] max-w-reading bg-border/60" data-test="cook-progress">
   <div
-  class="h-full rounded-full bg-brand transition-all"
+  class="h-full bg-brand transition-all"
   :style="{
   width: currentView
   ? `${(((currentView.partner ?? currentView.leader) + 1) / total) * 100}%`
@@ -732,7 +763,7 @@ function onTouchEnd(e: TouchEvent) {
   <span class="h-px flex-1" aria-hidden="true"></span>
   </div>
   <p
-  class="text-cooking-step"
+  class="text-cooking-step lg:text-cooking-step-lg"
   :data-test="vs.partner ? 'step-partner-text' : 'step-text'"
   >
   {{ vs.step.primary }}
@@ -750,36 +781,76 @@ function onTouchEnd(e: TouchEvent) {
   <span class="leading-relaxed">{{ d }}</span>
   </li>
   </ul>
-  <!-- Measured amounts (ADR-0022): only when an imprecise step line
-  names an ingredient whose measured quantity is known. -->
-  <div
-  v-if="visibleMeasured[i]?.chips.length"
-  class="mt-2 space-y-1 text-xs"
+  </template>
+
+  <!-- The card row: the checklist and (ADR-0081) the step's timer card
+  side by side at desktop, stacked on a phone — inside the 672px
+  measure, never wider than it (ADR-0073). -->
+  <div class="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start">
+  <!-- "This step uses" (ADR-0081): the ADR-0022 measured amounts as an
+  interactive checklist. The DERIVATION is unchanged — same
+  `measuredAmounts.ts` source, same nameKey matching, same
+  no-invented-quantity rule — only the presentation moved from the
+  collapsed chip to a full-row checkbox. Checked state is EPHEMERAL
+  per-step view state: the chips were never persisted. -->
+  <section
+  v-if="checklistRows.length"
+  class="rounded-xl border border-border bg-surface-raised p-4"
   data-test="measured-amounts"
+  aria-label="This step uses"
   >
-  <button
-  class="flex items-center gap-1 rounded-lg px-2 py-1 font-medium"
-  data-test="measured-toggle"
-  :aria-expanded="measuredOpen"
-  :aria-label="`${measuredOpen ? 'Hide' : 'Show'} measured ingredient amounts`"
-  @click="toggleMeasured"
-  >
-  <ChevronDown v-if="measuredOpen" :size="16" aria-hidden="true" />
-  <ChevronRight v-else :size="16" aria-hidden="true" />
-  Ingredient amounts ({{ visibleMeasured[i]?.chips.length ?? 0 }})
-  </button>
-  <ul v-if="measuredOpen" class="space-y-1 pl-3">
+  <div class="flex items-center justify-between pb-1">
+  <h2 class="text-[13px] font-bold tracking-wider text-text uppercase">This step uses</h2>
+  <span class="font-mono-data text-[11px] text-text-muted" data-test="measured-count">
+  {{ checklistRows.length }} {{ checklistRows.length === 1 ? 'ingredient' : 'ingredients' }}
+  </span>
+  </div>
+  <ul class="overflow-hidden rounded-lg border border-border bg-surface">
   <li
-  v-for="chip in visibleMeasured[i]?.chips ?? []"
-  :key="chipKey(i, chip)"
-  class="rounded-lg px-2 py-1 text-text-muted"
+  v-for="(row, idx) in checklistRows"
+  :key="row.key"
+  :class="idx > 0 ? 'border-t border-border/80' : ''"
   data-test="measured-chip"
   >
-  {{ chip.label }}
+  <label class="flex min-h-14 cursor-pointer items-center gap-3 px-3.5 py-2 select-none">
+  <input
+  type="checkbox"
+  class="sr-only"
+  :checked="isChecked(row.key)"
+  :aria-label="`Mark ${row.chip.ingredient} as used`"
+  data-test="measured-check"
+  @change="toggleChecked(row.key)"
+  />
+  <!-- 20px rounded checkbox; checked = the SUCCESS family
+  (ADR-0072: completion is never a food hue on a checkbox). -->
+  <span
+  class="flex size-5 shrink-0 items-center justify-center rounded-[5px] border transition-colors"
+  :class="
+  isChecked(row.key)
+  ? 'border-success bg-success'
+  : 'border-border-strong bg-surface-raised'
+  "
+  aria-hidden="true"
+  >
+  <Check v-if="isChecked(row.key)" :size="14" aria-hidden="true" class="text-on-success" />
+  </span>
+  <!-- Bold mono amount beside the name; checked strikes BOTH
+  through and mutes them. -->
+  <span
+  class="font-mono-data text-[15px] font-bold tabular-nums"
+  :class="isChecked(row.key) ? 'text-text-muted line-through' : 'text-text'"
+  >{{ row.chip.quantity }}</span
+  >
+  <span
+  class="min-w-0 flex-1 text-[15px] leading-snug"
+  :class="isChecked(row.key) ? 'text-text-muted line-through' : 'text-text'"
+  >{{ row.chip.ingredient }}</span
+  >
+  </label>
   </li>
   </ul>
+  </section>
   </div>
-  </template>
   </div>
   </div>
 
@@ -1041,25 +1112,30 @@ function onTouchEnd(e: TouchEvent) {
   </div>
   </Teleport>
 
-  <!-- Big navigation buttons -->
+  <!-- Action deck (ADR-0081): outlined Previous + filled-tomato Next on
+  one row, the tonal success "Mark as cooked" below. TOMATO = begin,
+  SUCCESS = complete (ADR-0072) — the split the owner explicitly praised
+  in the render. -->
   <footer class="border-t border-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-  <div class="mx-auto flex max-w-reading flex-col gap-2">
-  <div class="flex gap-3">
+  <div class="mx-auto flex max-w-reading flex-col gap-2.5">
+  <div class="flex items-center gap-2.5">
   <button
-  class="h-14 min-w-28 flex-1 rounded-xl border border-border-strong text-base font-semibold transition-opacity disabled:opacity-40"
+  class="flex h-12 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-border-strong bg-surface-raised px-4 text-sm font-semibold transition-colors hover:bg-surface-sunken disabled:opacity-40"
+  data-test="cook-previous"
   :disabled="isFirst"
   @click="prev"
   >
-  <ChevronLeft :size="18" aria-hidden="true" class="mr-1 inline" />
+  <ChevronLeft :size="18" aria-hidden="true" />
   Previous
   </button>
   <button
   v-if="!isLast"
-  class="h-14 flex-[2] rounded-xl bg-brand text-base font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
+  class="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-[15px] font-bold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
+  data-test="cook-next"
   @click="next"
   >
-  Next
-  <ChevronRight :size="18" aria-hidden="true" class="ml-1 inline" />
+  Next step
+  <ChevronRight :size="18" aria-hidden="true" />
   </button>
   <!-- Finish cooking is a COMPLETION, not a start intent: it fills the
   `success` family while every start intent on this surface (Start
@@ -1067,13 +1143,13 @@ function onTouchEnd(e: TouchEvent) {
   intent per surface with the colours doing the distinguishing. -->
   <button
   v-else
-  class="h-14 flex-[2] rounded-xl bg-success text-base font-semibold text-on-success transition-[background-color,transform,filter] hover:brightness-95 active:scale-[0.98]"
+  class="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-success px-5 text-[15px] font-semibold text-on-success transition-[background-color,transform,filter] hover:brightness-95 active:scale-[0.98]"
   data-test="finish"
   aria-label="Finish cooking and mark as cooked"
   @click="finishCooked"
   >
   Finish
-  <PartyPopper :size="18" aria-hidden="true" class="ml-1 inline" />
+  <PartyPopper :size="18" aria-hidden="true" />
   </button>
   </div>
   <!-- Mark as cooked is reachable from ANY step; on the last step
@@ -1083,13 +1159,13 @@ function onTouchEnd(e: TouchEvent) {
   stops inviting a second one. -->
   <button
   v-if="!isLast"
-  class="h-12 rounded-xl border border-border-strong text-sm font-semibold text-brand-text active:bg-surface-sunken disabled:opacity-60"
+  class="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-success/25 bg-success/8 text-sm font-semibold text-success transition-colors hover:bg-success/12 disabled:opacity-60"
   data-test="mark-cooked"
   aria-label="Mark as cooked and keep cooking"
   :disabled="sessionRecorded"
   @click="markCookedEarly"
   >
-  <Check v-if="!sessionRecorded" :size="16" aria-hidden="true" class="mr-1 inline" />
+  <Check :size="16" aria-hidden="true" />
   {{ sessionRecorded ? 'Marked as cooked' : 'Mark as cooked' }}
   </button>
   </div>

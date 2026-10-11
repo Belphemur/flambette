@@ -1342,7 +1342,20 @@
           "value": 20,
           "unit": "px"
         },
-        "fontWeight": 500
+        "fontWeight": 500,
+        "lineHeight": 30
+      }
+    },
+    "cooking-step-lg": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Plus Jakarta Sans",
+        "fontSize": {
+          "value": 22,
+          "unit": "px"
+        },
+        "fontWeight": 500,
+        "lineHeight": 34
       }
     }
   }

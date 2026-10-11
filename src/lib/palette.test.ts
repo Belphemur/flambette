@@ -176,6 +176,7 @@ const TYPOGRAPHY_TOKENS: Record<string, string> = {
   'label-sm': '--text-label-sm',
   'mono-data': '--text-mono-data',
   'cooking-step': '--text-cooking-step',
+  'cooking-step-lg': '--text-cooking-step-lg',
 }
 
 const FRONTMATTER = designMd.split('---')[1] ?? ''

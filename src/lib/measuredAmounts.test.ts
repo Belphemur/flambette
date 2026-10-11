@@ -101,14 +101,17 @@ describe('measuredChipsForLines', () => {
 
   test('imprecise lines get a chip in step order', () => {
     const chips = measuredChipsForLines(d, ['6 cloves garlic', 'juice of ¾ lemon'], 1)
-    expect(chips).toEqual([{ lineIndex: 1, label: 'measured: 3 lemons' }])
+    expect(chips.map((c) => c.label)).toEqual(['measured: 3 lemons'])
+    // The checklist card (ADR-0081) reads the SAME derivation split into
+    // amount + name — never a second parse.
+    expect(chips[0]).toMatchObject({ lineIndex: 1, quantity: '3', ingredient: 'lemons' })
   })
 
   test('a plural step line still yields a chip (qodo 4128519653)', () => {
     // "juice of 2 lemons" is imprecise (the 2 is not the line item count)
     // and must pick up the "3 lemons" line item.
-    expect(measuredChipsForLines(d, ['juice of 2 lemons'], 1)).toEqual([
-      { lineIndex: 0, label: 'measured: 3 lemons' },
+    expect(measuredChipsForLines(d, ['juice of 2 lemons'], 1).map((c) => c.label)).toEqual([
+      'measured: 3 lemons',
     ])
   })
 
@@ -122,8 +125,8 @@ describe('measuredChipsForLines', () => {
   })
 
   test('scaling applies to the chip, not the authored line', () => {
-    expect(measuredChipsForLines(d, ['juice of ¾ lemon'], 2)).toEqual([
-      { lineIndex: 0, label: 'measured: 6 lemons' },
+    expect(measuredChipsForLines(d, ['juice of ¾ lemon'], 2).map((c) => c.label)).toEqual([
+      'measured: 6 lemons',
     ])
   })
 
@@ -136,18 +139,18 @@ describe('measuredChipsForLines', () => {
 
   test('imperial localizes the chip quantity; metric leaves it canonical', () => {
     // 710 ml → 24.0 fl oz, a bare unit (no container annotation).
-    expect(measuredChipsForLines(d, ['a splash of milk'], 1, 'imperial')).toEqual([
-      { lineIndex: 0, label: 'measured: 24 fl oz milk' },
+    expect(measuredChipsForLines(d, ['a splash of milk'], 1, 'imperial').map((c) => c.label)).toEqual([
+      'measured: 24 fl oz milk',
     ])
     // The default argument is metric = today's text, unchanged.
-    expect(measuredChipsForLines(d, ['a splash of milk'], 1)).toEqual([
-      { lineIndex: 0, label: 'measured: 710 ml milk' },
+    expect(measuredChipsForLines(d, ['a splash of milk'], 1).map((c) => c.label)).toEqual([
+      'measured: 710 ml milk',
     ])
   })
 
   test('a count chip (lemons) is untouched by the unit system', () => {
-    expect(measuredChipsForLines(d, ['juice of ¾ lemon'], 1, 'imperial')).toEqual([
-      { lineIndex: 0, label: 'measured: 3 lemons' },
+    expect(measuredChipsForLines(d, ['juice of ¾ lemon'], 1, 'imperial').map((c) => c.label)).toEqual([
+      'measured: 3 lemons',
     ])
   })
 
@@ -156,8 +159,8 @@ describe('measuredChipsForLines', () => {
     // The head keeps the AUTHORED fraction (`1 ½`), not a flattened `1.5`:
     // only the annotation converted, so the count it sits next to is
     // untouched (ADR-0047, "parse what parses, keep the rest verbatim").
-    expect(measuredChipsForLines(cheese, ['a slab of cheddar cheese'], 1, 'imperial')).toEqual([
-      { lineIndex: 0, label: 'measured: 1 ½ (8 oz) block cheddar cheese' },
+    expect(measuredChipsForLines(cheese, ['a slab of cheddar cheese'], 1, 'imperial').map((c) => c.label)).toEqual([
+      'measured: 1 ½ (8 oz) block cheddar cheese',
     ])
   })
 })
