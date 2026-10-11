@@ -174,6 +174,27 @@ collapsed-state screens — project 2725470430841257407):
   honesty rule from §Decision 4 applies only while the creation form is
   expanded). Edited renders: mobile `fc73bab0a78344f3b27243c0fbe57c20`,
   desktop `0104c9f526a642ac8c45d665f4cc5e7f`.
+
+**Correction (2026-10-11, owner bug report on the PR #82 preview):** "has
+a timer" for the AUTO-EXPAND predicate means a RUNNING timer **or a
+DETECTED hint** — the first implementation keyed the expansion on running
+timers only, so a step whose text names a cook duration ("cook for 10
+minutes") stayed collapsed while its expanded form proved the hint was
+found. Two hard requirements follow:
+
+1. **DRY (coding-philosophy priority 1): ONE derivation owns "does this
+   step have a timer".** The suggestion/hint resolution (ADR-0041 source)
+   and the running-timer state are the only two inputs; a single computed
+   predicate consumes BOTH and drives the card state, the hint line's
+   wording, and the banner. A second code path that answers the same
+   question differently is a defect — the collapsed header saying "No
+   timer running for this step." while the expanded form says "Detected:
+   10 min" is exactly this failure, observed on the preview.
+2. **Auto-expand on detection.** When the predicate resolves to
+   "detected hint, no running timer", the card opens directly on the
+   suggestion view (the banner + one-tap add front and center), not the
+   collapsed row. The collapsed "Set a Timer" state then means what it
+   says: NOTHING is known or running for this step.
 - **Customization is never ambient.** In BOTH states the creation form is
   collapsed by default; expanding it is always an explicit user action
   ("Set a Timer" when empty, "Set another timer" when one runs). A step
