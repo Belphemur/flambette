@@ -1,6 +1,19 @@
 {
-  "generatedAt": "2026-10-11T02:01:09Z",
+  "generatedAt": "2026-10-11T14:54:26Z",
   "versions": [
+    {
+      "version": "v2.8.0",
+      "date": "2026-10-11",
+      "title": "Auto-Plan waste-first proposals, Choose-your-plan chooser, regenerate queue",
+      "features": [
+        {
+          "text": "Auto-Plan waste-first proposals, Choose-your-plan chooser, regenerate queue",
+          "scope": "plan",
+          "pr": 73,
+          "adr": "ADR-0080"
+        }
+      ]
+    },
     {
       "version": "v2.7.0",
       "date": "2026-10-11",
