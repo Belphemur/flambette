@@ -75,8 +75,14 @@ Bayesian-smoothed ratings as `useAutoPlan` injects them):
 4. **Regenerate rotates the proposal window.** The visible proposals are
    the window starting at rank `(generation mod (ROTATION_K − PROPOSAL_COUNT
    + 1))` of the rating-ranked seed list (add mode: the non-continuity
-   seeds). Every press shows a different deterministic set; the continuity
-   proposal stays pinned as #1 in add mode. Per-generation determinism
+   seeds — the continuity seed is removed from the rated pool BEFORE the
+   window start is taken, which makes the dedupe structural). Every press
+   shows a different deterministic set; the continuity
+   proposal stays pinned as #1 in add mode. For pools smaller than the
+   window the start modulus clamps to the pool and the walk is CYCLIC, so
+   every eligible seed stays reachable from every generation (a
+   one-candidate pool at generation 2 shows its one proposal, never an
+   empty preview). Per-generation determinism
    (ADR-0027's contract) is unchanged: same (index, request incl.
    generation) → identical proposal list. The `autoPlanGeneration` counter
    keeps its TWO advance points (ADR-0033).
