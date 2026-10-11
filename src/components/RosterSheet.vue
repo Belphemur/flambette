@@ -2,18 +2,26 @@
 import AppModal from './AppModal.vue'
 import PersonAvatar from './PersonAvatar.vue'
 import { computed } from 'vue'
-import { Users, X } from 'lucide-vue-next'
+import { Share2, Users, X } from 'lucide-vue-next'
 import type { RosterMember } from '../stores/room'
+import { useShareRoomLink } from '../composables/useShareRoomLink'
 
 /**
  * The room roster sheet (ADR-0063, DESIGN.md "Person avatars and the room
- * roster").
+ * roster"; ADR-0079 names the room and carries the share action).
  *
  * Opened by tapping the header's live room chip — the chip is the door.
  * The header states the RELAY's live count ("N in room"); each row is the
  * member's avatar + name (Title Case, `body-sm`) with a quiet text "you"
  * marker on this device's own row — text, never a colour-only
  * distinction.
+ *
+ * ADR-0079: the sheet is the room's INFO surface, not just its people
+ * list — it names the room (the code, in the data voice) and carries the
+ * "Share room link" action through `useShareRoomLink()` (ADR-0023:
+ * verified write, always says something, never a raw clipboard call).
+ * The chip itself has no tooltip any more; this sheet is where room
+ * information lives.
  *
  * This is a PEOPLE list (deduped relay-side by profile id), NOT a socket
  * list: the badge may say 3 while the sheet lists 2, because one device
@@ -31,6 +39,8 @@ const props = defineProps<{
   members: RosterMember[] | null
   /** THIS device's profile id — the row that gets the "you" marker. */
   selfId: string | null
+  /** The room's code — the room's NAME (ADR-0079). */
+  code: string | null
 }>()
 
 const emit = defineEmits<{ close: [] }>()
@@ -40,6 +50,13 @@ const heading = computed(() => {
   if (n === null) return 'Who is in the room'
   return n === 1 ? '1 in room' : `${n} in room`
 })
+
+/** ADR-0023: the ONLY path a room link ever takes to the clipboard. */
+const { shareRoomLink } = useShareRoomLink()
+
+function share() {
+  void shareRoomLink(props.code)
+}
 </script>
 
 <template>
@@ -62,6 +79,32 @@ const heading = computed(() => {
         @click="emit('close')"
       >
         <X :size="18" aria-hidden="true" />
+      </button>
+    </div>
+
+    <!-- ADR-0079: the room's NAME and its share action. The code is the
+         room's identity — the data voice (JetBrains Mono), selectable so
+         it can be copied by hand too; the share button goes through
+         useShareRoomLink (ADR-0023), never a raw clipboard call. -->
+    <div
+      v-if="code"
+      class="mt-3 flex items-center justify-between gap-2 rounded-xl border border-border bg-surface-raised px-3 py-2.5"
+    >
+      <span
+        class="min-w-0 select-all truncate font-mono-data text-sm font-semibold tracking-tight"
+        data-test="roster-code"
+        :aria-label="`Room code ${code}`"
+        >{{ code }}</span
+      >
+      <button
+        type="button"
+        class="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-semibold text-on-brand transition-colors hover:bg-brand-strong active:scale-[0.98] motion-reduce:active:scale-100"
+        data-test="roster-share"
+        aria-label="Copy the room link"
+        @click="share()"
+      >
+        <Share2 :size="14" aria-hidden="true" />
+        Share room link
       </button>
     </div>
 

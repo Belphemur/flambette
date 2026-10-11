@@ -500,16 +500,15 @@ onBeforeUnmount(() => {
   its `overflow: hidden` would clip a child bubble (coderabbit r1). -->
   <TooltipBubble :text="`Version ${appVersion}`" placement="below-right" />
   </button>
-  <!-- ADR-0063: the chip is now a real BUTTON — tapping it opens the room
-       roster. Every visual is unchanged (dot | badge | word, ADR-0049),
-       the TooltipBubble description stays, and `cursor-help` semantics
-       stay (the affordance rule covers the pointer cursor; the explicit
-       class keeps the help cursor for the tooltip target). It GAINS
-       `aria-expanded`, because it now opens and closes a sheet. -->
+  <!-- ADR-0063: the chip is a real BUTTON — tapping it opens the room
+       roster. Every visual is unchanged (dot | badge | word, ADR-0049).
+       ADR-0079: the tooltip is GONE — the sheet is the info surface — so
+       `cursor-help` is retired with it (the tap is the affordance). It
+       keeps `aria-expanded`, because it opens and closes a sheet. -->
   <button
   v-if="roomChip"
   type="button"
-  class="group relative flex shrink-0 cursor-help items-center gap-1.5 rounded-full bg-surface-sunken px-2.5 py-1.5 text-xs font-medium"
+  class="group relative flex shrink-0 items-center gap-1.5 rounded-full bg-surface-sunken px-2.5 py-1.5 text-xs font-medium"
   :aria-label="roomChip.description"
   :aria-expanded="rosterOpen"
   data-test="room-chip"
@@ -542,39 +541,12 @@ onBeforeUnmount(() => {
   aria-hidden="true"
   >{{ roomChip.badge }}</span>
   <span>{{ roomChip.label }}</span>
-  <!-- The PROPER tooltip, replacing the native `title` (ADR-0049). The OS
-       one cannot be styled, does not appear on keyboard focus, and put a
-       SECOND copy of the chip's meaning in a place that could drift from
-       the aria-label. `focus-within` makes it reachable without a pointer;
-       `pointer-events-none` keeps the bubble from swallowing a click on
-       the chip, and `aria-hidden` keeps it out of the a11y tree because
-       the chip's aria-label already says exactly this.
-       Plain CSS on purpose: useIconHoverTarget exists for HueIcon, whose
-       host is pointer-transparent and can never match :hover — this chip
-       is an ordinary pointer-active element.
-
-       HIDDEN MEANS `hidden`, NOT `invisible`, and the bubble is capped at
-       `max-w-56` and anchored `right-0`. Both are load-bearing, and the
-       first version got both wrong in a way that only showed up on a
-       phone: `visibility: hidden` still occupies layout, so a
-       `whitespace-nowrap` bubble centred with `left-1/2` beside the
-       header's right edge overflowed the Pixel 7 viewport. That made the
-       DOCUMENT horizontally scrollable, and a horizontally scrollable
-       document breaks hit-testing for the `fixed` bottom nav — every
-       tap on a nav tab silently became a no-op. `display: none`
-       contributes nothing at all, exactly as HueIcon's bubble does.
-
-       ADR-0055: the bubble is now `TooltipBubble` — the ONE tooltip
-       implementation. CSS mode (no `active`): this chip is an ordinary
-       pointer-active element, so the group-hover/focus-within classes
-       live inside the component. `room-chip-tooltip` survives through
-       attribute fallthrough (ADR-0055 Decision 8); the load-bearing
-       `max-w-56` + `right-0` shape is the `below-right` placement. -->
-  <TooltipBubble
-  :text="roomChip.description"
-  placement="below-right"
-  data-test="room-chip-tooltip"
-  />
+  <!-- ADR-0079: the chip carries NO tooltip any more. The hover bubble
+       (itself the ADR-0049 replacement for the native `title`) was a
+       pointer-gated duplicate of the aria-label's sentence; the room's
+       information surface is the roster sheet the chip opens, which
+       works identically for touch, keyboard and pointer. The
+       `aria-label` above stays the a11y carrier and the e2e handle. -->
   </button>
   <button
   class="flex size-11 items-center justify-center rounded-full text-xl transition-colors hover:bg-surface-sunken"
@@ -699,6 +671,7 @@ onBeforeUnmount(() => {
   :count="room.peers"
   :members="room.members"
   :self-id="room.joinedProfileId || identity.id || null"
+  :code="room.code"
   @close="rosterOpen = false"
   />
 </template>
