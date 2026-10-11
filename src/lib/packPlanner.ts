@@ -105,6 +105,16 @@ export interface PackPlanRequest {
    * which recipe anchors the pack.
    */
   favoriteIds?: ReadonlySet<number>
+  /**
+   * Recency-demotion amendment (ADR-0080, #74) — variant ids ALREADY
+   * OFFERED to the household in this dialog session. Demotion, not
+   * deletion: offered candidates rank BEHIND every not-yet-offered one
+   * (relative order preserved) in the proposal seed pool, and the greedy
+   * slots prefer fresh fillers while the fresh pool can still fill the
+   * pack. Absent/empty → bit-for-bit current behaviour (generation 0
+   * pins stand).
+   */
+  offeredIds?: ReadonlySet<number>
 }
 
 export interface PackPlan {
@@ -117,6 +127,37 @@ export interface PackPlan {
   /** Present only when the picker could not satisfy the request. */
   warnings?: string[]
 }
+
+export interface PackProposal {
+  /** The anchor (seed) recipe the completion grew from. */
+  seedId: number
+  /** NEWLY picked variant ids in pick order (base meals NOT included). */
+  variantIds: number[]
+  /** Whole packages bought for the FULL pack (base + additions in add mode). */
+  packagesBought: number
+  /** Distinct non-pantry ingredient nameKeys in the FULL pack. */
+  scoredIngredients: number
+  /**
+   * 'continuity' — add mode's pinned proposal #1, anchored on the eligible
+   * candidate with the LOWEST marginal package cost against the base ledger
+   * (ADR-0080 Decision 3). 'rated' — anchored on a rating-ranked window seed.
+   */
+  kind: 'continuity' | 'rated'
+  /** Pool-exhaustion warnings from the completion (qodo round 1). */
+  warnings?: string[]
+}
+
+/** Proposals per press (ADR-0080 Decision 2). */
+export const PROPOSAL_COUNT = 3
+/**
+ * Regeneration-variety amendment (ADR-0080, #74): the seed pool widens to
+ * PROPOSAL_COUNT × 3 top-rated candidates, and the generation's window
+ * covers one of three DISJOINT rank thirds — so the cheapest pack of one
+ * window can no longer dominate the next generation's Plan A.
+ */
+export const PROPOSAL_POOL = PROPOSAL_COUNT * 3
+/** Rank width of one disjoint window (PROPOSAL_POOL / PROPOSAL_COUNT). */
+const WINDOW_SIZE = 3
 
 export const MIN_MEALS = 1
 export const MAX_MEALS = 10
@@ -152,33 +193,26 @@ function cmpAscendingId(a: number, b: number): number {
 }
 
 /**
- * Greedy waste-first packer (v2, ADR-0027).
- *
- * Base meals (add mode) commit their footprints first — additions share
- * their packages — and are never re-picked. The seed ROTATES across
- * generations over the top-ROTATION_K candidates ranked by rating desc
- * (generation 0 = highest rating, ties → lowest id). Slots 2..N minimize
- * `marginalPackages + RATING_WEIGHT*(1-rating) + TAG_WEIGHT*tagOverlap
- * - FAVORITE_BONUS*isFavourite`;
- * ties → higher rating, then lower id. No randomness anywhere: the same
- * (index, request incl. generation) → identical output.
+ * Pack state shared by every completion of one request: running container
+ * totals keyed by (ingredient, container), the set of non-pantry ingredient
+ * keys already present, and the pool of variety tags present on picked
+ * meals (base included).
  */
-export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan {
-  const count = Math.min(MAX_MEALS, Math.max(MIN_MEALS, Math.floor(req.count)))
-  const pantry = new Set(index.pantryStaples)
-  const excluded = req.excludeIds ? new Set(req.excludeIds) : null
-  const ratings = req.ratings
-  const tags = req.tags
-  const favorites = req.favoriteIds ?? null
+interface PackLedger {
+  pantry: Set<string>
+  totals: Map<number, number>
+  scored: Set<number>
+  tagPool: Set<number>
+  commit(id: number, factor?: number): void
+  baseIds: number[]
+}
 
-  // Pack state: running container totals keyed by (ingredient, container),
-  // the set of non-pantry ingredient keys already present, and the pool of
-  // variety tags present on picked meals (base included).
+function createLedger(index: PackIndex, req: PackPlanRequest): PackLedger {
+  const pantry = new Set(index.pantryStaples)
   const totals = new Map<number, number>()
   const scored = new Set<number>()
   const tagPool = new Set<number>()
-  const pack: number[] = []
-  const picked = new Set<number>()
+  const tags = req.tags
 
   /** Commit a recipe's footprint + tags into the ledger (base OR pick). */
   function commit(id: number, factor = 1): void {
@@ -202,11 +236,55 @@ export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan 
   for (const id of baseIds) {
     const servings = req.baseServings?.get(id)
     commit(id, servings && servings > 0 ? servings / AUTHORED_SERVINGS : 1)
-    picked.add(id)
   }
 
-  // Eligible candidate ids, deterministically ordered (index keys are
-  // strings — sort numerically so iteration order is id order).
+  return { pantry, totals, scored, tagPool, commit, baseIds }
+}
+
+/**
+ * Marginal whole-package cost of adding a candidate's rows to the
+ * current pack (containers ceil-merge per ADR-0017; linear measures add
+ * freely). Pantry rows are free by definition.
+ */
+function marginalPackagesOf(
+  index: PackIndex,
+  pantry: Set<string>,
+  totals: Map<number, number>,
+  id: number,
+): number {
+  let marginal = 0
+  for (const [keyId, amount, unitId, isContainer] of index.recipes[String(id)]?.i ?? []) {
+    if (!isContainer || amount <= 0) continue
+    if (pantry.has(index.ingredientKeys[keyId])) continue
+    const key = containerKeyId(keyId, unitId)
+    const current = totals.get(key) ?? 0
+    marginal += Math.ceil(current + amount - EPS) - Math.ceil(current - EPS)
+  }
+  return marginal
+}
+
+/** Distinct candidate tags already present on picked meals (base incl.). */
+function tagOverlapOf(
+  tags: ReadonlyMap<number, ReadonlyArray<number>> | undefined,
+  tagPool: Set<number>,
+  id: number,
+): number {
+  const candidateTags = tags?.get(id)
+  if (!candidateTags || tagPool.size === 0) return 0
+  let overlap = 0
+  for (const tag of candidateTags) if (tagPool.has(tag)) overlap += 1
+  return overlap
+}
+
+/**
+ * Eligible candidate ids, deterministically ordered (index keys are
+ * strings — sort numerically so iteration order is id order).
+ */
+function collectCandidates(
+  index: PackIndex,
+  picked: Set<number>,
+  excluded: Set<number> | null,
+): number[] {
   const candidates: number[] = []
   for (const idStr of Object.keys(index.recipes)) {
     const id = Number(idStr)
@@ -214,9 +292,45 @@ export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan 
     candidates.push(id)
   }
   candidates.sort(cmpAscendingId)
+  return candidates
+}
+
+/** Non-finite or negative generations (a hostile backup import) degrade
+ * to 0 so `gen % k` can never produce NaN → an undefined seed (qodo
+ * round 2). Shared by the rotation seed and the proposal window. */
+function sanitizeGeneration(raw: number | undefined): number {
+  const generation = raw ?? 0
+  return typeof generation === 'number' && Number.isFinite(generation) && generation >= 0
+    ? Math.floor(generation)
+    : 0
+}
+
+/**
+ * ONE seeded greedy completion (the ADR-0080 refactor of the v2 body).
+ * The seed is either FORCED (a proposal's anchor) or the rotating
+ * rating-rank seed (ADR-0027). Slots 2..N minimize
+ * `marginalPackages + RATING_WEIGHT*(1-rating) + TAG_WEIGHT*tagOverlap
+ * - FAVORITE_BONUS*isFavourite`; ties → higher rating, then lower id.
+ * No randomness anywhere: the same (index, request incl. generation) →
+ * identical output.
+ */
+function runPack(index: PackIndex, req: PackPlanRequest, forcedSeedId: number | null): PackPlan {
+  const count = Math.min(MAX_MEALS, Math.max(MIN_MEALS, Math.floor(req.count)))
+  const ratings = req.ratings
+  const tags = req.tags
+  const favorites = req.favoriteIds ?? null
+  const ledger = createLedger(index, req)
+  const { pantry, totals, scored, tagPool, commit } = ledger
+  const picked = new Set(ledger.baseIds)
+  const candidates = collectCandidates(
+    index,
+    picked,
+    req.excludeIds ? new Set(req.excludeIds) : null,
+  )
+  const pack: number[] = []
 
   const warnings: string[] = []
-  if (candidates.length === 0 && baseIds.length === 0) {
+  if (candidates.length === 0 && ledger.baseIds.length === 0) {
     return {
       variantIds: [],
       packagesBought: 0,
@@ -227,67 +341,54 @@ export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan 
 
   const ratingOf = (id: number): number => ratings?.get(id) ?? 0
 
-  /**
-   * Marginal whole-package cost of adding a candidate's rows to the
-   * current pack (containers ceil-merge per ADR-0017; linear measures add
-   * freely). Pantry rows are free by definition.
-   */
-  function marginalPackages(id: number): number {
-    let marginal = 0
-    for (const [keyId, amount, unitId, isContainer] of index.recipes[String(id)]?.i ?? []) {
-      if (!isContainer || amount <= 0) continue
-      if (pantry.has(index.ingredientKeys[keyId])) continue
-      const key = containerKeyId(keyId, unitId)
-      const current = totals.get(key) ?? 0
-      marginal += Math.ceil(current + amount - EPS) - Math.ceil(current - EPS)
-    }
-    return marginal
-  }
-
-  /** Distinct candidate tags already present on picked meals (base incl.). */
-  function tagOverlap(id: number): number {
-    const candidateTags = tags?.get(id)
-    if (!candidateTags || tagPool.size === 0) return 0
-    let overlap = 0
-    for (const tag of candidateTags) if (tagPool.has(tag)) overlap += 1
-    return overlap
-  }
-
   // Rotating seed (ADR-0027): rank candidates by rating desc, ties →
   // lower id. candidates are ascending by id and Array.sort is stable, so
   // a descending-rating sort keeps the lowest id first within a rating
   // tie. Generation g seeds rank (g mod ROTATION_K); generation 0 lands
-  // on rank 0 = the v1 "highest rating" seed.
+  // on rank 0 = the v1 "highest rating" seed. A forced seed (a proposal
+  // anchor, always an eligible candidate) overrides the rotation.
   const byRating = [...candidates].sort((a, b) => ratingOf(b) - ratingOf(a))
   const k = Math.min(ROTATION_K, byRating.length)
-  // Guard: with a base pack and an empty candidate pool there is no seed
-  // (and no slots) — fall through to the partial-pack warning. Non-finite
-  // or negative generations (a hostile backup import) degrade to 0 so
-  // `gen % k` can never produce NaN → an undefined seed (qodo round 2).
   if (k > 0) {
-    const rawGeneration = req.seedGeneration ?? 0
-    const generation =
-      typeof rawGeneration === 'number' && Number.isFinite(rawGeneration) && rawGeneration >= 0
-        ? Math.floor(rawGeneration)
-        : 0
-    const seed = byRating[generation % k]
+    const forced =
+      forcedSeedId != null && candidates.includes(forcedSeedId) && !picked.has(forcedSeedId)
+        ? forcedSeedId
+        : null
+    const seed = forced ?? byRating[sanitizeGeneration(req.seedGeneration) % k]
     commit(seed)
     pack.push(seed)
     picked.add(seed)
   }
 
+  // Recency-demotion amendment (ADR-0080, #74): while enough FRESH
+  // (never-offered) candidates remain to fill the pack, offered ones are
+  // not considered for the slots — variety yields to availability only
+  // when the fresh pool runs short. Absent/empty offeredIds → the slot
+  // scan is bit-for-bit unchanged (same candidate set, same ascending-id
+  // order, same strict-improvement ties).
+  const offered = req.offeredIds
   for (let slot = 1; slot < count; slot++) {
     if (pack.length >= candidates.length) break
+    let freshOnly = false
+    if (offered && offered.size > 0) {
+      const remaining = count - pack.length
+      let freshUnpicked = 0
+      for (const id of candidates) {
+        if (!picked.has(id) && !offered.has(id)) freshUnpicked++
+      }
+      freshOnly = freshUnpicked >= remaining
+    }
     let bestId = -1
     let bestScore = Infinity
     let bestRating = -1
     for (const id of candidates) {
       if (picked.has(id)) continue
+      if (freshOnly && offered!.has(id)) continue
       const rating = ratingOf(id)
       const score =
-        marginalPackages(id) +
+        marginalPackagesOf(index, pantry, totals, id) +
         RATING_WEIGHT * (1 - rating) +
-        TAG_WEIGHT * tagOverlap(id) -
+        TAG_WEIGHT * tagOverlapOf(tags, tagPool, id) -
         (favorites?.has(id) ? FAVORITE_BONUS : 0)
       // Ties → higher rating, then lower id. Candidates are iterated in
       // ascending id order, so strict-improvement comparisons keep the
@@ -321,4 +422,195 @@ export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan 
   }
   if (warnings.length > 0) plan.warnings = warnings
   return plan
+}
+
+/**
+ * Greedy waste-first packer (v2, ADR-0027).
+ *
+ * Base meals (add mode) commit their footprints first — additions share
+ * their packages — and are never re-picked. The seed ROTATES across
+ * generations over the top-ROTATION_K candidates ranked by rating desc
+ * (generation 0 = highest rating, ties → lowest id).
+ *
+ * Bit-for-bit v2: the v2 body now lives in `runPack`; this wrapper passes
+ * no forced seed, so absent `buildAutoPlanProposals` the lib behaves
+ * exactly as before (every existing unit pin stays valid).
+ */
+export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan {
+  return runPack(index, req, null)
+}
+
+function toProposal(seedId: number, plan: PackPlan, kind: PackProposal['kind']): PackProposal {
+  const proposal: PackProposal = {
+    seedId,
+    variantIds: plan.variantIds,
+    packagesBought: plan.packagesBought,
+    scoredIngredients: plan.scoredIngredients,
+    kind,
+  }
+  // Pool-exhaustion warnings ride along (qodo round 1): a short pack must
+  // reach the confirm toast, not vanish into the lib.
+  if (plan.warnings) proposal.warnings = plan.warnings
+  return proposal
+}
+
+/**
+ * Multi-proposal Auto-Plan preview (ADR-0080): up to PROPOSAL_COUNT
+ * DISTINCT packs, each ONE seed greedy-completed with the SAME v2 slot
+ * arithmetic (`runPack`) — the scorer is never forked.
+ *
+ * Seeds come from the top-PROPOSAL_POOL (9) smoothed-rated candidates,
+ * ranked rating desc (ties → lower id) — the ranking the rotation uses.
+ * Ranking of the RETURNED list is waste-first (ADR-0080 Decision 1):
+ * packagesBought ASC, then seed rating DESC, then seed id ASC — except
+ * the CONTINUITY seed (add mode, non-empty baseIds), which is PINNED at
+ * position #1 (Decision 4). The favourite bonus stays inside the slot
+ * scores; it never reorders proposals.
+ *
+ * Regeneration-variety amendment (ADR-0080, #74 — "Plan A never changes
+ * across Regenerate presses"):
+ * - **Continuity tie-rotation.** The continuity seed is the candidate at
+ *   rank `(seedGeneration mod min(tieCount, ROTATION_K))` of the
+ *   minimal-marginal tie set (computed against the BASE ledger; candidates
+ *   outside the tie set are ineligible), ordered by smoothed rating desc →
+ *   id asc. Rank 0 is the pre-amendment pick, so generation 0 is
+ *   bit-for-bit unchanged.
+ * - **Disjoint proposal windows.** Window `w = seedGeneration mod 3`
+ *   covers ranks `[3w, 3w+2]` of the rated pool (which in add mode
+ *   EXCLUDES the continuity seed — Decision 4 — so the window start is
+ *   taken on the filtered pool). The walk is FORWARD in rank order, so a
+ *   pack-dedupe replacement takes "the next ranked seed"; if the pool
+ *   exhausts, fewer cards render.
+ * - **Pack-content dedupe.** A seed whose COMPLETED pack (variantId set —
+ *   order-insensitive, the planner has no day/slot assignment) equals an
+ *   already-chosen proposal's pack is skipped. No cross-generation state:
+ *   determinism per generation is preserved.
+ *
+ * Catalogs with fewer eligible candidates than PROPOSAL_POOL keep the
+ * original clamped, CYCLIC window (§Decision 4): span = min(WINDOW_SIZE,
+ * pool), start = generation mod span, so every eligible seed stays
+ * reachable from every generation (a one-candidate pool at generation 2
+ * shows its one proposal, never an empty preview).
+ *
+ * Recency-demotion amendment (ADR-0080, #74): `offeredIds` — variant ids
+ * already offered this dialog session, held EPHEMERALLY by the dialog —
+ * demote those candidates BEHIND every fresh one in the candidate
+ * ranking (relative order preserved) before the pool slice, and the
+ * greedy slots prefer fresh fillers while the fresh pool can still fill
+ * the pack. Absent/empty → bit-for-bit the demotion-free behaviour.
+ *
+ * `baseIds` footprints pre-commit into EVERY proposal's ledger (add mode
+ * semantics — `packagesBought` describes base + additions, exactly as
+ * `buildAutoPlan` does).
+ *
+ * Determinism: same (index, request incl. generation) → identical list.
+ */
+export function buildAutoPlanProposals(index: PackIndex, req: PackPlanRequest): PackProposal[] {
+  const ledger = createLedger(index, req)
+  const candidates = collectCandidates(
+    index,
+    new Set(ledger.baseIds),
+    req.excludeIds ? new Set(req.excludeIds) : null,
+  )
+  if (candidates.length === 0) return []
+
+  const ratingOf = (id: number): number => req.ratings?.get(id) ?? 0
+  const byRating = [...candidates].sort((a, b) => ratingOf(b) - ratingOf(a))
+
+  // Recency-demotion amendment (ADR-0080, #74): candidates already
+  // OFFERED this dialog session rank BEHIND every not-yet-offered one;
+  // relative order inside each group is preserved (rating desc → id
+  // asc). Demotion, not deletion — an offered candidate stays eligible
+  // for the pool and the slots (below) when the fresh pool runs short.
+  // Absent/empty offeredIds → bit-for-bit the demotion-free ranking.
+  const offered = req.offeredIds
+  const ranked: number[] =
+    offered && offered.size > 0
+      ? [...byRating.filter((id) => !offered.has(id)), ...byRating.filter((id) => offered.has(id))]
+      : byRating
+
+  // Continuity seed (add mode, amendment Decision 1): rank
+  // (generation mod min(tieCount, ROTATION_K)) of the minimal-marginal
+  // tie set against the BASE ledger, ordered smoothed-rating desc → id
+  // asc. The rating comparison keeps the pre-amendment tie semantics
+  // (differences within EPS are ties → lower id), so rank 0 reproduces
+  // the old strict-improvement scan's pick exactly.
+  let continuitySeed: number | null = null
+  if (ledger.baseIds.length > 0) {
+    let minMarginal = Infinity
+    const marginals = new Map<number, number>()
+    for (const id of candidates) {
+      const marginal = marginalPackagesOf(index, ledger.pantry, ledger.totals, id)
+      marginals.set(id, marginal)
+      if (marginal < minMarginal) minMarginal = marginal
+    }
+    const tieSet = candidates
+      .filter((id) => Math.abs(marginals.get(id)! - minMarginal) <= 1e-12)
+      .sort((a, b) => {
+        const dr = ratingOf(b) - ratingOf(a)
+        return Math.abs(dr) > EPS ? dr : a - b
+      })
+    const depth = Math.min(ROTATION_K, tieSet.length)
+    continuitySeed = tieSet[sanitizeGeneration(req.seedGeneration) % depth]
+  }
+
+  // Window rotation (ADR-0080 Decision 4 + regeneration-variety
+  // amendment Decision 2). The rated pool EXCLUDES the continuity seed
+  // (add mode: "the non-continuity seeds") BEFORE the window start is
+  // taken. Full pool: the three windows over ranks are DISJOINT, so the
+  // cheapest pack of one window cannot dominate the next generation.
+  // Sub-pool catalogs keep the clamped cyclic walk so no eligible seed
+  // becomes unreachable.
+  // Disjointness is decided on the PRE-filter slice (kody round 3): in
+  // add mode the continuity seed usually ranks INSIDE the top-9, so the
+  // filtered pool reads 8 — testing the filtered pool for 9 would
+  // silently fall back to the overlapping cyclic walk exactly when the
+  // amendment matters. The regime is "widened pool" iff the top-9 slice
+  // is complete AND enough seeds remain after the continuity seed is
+  // removed to fill the cards.
+  const preFilter = ranked.slice(0, Math.min(PROPOSAL_POOL, ranked.length))
+  const ratedPool = preFilter.filter((id) => id !== continuitySeed)
+  const generation = sanitizeGeneration(req.seedGeneration)
+  const disjoint = preFilter.length >= PROPOSAL_POOL && ratedPool.length >= PROPOSAL_COUNT
+  const start = disjoint ? (generation % WINDOW_SIZE) * WINDOW_SIZE : generation % Math.max(1, Math.min(WINDOW_SIZE, ratedPool.length))
+  const cyclic = !disjoint
+  const packKey = (variantIds: number[]): string =>
+    [...variantIds].sort(cmpAscendingId).join(',')
+
+  // Forward (disjoint) or cyclic (sub-pool clamp) walk over ranks; each
+  // visited seed is run once, deduped by completed pack.
+  const rankCount = cyclic ? ratedPool.length : ratedPool.length - start
+  const continuity: PackProposal[] = []
+  const rated: PackProposal[] = []
+  const seenPacks: string[] = []
+  let cards = 0
+  if (continuitySeed != null) {
+    const plan = runPack(index, req, continuitySeed)
+    seenPacks.push(packKey(plan.variantIds))
+    continuity.push(toProposal(continuitySeed, plan, 'continuity'))
+    cards++
+  }
+  for (let n = 0; n < rankCount && cards < PROPOSAL_COUNT; n++) {
+    const seedId = cyclic ? ratedPool[(start + n) % ratedPool.length] : ratedPool[start + n]
+    const plan = runPack(index, req, seedId)
+    // Amendment Decision 3: dedupe COMPLETED packs, not seeds — distinct
+    // seeds can complete to the same variantId set (order-insensitive;
+    // the plan has no day/slot assignment). The next ranked seed takes
+    // the slot; pool exhaustion renders fewer cards, never a duplicate.
+    const key = packKey(plan.variantIds)
+    if (seenPacks.includes(key)) continue
+    seenPacks.push(key)
+    rated.push(toProposal(seedId, plan, 'rated'))
+    cards++
+  }
+
+  // Waste-first ranking (Decision 1) among the rated proposals; the
+  // continuity proposal stays pinned at #1 in add mode (Decision 4).
+  rated.sort(
+    (a, b) =>
+      a.packagesBought - b.packagesBought ||
+      ratingOf(b.seedId) - ratingOf(a.seedId) ||
+      a.seedId - b.seedId,
+  )
+  return [...continuity, ...rated]
 }

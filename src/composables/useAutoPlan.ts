@@ -2,9 +2,10 @@ import { shallowRef } from 'vue'
 import { getCatalog } from '../lib/catalog'
 import { dietIndexFor, matchesAllDiets } from '../lib/dietFilter'
 import {
-  buildAutoPlan,
+  buildAutoPlanProposals,
   type PackIndex,
-  type PackPlan,
+  type PackPlanRequest,
+  type PackProposal,
 } from '../lib/packPlanner'
 import { usePlanStore } from '../stores/plan'
 import { useFavouritesStore } from '../stores/favourites'
@@ -82,11 +83,12 @@ export interface AutoPlanOptions {
   mode?: 'add' | 'replace'
   /** Rotating seed generation (persisted counter, ADR-0027). */
   seedGeneration?: number
-}
-
-export interface AutoPlanResult extends PackPlan {
-  /** Caller-side eligible pool size (diagnostics). */
-  eligibleCount: number
+  /**
+   * Recency-demotion amendment (ADR-0080, #74) — variant ids already
+   * offered to the household this dialog session (ephemeral, dialog-held;
+   * NO persisted store). Passed through to the planner request.
+   */
+  offeredIds?: ReadonlySet<number>
 }
 
 /** Bayesian prior weight for rating smoothing (ADR-0027 §smoothing). */
@@ -124,7 +126,11 @@ function smoothedRating(
  * Run the planner over the current catalog slice. Throws when the catalog
  * or the index fails to load — the UI surfaces that via a toast.
  */
-export async function runAutoPlan(options: AutoPlanOptions): Promise<AutoPlanResult> {
+async function resolveAutoPlanRequest(options: AutoPlanOptions): Promise<{
+  index: PackIndex
+  req: PackPlanRequest
+  eligibleCount: number
+}> {
   const [catalog, index] = await Promise.all([getCatalog(), getPackIndex()])
   const planStore = usePlanStore()
   const ui = useUiStore()
@@ -202,7 +208,7 @@ export async function runAutoPlan(options: AutoPlanOptions): Promise<AutoPlanRes
   // missing excludeIds as "exclude nothing" and pick recipes that fail
   // the active constraints; qodo thread 1).
   const excludeIds = [...catalog.dataById.keys()].filter((id) => !eligible.has(id))
-  const result = buildAutoPlan(index, {
+  const req: PackPlanRequest = {
     count: options.count,
     excludeIds,
     ratings,
@@ -210,10 +216,35 @@ export async function runAutoPlan(options: AutoPlanOptions): Promise<AutoPlanRes
     baseIds,
     baseServings,
     seedGeneration: options.seedGeneration ?? ui.nextAutoPlanGeneration(),
+    // Recency-demotion amendment (#74): the dialog's ephemeral offered
+    // set rides in the request — demotion happens in the pure lib.
+    offeredIds: options.offeredIds,
     // ADR-0031: household favourites are a preference signal (+0.05 off a
     // candidate's score). The set is read whole — the planner only ever
     // consults it for candidates it is already considering.
     favoriteIds: new Set(useFavouritesStore().ids),
-  })
-  return { ...result, eligibleCount: eligible.size }
+  }
+  return { index, req, eligibleCount: eligible.size }
+}
+
+export interface AutoPlanProposalsResult {
+  /** Up to PROPOSAL_COUNT proposals, waste-ranked (ADR-0080). */
+  proposals: PackProposal[]
+  /** Caller-side eligible pool size (diagnostics). */
+  eligibleCount: number
+}
+
+/**
+ * The ADR-0080 entry point: up to PROPOSAL_COUNT DISTINCT packs ranked
+ * waste-first (packagesBought ASC), with the continuity seed pinned as
+ * proposal #1 in add mode. Same eligibility, ratings, favourites and
+ * error posture as the v2 request resolver — the single-pack lib entry
+ * point `buildAutoPlan` remains exported for the pinned v2 behavior, but
+ * its composable wrapper is gone with its only caller (qodo round 1).
+ */
+export async function runAutoPlanProposals(
+  options: AutoPlanOptions,
+): Promise<AutoPlanProposalsResult> {
+  const { index, req, eligibleCount } = await resolveAutoPlanRequest(options)
+  return { proposals: buildAutoPlanProposals(index, req), eligibleCount }
 }

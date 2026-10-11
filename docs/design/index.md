@@ -5,7 +5,7 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**85 records.** One file per decision (`ADR-NNNN-slug.md`),
+**86 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
@@ -51,7 +51,6 @@ architecture is shaped the way it is.
 | [0030](ADR-0030-auto-plan-preview.md) | Auto-Plan previews the pack before it replaces the plan | 2026-09-29 |
 | [0031](ADR-0031-household-favorites-ratings.md) | Shared household favourites + per-recipe ratings | 2026-09-30 |
 | [0032](ADR-0032-cooked-history-shared-by-default.md) | Cooked history is shared by default, with a permanent opt-out _(supersedes ADR-0011)_ | 2026-09-29 |
-| [0033](ADR-0033-auto-plan-regenerate-seed.md) | An Auto-Plan "Regenerate" press rolls the seed | 2026-10-01 |
 | [0034](ADR-0034-cook-anytime.md) | Cook any recipe, and remember which plan a cook came from | 2026-10-01 |
 | [0037](ADR-0037-remembered-default-servings.md) | A remembered default serving size | 2026-10-01 |
 | [0038](ADR-0038-cloudflare-deployment.md) | Cloudflare hosts flambette.app — Workers with assets and a Durable Object relay | 2026-10-02 |
@@ -90,6 +89,7 @@ architecture is shaped the way it is.
 | [0077](ADR-0077-stitch-alignment-pass.md) | The Stitch alignment pass — closing the remaining structural gaps on four surfaces | 2026-10-10 |
 | [0078](ADR-0078-home-hero.md) | The home page is a hero page | 2026-10-10 |
 | [0079](ADR-0079-room-chip-no-tooltip-roster-is-the-room-surface.md) | The room chip drops its tooltip; the roster sheet is the room's info surface _(supersedes ADR-0049)_ | 2026-10-11 |
+| [0080](ADR-0080-waste-first-proposals.md) | Auto-Plan proposals — waste-first ranking and the continuity seed _(supersedes ADR-0033)_ | 2026-10-11 |
 
 ## Not in force
 
@@ -99,6 +99,7 @@ understand why the current shape is the shape.
 | ADR | Decision | Status | Date |
 | --- | --- | --- | --- |
 | [0004](ADR-0004-share-url-and-rooms.md) | Share via URL deep-link (`?p=`), rooms for interactive sync | accepted (superseded in part) | 2026-09-23 |
+| [0033](ADR-0033-auto-plan-regenerate-seed.md) | An Auto-Plan "Regenerate" press rolls the seed | accepted (superseded in part) | 2026-10-01 |
 | [0035](ADR-0035-design-tokens-and-categorical-hues.md) | A design-token layer (DESIGN.md), categorical food hues, and a wider desktop | superseded | 2026-10-01 |
 | [0036](ADR-0036-kitchen-companion-redesign.md) | A kitchen companion, not an accent-only reskin | proposed | 2026-10-01 |
 | [0038](ADR-0038-step-timers-move-under-step-views.md) | Step timers live on the step, not in a global strip | proposed | 2026-10-01 |
@@ -127,8 +128,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0080**). Do not count the files -- that is how the
-   collisions above happened (85 files share 79 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0081**). Do not count the files -- that is how the
+   collisions above happened (86 files share 80 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.
