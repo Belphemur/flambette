@@ -409,12 +409,17 @@ test('rotation: a Regenerate press rolls the seed, every apply rotates it (ADR-0
   const secondSet = await proposalSetIds(page)
   expect(await readGeneration(page)).toBe(1)
   expect(secondSet).not.toEqual(firstSet)
+  // Regeneration variety (#74): the SELECTED pack itself must differ —
+  // not just the card set around it. The pre-amendment lib kept Plan A
+  // pinned at the 4-package seed through every window.
+  expect(second).not.toEqual(first)
 
   await pressGenerate(page)
   const third = await previewIds(page)
   const thirdSet = await proposalSetIds(page)
   expect(await readGeneration(page)).toBe(2)
   expect(thirdSet).not.toEqual(secondSet)
+  expect(third).not.toEqual(second)
 
   // The apply-time advance is KEPT: confirming the pack shown at
   // generation 2 leaves the counter at 3 for the next dialog, so the
@@ -422,6 +427,35 @@ test('rotation: a Regenerate press rolls the seed, every apply rotates it (ADR-0
   await confirm(page)
   expect(await plannedIds(page)).toEqual(third)
   expect(await readGeneration(page)).toBe(3)
+  await expectZeroMealimeRequests(page)
+})
+
+test('rotation: add mode — Regenerate changes the pre-selected continuity pack (#74)', async ({
+  page,
+}) => {
+  await page.goto('/plan')
+  await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
+
+  // Non-empty plan → add mode: the SELECTED card is the CONTINUITY
+  // proposal (lowest marginal cost, pinned #1). Pre-amendment, its lead
+  // meal was pinned by the rating tie-break forever (#74).
+  await generateWithCount(page, 1)
+  await confirm(page)
+  expect(await plannedIds(page)).toEqual([PINNED_DEFAULT_IDS[0]])
+
+  await page.getByTestId('auto-plan-button').first().click()
+  await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+  // The dialog's first press keeps the stored generation (the apply
+  // above advanced it); the Regenerate press rolls it.
+  await pressGenerate(page)
+  const first = await previewIds(page)
+  await expect(page.getByTestId('auto-plan-generate')).toHaveText('Regenerate')
+  await pressGenerate(page)
+  const second = await previewIds(page)
+  // Same (zero) marginal cost, a DIFFERENT tied lead — the pre-selected
+  // card's meal ids must differ (ADR-0080 amendment Decision 1).
+  expect(second).not.toEqual(first)
+  await confirm(page)
   await expectZeroMealimeRequests(page)
 })
 
