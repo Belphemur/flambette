@@ -416,6 +416,11 @@ test('rotation: a Regenerate press rolls the seed, every apply rotates it (ADR-0
   // not just the card set around it. The pre-amendment lib kept Plan A
   // pinned at the 4-package seed through every window.
   expect(second).not.toEqual(first)
+  // Recency-demotion amendment (#74): regenerate is a QUEUE — the shown
+  // plans demote to the back of the candidate ranking, so consecutive
+  // pre-selected plans share NO meals (the offered set covers press 1's
+  // three cards; the fresh pool easily fills the packs).
+  expect(second.filter((id) => first.includes(id))).toEqual([])
 
   await pressGenerate(page)
   const third = await previewIds(page)
@@ -423,6 +428,7 @@ test('rotation: a Regenerate press rolls the seed, every apply rotates it (ADR-0
   expect(await readGeneration(page)).toBe(2)
   expect(thirdSet).not.toEqual(secondSet)
   expect(third).not.toEqual(second)
+  expect(third.filter((id) => second.includes(id))).toEqual([])
 
   // The apply-time advance is KEPT: confirming the pack shown at
   // generation 2 leaves the counter at 3 for the next dialog, so the
@@ -464,6 +470,41 @@ test('rotation: add mode — Regenerate changes the pre-selected continuity pack
   // card's meal ids must differ (ADR-0080 amendment Decision 1).
   expect(second).not.toEqual(first)
   await confirm(page)
+  await expectZeroMealimeRequests(page)
+})
+
+test('rotation: re-opening the dialog resets the offered set — the gen-0 pin reproduces (recency-demotion #74)', async ({
+  page,
+}) => {
+  await page.goto('/plan')
+  await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
+  await setGeneration(page, 0)
+
+  // Session 1: generate (gen-0 pin) + one Regenerate — the queue moves
+  // every shown meal to the back, so the pre-selected plan shares NO
+  // meals with the gen-0 pack.
+  await page.getByTestId('auto-plan-button').first().click()
+  await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+  await pressGenerate(page)
+  const first = await previewIds(page)
+  expect(first).toEqual(PINNED_DEFAULT_IDS)
+  await expect(page.getByTestId('auto-plan-generate')).toHaveText('Regenerate')
+  await pressGenerate(page)
+  const second = await previewIds(page)
+  expect(second.filter((id) => first.includes(id))).toEqual([])
+
+  // Discard the session — cancel + close WITHOUT confirming. The offered
+  // set is dialog-ephemeral (NO persisted store, owner ruling).
+  await page.getByTestId('auto-plan-cancel').click()
+  await page.getByRole('button', { name: 'Close auto-plan' }).click()
+  await expect(page.getByTestId('auto-plan-dialog')).toBeHidden()
+
+  // Session 2: clean slate — the first press reproduces the gen-0 pin.
+  await setGeneration(page, 0)
+  await page.getByTestId('auto-plan-button').first().click()
+  await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+  await pressGenerate(page)
+  expect(await previewIds(page)).toEqual(PINNED_DEFAULT_IDS)
   await expectZeroMealimeRequests(page)
 })
 

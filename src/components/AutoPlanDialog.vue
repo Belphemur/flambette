@@ -98,16 +98,30 @@ function planLetter(index: number): string {
   return PLAN_LETTERS[index] ?? String(index + 1)
 }
 
+/**
+ * Recency-demotion amendment (ADR-0080, #74): the union of every
+ * variantId shown in proposal cards so far this dialog session. Each
+ * generate press adds its proposals' ids and passes the set into the
+ * planner request, so already-seen plans demote to the BACK of the
+ * candidate ranking — regenerate behaves like a queue. EPHEMERAL by
+ * owner ruling: NO persisted store, NO STORE_SLICES change, NO backup /
+ * room payload — closing the dialog discards it, the next open starts
+ * clean (same ephemerality rule as `pendingProposals`).
+ */
+const offeredIds = ref<ReadonlySet<number>>(new Set())
+
 /** PlanTab's trigger buttons open the dialog; everything else is internal. */
 function openAutoPlan() {
   pendingProposals.value = null
   selectedProposal.value = 0
+  offeredIds.value = new Set()
   autoPlanOpen.value = true
 }
 
 function closeAutoPlan() {
   autoPlanOpen.value = false
   pendingProposals.value = null
+  offeredIds.value = new Set()
 }
 
 defineExpose({ open: openAutoPlan })
@@ -159,6 +173,10 @@ async function generateAutoPlan() {
   ruleset: wanted.ruleset,
   mode: wanted.mode,
   seedGeneration: wanted.generation,
+  // The press BEFORE this one showed these ids; they demote behind every
+  // fresh candidate. The first press passes an empty set — generation 0
+  // stays bit-for-bit the pinned pack (ADR-0080 recency-demotion §4).
+  offeredIds: offeredIds.value,
   })
   if (
   wanted.count !== autoPlanCount.value ||
@@ -171,6 +189,10 @@ async function generateAutoPlan() {
   }
   pendingProposals.value = result
   selectedProposal.value = preselectedProposalIndex(result.proposals)
+  // The shown plans are now OFFERED: the next press demotes them.
+  const shown = new Set(offeredIds.value)
+  for (const p of result.proposals) for (const id of p.variantIds) shown.add(id)
+  offeredIds.value = shown
   } catch {
   ui.showToast("Couldn't load the planner — try again")
   } finally {
@@ -556,6 +578,7 @@ function setCategory(value: string) {
   {{ pendingProposals.proposals.length === 1 ? 'plan' : 'plans' }} for your week.
   <span class="lg:hidden">Tap one</span><span class="hidden lg:inline">Pick one</span> to preview it —
   the badge marks the one that buys the fewest packages.
+  Regenerating shows plans you haven't seen yet — seen plans move to the back of the queue.
   </p>
   </div>
   <!-- ADR-0080 Decision 5 + amendment: one card per proposal, the

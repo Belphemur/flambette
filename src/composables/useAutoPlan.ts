@@ -83,6 +83,12 @@ export interface AutoPlanOptions {
   mode?: 'add' | 'replace'
   /** Rotating seed generation (persisted counter, ADR-0027). */
   seedGeneration?: number
+  /**
+   * Recency-demotion amendment (ADR-0080, #74) — variant ids already
+   * offered to the household this dialog session (ephemeral, dialog-held;
+   * NO persisted store). Passed through to the planner request.
+   */
+  offeredIds?: ReadonlySet<number>
 }
 
 /** Bayesian prior weight for rating smoothing (ADR-0027 §smoothing). */
@@ -210,6 +216,9 @@ async function resolveAutoPlanRequest(options: AutoPlanOptions): Promise<{
     baseIds,
     baseServings,
     seedGeneration: options.seedGeneration ?? ui.nextAutoPlanGeneration(),
+    // Recency-demotion amendment (#74): the dialog's ephemeral offered
+    // set rides in the request — demotion happens in the pure lib.
+    offeredIds: options.offeredIds,
     // ADR-0031: household favourites are a preference signal (+0.05 off a
     // candidate's score). The set is read whole — the planner only ever
     // consults it for candidates it is already considering.

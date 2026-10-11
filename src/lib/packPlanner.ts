@@ -105,6 +105,16 @@ export interface PackPlanRequest {
    * which recipe anchors the pack.
    */
   favoriteIds?: ReadonlySet<number>
+  /**
+   * Recency-demotion amendment (ADR-0080, #74) — variant ids ALREADY
+   * OFFERED to the household in this dialog session. Demotion, not
+   * deletion: offered candidates rank BEHIND every not-yet-offered one
+   * (relative order preserved) in the proposal seed pool, and the greedy
+   * slots prefer fresh fillers while the fresh pool can still fill the
+   * pack. Absent/empty → bit-for-bit current behaviour (generation 0
+   * pins stand).
+   */
+  offeredIds?: ReadonlySet<number>
 }
 
 export interface PackPlan {
@@ -350,13 +360,30 @@ function runPack(index: PackIndex, req: PackPlanRequest, forcedSeedId: number | 
     picked.add(seed)
   }
 
+  // Recency-demotion amendment (ADR-0080, #74): while enough FRESH
+  // (never-offered) candidates remain to fill the pack, offered ones are
+  // not considered for the slots — variety yields to availability only
+  // when the fresh pool runs short. Absent/empty offeredIds → the slot
+  // scan is bit-for-bit unchanged (same candidate set, same ascending-id
+  // order, same strict-improvement ties).
+  const offered = req.offeredIds
   for (let slot = 1; slot < count; slot++) {
     if (pack.length >= candidates.length) break
+    let freshOnly = false
+    if (offered && offered.size > 0) {
+      const remaining = count - pack.length
+      let freshUnpicked = 0
+      for (const id of candidates) {
+        if (!picked.has(id) && !offered.has(id)) freshUnpicked++
+      }
+      freshOnly = freshUnpicked >= remaining
+    }
     let bestId = -1
     let bestScore = Infinity
     let bestRating = -1
     for (const id of candidates) {
       if (picked.has(id)) continue
+      if (freshOnly && offered!.has(id)) continue
       const rating = ratingOf(id)
       const score =
         marginalPackagesOf(index, pantry, totals, id) +
@@ -465,6 +492,13 @@ function toProposal(seedId: number, plan: PackPlan, kind: PackProposal['kind']):
  * reachable from every generation (a one-candidate pool at generation 2
  * shows its one proposal, never an empty preview).
  *
+ * Recency-demotion amendment (ADR-0080, #74): `offeredIds` — variant ids
+ * already offered this dialog session, held EPHEMERALLY by the dialog —
+ * demote those candidates BEHIND every fresh one in the candidate
+ * ranking (relative order preserved) before the pool slice, and the
+ * greedy slots prefer fresh fillers while the fresh pool can still fill
+ * the pack. Absent/empty → bit-for-bit the demotion-free behaviour.
+ *
  * `baseIds` footprints pre-commit into EVERY proposal's ledger (add mode
  * semantics — `packagesBought` describes base + additions, exactly as
  * `buildAutoPlan` does).
@@ -482,6 +516,18 @@ export function buildAutoPlanProposals(index: PackIndex, req: PackPlanRequest): 
 
   const ratingOf = (id: number): number => req.ratings?.get(id) ?? 0
   const byRating = [...candidates].sort((a, b) => ratingOf(b) - ratingOf(a))
+
+  // Recency-demotion amendment (ADR-0080, #74): candidates already
+  // OFFERED this dialog session rank BEHIND every not-yet-offered one;
+  // relative order inside each group is preserved (rating desc → id
+  // asc). Demotion, not deletion — an offered candidate stays eligible
+  // for the pool and the slots (below) when the fresh pool runs short.
+  // Absent/empty offeredIds → bit-for-bit the demotion-free ranking.
+  const offered = req.offeredIds
+  const ranked: number[] =
+    offered && offered.size > 0
+      ? [...byRating.filter((id) => !offered.has(id)), ...byRating.filter((id) => offered.has(id))]
+      : byRating
 
   // Continuity seed (add mode, amendment Decision 1): rank
   // (generation mod min(tieCount, ROTATION_K)) of the minimal-marginal
@@ -522,7 +568,7 @@ export function buildAutoPlanProposals(index: PackIndex, req: PackPlanRequest): 
   // amendment matters. The regime is "widened pool" iff the top-9 slice
   // is complete AND enough seeds remain after the continuity seed is
   // removed to fill the cards.
-  const preFilter = byRating.slice(0, Math.min(PROPOSAL_POOL, byRating.length))
+  const preFilter = ranked.slice(0, Math.min(PROPOSAL_POOL, ranked.length))
   const ratedPool = preFilter.filter((id) => id !== continuitySeed)
   const generation = sanitizeGeneration(req.seedGeneration)
   const disjoint = preFilter.length >= PROPOSAL_POOL && ratedPool.length >= PROPOSAL_COUNT

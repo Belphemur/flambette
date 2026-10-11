@@ -1100,3 +1100,133 @@ test('add mode: the continuity seed INSIDE the top-9 does not collapse the windo
   // drop #4, so its window w=0 reads ranks 0-1 of THAT pool = #1, #2.
   expect(seedsOf(3)).toEqual([4, 1, 2])
 })
+
+/**
+ * Recency-demotion amendment (ADR-0080, #74): regenerate behaves like a
+ * queue — offered candidates demote BEHIND every fresh one; demotion,
+ * not deletion; absent offeredIds = bit-for-bit current behaviour.
+ */
+describe('buildAutoPlanProposals recency-demotion amendment (ADR-0080, #74)', () => {
+  test('pool demotion: an offered high-rated seed ranks behind fresh ones', () => {
+    const index = idx({
+      '1': { i: [], s: 0 },
+      '2': { i: [], s: 0 },
+      '3': { i: [], s: 0 },
+      '4': { i: [], s: 0 },
+    })
+    const req = {
+      count: 1,
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.8],
+        [3, 0.7],
+        [4, 0.6],
+      ]),
+    }
+    expect(buildAutoPlanProposals(index, { ...req, seedGeneration: 0 }).map((p) => p.seedId)).toEqual([
+      1, 2, 3,
+    ])
+    // With #1 offered, the fresh candidates fill the cards; #1 is demoted
+    // BEHIND them (not deleted — a 4th card slot would take it).
+    expect(
+      buildAutoPlanProposals(index, { ...req, seedGeneration: 0, offeredIds: new Set([1]) }).map(
+        (p) => p.seedId,
+      ),
+    ).toEqual([2, 3, 4])
+  })
+
+  test('slot demotion: the greedy slots prefer fresh fillers while fresh can fill the pack', () => {
+    // Three candidates sharing ONE container (every completion is the
+    // same cheap package); #1 offered AND highest-rated — without slot
+    // demotion the freshest seed's completion would take #1 (rating
+    // tie-break). The fresh-seeded card must instead complete FRESH.
+    const index = idx({
+      '1': { i: [[0, 0.5, 1, 1]], s: 1 },
+      '2': { i: [[0, 0.5, 1, 1]], s: 1 },
+      '3': { i: [[0, 0.5, 1, 1]], s: 1 },
+    })
+    const req = {
+      count: 2,
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.8],
+        [3, 0.7],
+      ]),
+      offeredIds: new Set([1]),
+    }
+    const proposals = buildAutoPlanProposals(index, req)
+    // Locate the FRESH-seeded card by seedId (the returned ranking is
+    // waste-first with a rating tie-break, so an offered seed's pack can
+    // sit first in this degenerate 3-candidate synthetic — the real
+    // catalog never ties, and Decision 6's e2e pins the pre-selection).
+    const freshCard = proposals.find((p) => p.seedId === 2)
+    expect(freshCard?.variantIds).toEqual([2, 3])
+    expect(freshCard?.variantIds).not.toContain(1)
+  })
+
+  test('variety yields to availability: a thin fresh pool lets offered candidates fill the pack', () => {
+    const index = idx({
+      '1': { i: [[0, 1, 1, 1]], s: 1 },
+      '2': { i: [[1, 1, 1, 1]], s: 1 },
+      '3': { i: [[2, 1, 1, 1]], s: 1 },
+      '4': { i: [[3, 1, 1, 1]], s: 1 },
+    })
+    const req = {
+      count: 3,
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.8],
+        [3, 0.7],
+        [4, 0.6],
+      ]),
+      offeredIds: new Set([2, 3, 4]),
+    }
+    const proposals = buildAutoPlanProposals(index, req)
+    // Card A (pre-selected) is fresh-only: fresh #1 seeds, fresh #2 fills.
+    expect(proposals[0].variantIds).toEqual([1, 2, 3])
+    // Availability: packs still hold 3 meals — the fresh pool (2) cannot
+    // fill three DISTINCT packs, so offered candidates re-offer (in the
+    // pack slots of a demoted seed's card, and as demoted seed leads).
+    for (const p of proposals) {
+      expect(p.variantIds).toHaveLength(3)
+    }
+  })
+
+  test('determinism: offeredIds is part of the request', () => {
+    const recipes: Record<string, { i: Array<[number, number, number, number]>; s: number }> = {}
+    const ratingEntries: Array<[number, number]> = []
+    for (let id = 1; id <= 6; id++) {
+      recipes[String(id)] = { i: [[0, id * 0.25, 1, 1]], s: 1 }
+      ratingEntries.push([id, 1 - id * 0.05])
+    }
+    const index = idx(recipes)
+    const req = { count: 3, ratings: ratings(ratingEntries), seedGeneration: 1, offeredIds: new Set([1, 6]) }
+    expect(JSON.stringify(buildAutoPlanProposals(index, req))).toBe(
+      JSON.stringify(buildAutoPlanProposals(index, req)),
+    )
+    // A different offered set → a different (deterministic) list.
+    expect(JSON.stringify(buildAutoPlanProposals(index, req))).not.toBe(
+      JSON.stringify(buildAutoPlanProposals(index, { ...req, offeredIds: new Set([2]) })),
+    )
+  })
+
+  test('the continuity tie-set is UNCHANGED by demotion: an offered tied lead still ranks first', () => {
+    const base = { '10': { i: [[0, 2, 1, 1]], s: 1 } }
+    const sharers = {
+      '1': { i: [[0, 0.5, 1, 1]], s: 1 },
+      '2': { i: [[0, 0.5, 1, 1]], s: 1 },
+    }
+    const proposals = buildAutoPlanProposals(idx({ ...base, ...sharers }), {
+      count: 1,
+      baseIds: [10],
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.8],
+      ]),
+      offeredIds: new Set([1]),
+    })
+    // Demotion reorders the SEED POOL, never the continuity tie-set
+    // (ADR recency-demotion §3): #1 stays the continuity lead.
+    expect(proposals[0]).toMatchObject({ seedId: 1, kind: 'continuity' })
+  })
+})
