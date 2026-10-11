@@ -34,7 +34,12 @@ import {
 // app can never generate. The probe now applies the dinner default and
 // reports the pack below as HOLDS. A pin is only worth anything if the thing
 // producing it is a faithful mirror; verify with the probe, not by eye.
-const PINNED_DEFAULT_IDS = [17452, 9889, 6389, 6167]
+// The generation-0 pre-selected proposal under ADR-0080 (fresh profile,
+// dinner, empty plan, replace-on-empty press): the CHEAPEST of the three
+// waste-ranked proposals — the 4-package pack anchored on #13443, down
+// from the 8-package rating-ranked v2 anchor #17452. The old pin breaking
+// loudly IS the contract working (ADR-0027 §Consequences, ADR-0080).
+const PINNED_DEFAULT_IDS = [13443, 6389, 11982, 6167]
 
 /** Open + generate in the Auto-Plan dialog with the DEFAULT count 4. */
 async function generate(page: Page): Promise<void> {
@@ -113,21 +118,47 @@ async function pressGenerate(page: Page): Promise<void> {
   await page.getByTestId('auto-plan-generate').click()
 }
 
-/** Variant ids of the pack currently shown in the open preview. */
+/** Variant ids of the SELECTED proposal card in the open preview (ADR-0080). */
 async function previewIds(page: Page): Promise<number[]> {
   await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
   // A finished run leaves "Generating…"; a FAILED one leaves the previous
   // preview up, which is also a settled state to read.
   await expect(page.getByTestId('auto-plan-generate')).not.toHaveText('Generating…', { timeout: 20_000 })
   await expect(page.getByTestId('auto-plan-confirm')).toBeVisible({ timeout: 20_000 })
-  const tiles = await page.locator('[data-test^="auto-plan-meal-"]').all()
-  if (tiles.length === 0) throw new Error('no preview tiles')
+  // Scope to the SELECTED card — every card renders its own tiles.
+  const tiles = await page
+    .locator('[data-test="auto-plan-proposal-selected"] [data-test^="auto-plan-meal-"]')
+    .all()
+  if (tiles.length === 0) throw new Error('no preview tiles in the selected proposal card')
   const ids: number[] = []
   for (const t of tiles) {
     const raw = await t.getAttribute('data-test')
     if (raw) ids.push(Number(raw.replace('auto-plan-meal-', '')))
   }
   return ids
+}
+
+/**
+ * The press's PROPOSAL SET: the union of every card's tiles (ADR-0080
+ * §Decision 4 — what a Regenerate press rotates is the window, i.e. this
+ * set, even when the cheapest pre-selected pack stays the same).
+ */
+async function proposalSetIds(page: Page): Promise<number[]> {
+  await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+  // Same settle waits as previewIds: the press's tiles stay mounted for
+  // the whole await, so the busy state is the honest completion signal.
+  await expect(page.getByTestId('auto-plan-generate')).not.toHaveText('Generating…', { timeout: 20_000 })
+  await expect(page.getByTestId('auto-plan-confirm')).toBeVisible({ timeout: 20_000 })
+  const tiles = await page
+    .locator('[data-test^="auto-plan-proposal"] [data-test^="auto-plan-meal-"]')
+    .all()
+  if (tiles.length === 0) throw new Error('no proposal cards')
+  const ids = new Set<number>()
+  for (const t of tiles) {
+    const raw = await t.getAttribute('data-test')
+    if (raw) ids.add(Number(raw.replace('auto-plan-meal-', '')))
+  }
+  return [...ids].sort((a, b) => a - b)
 }
 
 /** Category (builder_data) for each variant id. */
@@ -141,11 +172,13 @@ async function metaFor(page: Page, ids: number[]): Promise<Array<{ category?: st
   }, ids)
 }
 
-/** Packages number claimed by the open preview ("buys N packages"). */
+/** Packages number claimed by the SELECTED proposal card (ADR-0080). */
 async function previewPackages(page: Page): Promise<number> {
-  const text = await page.getByTestId('auto-plan-preview').textContent()
-  const m = text?.match(/buys (\d+) packages?/)
-  if (!m) throw new Error(`preview text missing packages: ${text}`)
+  const text = await page
+    .locator('[data-test="auto-plan-proposal-selected"] [data-test="auto-plan-proposal-packages"]')
+    .textContent()
+  const m = text?.match(/(\d+)/)
+  if (!m) throw new Error(`selected proposal missing packages: ${text}`)
   return Number(m[1])
 }
 
@@ -173,6 +206,83 @@ test('fresh profile: generates the pinned 4-meal dinner pack, grocery derives', 
   await expect(page.locator('main').getByRole('listitem').first()).toBeVisible({
     timeout: 15_000,
   })
+  await expectZeroMealimeRequests(page)
+})
+
+test('proposals: the cheapest card is pre-selected and every card shows its packages line (ADR-0080)', async ({
+  page,
+}) => {
+  await page.goto('/plan')
+  await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
+  await page.getByTestId('auto-plan-button').first().click()
+  await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+  await page.getByTestId('auto-plan-generate').click()
+  await expect(page.getByTestId('auto-plan-confirm')).toBeVisible({ timeout: 20_000 })
+
+  // Three cards (PROPOSAL_COUNT), each with its own "buys N packages"
+  // line — and exactly ONE selected marker.
+  const cards = page.locator('[data-test="auto-plan-proposal"], [data-test="auto-plan-proposal-selected"]')
+  await expect(cards).toHaveCount(3)
+  const lines = page.getByTestId('auto-plan-proposal-packages')
+  await expect(lines).toHaveCount(3)
+  for (let i = 0; i < 3; i++) {
+    await expect(lines.nth(i)).toContainText(/buys \d+ packages?/)
+  }
+
+  // Waste-first made visible: the SELECTED card's packages number is the
+  // minimum across the cards.
+  const pkgs = (await lines.allTextContents()).map(
+    (t) => Number(t.match(/(\d+)/)![1]),
+  )
+  const selected = page.getByTestId('auto-plan-proposal-selected')
+  await expect(selected).toHaveCount(1)
+  const selectedPkgs = Number(
+    (await selected.getByTestId('auto-plan-proposal-packages').textContent())!.match(/(\d+)/)![1],
+  )
+  expect(selectedPkgs).toBe(Math.min(...pkgs))
+  await expectZeroMealimeRequests(page)
+})
+
+test('proposals: selecting a different card changes what Confirm applies (ADR-0080)', async ({
+  page,
+}) => {
+  await page.goto('/plan')
+  await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
+  await page.getByTestId('auto-plan-button').first().click()
+  await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
+  await page.getByTestId('auto-plan-generate').click()
+  await expect(page.getByTestId('auto-plan-confirm')).toBeVisible({ timeout: 20_000 })
+
+  const cards = page.locator('[data-test="auto-plan-proposal"], [data-test="auto-plan-proposal-selected"]')
+  await expect(cards).toHaveCount(3)
+
+  async function cardIds(index: number): Promise<number[]> {
+    const tiles = cards.nth(index).locator('[data-test^="auto-plan-meal-"]')
+    const raws = await tiles.evaluateAll((els) =>
+      els.map((el) => (el.getAttribute('data-test') ?? '').replace('auto-plan-meal-', '')),
+    )
+    return raws.filter(Boolean).map(Number)
+  }
+
+  const preselected = await cardIds(0)
+  // Pick a card whose pack differs from the pre-selected one — the floor
+  // pack is cheapest and may well be the ONLY 4-package proposal.
+  let target = -1
+  for (let i = 0; i < 3; i++) {
+    if (JSON.stringify(await cardIds(i)) !== JSON.stringify(preselected)) {
+      target = i
+      break
+    }
+  }
+  expect(target).toBeGreaterThanOrEqual(0)
+
+  await cards.nth(target).click()
+  await expect(page.getByTestId('auto-plan-proposal-selected')).toHaveCount(1)
+  // Confirm applies ONLY the selected proposal (ADR-0080 Decision 5).
+  await expect(page.getByTestId('auto-plan-confirm')).toBeEnabled({ timeout: 20_000 })
+  const chosen = await cardIds(target) // read BEFORE confirm closes the dialog
+  await confirm(page)
+  expect(await plannedIds(page)).toEqual(chosen)
   await expectZeroMealimeRequests(page)
 })
 
@@ -214,19 +324,24 @@ test('rotation: a Regenerate press rolls the seed, every apply rotates it (ADR-0
   expect(await readGeneration(page)).toBe(0)
 
   // From here the button reads "Regenerate" and EVERY press must roll the
-  // seed: re-running the same generation would rebuild the identical pack,
-  // which makes the affordance dead. No confirm, no apply — the advance
-  // happens on the press itself.
+  // seed: re-running the same generation would rebuild the identical
+  // proposal set, which makes the affordance dead (ADR-0033, ADR-0080 §4).
+  // What rotates is the PROPOSAL WINDOW — the card SET differs even when
+  // the cheapest pre-selected pack stays the same (the waste-floor pack
+  // wins every window it appears in; that is waste-first working).
   await expect(page.getByTestId('auto-plan-generate')).toHaveText('Regenerate')
+  const firstSet = await proposalSetIds(page)
   await pressGenerate(page)
   const second = await previewIds(page)
+  const secondSet = await proposalSetIds(page)
   expect(await readGeneration(page)).toBe(1)
-  expect(second).not.toEqual(first)
+  expect(secondSet).not.toEqual(firstSet)
 
   await pressGenerate(page)
   const third = await previewIds(page)
+  const thirdSet = await proposalSetIds(page)
   expect(await readGeneration(page)).toBe(2)
-  expect(third).not.toEqual(second)
+  expect(thirdSet).not.toEqual(secondSet)
 
   // The apply-time advance is KEPT: confirming the pack shown at
   // generation 2 leaves the counter at 3 for the next dialog, so the
@@ -241,30 +356,31 @@ test('rotation: a FIXED generation stays stable, successive ones differ', async 
   await page.goto('/plan')
   await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
 
-  // Open, read the first pick from the preview tiles, then close WITHOUT
-  // confirming. Each open is a first press, so the pinned generation is
-  // what the run uses — the determinism control for the seed itself.
-  async function firstPreviewId(): Promise<number> {
+  // Open, read the press's PROPOSAL SET from the preview cards, then
+  // close WITHOUT confirming. Each open is a first press, so the pinned
+  // generation is what the run uses — the determinism control for the
+  // window itself.
+  async function firstProposalSet(): Promise<number[]> {
     await page.getByTestId('auto-plan-button').first().click()
     await expect(page.getByTestId('auto-plan-dialog')).toBeVisible()
     await pressGenerate(page)
-    const ids = await previewIds(page)
+    const ids = await proposalSetIds(page)
     await page.getByTestId('auto-plan-cancel').click()
     await page.getByRole('button', { name: 'Close auto-plan' }).click()
     await expect(page.getByTestId('auto-plan-dialog')).toBeHidden()
-    return ids[0]
+    return ids
   }
 
   await setGeneration(page, 0)
-  const gen0 = await firstPreviewId()
+  const gen0 = await firstProposalSet()
   await setGeneration(page, 1)
-  const gen1 = await firstPreviewId()
-  expect(gen1).not.toBe(gen0)
+  const gen1 = await firstProposalSet()
+  expect(gen1).not.toEqual(gen0)
   // Stable under repeat of the same generation.
   await setGeneration(page, 1)
-  expect(await firstPreviewId()).toBe(gen1)
+  expect(await firstProposalSet()).toEqual(gen1)
   await setGeneration(page, 0)
-  expect(await firstPreviewId()).toBe(gen0)
+  expect(await firstProposalSet()).toEqual(gen0)
   await expectZeroMealimeRequests(page)
 })
 
@@ -276,8 +392,9 @@ test('count stepper: 1 meal and 10 meals (new meals only)', async ({ page }) => 
   await confirm(page)
   const ids = await plannedIds(page)
   expect(ids).toHaveLength(1)
-  // Gen 0 seed = highest smoothed dinner rating.
-  expect(ids[0]).toBe(17452)
+  // Gen 0 pre-selects the CHEAPEST proposal (ADR-0080): the 4-package
+  // anchor #13443, not the 8-package rating-ranked seed #17452.
+  expect(ids[0]).toBe(PINNED_DEFAULT_IDS[0])
 
   // Reopen; bump the count to 10 by pressing the + stepper.
   await page.getByTestId('auto-plan-button').first().click()
@@ -301,14 +418,14 @@ test('add mode: pre-seeded plan keeps its meals and appends exactly N', async ({
   await generateWithCount(page, 1)
   await confirm(page)
   const base = await plannedIds(page)
-  expect(base).toEqual([17452])
+  expect(base).toEqual([PINNED_DEFAULT_IDS[0]])
 
   await generateWithCount(page, 3)
   await confirm(page)
   const combined = await plannedIds(page)
   expect(combined).toHaveLength(4)
   // The base stayed in place (still first) and the additions are new ids.
-  expect(combined[0]).toBe(17452)
+  expect(combined[0]).toBe(PINNED_DEFAULT_IDS[0])
   expect(new Set(combined).size).toBe(4)
   await expectZeroMealimeRequests(page)
 })

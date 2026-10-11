@@ -1,18 +1,21 @@
 /**
- * Probe: does the pinned Auto-Plan pack still hold after a catalog sync?
+ * Probe: does the pinned Auto-Plan PROPOSAL still hold after a catalog sync?
  *
- * The e2e pins the generation-0 4-pack as [17452, 6389, 9889, 6167] (ADR-0024).
- * A catalog sync changes the candidate set, so the pin is only valid if the
- * arithmetic is unchanged. Run this BEFORE `bunx playwright test e2e/auto-plan.spec.ts`
- * so a pin break is diagnosed here instead of in a browser.
+ * The e2e pins the generation-0 PRE-SELECTED proposal as [13443, 6389,
+ * 11982, 6167] (ADR-0080): the CHEAPEST of the waste-ranked proposals —
+ * packagesBought ASC, then seed rating DESC, then seed id ASC. A catalog
+ * sync changes the candidate set, so the pin is only valid if the
+ * arithmetic is unchanged. Run this BEFORE
+ * `bunx playwright test e2e/auto-plan.spec.ts` so a pin break is
+ * diagnosed here instead of in a browser.
  *
  *     bun run scripts/probe_autoplan_pin.ts
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { buildAutoPlan } from '../src/lib/packPlanner'
+import { buildAutoPlanProposals } from '../src/lib/packPlanner'
 
-const PINNED = [17452, 9889, 6389, 6167]
+const PINNED = [13443, 6389, 11982, 6167]
 
 /** Must match the `autoPlanRuleset` default in src/stores/ui.ts: the
  *  default pack is a DINNER pack, and a probe that mirrors the call
@@ -59,20 +62,28 @@ for (const v of eligible) {
   ratings.set(v, (((m?.rating ?? 0) * count + mean * RATING_PRIOR_WEIGHT) / (count + RATING_PRIOR_WEIGHT)))
 }
 
-const plan = buildAutoPlan(index as any, {
+const proposals = buildAutoPlanProposals(index as any, {
   count: 4,
-  generation: 0,
+  seedGeneration: 0,
   excludeIds: [],
   ratings,
   tags: new Map([...builder.variant_meta, ...userEntries.map((r: any) => r.meta)].map((m: any) => [m.id, m.variety_tag_ids ?? []])),
 })
 
-const got = [...plan.variantIds]
-const same = got.length === PINNED.length && got.every((v, i) => v === PINNED[i])
-
+// Mirror AutoPlanDialog.preselectedProposalIndex exactly: the CHEAPEST
+// proposal, ties → first in the ranked array.
+let best = 0
+for (let i = 1; i < proposals.length; i++) {
+  if (proposals[i].packagesBought < proposals[best].packagesBought) best = i
+}
+const got = [...proposals[best].variantIds]
 console.log(`catalog: ${builder.feasible_variants.length} variants`)
+console.log(
+  `proposals: ${proposals.map((p) => `#${p.seedId}(${p.packagesBought} pkg)`).join(' ')}`,
+)
 console.log(`pinned : [${PINNED.join(', ')}]`)
 console.log(`actual : [${got.join(', ')}]`)
+const same = got.length === PINNED.length && got.every((v, i) => v === PINNED[i])
 if (same) {
   console.log('PIN HOLDS')
 } else {

@@ -21,11 +21,11 @@ import {
  */
 
 // Same contract as e2e/auto-plan.spec.ts, same value: the generation-0
-// DINNER pack after the 2,759-recipe sync. Only the ORDER within the pack
-// moved (the 9889/6389 pair swapped), which is the seed ranking re-sorting
-// inside the eligible slice — not a different pack. See
-// `bun run scripts/probe_autoplan_pin.ts`.
-const PINNED_DEFAULT_IDS = [17452, 9889, 6389, 6167]
+// CHEAPEST proposal under ADR-0080 (fresh profile, dinner, empty plan).
+// Down from v2's 8-package rating-ranked anchor #17452 to the 4-package
+// pack anchored on #13443 — the loud break is the contract working.
+// Verify with the probe, not by eye (`scripts/probe_autoplan_pin.ts`).
+const PINNED_DEFAULT_IDS = [13443, 6389, 11982, 6167]
 
 type RatingRecord = { rating: number; count: number; updatedAt: number }
 

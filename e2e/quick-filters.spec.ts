@@ -364,12 +364,17 @@ test.describe('Auto-Plan preview (WS6)', () => {
 
     const preview = page.getByTestId('auto-plan-preview')
     await expect(preview).toBeVisible()
-    const items = preview.getByTestId(/^auto-plan-meal-/)
+    // ADR-0080: every proposal card renders its own tiles — scope to the
+    // SELECTED card (the one Confirm applies).
+    const items = preview
+      .locator('[data-test="auto-plan-proposal-selected"] [data-test^="auto-plan-meal-"]')
     // One tile per picked meal, matching the count line above it.
     await expect(items).toHaveCount(4)
     for (let i = 0; i < 4; i++) {
       await expect(items.nth(i).locator('img')).toBeVisible()
-      await expect(items.nth(i).locator('p').first()).not.toBeEmpty()
+      // Card tiles use phrasing-only spans (a <button> cannot contain a
+      // <ul>/<p>); the name span is the tile's first span child.
+      await expect(items.nth(i).locator('span').first()).not.toBeEmpty()
     }
     // The images are the offline local files, never a remote host.
     const srcs = await items.locator('img').evaluateAll((imgs) =>
@@ -378,7 +383,7 @@ test.describe('Auto-Plan preview (WS6)', () => {
     for (const src of srcs) expect(src).not.toMatch(/^https?:/i)
 
     // Confirming still works, and the plan is what was previewed.
-    const titles = await items.locator('p').first().allTextContents()
+    const titles = await items.locator('span').first().allTextContents()
     await page.getByTestId('auto-plan-confirm').click()
     await expect(page.getByTestId('auto-plan-dialog')).toBeHidden()
     for (const title of titles) {
