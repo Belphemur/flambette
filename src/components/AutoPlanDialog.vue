@@ -3,8 +3,8 @@ import { computed, ref, watch } from 'vue'
 import { Minus, Plus, Sparkles, X } from 'lucide-vue-next'
 import { catalog } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
-import { MAX_MEALS, MIN_MEALS, type PackPlan } from '../lib/packPlanner'
-import { runAutoPlan } from '../composables/useAutoPlan'
+import { MAX_MEALS, MIN_MEALS, type PackProposal } from '../lib/packPlanner'
+import { runAutoPlanProposals } from '../composables/useAutoPlan'
 import { OFFERED_MEAL_TYPES } from '../lib/mealTypeFilter'
 import { mealRole, proteinRole } from '../lib/palette'
 import { usePlanStore } from '../stores/plan'
@@ -33,8 +33,11 @@ import type { FilterDropdownOption } from './FilterDropdown.vue'
  * gain — ADR-0046 §2.2).
  *
  * Planner arithmetic is UNTOUCHED (ADR-0046 Part 1: the algorithm review
- * is closed; K1-K3 are documented as kept). The e2e dinner pin
- * [17452, 9889, 6389, 6167] is the regression gate for that.
+ * is closed; K1-K3 are documented as kept). ADR-0080 layers the PROPOSAL
+ * preview on top: the dialog now renders one card per proposal (waste-
+ * ranked, cheapest pre-selected) and applies only the selected one. The
+ * e2e dinner pins (re-pinned under ADR-0080) remain the regression gate
+ * for the arithmetic itself.
  */
 
 const plan = usePlanStore()
@@ -50,18 +53,41 @@ const autoPlanCategory = ref<'' | 'meat' | 'fish' | 'vegetarian'>('')
 const autoPlanBusy = ref(false)
 // Ruleset + mode live in the UI STORE (persisted, ADR-0027); the dialog
 // binds them through the store refs.
-/** After Generate: the pending result awaiting the confirm step. */
-const pendingPlan = ref<(PackPlan & { eligibleCount: number }) | null>(null)
+/** After Generate: the pending PROPOSALS awaiting the confirm step (ADR-0080). */
+const pendingProposals = ref<{ proposals: PackProposal[]; eligibleCount: number } | null>(null)
+
+/**
+ * Which proposal card is selected — EPHEMERAL view state (ADR-0080
+ * Decision 5, like the search query): never persisted, never room-synced,
+ * no STORE_SLICES change. Reset to the CHEAPEST proposal whenever a new
+ * set arrives.
+ */
+const selectedProposal = ref(0)
+
+/**
+ * ADR-0080 Decision 1 made visible: the CHEAPEST proposal is pre-selected.
+ * Ties resolve to the first card in the ranked array — the lib already
+ * orders the rated proposals packagesBought-ASC → rating-DESC → id-ASC,
+ * and the continuity proposal (pinned #1) wins an exact tie.
+ */
+function preselectedProposalIndex(proposals: PackProposal[]): number {
+  let best = 0
+  for (let i = 1; i < proposals.length; i++) {
+    if (proposals[i].packagesBought < proposals[best].packagesBought) best = i
+  }
+  return best
+}
 
 /** PlanTab's trigger buttons open the dialog; everything else is internal. */
 function openAutoPlan() {
-  pendingPlan.value = null
+  pendingProposals.value = null
+  selectedProposal.value = 0
   autoPlanOpen.value = true
 }
 
 function closeAutoPlan() {
   autoPlanOpen.value = false
-  pendingPlan.value = null
+  pendingProposals.value = null
 }
 
 defineExpose({ open: openAutoPlan })
@@ -76,7 +102,7 @@ watch(
   () => ui.autoPlanRuleset,
   ],
   () => {
-  pendingPlan.value = null
+  pendingProposals.value = null
   },
 )
 
@@ -96,7 +122,7 @@ async function generateAutoPlan() {
   // once, and a failed or raced rebuild only costs a skipped seed value
   // (the seed is `generation mod ROTATION_K`, so a gap changes which pack
   // comes next, never the integrity of one that did resolve).
-  if (pendingPlan.value) ui.advanceAutoPlanGeneration()
+  if (pendingProposals.value) ui.advanceAutoPlanGeneration()
   // Pin the choices this run was made with; a result coming back after
   // the user changed any control is stale and must not apply.
   const wanted = {
@@ -107,7 +133,7 @@ async function generateAutoPlan() {
   generation: ui.nextAutoPlanGeneration(),
   }
   try {
-  const result = await runAutoPlan({
+  const result = await runAutoPlanProposals({
   count: wanted.count,
   category: wanted.category || undefined,
   ruleset: wanted.ruleset,
@@ -123,7 +149,8 @@ async function generateAutoPlan() {
   ) {
   return
   }
-  pendingPlan.value = result
+  pendingProposals.value = result
+  selectedProposal.value = preselectedProposalIndex(result.proposals)
   } catch {
   ui.showToast("Couldn't load the planner — try again")
   } finally {
@@ -131,18 +158,24 @@ async function generateAutoPlan() {
   }
 }
 
-/** Auto-Plan preview (WS6): the picked meals resolved to title + image so
- * the user SEES the pack before replacing a hand-curated plan. Same
- * catalog + image helpers the recipe cards use (offline, no new fetches). */
-const pendingMeals = computed(() => {
-  const ids = pendingPlan.value?.variantIds ?? []
+/** ADR-0080: each proposal's meals resolved to title + image (same
+ * catalog + image helpers as before — offline, no new fetches). Index
+ * aligns with `pendingProposals.proposals`. */
+const proposalMeals = computed(() => {
   const c = catalog.value
   if (!c) return []
-  return ids.flatMap((id) => {
+  return (pendingProposals.value?.proposals ?? []).map((p) =>
+  p.variantIds.flatMap((id) => {
   const meta = c.byId.get(id)
   return meta ? [{ id, name: meta.name, image: meta.thumbnail_image_url, minutes: meta.cooking_minutes }] : []
-  })
+  }),
+  )
 })
+
+/** The proposal the confirm step will apply (ADR-0080 Decision 5). */
+const selectedPack = computed(
+  () => pendingProposals.value?.proposals[selectedProposal.value] ?? null,
+)
 
 /**
  * A preview tile is missing for a variant the catalog cannot resolve.
@@ -160,20 +193,22 @@ const pendingMeals = computed(() => {
  */
 const previewComplete = computed(
   () =>
-  !!pendingPlan.value &&
+  !!selectedPack.value &&
   !autoPlanBusy.value &&
   // An EMPTY pack (pool exhausted under the active filters) must never
   // be confirmable: in replace mode it would erase the plan (qodo
   // round 1, thread 2).
-  pendingPlan.value.variantIds.length > 0 &&
-  pendingMeals.value.length === pendingPlan.value.variantIds.length,
+  selectedPack.value.variantIds.length > 0 &&
+  (proposalMeals.value[selectedProposal.value]?.length ?? 0) ===
+    selectedPack.value.variantIds.length,
 )
 
 /** Confirm/apply step: add mode APPENDS to the current plan (no
  * destructive confirm needed); replace mode REPLACES it after the
  * preview (confirm-before-destroy, unchanged from phase 19). */
 function confirmAutoPlan() {
-  const result = pendingPlan.value
+  // The SELECTED proposal is what applies (ADR-0080 Decision 5).
+  const result = selectedPack.value
   if (!result) return
   // Belt-and-braces with the `previewComplete` gate: a regeneration in
   // flight means the pack on screen is already superseded, and applying
@@ -183,7 +218,7 @@ function confirmAutoPlan() {
   // apply: in replace mode replacePlan([]) would ERASE the user's plan
   // (qodo round 1, thread 2); in add mode it would be a no-op anyway.
   if (result.variantIds.length === 0) {
-  ui.showToast(result.warnings?.[0] ?? 'No eligible recipes for this plan')
+  ui.showToast('No eligible recipes for this plan')
   closeAutoPlan()
   return
   }
@@ -234,11 +269,8 @@ function confirmAutoPlan() {
   plan.replacePlan(atConfirm, plan.customItems)
   plan.setClearedIngredients(clearedAtConfirm)
   }
-  const warning = result.warnings?.[0]
   ui.showToast(
-  warning
-  ? `Plan generated — ${warning}`
-  : replacing
+  replacing
   ? `Plan generated: ${result.variantIds.length} meals`
   : `${result.variantIds.length} meals added to your plan`,
   {
@@ -444,28 +476,28 @@ function setCategory(value: string) {
   :disabled="autoPlanBusy"
   @click="generateAutoPlan"
   >
-  {{ autoPlanBusy ? 'Generating…' : pendingPlan ? 'Regenerate' : 'Generate' }}
+  {{ autoPlanBusy ? 'Generating…' : pendingProposals ? 'Regenerate' : 'Generate' }}
   </button>
 
-  <div v-if="pendingPlan" class="ring-1 ring-border rounded-xl p-3 space-y-2" data-test="auto-plan-preview">
+  <div v-if="pendingProposals" class="ring-1 ring-border rounded-xl p-3 space-y-2" data-test="auto-plan-preview">
   <p class="text-xs">
   <template v-if="ui.autoPlanMode === 'add'">
-  Adds {{ pendingPlan.variantIds.length }} new
-  {{ pendingPlan.variantIds.length === 1 ? 'meal' : 'meals' }} to your plan —
+  Adds {{ selectedPack?.variantIds.length ?? 0 }} new
+  {{ (selectedPack?.variantIds.length ?? 0) === 1 ? 'meal' : 'meals' }} to your plan —
   </template>
   <template v-else>
-  Found a {{ pendingPlan.variantIds.length }}-meal pack —
+  Found a {{ selectedPack?.variantIds.length ?? 0 }}-meal pack —
   </template>
-  the full plan buys {{ pendingPlan.packagesBought }}
-  {{ pendingPlan.packagesBought === 1 ? 'package' : 'packages' }}
-  ({{ pendingPlan.eligibleCount }} eligible recipes).
+  the full plan buys {{ selectedPack?.packagesBought ?? 0 }}
+  {{ (selectedPack?.packagesBought ?? 0) === 1 ? 'package' : 'packages' }}
+  ({{ pendingProposals.eligibleCount }} eligible recipes).
   <template v-if="ui.autoPlanMode === 'replace'">
   Replaces your current plan
   <template v-if="plan.plan.length > 0">({{ plan.plan.length }} meals)</template>.
   </template>
   </p>
   <p v-if="!previewComplete" class="text-xs text-warning">
-  Showing {{ pendingMeals.length }} of {{ pendingPlan.variantIds.length }} meals — the rest are still
+  Showing {{ proposalMeals[selectedProposal]?.length ?? 0 }} of {{ selectedPack?.variantIds.length ?? 0 }} meals — the rest are still
   loading, so this plan cannot be confirmed yet.
   </p>
   <!-- ADR-0031: household stars and favourites nudge the ranking
@@ -474,9 +506,36 @@ function setCategory(value: string) {
   Ranked with your household’s ratings
   <template v-if="favouritesCount > 0"> and {{ favouritesCount }} favourite{{ favouritesCount === 1 ? '' : 's' }}</template>.
   </p>
-  <ul class="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Meals in this auto-plan">
-  <li
-  v-for="meal in pendingMeals"
+  <!-- ADR-0080 Decision 5: one card per proposal, the CHEAPEST
+  pre-selected (waste-first made visible). Selecting a card switches
+  the preview; Confirm applies ONLY the selected proposal. The cards
+  are a radio group; the selection is TINT + border emphasis (ADR-0036)
+  — the Confirm button stays this sheet's one filled intent. Card
+  content is phrasing-only (spans) because a <button> cannot contain
+  a <ul>; the tile GRAMMAR (image, clamped name, bubble, minutes) is
+  unchanged. -->
+  <div role="radiogroup" aria-label="Plan proposals" data-test="auto-plan-proposals" class="space-y-2">
+  <button
+  v-for="(proposal, pi) in pendingProposals.proposals"
+  :key="proposal.seedId"
+  type="button"
+  role="radio"
+  class="block w-full rounded-xl p-2 text-left ring-1 transition-colors"
+  :class="selectedProposal === pi ? 'bg-brand-tint ring-border-strong' : 'bg-surface ring-border hover:bg-surface-sunken'"
+  :aria-checked="selectedProposal === pi"
+  :aria-label="`Proposal ${pi + 1}: ${proposal.variantIds.length} ${proposal.variantIds.length === 1 ? 'meal' : 'meals'}, buys ${proposal.packagesBought} ${proposal.packagesBought === 1 ? 'package' : 'packages'}`"
+  :data-test="selectedProposal === pi ? 'auto-plan-proposal-selected' : 'auto-plan-proposal'"
+  @click="selectedProposal = pi"
+  >
+  <span class="flex items-center justify-between gap-2">
+  <span class="text-xs font-semibold">
+  Option {{ pi + 1 }}<template v-if="proposal.kind === 'continuity'"> · extends your plan</template>
+  </span>
+  <span class="shrink-0 font-mono-data text-[10px] tabular-nums" data-test="auto-plan-proposal-packages">buys {{ proposal.packagesBought }} {{ proposal.packagesBought === 1 ? 'package' : 'packages' }}</span>
+  </span>
+  <span class="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-hidden="true">
+  <span
+  v-for="meal in proposalMeals[pi] ?? []"
   :key="meal.id"
   class="group relative rounded-lg bg-surface ring-1 ring-border"
   :data-test="`auto-plan-meal-${meal.id}`"
@@ -490,20 +549,20 @@ function setCategory(value: string) {
   />
   <!-- ADR-0055: the OS title on the line-clamped name becomes the one
   bubble (hover only). above-center: below would clip against the
-  dialog's vertical scroll. The GROUP HOST is the tile li (not the p):
-  group-hover is a descendant selector, so the bubble must hang under
-  the hovered element, and the p's own text must stay clean — the e2e
-  preview round-trip reads the p's textContent and looks the meal up as
-  a heading. The tile's overflow clipping moved onto the image (rounded
-  top corners), or the absolutely-positioned bubble would be clipped by
-  its own tile. -->
-  <p class="line-clamp-2 px-1.5 py-1 text-[11px] leading-tight font-medium">
+  dialog's vertical scroll. The GROUP HOST is the tile (not the name
+  span): group-hover is a descendant selector, so the bubble must hang
+  under the hovered element. The tile's overflow clipping lives on the
+  image (rounded top corners), or the absolutely-positioned bubble
+  would be clipped by its own tile. -->
+  <span class="block line-clamp-2 px-1.5 py-1 text-[11px] leading-tight font-medium">
   {{ meal.name }}
-  </p>
+  </span>
   <TooltipBubble :text="meal.name" />
-  <p class="px-1.5 pb-1 font-mono-data text-[10px] tabular-nums">{{ meal.minutes }} min</p>
-  </li>
-  </ul>
+  <span class="block px-1.5 pb-1 font-mono-data text-[10px] tabular-nums">{{ meal.minutes }} min</span>
+  </span>
+  </span>
+  </button>
+  </div>
   <div class="flex gap-2">
   <button
   class="group relative h-11 flex-1 rounded-xl bg-brand text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
@@ -525,7 +584,7 @@ function setCategory(value: string) {
   <button
   class="h-11 flex-1 rounded-xl border border-border-strong bg-surface-raised text-sm font-medium text-text active:bg-surface-sunken"
   data-test="auto-plan-cancel"
-  @click="pendingPlan = null"
+  @click="pendingProposals = null"
   >
   Keep editing
   </button>
