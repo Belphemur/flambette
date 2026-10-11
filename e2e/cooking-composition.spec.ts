@@ -84,11 +84,16 @@ test('the two-card row is side by side at desktop and stacked on a phone', async
 })
 
 test('the timer card labels its quick-start pills, never as detections', async ({ page }) => {
-  const cooking = await startCookingRecipe(page, 5132)
+  // 10085 has NO timer sidecar: the collapsed default is deterministic
+  // (a hinted step auto-opens on the suggestion view — pinned in
+  // cooking-timers.spec).
+  const cooking = await startCookingRecipe(page, 10085)
   const card = cooking.getByTestId('timer-card')
-  // Collapsed default (states amendment): the fresh card is its
-  // "Set a Timer" disclosure row alone.
+  // No hint on this view: the COLLAPSED default (states amendment) is
+  // its "Set a Timer" disclosure row alone. (A hinted step auto-opens on
+  // the suggestion view instead — pinned in cooking-timers.spec.)
   const disclose = cooking.getByTestId('timer-disclose')
+  await expect(disclose).toBeVisible()
   await expect(disclose).toContainText('Set a Timer')
   await expect(disclose).toContainText('No timer running for this step.')
   await expect(disclose).toHaveAttribute('aria-expanded', 'false')

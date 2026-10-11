@@ -71,15 +71,16 @@ async function secondsAt(cooking: Locator, index = 0): Promise<number> {
 }
 
 /**
- * Expand the timer card's creation form (ADR-0081 states amendment).
- * The form is COLLAPSED by default in both card states and expansion is
- * always an explicit tap, so every test that touches a creation control
- * opens it first. Idempotent: reads `aria-expanded` instead of tapping
- * blindly (a second tap would collapse it again).
+ * Make the timer card's creation form visible (ADR-0081 states
+ * amendment + correction). Idempotent: reads `aria-expanded` instead of
+ * tapping blindly (a second tap would collapse it again). A DETECTED
+ * hint auto-opens the card on the suggestion view — there is no row to
+ * tap, so the helper returns instead of failing on the absent row.
  */
 async function openTimerForm(cooking: Locator) {
+  await expect(cooking.getByTestId('timer-card')).toBeVisible()
   const disclose = cooking.getByTestId('timer-disclose')
-  await expect(disclose).toBeVisible()
+  if ((await disclose.count()) === 0) return // auto-opened on a detected hint
   if ((await disclose.getAttribute('aria-expanded')) === 'false') await disclose.click()
   await expect(disclose).toHaveAttribute('aria-expanded', 'true')
 }
@@ -132,7 +133,10 @@ async function goToLastStep(cooking: Locator) {
 }
 
 test('the timer card is on the step view, the strip only when something is armed', async ({ page }) => {
-  const cooking = await startCooking(page)
+  // 10085 has NO timer sidecar: nothing is known or running, so the
+  // COLLAPSED default is deterministic here (a hinted step auto-opens on
+  // the suggestion view — pinned separately below).
+  const cooking = await startCookingRecipe(page, 10085)
 
   // COLLAPSED default (ADR-0081 states amendment): the fresh card is only
   // its "Set a Timer" disclosure row — every creation control is hidden
@@ -290,12 +294,12 @@ test('a duration the recipe writes out is offered honestly, and only a tap arms 
   // ADR-0081: the card OFFERS the detected duration — the suggestion row
   // says "Detected:" and names the sidecar's label. Authored as
   // "15-18 minutes" (extract_timer_hints.py), so the LOWER bound is what
-  // is proposed. The offer lives in the creation form (states amendment):
-  // collapsed by default, so the tap that expands the form comes FIRST.
-  await expect(cooking.getByTestId('timer-suggest-row')).toHaveCount(0)
-  await openTimerForm(cooking)
+  // is proposed. A DETECTED hint AUTO-OPENS the card on the suggestion
+  // view (states correction rule 2): no disclosure tap, the offer is
+  // front and center the moment the sidecar resolves.
   const offer = cooking.getByTestId('timer-suggest')
   await expect(cooking.getByTestId('timer-suggest-row')).toBeVisible()
+  await expect(cooking.getByTestId('timer-disclose')).toHaveCount(0)
   const copy = cooking.getByTestId('timer-suggest-copy')
   await expect(copy).toContainText('Detected: 15 min')
   await expect(copy).toContainText('Step 1 (of 15–18)')
@@ -314,6 +318,32 @@ test('a duration the recipe writes out is offered honestly, and only a tap arms 
   await expect(cooking.getByTestId('card-timers')).toBeVisible()
   await expect(cooking.getByTestId('timer-disclose')).toContainText('Set another timer')
   await expect(cooking.getByTestId('timer-disclose')).toHaveAttribute('aria-expanded', 'false')
+  await expectZeroMealimeRequests(page)
+})
+
+test('a DETECTED hint auto-expands the card on the suggestion view (5995 step 12, preview bug)', async ({ page }) => {
+  // The owner's bug report on the PR #82 preview: "Tuscan Kale & White
+  // Bean Soup" step 12 ("…cover, and cook for 10 minutes.") stayed
+  // COLLAPSED — "Set a Timer" — while its expanded form said "Detected:
+  // 10 min — Soup". The states correction (ADR-0081) makes the ONE
+  // presence predicate consume BOTH inputs, so the card opens DIRECTLY on
+  // the suggestion view here: no disclosure row, no tap.
+  const cooking = await startCookingRecipe(page, 5995)
+  await goToStepView(cooking, 12)
+  await expect(cooking.getByTestId('timer-suggest-row')).toBeVisible()
+  await expect(cooking.getByTestId('timer-suggest-copy')).toContainText('Detected: 10 min')
+  await expect(cooking.getByTestId('timer-disclose')).toHaveCount(0)
+
+  // Starting the suggested timer moves suggestion view → running view:
+  // countdown + Pause/Cancel front and center, form collapsed behind
+  // "Set another timer", banner gone.
+  await cooking.getByTestId('timer-suggest').click()
+  await expect(chips(cooking)).toHaveCount(1)
+  await expect(cooking.getByTestId('card-timers')).toBeVisible()
+  await expect(cooking.getByTestId('card-timer-count')).toContainText('10:00')
+  await expect(cooking.getByTestId('timer-disclose')).toContainText('Set another timer')
+  await expect(cooking.getByTestId('timer-disclose')).toHaveAttribute('aria-expanded', 'false')
+  await expect(cooking.getByTestId('timer-suggest-row')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
 

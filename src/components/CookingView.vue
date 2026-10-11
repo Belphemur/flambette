@@ -358,6 +358,38 @@ const suggestion = computed<TimerSuggestion | null>(() => {
 const hintsLoaded = computed(() => hints.value !== null)
 
 /**
+ * THE one derivation of "does this step have a timer" (ADR-0081 states
+ * correction — DRY, coding-philosophy priority 1): a RUNNING timer or a
+ * DETECTED hint, never two code paths answering the same question. It
+ * alone drives the card state, the collapsed hint line's wording, and
+ * where the banner may render:
+ *
+ * - `running` → the card auto-expands on the running timers (countdown /
+ *   progress / Pause / Cancel), the creation form collapsed behind
+ *   "Set another timer";
+ * - `detected` → the card opens DIRECTLY on the suggestion view (banner
+ *   + one-tap add front and center, quick-start below) — the first
+ *   implementation keyed this on running timers only and left a hinted
+ *   step collapsed while its form said "Detected: 10 min" (preview bug);
+ * - `none` → the collapsed "Set a Timer" row, whose hint line now means
+ *   what it says: NOTHING is known or running for this step.
+ */
+const timerPresence = computed<'running' | 'detected' | 'none'>(() => {
+  if (timers.value.length > 0) return 'running'
+  if (suggestion.value) return 'detected'
+  return 'none'
+})
+
+/**
+ * The creation form is visible when the cook explicitly opened it OR the
+ * predicate auto-opened it on a detected hint (states correction rule 2:
+ * auto-expand on detection — the one sanctioned non-explicit opening).
+ */
+const timerFormVisible = computed(
+  () => timerFormOpen.value || timerPresence.value === 'detected',
+)
+
+/**
  * One-tap add of the step's detected duration (ADR-0081): the TAP is
  * the confirm — nothing a parser found ever starts counting on its own
  * (ADR-0041 §4). At the concurrent cap the ask is held in `pendingArm`
@@ -897,13 +929,13 @@ function onTouchEnd(e: TouchEvent) {
   data-test="timer-card"
   aria-label="Timers for this step"
   >
-  <!-- RUNNING state (ADR-0081 states amendment): when the step has a
-  timer the card AUTO-EXPANDS and the running timers are the dominant
-  content — large mono tomato countdown, name, slim progress bar,
-  Pause (tonal) + Cancel (outlined). Timers are recipe-scoped named
-  chips (ADR-0041), so the card shows the same armed set the global
-  strip carries, in the richer per-step presentation. -->
-  <template v-if="timers.length">
+  <!-- RUNNING state (ADR-0081 states amendment, via the ONE presence
+  predicate): when a timer runs the card auto-expands and the running
+  timers are the dominant content — large mono tomato countdown, name,
+  slim progress bar, Pause (tonal) + Cancel (outlined). Timers are
+  recipe-scoped named chips (ADR-0041), so the card shows the same armed
+  set the global strip carries, in the richer per-step presentation. -->
+  <template v-if="timerPresence === 'running'">
   <h2 class="text-[13px] font-bold tracking-wider text-text uppercase">Timers for this step</h2>
   <ul class="flex flex-col gap-2 pt-3" data-test="card-timers">
   <li
@@ -956,11 +988,13 @@ function onTouchEnd(e: TouchEvent) {
   </ul>
   </template>
 
-  <!-- The disclosure row — present in BOTH card states, and the form
-  below it is collapsed by default in BOTH: customization is never
-  ambient (ADR-0081 states amendment). Title differs per state; the
-  chevron carries the open state. -->
+  <!-- The disclosure row — rendered only when NOTHING is known or
+  running (collapsed "Set a Timer") or a timer runs ("Set another
+  timer"). A DETECTED hint renders neither: the correction opens the
+  card directly on the suggestion view instead — a row above the banner
+  would re-introduce the collapsed-vs-detected contradiction. -->
   <button
+  v-if="timerPresence !== 'detected'"
   type="button"
   class="flex min-h-[56px] w-full items-center justify-between gap-3 text-left"
   :class="timers.length ? 'mt-3 border-t border-border pt-3' : ''"
@@ -988,14 +1022,17 @@ function onTouchEnd(e: TouchEvent) {
   </span>
   </button>
 
-  <!-- The creation form — collapsed by default in BOTH states. The
-  suggestion banner's honesty rule (ADR-0081 decision 4) applies only
-  while the form is EXPANDED: the saffron rows never render over a
-  running timer's card (a timer already exists; the card says so). -->
+  <!-- The creation form — visible when the cook explicitly opened it
+  ("Set a Timer" / "Set another timer") OR the presence predicate
+  auto-opened it on a DETECTED hint (states correction rule 2). The
+  suggestion banner's honesty rule (ADR-0081 decision 4) applies while
+  the form is visible; the saffron rows never render over a running
+  timer's auto-expanded view. -->
   <div
-  v-if="timerFormOpen"
+  v-if="timerFormVisible"
   id="timer-create-form"
-  class="flex flex-col gap-3 border-t border-border pt-3"
+  class="flex flex-col gap-3 pt-3"
+  :class="timerPresence !== 'detected' ? 'border-t border-border' : ''"
   data-test="timer-create-form"
   >
   <!-- The honest suggestion row: saffron tint (the timers/heat/tips
