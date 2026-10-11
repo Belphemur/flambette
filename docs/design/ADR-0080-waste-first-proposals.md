@@ -207,6 +207,52 @@ which this ADR inherited). Decisions (owner-binding):
    replace mode, and across two consecutive Regenerates in add mode with a
    non-empty plan.
 
+## Recency-demotion amendment (2026-10-11, owner refinement of #74)
+
+"Mostly the same recipes coming out, instead of widely different ones."
+The regeneration-variety amendment fixed WHICH SEEDS lead the window, but
+the top-rated candidates still recur across presses — nothing remembers
+what was already shown. Owner direction: regenerate acts like a QUEUE —
+"putting the current recipe at the end of the choice available, like a
+blacklist for the current auto plan" — refined by a follow-up owner
+ruling: NO persisted store. The offered-set memory is EPHEMERAL, part of
+the regenerate run happening in the open dialog; nothing lands in
+localStorage, backup, or the room payload. Decision (owner-binding):
+
+1. **Offered-set demotion, held by the dialog.** While the Auto-Plan
+   dialog is open, the component accumulates `offeredIds` — the union of
+   every variantId shown in proposal cards so far this dialog session
+   (each generate press adds its three proposals' ids). Every press passes
+   the set into the planner request as `offeredIds`. Closing the dialog
+   discards it — the next open starts clean, exactly like `pendingProposals`
+   today. NO persisted store, NO STORE_SLICES change, NO backup/room
+   payload change (the same ephemerality rule as the proposal selection,
+   Decision 5).
+2. **Demotion, not deletion.** A candidate in `offeredIds` stays eligible;
+   it only ranks BEHIND every not-yet-offered candidate (relative order
+   among demoted candidates preserved: smoothed rating desc → id asc).
+   Within one regenerate press the planner may still re-offer a demoted
+   candidate when the fresh pool cannot fill three DISTINCT packs —
+   variety yields to availability, waste stays king.
+3. **Ranking composition.** Candidate ranking for the proposal pool
+   becomes: (not offered first, then) smoothed rating desc → id asc.
+   Everything downstream (the 9-candidate pool slice, windows, continuity
+   tie-set, pack dedupe, packages-asc proposal ranking) is UNCHANGED —
+   demotion only reorders the CANDIDATE pool before the pool slice.
+4. **Determinism.** `offeredIds` is part of the REQUEST: same (index,
+   request incl. generation + offeredIds) → identical output. A dialog's
+   FIRST press passes an empty set, so generation 0 output is bit-for-bit
+   the pinned pack — all existing e2e pins stand. Regenerate presses
+   differ from each other BY CONSTRUCTION (the offered set grows), which
+   is what the owner asked for.
+5. **Dialog copy.** The chooser's supporting line gains the rotation fact:
+   plans you've seen move to the back of the queue ("Regenerating shows
+   plans you haven't seen yet"). One sentence, muted text.
+6. e2e: within one dialog session, two consecutive Regenerates produce
+   pre-selected plans sharing NO meals (fresh profile, replace mode);
+   re-opening the dialog resets the memory (first press reproduces the
+   gen-0 pin); the gen-0 pin itself still passes.
+
 ## Alternatives considered
 
 - **Status quo (rating-ranked single seed).** Rejected: the default press
