@@ -116,6 +116,42 @@ using green for mark a cooked"):
   as ADR-0022's pins — the old chip hooks must be re-pinned loudly, which
   is the contract working.
 
+## Timer-alert amendment (2026-10-11, owner ruling)
+
+"The timer also should make sound and vibrate the phone if possible. Should
+be in the settings how the timer acts. Default vibrate and sound." Decision
+(owner-binding):
+
+1. **Timer completion alerts.** When a step timer reaches zero, the device
+   alerts per the household's settings: a short synthesized chime (Web
+   Audio — two-tone, generated at runtime, NO audio asset, NO new
+   dependency) and/or a vibration pattern (`navigator.vibrate`, feature-
+   detected, graceful no-op where unsupported). The ADR-0020 polite
+   live-region announcement stays — the alert ADDS to it, never replaces
+   it (visible + audible + haptic = three channels for a hands-busy,
+   possibly oven-noisy cook).
+2. **Settings → "Timer alerts"** section on the Settings tab: two toggles,
+   Sound (default ON) and Vibration (default ON) — the owner's defaults.
+   Persisted in the existing `mealime-planner:v1:ui` slice
+   (`timerAlertSound`, `timerAlertVibrate`), so backup/restore carries
+   them via the registered slice (ADR-0013 rule already satisfied — no
+   new slice).
+3. **Deliberately device-local, never room-synced** (ADR-0037's
+   defaultServings reasoning): sound and vibration are per-device
+   capabilities — a desktop has no vibrator and may be muted; syncing the
+   preference across the household would make one device configure
+   another's alerts. The ADR records this scope ruling so a reviewer does
+   not "fix" it into the room payload.
+4. **Autoplay discipline.** Mobile browsers only allow audio after a user
+   gesture: the AudioContext is created/resumed lazily at the
+   Start-timer press (the gesture) and the completion chime plays through
+   it. If no gesture ever happened, the chime degrades to the
+   announcement + vibration silently — never an error surfaced.
+5. **e2e.** Toggles persist and round-trip backup; `navigator.vibrate` is
+   feature-patched per test to assert called/not-called per setting; the
+   AudioContext path is guarded so headless runs (no audio device) take
+   the silent branch without failing.
+
 ## Alternatives considered
 
 - **Status quo strip with more padding.** Rejected: the row is
