@@ -197,7 +197,7 @@ test('cooked history is shared by default: B in the room sees A cooked meals', a
   await blockExternalRequests(a)
   const name = await planAndCook(a)
   // Keep a (shared) plan entry so the Plan tab shows the Share button.
-  await a.goto('/')
+  await a.goto('/recipes')
   await openRecipeDetail(a, name)
   await a.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
   const roomUrl = await startLiveRoom(a)
@@ -229,7 +229,7 @@ test('an explicit opt-out keeps cooked history off the wire (ADR-0032)', async (
   await blockExternalRequests(a)
   const name = await planAndCook(a)
   // Keep a (shared) plan entry so the Plan tab shows the Share button.
-  await a.goto('/')
+  await a.goto('/recipes')
   await openRecipeDetail(a, name)
   await a.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
 
