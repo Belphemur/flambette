@@ -23,7 +23,7 @@ import {
 
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 })
 
@@ -157,7 +157,7 @@ async function addVariantToPlan(page: Page, variantId: number) {
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible({ timeout: 15_000 })
   await dialog.getByRole('button', { name: 'Add to plan' }).click()
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 }
 
@@ -257,7 +257,9 @@ test.describe('household room', () => {
     await b.goto(`/?room=${code}`)
     await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
     await dismissJoinCongrats(b)
-    await gotoTab(b, 'Plan')
+    // ADR-0078: the ?room= join lands on the hero, which hides the bottom
+    // nav — route directly to Plan instead of tab-clicking.
+    await b.goto('/plan')
     await expect(b.getByRole('heading', { level: 3, name: recipeName })).toBeVisible({
       timeout: 20_000,
     })

@@ -32,7 +32,7 @@ import type { AutoPlanRulesetFilter } from '../composables/useAutoPlan'
  *  a Lucide component (WS5), not an emoji or a hand-rolled path — the
  *  five labels keep their measured Pixel 7 fit (ADR-0016). */
 export const TABS: { id: string; label: string; icon: Component; to: string }[] = [
-  { id: 'recipes', label: 'Recipes', icon: BookOpen, to: '/' },
+  { id: 'recipes', label: 'Recipes', icon: BookOpen, to: '/recipes' },
   { id: 'plan', label: 'Plan', icon: CalendarDays, to: '/plan' },
   { id: 'grocery', label: 'Grocery', icon: ShoppingCart, to: '/grocery' },
   { id: 'history', label: 'History', icon: History, to: '/history' },

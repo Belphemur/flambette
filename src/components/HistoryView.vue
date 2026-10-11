@@ -192,7 +192,7 @@ const hasAnyCook = computed(() => plan.cookedHistory.length > 0)
   <p class="mx-auto mt-1 max-w-xs text-body-sm">Mark meals as cooked when you finish them.</p>
   <button
   class="mt-4 min-h-11 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98]"
-  @click="router.push('/')"
+  @click="router.push('/recipes')"
   >
   Browse recipes
   </button>

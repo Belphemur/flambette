@@ -58,6 +58,14 @@ import { useSearchTips } from '../composables/useSearchTips'
  *  read the same singleton; switching tabs keeps the query in memory. */
 const { query, searchResults, searchPending } = useRecipeSearch()
 
+/** ADR-0078 Decision 9: the recipes list is its OWN indexable surface.
+ *  The prerendered `dist/recipes/index.html` carries `recipesSeoHead`;
+ *  the client-side assertion of that SAME head lives in App.vue, gated on
+ *  the route — NOT here. This tab is KeepAlive-CACHED, so a scoped
+ *  `useHead` registered for the component's lifetime would survive
+ *  deactivation and keep overriding the shell head on every other tab
+ *  (unhead only drops scoped entries on unmount). */
+
 /** The desktop breakpoint where the search well moves into the header.
  *  Same lg: value as the Tailwind variant used in App.vue. */
 const isDesktop = useMediaQuery('(min-width: 1024px)')

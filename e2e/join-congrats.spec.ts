@@ -24,7 +24,7 @@ import {
 
 /** Start a room on A and return the share link a household member gets. */
 async function shareLink(page: Page): Promise<string> {
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   // The header's Share action only exists once there is a plan to share.
   await openFirstRecipeDetail(page)
@@ -123,8 +123,9 @@ test('joining from another tab with an EMPTY plan lands on the recipes list', as
   await expect(b.getByTestId('join-congrats')).toBeVisible({ timeout: 20_000 })
   await b.getByTestId('join-congrats-continue').click()
   // The household's content is on the recipes list; that is where a
-  // plan-less joiner belongs (ADR-0049 addendum).
-  await expect(b).toHaveURL(/\/$/)
+  // plan-less joiner belongs (ADR-0049 addendum). The list lives at
+  // /recipes now (ADR-0078) — the route name is unchanged.
+  await expect(b).toHaveURL(/\/recipes$/)
   await waitForCatalog(b)
 
   await expectZeroMealimeRequests(b)
@@ -220,7 +221,9 @@ test('a link join ADOPTS the household — the next launch re-joins on its own',
 
   // The adopted code is the household room: the settings card carries it
   // and Leave is visible, so the opt-out is one tap away from day one.
-  await gotoTab(page, 'Settings')
+  // (ADR-0078: the link join lands on the hero, which hides the bottom
+  // nav — route to Settings directly.)
+  await page.goto('/settings')
   await expect(page.getByTestId('household-room-input')).toHaveValue('ember-falcon-bridge')
   await expect(page.getByTestId('household-room-clear')).toBeVisible()
 

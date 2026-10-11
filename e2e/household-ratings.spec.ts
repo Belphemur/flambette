@@ -76,14 +76,14 @@ async function startLiveRoom(page: Page): Promise<string> {
   const url = `${page.url().replace(/\/plan.*$/, '')}/plan?room=${code}`
   // The share sheet is a modal that would swallow the next nav click; the
   // room survives a full navigation (the code lives in sessionStorage).
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   return url
 }
 
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 })
 
@@ -199,7 +199,7 @@ test('room: a favourite and a rating reach the other phone live', async ({ brows
   const ctxA = await browser.newContext()
   const a = await ctxA.newPage()
   await blockExternalRequests(a)
-  await a.goto('/')
+  await a.goto('/recipes')
   await waitForCatalog(a)
 
   const name = await planFirstRecipe(a)
@@ -244,7 +244,7 @@ test('room: the LAST rating written wins, and both devices agree', async ({ brow
   const ctxA = await browser.newContext()
   const a = await ctxA.newPage()
   await blockExternalRequests(a)
-  await a.goto('/')
+  await a.goto('/recipes')
   await waitForCatalog(a)
   const name = await planFirstRecipe(a)
   const roomUrl = await startLiveRoom(a)
@@ -315,7 +315,7 @@ test('room: an un-star reaches the other phone and is not resurrected', async ({
   const ctxA = await browser.newContext()
   const a = await ctxA.newPage()
   await blockExternalRequests(a)
-  await a.goto('/')
+  await a.goto('/recipes')
   await waitForCatalog(a)
   await planFirstRecipe(a)
   const roomUrl = await startLiveRoom(a)

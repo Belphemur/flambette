@@ -24,7 +24,7 @@ import {
 
 /** A is the household: start a room and return its code. */
 async function startRoom(page: Page): Promise<string> {
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   // The header's Share action only exists once there is a plan to share.
   await openFirstRecipeDetail(page)

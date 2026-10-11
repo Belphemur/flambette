@@ -56,7 +56,7 @@ async function clickInViewCard(page: Page): Promise<void> {
 
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 })
 
@@ -85,18 +85,24 @@ test('browser back (page.goBack) restores the list scroll position', async ({ pa
 })
 
 test('push navigations still land at the top', async ({ page }) => {
-  // Detail view → header logo: a PUSH to the recipes list starts at top.
+  // Detail view → header logo: under ADR-0078 the logo from anywhere but
+  // /recipes pushes to the HERO. The guarded invariant is unchanged — a
+  // push navigation starts at the top, never a restored scroll.
   await page.evaluate(() => window.scrollTo(0, 2000))
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
   await clickInViewCard(page)
   await expect(page.getByTestId('detail-title')).toBeVisible()
   await page.getByTestId('home-link').click()
-  await waitForCatalog(page)
+  await expect(page.getByTestId('home-hero')).toBeVisible()
   const yAfterHome = await page.evaluate(() => window.scrollY)
   expect(yAfterHome).toBe(0)
 
   // Tab switch: Plan then back to Recipes is a PUSH both ways — no
-  // savedPosition — so the list starts at the top again.
+  // savedPosition — so the list starts at the top again. The bottom
+  // nav only exists OUTSIDE the hero (ADR-0078), so this leg starts
+  // from the catalog.
+  await page.goto('/recipes')
+  await waitForCatalog(page)
   await page.evaluate(() => window.scrollTo(0, 2000))
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
   await gotoTab(page, 'Plan')

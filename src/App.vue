@@ -12,7 +12,7 @@ import { usePlanStore } from './stores/plan'
 import { useRoomStore, type RoomStatus } from './stores/room'
 import { initFavourites } from './stores/favourites'
 import { appVersion } from './lib/appVersion'
-import { homeSeoHead } from './lib/seo'
+import { homeSeoHead, recipesSeoHead } from './lib/seo'
 import { normalizeRoomCode } from './lib/roomWords'
 import { useHead } from '@unhead/vue'
 import JoinCongratsModal from './components/JoinCongratsModal.vue'
@@ -22,17 +22,21 @@ import { useIdentityStore } from './stores/identity'
 import RecipeSearchField from './components/RecipeSearchField.vue'
 
 /**
- * The app-level DEFAULT head (ADR-0048). Every app-shell route is served
- * the same SPA fallback HTML, so it all shares this one head — canonical
- * to the homepage, which is the duplicate-content defence for /plan,
- * /grocery, /settings … Route components layer their own scoped entries
- * over it; Unhead drops those on unmount and this default resurfaces.
+ * The app-level head (ADR-0048), ONE owner for the two indexable
+ * surfaces: the hero (`/`, canonical `/`) and the recipes list
+ * (`/recipes`, canonical `/recipes/`). Every other app-shell route is
+ * served the same SPA fallback HTML and keeps the homepage head — the
+ * duplicate-content defence for /plan, /grocery, /settings …
  *
- * The strings come from `homeSeoHead()` — the SAME builder the
- * prerenderer writes into `dist/index.html`, so a crawler and the
- * hydrating app cannot disagree.
+ * The recipes entry lives HERE, route-gated, not inside RecipesTab:
+ * that tab is KeepAlive-CACHED, so leaving the route deactivates it
+ * without unmounting, and a scoped `useHead` registered for the
+ * component's lifetime would keep overriding the shell's head on every
+ * other tab. The strings come from the SAME builders the prerenderer
+ * writes into `dist/index.html` and `dist/recipes/index.html`, so a
+ * crawler and the hydrating app cannot disagree. Bound below, after
+ * `route` exists.
  */
-useHead(homeSeoHead())
 
 const reload = () => location.reload()
 
@@ -45,6 +49,10 @@ const room = useRoomStore()
 // migration (generate when absent while a household room is saved).
 const identity = useIdentityStore()
 const { shareAction } = useShareRoomLink()
+
+/** The app-level head (ADR-0048): see the block comment above — ONE
+ *  owner, the hero and the recipes list, homepage head everywhere else. */
+useHead(computed(() => (route.name === 'recipes' ? recipesSeoHead() : homeSeoHead())))
 
 /** Dark mode: follows the system preference until the user overrides it
  *  (the override persists in localStorage via useDark). */
@@ -137,6 +145,11 @@ const roomChip = computed(() => {
 /** The recipe detail view is full-bleed (edge-to-edge hero image). */
 const isRecipe = computed(() => route.name === 'recipe')
 
+/** ADR-0078: `/` is the home hero — the bottom nav is hidden there (the
+ *  header STAYS per Q2) and the hero owns its own padding, like the
+ *  fullscreen modes do. */
+const isHome = computed(() => route.name === 'home')
+
 /** ADR-0070 (Addendum 2): the search well is PERSISTENT — it renders in
  *  the header band on EVERY tab at lg+, not only on Recipes. The media
  *  query mirrors the `lg:` Tailwind variant so the v-if (not a CSS hide)
@@ -152,16 +165,17 @@ const showHeaderSearch = computed(() => isDesktop.value && !isFullscreenMode.val
  */
 const rosterOpen = ref(false)
 
-/** Clicking the header logo always returns to the recipes list (the
- * homepage). ADR-0048: app-shell routes share one head, so the recipes
- * route is the canonical home — never navigate away from it when already
- * there. */
+/** Clicking the header logo goes home (ADR-0078 Q3): on `/recipes` it
+ *  keeps the scroll-to-top behaviour (the list is the destination from
+ *  the hero already — a no-op push would discard the reader's scroll);
+ *  the hero IS the destination everywhere else. From a tab it navigates
+ *  to `/`; from `/` itself it scrolls to top. */
 function goHome() {
-  if (route.name === 'recipes') {
+  if (route.name === 'recipes' || route.name === 'home') {
     // Same page: scroll to top instead of a no-op navigation.
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
   } else {
-    void router.push({ name: 'recipes', query: route.query.room ? {} : undefined })
+    void router.push({ name: 'home', query: route.query.room ? {} : undefined })
   }
 }
 
@@ -281,6 +295,10 @@ watch(
     if (plan.plan.length > 0) return
     if (isFullscreenMode.value) return
     if (route.name === 'recipes' || route.name === 'settings') return
+    // ADR-0078 Decision 7: a create or join made FROM the hero must not
+    // navigate away while the household modal is open — the modal IS the
+    // confirmation surface.
+    if (route.name === 'home') return
     void router.push({ name: 'recipes' })
   },
 )
@@ -468,7 +486,7 @@ onBeforeUnmount(() => {
   type="button"
   data-test="home-link"
   class="flex items-center gap-2 py-1 text-lg font-bold tracking-tight text-brand-text"
-  :aria-label="route.name === 'recipes' ? 'Back to top of recipes' : 'Recipes list'"
+  :aria-label="route.name === 'recipes' ? 'Back to top of recipes' : 'Home'"
   @click="goHome()"
   >
   <img src="/favicon.svg" alt="" width="22" height="22" class="inline" aria-hidden="true" />
@@ -582,7 +600,7 @@ onBeforeUnmount(() => {
   <main
   v-else
   class="mx-auto w-full max-w-app flex-1"
-  :class="isRecipe || isFullscreenMode ? '' : 'px-4 pt-4 pb-28'"
+  :class="isRecipe || isFullscreenMode || isHome ? '' : 'px-4 pt-4 pb-28'"
   >
   <RouterView v-slot="{ Component }">
   <KeepAlive include="RecipesTab,PlanTab,GroceryTab,SettingsTab">
@@ -618,17 +636,23 @@ onBeforeUnmount(() => {
        measured Pixel 7 fit (82px/tab) is untouched: same bar height,
        same five labelled tabs, same hit areas. -->
   <nav
-  v-if="!isFullscreenMode"
+  v-if="!isFullscreenMode && !isHome"
   class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-chrome-border bg-espresso"
   aria-label="Main navigation"
   >
   <div class="mx-auto flex w-full max-w-app">
+  <!-- Active state keys on the ROUTE NAME (tab ids are the route names),
+  never on `route.path === tab.to`: the canonical URLs are the
+  slash forms (/recipes/ is what Cloudflare 308s to and nginx serves as
+  the directory index), and a strict path comparison leaves the tab
+  unmarked — and aria-current missing — for everyone arriving from
+  search, a sitemap entry, a bookmark or a reload. -->
   <button
   v-for="tab in TABS"
   :key="tab.id"
   class="nav-tab flex min-h-14 flex-1 flex-col items-center justify-center gap-1 pt-1.5 text-label-md transition-colors"
-  :class="route.path === tab.to ? 'text-chrome-accent' : 'text-chrome-muted'"
-  :aria-current="route.path === tab.to ? 'page' : undefined"
+  :class="route.name === tab.id ? 'text-chrome-accent' : 'text-chrome-muted'"
+  :aria-current="route.name === tab.id ? 'page' : undefined"
   @click="router.push(tab.to)"
   >
   <!-- A tinted icon BACKPLATE marks the active tab (DESIGN.md
@@ -638,7 +662,7 @@ onBeforeUnmount(() => {
   near-espresso in dark mode and vanish against the bar. -->
   <span
   class="flex h-8 w-14 items-center justify-center rounded-full transition-colors"
-  :class="route.path === tab.to ? 'bg-chrome-backplate' : ''"
+  :class="route.name === tab.id ? 'bg-chrome-backplate' : ''"
   >
   <component
   :is="tab.icon"

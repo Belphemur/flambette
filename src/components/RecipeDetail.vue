@@ -547,10 +547,12 @@ watch(
   { immediate: true },
 )
 
-/** Back to wherever the user came from; deep links fall back to `/`. */
+/** Back to wherever the user came from; deep links fall back to the
+ *  catalog (ADR-0078: `/` is the marketing hero — a reader who followed
+ *  a recipe link closes back into the list, never the hero). */
 function close() {
   if (window.history.state?.back) router.back()
-  else router.replace('/')
+  else router.replace('/recipes')
 }
 
 function onKey(e: KeyboardEvent) {

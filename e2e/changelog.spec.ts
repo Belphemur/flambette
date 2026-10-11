@@ -13,7 +13,7 @@ import { blockExternalRequests, expectZeroMealimeRequests } from './helpers'
 
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
 })
 
 // --- version.json endpoint ---------------------------------------------------

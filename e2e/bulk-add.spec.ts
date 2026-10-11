@@ -18,7 +18,7 @@ import {
 
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   await gotoTab(page, 'Grocery')
 })
@@ -140,7 +140,7 @@ test('suggestion row mirrors room-synced customs from another context', async ({
 
   // A: plan a recipe (a shared plan is required for the room start) and
   // remember a custom name with a chosen category.
-  await a.goto('/')
+  await a.goto('/recipes')
   await waitForCatalog(a)
   await openFirstRecipeDetail(a)
   await a.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()

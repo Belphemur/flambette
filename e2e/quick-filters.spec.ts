@@ -81,7 +81,7 @@ async function startLiveRoom(page: Page): Promise<string> {
 
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 })
 
@@ -269,9 +269,14 @@ test.describe('filter sync and join reconciliation (WS3 + WS4)', () => {
     await b.goto(`/?room=${code}`)
     await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
     await dismissJoinCongrats(b)
+    // ADR-0078: the link join lands on the hero — B must be ON the recipes
+    // grid for the live chip assertions to mean anything. The load happens
+    // BEFORE device A edits, so the convergence below stays live-sync.
+    await b.goto('/recipes')
+    await waitForCatalog(b)
 
     // Device A changes the household selection.
-    await page.goto('/')
+    await page.goto('/recipes')
     await waitForCatalog(page)
     await page.getByTestId('protein-chip-fish').click()
     await page.getByTestId('diet-chip-no-shellfish').click()
@@ -292,12 +297,12 @@ test.describe('filter sync and join reconciliation (WS3 + WS4)', () => {
     const ctxA = await browser.newContext()
     const a = await ctxA.newPage()
     await blockExternalRequests(a)
-    await a.goto('/')
+    await a.goto('/recipes')
     await waitForCatalog(a)
     await a.locator('main article').first().click()
     await a.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
     const code = await startLiveRoom(a)
-    await a.goto('/')
+    await a.goto('/recipes')
     await waitForCatalog(a)
     await a.getByTestId('diet-chip-vegan').click()
     await a.getByTestId('sort-button').click()
@@ -329,7 +334,7 @@ test.describe('filter sync and join reconciliation (WS3 + WS4)', () => {
     await expect
       .poll(async () => quickFilters(b), { timeout: 20_000 })
       .toEqual({ ...household, favOnly: true })
-    await b.goto('/')
+    await b.goto('/recipes')
     await waitForCatalog(b)
     await expect(b.getByTestId('diet-chip-vegan')).toHaveAttribute('aria-pressed', 'true')
     await expect(b.getByTestId('protein-chip-any')).toHaveAttribute('aria-pressed', 'true')

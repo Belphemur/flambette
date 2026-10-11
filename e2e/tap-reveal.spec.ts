@@ -28,7 +28,7 @@ function detailTypeIcon(page: import('@playwright/test').Page) {
 
 async function openDetail(page: import('@playwright/test').Page) {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await dismissJoinCongrats(page)
   await waitForCatalog(page)
   await page.locator('[data-test="recipe-card-link"]').first().click()
@@ -73,7 +73,7 @@ test('a second tap while open hides the bubble immediately', async ({ page, isMo
 test('tapping a browse-card icon navigates — the card bubble never reveals', async ({ page, isMobile }) => {
   test.skip(isMobile !== true, 'touch project only (Pixel 7)')
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await dismissJoinCongrats(page)
   await waitForCatalog(page)
   await expectZeroMealimeRequests(page)

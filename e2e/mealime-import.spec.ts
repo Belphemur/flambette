@@ -42,7 +42,7 @@ test.beforeEach(async ({ page }) => {
 test('section shows the shutdown notice, steps and the draggable bookmarklet link', async ({
   page,
 }) => {
-  await page.goto('/')
+  await page.goto('/recipes')
   await openSettings(page)
   await expect(page.getByTestId('mealime-import-notice')).toContainText('21 October 2026')
   const link = page.getByTestId('mealime-bookmarklet-link')
@@ -60,7 +60,7 @@ test('section shows the shutdown notice, steps and the draggable bookmarklet lin
 test('pasting a payload imports favourites and reports id/name/missing/removed counts', async ({
   page,
 }) => {
-  await page.goto('/')
+  await page.goto('/recipes')
   await openSettings(page)
   await page.getByTestId('mealime-import-input').fill(PAYLOAD)
   await page.getByTestId('mealime-import-button').click()
@@ -93,7 +93,7 @@ test('pasting a payload imports favourites and reports id/name/missing/removed c
 test('a single-recipe import overrides the seeded set down to that one recipe', async ({
   page,
 }) => {
-  await page.goto('/')
+  await page.goto('/recipes')
   await openSettings(page)
   // 3949 resolves to seeded favourite 36222: already starred, so
   // added === 0 — but the override still tombstones the other 55 seeds.
@@ -126,7 +126,7 @@ test('a single-recipe import overrides the seeded set down to that one recipe', 
 test('an all-miss payload is reported, not applied — favourites survive the override', async ({
   page,
 }) => {
-  await page.goto('/')
+  await page.goto('/recipes')
   await openSettings(page)
   // Every row misses: 999999 is a deliberate miss, and the name matches
   // nothing. Nothing matched = a match-layer failure, NOT a user opinion
@@ -157,7 +157,7 @@ test('an all-miss payload is reported, not applied — favourites survive the ov
 test('a successful paste opens the success modal with counts and the imported tiles', async ({
   page,
 }) => {
-  await page.goto('/')
+  await page.goto('/recipes')
   await openSettings(page)
   await page.getByTestId('mealime-import-input').fill(PAYLOAD)
   await page.getByTestId('mealime-import-button').click()
@@ -197,7 +197,7 @@ test('a successful paste opens the success modal with counts and the imported ti
 test('a second identical paste reports "already match" in the modal (the honest zero)', async ({
   page,
 }) => {
-  await page.goto('/')
+  await page.goto('/recipes')
   await openSettings(page)
   await page.getByTestId('mealime-import-input').fill(PAYLOAD)
   await page.getByTestId('mealime-import-button').click()
@@ -217,7 +217,7 @@ test('a second identical paste reports "already match" in the modal (the honest 
 })
 
 test('a malformed paste errors and applies nothing', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/recipes')
   await openSettings(page)
   await page.getByTestId('mealime-import-input').fill('this is not json')
   await page.getByTestId('mealime-import-button').click()

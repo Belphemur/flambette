@@ -44,7 +44,7 @@ const LEGACY_CODE = /^[A-Z0-9]{4,12}$/
 
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 })
 

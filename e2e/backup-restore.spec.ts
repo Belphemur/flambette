@@ -27,7 +27,9 @@ const decoder = new TextDecoder()
  *  Always reachable, even with an empty plan, which is exactly when you
  *  restore. Navigate there for export/import. */
 async function openBackup(page: Page): Promise<void> {
-  await gotoTab(page, 'Settings')
+  // ADR-0078: `/` is the hero and hides the bottom nav, so a fresh context
+  // cannot tab-click its way here — navigate to the Settings route directly.
+  await page.goto('/settings')
   await expect(page.getByTestId('export-settings')).toBeVisible()
 }
 
@@ -47,7 +49,7 @@ async function exportBackup(page: Page): Promise<{ filename: string; bytes: Uint
  *  item, remember a custom ingredient, favourite, dark theme. Returns
  *  names of { planned, cooked, custom } for the assertions. */
 async function backupSeed(page: Page): Promise<{ planned: string; cooked: string; custom: string; checkedKeys: string[] }> {
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 
   // Planned (stays in plan) + cooked (vanishes from plan, into history).
@@ -280,7 +282,7 @@ test('invalid files are rejected atomically — state untouched', async ({ brows
   const page = await ctx.newPage()
   await blockExternalRequests(page)
   // Seed SOME state first so we can prove the import doesn't touch it.
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   const planned = await openFirstRecipeDetail(page)
   await page.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
@@ -366,7 +368,7 @@ test('invalid files are rejected atomically — state untouched', async ({ brows
 
 test('unregistered persisted slices make export fail loudly (AGENTS.md rule)', async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
   // Forge a persisted store key that no slice covers.
   await page.evaluate(() =>
