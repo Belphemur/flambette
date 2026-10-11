@@ -91,6 +91,29 @@ test('closing the household modal restores the hero', async ({ page }) => {
   await expect(page.getByTestId('home-hero')).toBeVisible()
 })
 
+test('the create button re-joins a SAVED household instead of rolling a new code', async ({
+  page,
+}) => {
+  // A device that already adopted a household (ADR-0019) must never get a
+  // fresh code from the hero — that would orphan the household it belongs
+  // to. The button reconnects to the saved room; the modal shows the REAL
+  // saved code, adopted synchronously by `join()`.
+  await page.goto('/settings')
+  const code = 'quartz-lantern-otter'
+  await page.getByTestId('household-room-input').fill(code)
+  await page.getByTestId('household-room-join').click()
+  await expect(page.getByTestId('household-room-status')).toContainText(code, {
+    timeout: 20_000,
+  })
+
+  // Back on the hero: the press reconnects — the code in the modal is the
+  // SAVED one, byte for byte, not a fresh roll.
+  await page.goto('/')
+  await page.getByTestId('hero-create-household').click()
+  await expect(page.getByTestId('household-modal')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('household-code')).toHaveText(code)
+})
+
 test('the hero flips with the theme via tokens, not dark: pairs', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByTestId('home-hero')).toBeVisible()

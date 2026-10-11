@@ -6,6 +6,7 @@ import AppModal from './AppModal.vue'
 import { generateRoomCode } from '../lib/roomWords'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
 import { useRoomStore } from '../stores/room'
+import { useUiStore } from '../stores/ui'
 
 /**
  * The home hero (ADR-0078). `/` is a statement of what the app is — no
@@ -33,6 +34,7 @@ import { useRoomStore } from '../stores/room'
 
 const router = useRouter()
 const room = useRoomStore()
+const ui = useUiStore()
 const { shareRoomLink } = useShareRoomLink()
 
 /** ADR-0078 Decision 3: the hero's primary route into the catalog. */
@@ -49,6 +51,12 @@ function startPlanning() {
  * (the ADR-0019 room-failure pattern: toast, never block); this view
  * only closes the modal again so a dead attempt cannot read as success.
  * Nothing here awaits a room operation on the render path.
+ *
+ * A device that ALREADY has a saved household (ADR-0019 `ui.householdRoom`)
+ * must never roll a fresh code — that would orphan the household the
+ * device belongs to. The button re-connects to the saved room instead
+ * (a deliberate join, join-or-create per ADR-0026) and the modal shows
+ * the REAL saved code, which `join()` adopts synchronously.
  */
 const modalOpen = ref(false)
 const rolledCode = ref('')
@@ -57,8 +65,18 @@ const creating = ref(false)
 function createHousehold() {
   if (creating.value) return
   creating.value = true
-  rolledCode.value = generateRoomCode()
-  room.create(rolledCode.value)
+  const saved = ui.householdRoom
+  if (saved) {
+    // Already in a household: reconnect, never re-roll. `join()` sets
+    // `room.code` synchronously, so the modal shows the saved code at
+    // once; a deliberate join is safe here because the freshJoin landing
+    // watcher never navigates away from `/` (ADR-0078 Decision 7).
+    rolledCode.value = ''
+    room.join(saved)
+  } else {
+    rolledCode.value = generateRoomCode()
+    room.create(rolledCode.value)
+  }
   modalOpen.value = true
 }
 
