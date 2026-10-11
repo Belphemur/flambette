@@ -221,7 +221,9 @@ test('a link join ADOPTS the household — the next launch re-joins on its own',
 
   // The adopted code is the household room: the settings card carries it
   // and Leave is visible, so the opt-out is one tap away from day one.
-  await gotoTab(page, 'Settings')
+  // (ADR-0078: the link join lands on the hero, which hides the bottom
+  // nav — route to Settings directly.)
+  await page.goto('/settings')
   await expect(page.getByTestId('household-room-input')).toHaveValue('ember-falcon-bridge')
   await expect(page.getByTestId('household-room-clear')).toBeVisible()
 

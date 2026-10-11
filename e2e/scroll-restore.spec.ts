@@ -85,13 +85,15 @@ test('browser back (page.goBack) restores the list scroll position', async ({ pa
 })
 
 test('push navigations still land at the top', async ({ page }) => {
-  // Detail view → header logo: a PUSH to the recipes list starts at top.
+  // Detail view → header logo: under ADR-0078 the logo from anywhere but
+  // /recipes pushes to the HERO. The guarded invariant is unchanged — a
+  // push navigation starts at the top, never a restored scroll.
   await page.evaluate(() => window.scrollTo(0, 2000))
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
   await clickInViewCard(page)
   await expect(page.getByTestId('detail-title')).toBeVisible()
   await page.getByTestId('home-link').click()
-  await waitForCatalog(page)
+  await expect(page.getByTestId('home-hero')).toBeVisible()
   const yAfterHome = await page.evaluate(() => window.scrollY)
   expect(yAfterHome).toBe(0)
 

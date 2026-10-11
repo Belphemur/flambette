@@ -269,6 +269,11 @@ test.describe('filter sync and join reconciliation (WS3 + WS4)', () => {
     await b.goto(`/?room=${code}`)
     await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
     await dismissJoinCongrats(b)
+    // ADR-0078: the link join lands on the hero — B must be ON the recipes
+    // grid for the live chip assertions to mean anything. The load happens
+    // BEFORE device A edits, so the convergence below stays live-sync.
+    await b.goto('/recipes')
+    await waitForCatalog(b)
 
     // Device A changes the household selection.
     await page.goto('/recipes')
