@@ -129,6 +129,10 @@ test('a finished timer buzzes when vibration is ON and stays silent when OFF —
   await page.goto('/recipes')
   await waitForCatalog(page)
   await cooking2(page)
+  // The expired timer from the first leg must NOT re-alert on reopening:
+  // seeding is silent (ADR-0081 amendment — a timer that finished before
+  // the view mounted never buzzes).
+  expect(await vibrateCalls(page)).toEqual([])
   await armPreset1(page)
   await expectCompletion(page)
   const calls = await vibrateCalls(page)

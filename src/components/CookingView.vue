@@ -29,7 +29,10 @@ import {
   type CookTimer,
 } from '../lib/stepTimer'
 import { getTimerHints, hintForStep, suggestionFromHint, type TimerSuggestion } from '../lib/timerSuggest'
-import { createTimerAlerts } from '../lib/timerAlert'
+import {
+  ensureTimerAlertPolling,
+  unlockTimerAlertAudio,
+} from '../lib/timerAlertHost'
 import type { RecipeDoc } from '../lib/types'
 import { usePlanStore, type CookedEntry, type PlanEntry, type PlanIdentity } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
@@ -296,8 +299,10 @@ const recipeTotalSuggestion = computed(() => {
  * The build-time hints of THIS recipe, loaded on demand from the sidecar
  * next to the recipe doc (`<variantId>.timer.json`) and cached per
  * session. `null` until loaded — a recipe with no sidecar resolves to an
- * empty list, which is a fact about the catalog (no authored durations),
- * not an error.
+ * empty list (a fact about the catalog, no authored durations), while a
+ * FAILED fetch/parse also resolves to `null` (the truth is "unknown"):
+ * `hintsLoaded` then stays false and the honest banner is WITHHELD — the
+ * card never claims "no cook time mentioned" on a guess (ADR-0081 §4).
  */
 const hints = ref<Awaited<ReturnType<typeof getTimerHints>> | null>(null)
 
@@ -346,7 +351,8 @@ const hintsLoaded = computed(() => hints.value !== null)
 function armSuggestion() {
   const s = suggestion.value
   if (!s || !meta.value) return
-  alerts.unlock()
+  unlockTimerAlertAudio()
+  ensureTimerAlertPolling()
   if (ui.addTimer(meta.value.id, s.label, s.minutes * 60) === null) {
     pendingArm.value = { label: s.label, seconds: s.minutes * 60 }
     return
@@ -392,12 +398,18 @@ const manageOpen = ref(false)
  * and when the row fits there is no scrollbar: the wide-screen look is
  * unchanged.
  */
-function arm(seconds: number, replacingId?: number): boolean {
+function arm(seconds: number, replacingId?: number, labelOverride?: string): boolean {
   if (!meta.value) return false
   // The arm is the user gesture: create/resume the AudioContext here so
-  // the completion chime is allowed to play later (ADR-0081 amendment).
-  alerts.unlock()
-  const label = nameInput.value.trim() || suggestion.value?.label || ''
+  // the completion chime is allowed to play later (ADR-0081 amendment),
+  // and make sure the device-level completion host is watching.
+  unlockTimerAlertAudio()
+  ensureTimerAlertPolling()
+  // Precedence is explicit: an override (replace flows) wins; otherwise the
+  // typed name, then the suggestion's label (an accepted suggestion arms
+  // with its own name), never an invented one.
+  const label =
+    labelOverride ?? (nameInput.value.trim() || suggestion.value?.label || '')
   if (replacingId !== undefined) ui.replaceTimer(meta.value.id, replacingId, label, seconds)
   else if (ui.addTimer(meta.value.id, label, seconds) === null) {
     pendingArm.value = { label, seconds }
@@ -420,49 +432,26 @@ function confirmArm() {
   if (minutes > 0) arm(minutes * 60)
 }
 
-/** The alert engine: one per session, prefs read live from the store. */
-const alerts = createTimerAlerts(() => ({
-  sound: ui.timerAlertSound,
-  vibrate: ui.timerAlertVibrate,
-}))
-
 /**
- * Completion detection (ADR-0081 amendment): a timer whose derived
- * countdown crosses to zero fires the alert ONCE — chime + vibration per
- * the settings, ON TOP of the live region's "Time's up" (three channels:
- * visible, audible, haptic). Restarting (or clearing and re-arming) a
- * timer re-arms its alert. The tick runs every 500 ms, so this watcher is
- * cheap; the transition guard is what keeps it from re-firing every tick.
+ * Completion detection moved to the DEVICE-LEVEL host
+ * (`src/lib/timerAlertHost.ts`): a timer that reaches zero alerts per the
+ * settings even when the cook has left this route, keyed per recipe+timer
+ * so ids cannot collide across recipes, and a timer already expired when
+ * the app opened never re-alerts. The gesture unlocks (arm / suggestion /
+ * restart, above) are what allow the chime channel.
  */
-const alertedTimers = ref(new Set<number>())
-
-watch(
-  () => timers.value.map((t) => ({ id: t.id, left: remainingOf(t) })),
-  (snapshots) => {
-    const seen = new Set<number>()
-    for (const s of snapshots) {
-      seen.add(s.id)
-      if (s.left <= 0) {
-        if (!alertedTimers.value.has(s.id)) {
-          alertedTimers.value.add(s.id)
-          alerts.fire()
-        }
-      } else {
-        alertedTimers.value.delete(s.id)
-      }
-    }
-    // A cleared timer forgets its alert entirely.
-    for (const id of [...alertedTimers.value]) {
-      if (!seen.has(id)) alertedTimers.value.delete(id)
-    }
-  },
-)
 
 /** One tap pause / resume (or restart once the countdown hit zero). */
 function toggle(t: CookTimer) {
   if (!meta.value) return
   if (isRunning(t)) ui.pauseTimer(meta.value.id, t.id, remainingOf(t))
-  else ui.startTimer(meta.value.id, t.id, remainingOf(t))
+  else {
+    // Restarting is ALSO a user gesture: unlock the audio here so a
+    // restarted timer's completion can chime (qodo round 1).
+    unlockTimerAlertAudio()
+    ensureTimerAlertPolling()
+    ui.startTimer(meta.value.id, t.id, remainingOf(t))
+  }
 }
 
 /** Spoken form for one chip's polite live region (minute ticks only). */
@@ -475,11 +464,12 @@ function clear(t: CookTimer) {
   ui.clearTimer(meta.value.id, t.id)
 }
 
-/** Which chip the user gave up from the at-cap prompt. */
+/** Which chip the user gave up from the at-cap prompt. The HELD label
+ * replaces the chip — never the (possibly retyped) field draft. */
 function replaceWith(id: number) {
   const held = pendingArm.value
   if (!held) return
-  arm(held.seconds, id)
+  arm(held.seconds, id, held.label)
 }
 
 /**

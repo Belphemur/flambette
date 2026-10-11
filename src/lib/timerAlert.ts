@@ -85,13 +85,21 @@ export function createTimerAlerts(
   function unlock(): void {
     try {
       if (!ctx) {
-        const g = globalThis as {
-          AudioContext?: new () => ChimeContext
-          webkitAudioContext?: new () => ChimeContext
+        if (audioFactory) {
+          // An injected factory is a plain callable (tests).
+          ctx = audioFactory()
+        } else {
+          // WebIDL constructors THROW without `new` — the native path
+          // must be a real construction, never a bare call (qodo: the
+          // chime would silently never play in a real browser).
+          const g = globalThis as {
+            AudioContext?: new () => ChimeContext
+            webkitAudioContext?: new () => ChimeContext
+          }
+          const Native = g.AudioContext ?? g.webkitAudioContext
+          if (!Native) return
+          ctx = new Native()
         }
-        const Ctor = audioFactory ?? g.AudioContext ?? g.webkitAudioContext
-        if (!Ctor) return
-        ctx = (Ctor as () => ChimeContext)()
       }
       if (ctx && ctx.state === 'suspended') void ctx.resume().catch(() => {})
     } catch {

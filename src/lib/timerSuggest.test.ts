@@ -53,6 +53,20 @@ describe('getTimerHints (per-recipe sidecar, on demand)', () => {
     expect(hints).toEqual([])
     expect(fetchCalls).toHaveLength(1)
   })
+
+  test('a FAILED fetch resolves to null — "unknown", never a false "no cook time" (ADR-0081 §4)', async () => {
+    globalThis.fetch = (async () => {
+      throw new TypeError('network down')
+    }) as typeof fetch
+    try {
+      const hints = await getTimerHints(424242)
+      expect(hints).toBeNull()
+      // The failure is cached too: no retry storm behind a dead network.
+      await getTimerHints(424242)
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
 })
 
 describe('hintForStep (lookup by view)', () => {

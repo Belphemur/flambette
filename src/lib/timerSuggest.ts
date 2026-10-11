@@ -50,20 +50,23 @@ export interface TimerSuggestion {
 
 const BASE = import.meta.env?.BASE_URL ?? '/'
 
-const cache = new Map<number, Promise<TimerHint[]>>()
+const cache = new Map<number, Promise<TimerHint[] | null>>()
 
 /**
  * The hints of ONE variant, fetched on demand from its sidecar. A missing
  * sidecar (recipes with zero hints have none) resolves to an EMPTY list —
- * a 404 is a fact about the catalog, not an error.
+ * a 404 is a fact about the catalog, not an error. A fetch/parse FAILURE
+ * resolves to NULL — the honest-copy rule (ADR-0081 decision 4) forbids
+ * claiming "no cook time mentioned" when the truth is "unknown": callers
+ * withhold the banner until the artifact actually resolves.
  */
-export function getTimerHints(variantId: number): Promise<TimerHint[]> {
+export function getTimerHints(variantId: number): Promise<TimerHint[] | null> {
   let p = cache.get(variantId)
   if (!p) {
     p = fetch(`${BASE}data/recipes/${variantId}.timer.json`)
       .then((res) => (res.ok ? (res.json() as Promise<TimerHintsDoc>) : { steps: [] }))
       .then((doc) => (Array.isArray(doc?.steps) ? doc.steps : []))
-      .catch(() => [])
+      .catch(() => null)
     cache.set(variantId, p)
   }
   return p
