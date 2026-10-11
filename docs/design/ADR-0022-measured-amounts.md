@@ -1,6 +1,8 @@
 # ADR-0022: Measured amounts under the cooking step text
 
-**Status:** Accepted (2026-09-28)
+**Status:** Accepted (2026-09-28) — superseded-in-part by ADR-0081 (the cooking
+surface renders measured amounts as checklist rows; the derivation, scaling and
+no-invented-quantity rules below survive untouched)
 **Extends:** ADR-0003 (derived grocery merge keys), ADR-0009 (spice
 scaling), ADR-0017 (container units). No catalog data changes; step and
 recipe text stay exactly as authored.
