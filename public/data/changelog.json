@@ -1,6 +1,19 @@
 {
-  "generatedAt": "2026-10-11T14:54:26Z",
+  "generatedAt": "2026-10-11T20:10:25Z",
   "versions": [
+    {
+      "version": "v2.9.0",
+      "date": "2026-10-11",
+      "title": "Card composition, honest timer suggestions, alerts, two-state timer card",
+      "features": [
+        {
+          "text": "card composition, honest timer suggestions, alerts, two-state timer card",
+          "scope": "cooking",
+          "pr": 82,
+          "adr": "ADR-0081"
+        }
+      ]
+    },
     {
       "version": "v2.8.0",
       "date": "2026-10-11",
