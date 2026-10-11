@@ -135,6 +135,36 @@ Bayesian-smoothed ratings as `useAutoPlan` injects them):
   zero-container waste; the ledger extension (count-nouns, pack-index
   parity) is the follow-up ADR if the grocery lists still read wrong.
 
+## Presentation amendment (2026-10-11, owner ruling after the Stitch render)
+
+The first implementation rendered the proposals as stacked rows titled
+"Option 1/2/3". Owner review of the Stitch renders
+("Flambette — Auto-Plan Proposal Chooser", screens
+`e602d8dba75142a0b8e144e63db31e3d` (mobile) and
+`9d996775280e40e9a5d591e1937ab8e0` (desktop), project 2725470430841257407)
+ruled the chooser must LOOK like a choice between plans:
+
+- **A "Choose your plan" section header** with the explicit line
+  "We generated 3 plans for your week. Tap one to preview it — the badge
+  marks the one that buys the fewest packages." (desktop: "Pick one").
+  The multiple-options fact is STATED, never implied.
+- **Plan letters, not ordinals**: cards are "Plan A / Plan B / Plan C"
+  in ranked order, each with a RADIO INDICATOR (filled tomato dot when
+  selected) so the affordance reads as pick-one-of-N.
+- **The cheapest card carries a "FEWEST PACKAGES" pill** (tomato tint,
+  tomato text) — Decision 1's pre-selection made scannable. The selection
+  state stays the tint + 2px tomato border; the pill is metadata, not
+  state.
+- The continuity marker ("extends your plan", Decision 3) renders as a
+  second pill beside FEWEST PACKAGES when the card is the continuity
+  proposal.
+- Everything else in Decision 5 stands: radio-group semantics with
+  arrow-key roving focus, per-card `buys N packages` in the mono data
+  voice, ephemeral selection, Confirm applies only the selected card.
+  Accessible names carry the plan letter (`Plan A: 4 meals, buys 4
+  packages`); any e2e assertion pinned to the old "Option N" phrasing
+  re-pins.
+
 ## Alternatives considered
 
 - **Status quo (rating-ranked single seed).** Rejected: the default press
