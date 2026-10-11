@@ -16,10 +16,12 @@ import { clampServings, FALLBACK_SERVINGS, isServings, MIN_SERVINGS } from '../l
 import {
   MAX_CONCURRENT_TIMERS,
   clampSeconds,
+  isFinished,
   isStepTimer,
   nextTimerId,
   newCookTimer,
   normalizeTimerLabel,
+  remainingSeconds,
   type CookTimer,
 } from '../lib/stepTimer'
 // The offered occasions are the ONE taxonomy (ADR-0046 §2.2/2.3): the
@@ -278,15 +280,23 @@ export const useUiStore = defineStore(
       const forRecipe = { ...(stepTimers.value[variantId] ?? {}) }
       const existing = forRecipe[id]
       if (!existing) return
-      const frozen = seconds === undefined ? existing.remaining : seconds
-      const base = frozen > 0 ? frozen : 300
-      const total =
-        seconds === undefined
-          ? existing.total && existing.total > 0
-            ? existing.total
-            : base
-          : clampSeconds(seconds)
-      forRecipe[id] = { ...newCookTimer(id, existing.label, base, true, Date.now()), total }
+      const now = Date.now()
+      // ONE arm rule (kody round 4, revising its round-3 `total` fix): a
+      // no-seconds press RESUMES the frozen segment while the timer is
+      // still live, and RE-ARMS the whole armed duration once it has
+      // expired — `remaining` on an expired timer is the last countdown
+      // segment, not the duration. Restart at 300 would be an invented
+      // number; the armed duration is the only honest base.
+      const base =
+        seconds !== undefined
+          ? clampSeconds(seconds)
+          : isFinished(existing, now) || (remainingSeconds(existing, now) <= 0 && existing.total && existing.total > 0)
+            ? existing.total!
+            : existing.remaining > 0
+              ? existing.remaining
+              : (existing.total && existing.total > 0 ? existing.total : 300)
+      const total = seconds !== undefined ? clampSeconds(seconds) : Math.max(base, existing.total ?? 0)
+      forRecipe[id] = { ...newCookTimer(id, existing.label, base, true, now), total }
       stepTimers.value = { ...stepTimers.value, [variantId]: forRecipe }
     }
 

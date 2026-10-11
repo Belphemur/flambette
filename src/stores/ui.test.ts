@@ -418,6 +418,23 @@ describe('the global timer list (ADR-0041)', () => {
     ui.startTimer(7, 1, 5 * 60)
     expect(ui.timerById(7, 1)?.total).toBe(5 * 60)
   })
+
+  test('restarting an EXPIRED timer re-arms the armed duration, not the last segment (kody round 5)', () => {
+    const ui = useUiStore()
+    ui.addTimer(7, 'Rice', 25 * 60)
+    // Simulate a pause at 10 minutes remaining, then let it expire while
+    // paused (remaining hits 0, total stays 1500).
+    ui.pauseTimer(7, 1, 0)
+    const before = ui.timerById(7, 1)
+    expect(before?.total).toBe(25 * 60)
+    // The view's Restart press passes NO seconds — the re-arm base must be
+    // the armed 25 min, never the frozen 0 segment (or an invented 300).
+    ui.startTimer(7, 1)
+    const restarted = ui.timerById(7, 1)
+    expect(restarted?.remaining).toBe(25 * 60)
+    expect(restarted?.total).toBe(25 * 60)
+    expect(restarted?.running).toBe(true)
+  })
 })
 
 /* ---------- Dietary restrictions (the restriction ADR) ---------- */
