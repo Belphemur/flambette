@@ -257,7 +257,9 @@ test.describe('household room', () => {
     await b.goto(`/?room=${code}`)
     await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
     await dismissJoinCongrats(b)
-    await gotoTab(b, 'Plan')
+    // ADR-0078: the ?room= join lands on the hero, which hides the bottom
+    // nav — route directly to Plan instead of tab-clicking.
+    await b.goto('/plan')
     await expect(b.getByRole('heading', { level: 3, name: recipeName })).toBeVisible({
       timeout: 20_000,
     })
