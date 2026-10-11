@@ -881,12 +881,193 @@ describe('buildAutoPlanProposals (ADR-0080)', () => {
     expect([...seedIds.slice(1)].sort()).toEqual([2, 3])
   })
 
-  test('pool exhaustion warnings ride along on each proposal (qodo round 1)', () => {
+  test('pool exhaustion warnings ride along on the surviving card (qodo round 1)', () => {
+    // An exhausted pool completes EVERY seed to the same all-candidates
+    // pack, so the regeneration-variety amendment's pack-content dedupe
+    // (Decision 3) collapses them to ONE card — and that card must still
+    // carry the warning toward the confirm toast.
+    const index = idx({
+      '1': { i: [[0, 1, 1, 1]], s: 1 },
+      '2': { i: [[1, 1, 1, 1]], s: 1 },
+    })
+    const proposals = buildAutoPlanProposals(index, { count: 4 })
+    expect(proposals).toHaveLength(1)
+    expect(proposals[0].warnings).toEqual(['Pool exhausted at 2/4 meals'])
+  })
+
+  test('regeneration-variety amendment: two seeds completing to the SAME pack dedupe to one card', () => {
+    // A two-candidate pool completes every seed to the identical pair —
+    // the completed packs (not the seeds) decide the cards.
     const index = idx({ '1': { i: [], s: 0 }, '2': { i: [], s: 0 } })
     const proposals = buildAutoPlanProposals(index, { count: 4 })
-    expect(proposals).toHaveLength(2)
-    for (const p of proposals) {
-      expect(p.warnings).toEqual(['Pool exhausted at 2/4 meals'])
+    expect(proposals).toHaveLength(1)
+  })
+})
+
+/**
+ * Regeneration-variety amendment (ADR-0080, owner bug #74): "Plan A never
+ * changes across Regenerate presses." The three decisions — continuity
+ * tie-rotation, disjoint 9-seed windows, pack-content dedupe — must all
+ * keep generation 0 bit-for-bit.
+ */
+describe('buildAutoPlanProposals regeneration-variety amendment (ADR-0080, #74)', () => {
+  // Real-index fixtures, replicating useAutoPlan's injection (dinner
+  // ruleset, Bayesian smoothing prior weight 10 over the eligible slice).
+  let real: {
+    index: PackIndex
+    req: {
+      count: number
+      ratings: Map<number, number>
+      tags: Map<number, number[]>
+      excludeIds: number[]
+    }
+  } | null = null
+  async function realIndexReq() {
+    if (!real) {
+      const [index, bd] = await Promise.all([
+        Bun.file(new URL('../../public/data/pack_index.json', import.meta.url)).json(),
+        Bun.file(new URL('../../public/data/builder_data.json', import.meta.url)).json(),
+      ])
+      const meta: Array<{
+        id: number
+        rating?: number
+        rating_count?: number
+        ruleset?: string
+        variety_tag_ids?: number[]
+      }> = bd.variant_meta
+      const eligible = meta.filter((m) => m.ruleset === 'dinner').map((m) => m.id)
+      const eligibleSet = new Set(eligible)
+      const mean = eligible.reduce((s, id) => {
+        const m = meta.find((x) => x.id === id)!
+        return s + (m.rating ?? 0)
+      }, 0) / eligible.length
+      const ratings = new Map<number, number>(
+        meta.map((m) => [
+          m.id,
+          eligibleSet.has(m.id)
+            ? ((m.rating ?? 0) * (m.rating_count ?? 0) + mean * 10) / ((m.rating_count ?? 0) + 10)
+            : 0,
+        ]),
+      )
+      const tags = new Map<number, number[]>(meta.map((m) => [m.id, m.variety_tag_ids ?? []]))
+      const excludeIds = meta.map((m) => m.id).filter((id) => !eligibleSet.has(id))
+      real = { index, req: { count: 4, ratings, tags, excludeIds } }
+    }
+    return real
+  }
+
+  test('REAL INDEX gen-0 equality, replace mode: the exact pre-amendment proposal list (pin)', async () => {
+    const { index, req } = await realIndexReq()
+    const proposals = buildAutoPlanProposals(index, { ...req, seedGeneration: 0 })
+    expect(
+      proposals.map((p) => ({ seedId: p.seedId, ids: p.variantIds, pk: p.packagesBought, kind: p.kind })),
+    ).toEqual([
+      { seedId: 13443, ids: [13443, 6389, 11982, 6167], pk: 4, kind: 'rated' },
+      { seedId: 17452, ids: [17452, 9889, 6389, 6167], pk: 8, kind: 'rated' },
+      { seedId: 40322, ids: [40322, 9889, 6389, 6167], pk: 8, kind: 'rated' },
+    ])
+  })
+
+  test('REAL INDEX gen-0 equality, add mode: continuity pick + rated cards unchanged (pin)', async () => {
+    const { index, req } = await realIndexReq()
+    const base = [13443, 6389, 11982, 6167]
+    const proposals = buildAutoPlanProposals(index, {
+      ...req,
+      seedGeneration: 0,
+      baseIds: base,
+    })
+    expect(
+      proposals.map((p) => ({ seedId: p.seedId, ids: p.variantIds, pk: p.packagesBought, kind: p.kind })),
+    ).toEqual([
+      { seedId: 9889, ids: [9889, 26529, 33435, 16579], pk: 4, kind: 'continuity' },
+      { seedId: 17452, ids: [17452, 26529, 16579, 30915], pk: 12, kind: 'rated' },
+      { seedId: 40322, ids: [40322, 26529, 33435, 16579], pk: 12, kind: 'rated' },
+    ])
+  })
+
+  test('REAL INDEX replace mode: Plan A differs across generations 0/1/2 (#74)', async () => {
+    const { index, req } = await realIndexReq()
+    const planA = [0, 1, 2].map((gen) =>
+      buildAutoPlanProposals(index, { ...req, seedGeneration: gen })[0].variantIds.join(','),
+    )
+    expect(new Set(planA).size).toBe(3)
+  })
+
+  test('REAL INDEX add mode: the continuity lead differs across generations 0/1/2 (#74)', async () => {
+    const { index, req } = await realIndexReq()
+    const base = [13443, 6389, 11982, 6167]
+    const leads = [0, 1, 2].map((gen) =>
+      buildAutoPlanProposals(index, { ...req, seedGeneration: gen, baseIds: base })[0].variantIds.join(','),
+    )
+    expect(new Set(leads).size).toBe(3)
+  })
+
+  test('REAL INDEX determinism: identical (index, generation) → identical list', async () => {
+    const { index, req } = await realIndexReq()
+    for (const gen of [0, 1, 2, 3]) {
+      const r = { ...req, seedGeneration: gen }
+      expect(JSON.stringify(buildAutoPlanProposals(index, r))).toBe(
+        JSON.stringify(buildAutoPlanProposals(index, r)),
+      )
+    }
+  })
+
+  test('tie-rotation cycles the continuity lead and caps at ROTATION_K', () => {
+    // Base opens ingA; candidates 1..6 each add ½ of their OWN container
+    // → marginal 1 each → a SIX-wide tie. Depth = min(tieCount,
+    // ROTATION_K) = 5, so generation 5 wraps back to rank 0.
+    const recipes: Record<string, { i: Array<[number, number, number, number]>; s: number }> = {
+      '10': { i: [[0, 2, 1, 1]], s: 1 },
+    }
+    for (const id of [1, 2, 3, 4, 5, 6]) {
+      recipes[String(id)] = { i: [[1, 0.5, 1, 1]], s: 1 }
+    }
+    const index = idx(recipes, { ingredientKeys: ['ingA', 'ingB'] })
+    const req = {
+      count: 1,
+      baseIds: [10],
+      ratings: ratings([
+        [1, 0.95],
+        [2, 0.9],
+        [3, 0.85],
+        [4, 0.8],
+        [5, 0.75],
+        [6, 0.7],
+      ]),
+    }
+    const lead = (gen: number) =>
+      buildAutoPlanProposals(index, { ...req, seedGeneration: gen })[0].seedId
+    // Rank 0 (gen 0) is the pre-amendment pick: highest rating, lower id.
+    expect([0, 1, 2, 3, 4, 5, 6].map(lead)).toEqual([1, 2, 3, 4, 5, 1, 2])
+  })
+
+  test('disjoint windows: generation w covers ranks [3w, 3w+2] of the 9-wide pool', () => {
+    // Ten candidates (pool = top 9), distinct ratings, count 1 → every
+    // pack is its seed alone, so the ranked output order IS rank order.
+    const recipes: Record<string, { i: []; s: number }> = {}
+    const ratingEntries: Array<[number, number]> = []
+    for (let id = 1; id <= 10; id++) {
+      recipes[String(id)] = { i: [], s: 0 }
+      ratingEntries.push([id, 1 - id * 0.05])
+    }
+    const index = idx(recipes)
+    const req = { count: 1, ratings: ratings(ratingEntries) }
+    const seedsOf = (gen: number) =>
+      buildAutoPlanProposals(index, { ...req, seedGeneration: gen }).map((p) => p.seedId)
+    expect(seedsOf(0)).toEqual([1, 2, 3]) // ranks 0–2 = the pre-amendment set
+    expect(seedsOf(1)).toEqual([4, 5, 6]) // ranks 3–5 — disjoint from gen 0
+    expect(seedsOf(2)).toEqual([7, 8, 9]) // ranks 6–8 — disjoint from 0 and 1
+    expect(seedsOf(3)).toEqual([1, 2, 3]) // mod 3 wraps
+  })
+
+  test('pack-content dedupe: a seed that completes to an already-chosen pack is skipped (real index)', async () => {
+    const { index, req } = await realIndexReq()
+    // Across generations 0..2 the replace-mode packs must never contain a
+    // duplicate variantId SET within one generation.
+    for (const gen of [0, 1, 2]) {
+      const proposals = buildAutoPlanProposals(index, { ...req, seedGeneration: gen })
+      const keys = proposals.map((p) => [...p.variantIds].sort((a, b) => a - b).join(','))
+      expect(new Set(keys).size).toBe(keys.length)
     }
   })
 })
