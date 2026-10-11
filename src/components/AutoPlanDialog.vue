@@ -78,6 +78,26 @@ function preselectedProposalIndex(proposals: PackProposal[]): number {
   return best
 }
 
+/** Index of the cheapest proposal of the pending set — the card that
+ *  carries the "FEWEST PACKAGES" pill (ADR-0080 amendment). */
+const cheapestIndex = computed(() => {
+  const ps = pendingProposals.value?.proposals
+  return ps && ps.length > 0 ? preselectedProposalIndex(ps) : -1
+})
+
+/**
+ * Card titles are PLAN LETTERS, not ordinals (ADR-0080 amendment): the
+ * chooser must read as a choice between plans. Letters are POSITIONAL
+ * (ranked order) — the continuity card is wherever the ranking put it,
+ * the letter carries no semantics. PROPOSAL_COUNT is 3; the fallback
+ * keeps the label honest if the count ever widens past the alphabet
+ * slice we name.
+ */
+const PLAN_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const
+function planLetter(index: number): string {
+  return PLAN_LETTERS[index] ?? String(index + 1)
+}
+
 /** PlanTab's trigger buttons open the dialog; everything else is internal. */
 function openAutoPlan() {
   pendingProposals.value = null
@@ -522,45 +542,80 @@ function setCategory(value: string) {
   Showing {{ proposalMeals[selectedProposal]?.length ?? 0 }} of {{ selectedPack?.variantIds.length ?? 0 }} meals — the rest are still
   loading, so this plan cannot be confirmed yet.
   </p>
-  <!-- ADR-0031: household stars and favourites nudge the ranking
-  (see useAutoPlan) — say so, or the ranking looks arbitrary. -->
-  <p class="text-xs text-text-muted" data-test="auto-plan-household-note">
-  Ranked with your household’s ratings
-  <template v-if="favouritesCount > 0"> and {{ favouritesCount }} favourite{{ favouritesCount === 1 ? '' : 's' }}</template>.
+  <!-- ADR-0080 amendment: the section header that states the
+  multiple-options fact OUT LOUD — the chooser must read as a choice
+  between plans, never a single pack with decoration. Desktop copy
+  says "Pick one" via an lg:-gated span (ONE component, two wordings,
+  ADR-0027's mobile-first grammar). -->
+  <div class="space-y-1">
+  <h4 class="text-title" data-test="auto-plan-choose-heading">Choose your plan</h4>
+  <p class="text-xs text-text-muted">
+  We generated {{ pendingProposals.proposals.length }}
+  {{ pendingProposals.proposals.length === 1 ? 'plan' : 'plans' }} for your week.
+  <span class="lg:hidden">Tap one</span><span class="hidden lg:inline">Pick one</span> to preview it —
+  the badge marks the one that buys the fewest packages.
   </p>
-  <!-- ADR-0080 Decision 5: one card per proposal, the CHEAPEST
-  pre-selected (waste-first made visible). Selecting a card switches
-  the preview; Confirm applies ONLY the selected proposal. The cards
-  are a radio group; the selection is TINT + border emphasis (ADR-0036)
-  — the Confirm button stays this sheet's one filled intent. Card
-  content is phrasing-only (spans) because a <button> cannot contain
-  a <ul>; the tile GRAMMAR (image, clamped name, bubble, minutes) is
-  unchanged. -->
-  <div role="radiogroup" aria-label="Plan proposals" data-test="auto-plan-proposals" class="space-y-2" @keydown="onProposalsKeydown">
+  </div>
+  <!-- ADR-0080 Decision 5 + amendment: one card per proposal, the
+  CHEAPEST pre-selected (waste-first made visible) and titled Plan A/B/C
+  with a RADIO INDICATOR, so the affordance reads as pick-one-of-N.
+  Selecting a card switches the preview; Confirm applies ONLY the
+  selected proposal. The cards are a radio group; the selection is the
+  tint + 2px tomato border (ADR-0036) — the Confirm button stays this
+  sheet's one filled intent. The cheapest card carries the FEWEST
+  PACKAGES pill (tomato text on the chip tint, the repo's badge idiom);
+  the continuity card carries a second, NEUTRAL pill beside it. Desktop
+  richness is lg:-gated: the SAME component becomes the Stitch desktop
+  render's 3-column card grid, each card's tiles stacking into rows
+  (image left, name + minutes right). Card content is phrasing-only
+  (spans) because a <button> cannot contain a <ul>; the tile GRAMMAR
+  (image, clamped name, bubble, minutes) is unchanged. -->
+  <div role="radiogroup" aria-label="Plan proposals" data-test="auto-plan-proposals" class="grid grid-cols-1 gap-2 lg:grid-cols-3 lg:gap-4" @keydown="onProposalsKeydown">
   <button
   v-for="(proposal, pi) in pendingProposals.proposals"
   :key="proposal.seedId"
   type="button"
   role="radio"
   :tabindex="selectedProposal === pi ? 0 : -1"
-  class="block w-full rounded-xl p-2 text-left ring-1 transition-colors"
-  :class="selectedProposal === pi ? 'bg-brand-tint ring-border-strong' : 'bg-surface ring-border hover:bg-surface-sunken'"
+  class="block w-full rounded-xl border-2 p-2 text-left transition-colors lg:p-3"
+  :class="selectedProposal === pi ? 'bg-brand-tint border-brand' : 'bg-surface border-border hover:bg-surface-sunken'"
   :aria-checked="selectedProposal === pi"
-  :aria-label="`Proposal ${pi + 1}: ${proposal.variantIds.length} ${proposal.variantIds.length === 1 ? 'meal' : 'meals'}, buys ${proposal.packagesBought} ${proposal.packagesBought === 1 ? 'package' : 'packages'}`"
+  :aria-label="`Plan ${planLetter(pi)}: ${proposal.variantIds.length} ${proposal.variantIds.length === 1 ? 'meal' : 'meals'}, buys ${proposal.packagesBought} ${proposal.packagesBought === 1 ? 'package' : 'packages'}`"
   :data-test="selectedProposal === pi ? 'auto-plan-proposal-selected' : 'auto-plan-proposal'"
   @click="selectedProposal = pi"
   >
   <span class="flex items-center justify-between gap-2">
-  <span class="text-xs font-semibold">
-  Option {{ pi + 1 }}<template v-if="proposal.kind === 'continuity'"> · extends your plan</template>
+  <span class="flex min-w-0 flex-wrap items-center gap-2">
+  <!-- Radio indicator: filled tomato dot in a tomato ring when
+  selected; a quiet ring when not (the render's radio grammar). -->
+  <span class="grid size-4 shrink-0 place-items-center rounded-full border-2" :class="selectedProposal === pi ? 'border-brand' : 'border-border-strong/50'" aria-hidden="true">
+  <span v-if="selectedProposal === pi" class="size-2 rounded-full bg-brand"></span>
+  </span>
+  <span class="text-sm font-bold tracking-tight">Plan {{ planLetter(pi) }}</span>
+  <!-- FEWEST PACKAGES: Decision 1's pre-selection made scannable —
+  metadata on the cheapest card, NOT the selection state. -->
+  <span
+  v-if="pi === cheapestIndex"
+  class="shrink-0 rounded-full border border-brand/20 bg-brand-tint px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-text"
+  data-test="auto-plan-proposal-badge-fewest"
+  >
+  Fewest packages
+  </span>
+  <span
+  v-if="proposal.kind === 'continuity'"
+  class="shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-text-muted"
+  data-test="auto-plan-proposal-badge-continuity"
+  >
+  Extends your plan
+  </span>
   </span>
   <span class="shrink-0 font-mono-data text-[10px] tabular-nums" data-test="auto-plan-proposal-packages">buys {{ proposal.packagesBought }} {{ proposal.packagesBought === 1 ? 'package' : 'packages' }}</span>
   </span>
-  <span class="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
+  <span class="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:mt-2 lg:grid-cols-1 lg:gap-1.5">
   <span
   v-for="meal in proposalMeals[pi] ?? []"
   :key="meal.id"
-  class="group relative rounded-lg bg-surface ring-1 ring-border"
+  class="group relative rounded-lg bg-surface ring-1 ring-border lg:flex lg:items-center lg:gap-2 lg:p-1.5"
   :data-test="`auto-plan-meal-${meal.id}`"
   >
   <img
@@ -568,7 +623,7 @@ function setCategory(value: string) {
   :alt="meal.name"
   loading="lazy"
   @error="onImgError"
-  class="aspect-[4/3] w-full rounded-t-lg object-cover"
+  class="aspect-[4/3] w-full rounded-t-lg object-cover lg:aspect-auto lg:w-14 lg:shrink-0 lg:rounded-md"
   />
   <!-- ADR-0055: the OS title on the line-clamped name becomes the one
   bubble (hover only). above-center: below would clip against the
@@ -577,15 +632,23 @@ function setCategory(value: string) {
   under the hovered element. The tile's overflow clipping lives on the
   image (rounded top corners), or the absolutely-positioned bubble
   would be clipped by its own tile. -->
-  <span class="block line-clamp-2 px-1.5 py-1 text-[11px] leading-tight font-medium">
+  <span class="block line-clamp-2 min-w-0 px-1.5 py-1 text-[11px] leading-tight font-medium lg:flex-1 lg:px-0 lg:py-0">
   {{ meal.name }}
   </span>
   <TooltipBubble :text="meal.name" />
-  <span class="block px-1.5 pb-1 font-mono-data text-[10px] tabular-nums">{{ meal.minutes }} min</span>
+  <span class="block px-1.5 pb-1 font-mono-data text-[10px] tabular-nums lg:px-0 lg:pb-0">{{ meal.minutes }} min</span>
   </span>
   </span>
   </button>
   </div>
+  <!-- ADR-0031: household stars and favourites nudge the ranking
+  (see useAutoPlan) — say so, or the ranking looks arbitrary. The
+  render puts this footnote BELOW the cards (it explains the set, not
+  one card) — moved here from above the group, hook unchanged. -->
+  <p class="text-xs text-text-muted" data-test="auto-plan-household-note">
+  Ranked with your household’s ratings
+  <template v-if="favouritesCount > 0"> and {{ favouritesCount }} favourite{{ favouritesCount === 1 ? '' : 's' }}</template>.
+  </p>
   <div class="flex gap-2">
   <button
   class="group relative h-11 flex-1 rounded-xl bg-brand text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
