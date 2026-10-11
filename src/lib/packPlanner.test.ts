@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test'
-import { buildAutoPlan, MAX_MEALS, MIN_MEALS, type PackIndex } from './packPlanner'
+import {
+  buildAutoPlan,
+  buildAutoPlanProposals,
+  MAX_MEALS,
+  MIN_MEALS,
+  PROPOSAL_COUNT,
+  type PackIndex,
+} from './packPlanner'
 
 /**
  * Tiny hand-built indexes for semantic assertions. Rows are the committed
@@ -593,5 +600,293 @@ describe('buildAutoPlan v3 (ADR-0031 household favourites)', () => {
     })
     expect(withoutFavorite.variantIds).toEqual([1, 2])
     expect(withFavorite.variantIds).toEqual([1, 3])
+  })
+})
+
+describe('buildAutoPlanProposals (ADR-0080)', () => {
+  test('exports PROPOSAL_COUNT = 3', () => {
+    expect(PROPOSAL_COUNT).toBe(3)
+  })
+
+  test('returns up to 3 proposals from the top-rated window', () => {
+    const index = idx({
+      '1': { i: [], s: 0 },
+      '2': { i: [], s: 0 },
+      '3': { i: [], s: 0 },
+      '4': { i: [], s: 0 },
+      '5': { i: [], s: 0 },
+    })
+    const req = {
+      count: 1,
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.85],
+        [3, 0.8],
+        [4, 0.75],
+        [5, 0.7],
+      ]),
+    }
+    const proposals = buildAutoPlanProposals(index, req)
+    expect(proposals).toHaveLength(PROPOSAL_COUNT)
+    // Every proposal is a distinct pack, and each is exactly its seed at count 1.
+    const seedIds = proposals.map((p) => p.seedId)
+    expect(new Set(seedIds).size).toBe(3)
+    expect(proposals.map((p) => p.variantIds)).toEqual([[1], [2], [3]])
+    // No base → no continuity proposal.
+    expect(proposals.every((p) => p.kind === 'rated')).toBe(true)
+  })
+
+  test('fewer eligible candidates than PROPOSAL_COUNT → fewer proposals', () => {
+    const index = idx({ '1': { i: [], s: 0 }, '2': { i: [], s: 0 } })
+    const proposals = buildAutoPlanProposals(index, { count: 1 })
+    expect(proposals).toHaveLength(2)
+  })
+
+  test('waste-first ranking: a 4-package proposal ranks above an 8-package one regardless of seed rating', () => {
+    // Seed 1 is the highest-rated but anchors an 8-package pack; seed 2
+    // rates lower but its pack (sharing completion) buys fewer packages.
+    const index = idx({
+      '1': { i: [[0, 8, 1, 1]], s: 1 },
+      '2': { i: [[0, 4, 1, 1]], s: 1 },
+      '3': { i: [[1, 6, 1, 1]], s: 1 },
+      '4': { i: [[0, 0.5, 1, 1]], s: 1 },
+    })
+    const proposals = buildAutoPlanProposals(index, {
+      count: 2,
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.8],
+        [3, 0.7],
+        [4, 0.1],
+      ]),
+    })
+    expect(proposals.map((p) => p.seedId)).toEqual([2, 3, 1])
+    expect(proposals.map((p) => p.packagesBought)).toEqual([5, 7, 9])
+    // Sorted ascending by packagesBought — waste first.
+    const pkgs = proposals.map((p) => p.packagesBought)
+    expect([...pkgs].sort((a, b) => a - b)).toEqual(pkgs)
+  })
+
+  test('add mode: continuity seed (lowest marginal cost vs the base ledger) is pinned proposal #1', () => {
+    const index = idx({
+      '10': { i: [[0, 2, 1, 1]], s: 1 }, // base: 2 pkg of ingA
+      '1': { i: [[0, 0.5, 1, 1]], s: 1 }, // shares ingA — marginal 1
+      '5': { i: [[1, 2, 1, 1]], s: 1 }, // opens ingB — marginal 2
+      '6': { i: [[2, 2, 1, 1]], s: 1 }, // opens ingC — marginal 2
+    })
+    const proposals = buildAutoPlanProposals(index, {
+      count: 1,
+      baseIds: [10],
+      ratings: ratings([
+        [1, 0.5],
+        [5, 0.9],
+        [6, 0.8],
+      ]),
+    })
+    expect(proposals).toHaveLength(3)
+    // The LOWEST-rated sharing candidate anchors proposal #1 — the ledger
+    // extends instead of opening new packages.
+    expect(proposals[0].seedId).toBe(1)
+    expect(proposals[0].kind).toBe('continuity')
+    expect(proposals.slice(1).every((p) => p.kind === 'rated')).toBe(true)
+    // packagesBought describes base + additions (2 + 0.5 → 3 packages).
+    expect(proposals[0].packagesBought).toBe(3)
+    // Base meals never appear as picks.
+    expect(proposals[0].variantIds).toEqual([1])
+    expect(proposals.every((p) => !p.variantIds.includes(10))).toBe(true)
+  })
+
+  test('continuity tie → smoothed rating desc; full tie → lower id', () => {
+    const base = { '10': { i: [[0, 2, 1, 1]], s: 1 } }
+    const sharers = {
+      '1': { i: [[0, 0.5, 1, 1]], s: 1 },
+      '2': { i: [[0, 0.5, 1, 1]], s: 1 },
+    }
+    const higherRatedWins = buildAutoPlanProposals(idx({ ...base, ...sharers }), {
+      count: 1,
+      baseIds: [10],
+      ratings: ratings([
+        [1, 0.5],
+        [2, 0.9],
+      ]),
+    })
+    expect(higherRatedWins[0]).toMatchObject({ seedId: 2, kind: 'continuity' })
+    const lowerIdWins = buildAutoPlanProposals(idx({ ...base, ...sharers }), {
+      count: 1,
+      baseIds: [10],
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.9],
+      ]),
+    })
+    expect(lowerIdWins[0]).toMatchObject({ seedId: 1, kind: 'continuity' })
+  })
+
+  test('window rotation: generation w starts the window at rank w mod 3, wrapping', () => {
+    const index = idx({
+      '1': { i: [], s: 0 },
+      '2': { i: [], s: 0 },
+      '3': { i: [], s: 0 },
+      '4': { i: [], s: 0 },
+      '5': { i: [], s: 0 },
+    })
+    const req = {
+      count: 1,
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.85],
+        [3, 0.8],
+        [4, 0.75],
+        [5, 0.7],
+      ]),
+    }
+    const seedsOf = (gen: number) =>
+      buildAutoPlanProposals(index, { ...req, seedGeneration: gen }).map((p) => p.seedId)
+    expect(seedsOf(0)).toEqual([1, 2, 3])
+    expect(seedsOf(1)).toEqual([2, 3, 4])
+    expect(seedsOf(2)).toEqual([3, 4, 5])
+    // mod 3 wraps: generation 3 shows generation 0's window again.
+    expect(seedsOf(3)).toEqual([1, 2, 3])
+  })
+
+  test('dedupe: a continuity seed that coincides with a window seed is replaced by the next distinct one', () => {
+    const index = idx({
+      '10': { i: [[0, 2, 1, 1]], s: 1 },
+      '1': { i: [[0, 0.5, 1, 1]], s: 1 }, // top-rated AND lowest marginal → continuity + window[0]
+      '2': { i: [[1, 2, 1, 1]], s: 1 },
+      '3': { i: [[2, 2, 1, 1]], s: 1 },
+    })
+    const proposals = buildAutoPlanProposals(index, {
+      count: 1,
+      baseIds: [10],
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.8],
+        [3, 0.7],
+      ]),
+    })
+    const seedIds = proposals.map((p) => p.seedId)
+    expect(seedIds).toEqual([1, 2, 3]) // all distinct, continuity pinned
+    expect(new Set(seedIds).size).toBe(3)
+    expect(proposals[0].kind).toBe('continuity')
+  })
+
+  test('determinism: same request → identical proposal list', () => {
+    const index = idx({
+      '1': { i: [[0, 3, 1, 1]], s: 1 },
+      '2': { i: [[0, 2, 1, 1]], s: 1 },
+      '3': { i: [[1, 2, 1, 1]], s: 1 },
+      '4': { i: [[1, 1, 1, 1]], s: 1 },
+      '5': { i: [[2, 2, 1, 1]], s: 1 },
+    })
+    const req = {
+      count: 3,
+      seedGeneration: 1,
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.8],
+        [3, 0.75],
+        [4, 0.6],
+        [5, 0.5],
+      ]),
+    }
+    expect(JSON.stringify(buildAutoPlanProposals(index, req))).toBe(
+      JSON.stringify(buildAutoPlanProposals(index, req)),
+    )
+  })
+
+  test('add mode: baseIds footprints pre-commit into EVERY proposal (shared packages)', () => {
+    const index = idx({
+      '10': { i: [[0, 2, 1, 1]], s: 1 },
+      '1': { i: [[0, 1, 1, 1]], s: 1 },
+      '2': { i: [[1, 2, 1, 1]], s: 1 },
+      '3': { i: [[2, 2, 1, 1]], s: 1 },
+      '4': { i: [[3, 2, 1, 1]], s: 1 },
+      '5': { i: [[4, 2, 1, 1]], s: 1 },
+    })
+    const proposals = buildAutoPlanProposals(index, {
+      count: 2,
+      baseIds: [10],
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.8],
+        [3, 0.7],
+        [4, 0.6],
+        [5, 0.5],
+      ]),
+    })
+    // Every pack pays for the base's ingA container (2 pkg) plus its own.
+    expect(proposals.every((p) => p.packagesBought >= 3)).toBe(true)
+  })
+
+  test('empty pool → no proposals', () => {
+    expect(buildAutoPlanProposals(idx({}), { count: 4 })).toEqual([])
+  })
+
+  test('a one-candidate pool still yields its proposal at ANY generation (qodo round 1)', () => {
+    const index = idx({ '1': { i: [], s: 0 } })
+    for (const gen of [0, 1, 2, 7]) {
+      const proposals = buildAutoPlanProposals(index, { count: 1, seedGeneration: gen })
+      expect(proposals).toHaveLength(1)
+      expect(proposals[0].seedId).toBe(1)
+    }
+  })
+
+  test('a two-candidate pool shows BOTH seeds from every generation (cyclic window)', () => {
+    const index = idx({
+      '1': { i: [], s: 0 },
+      '2': { i: [], s: 0 },
+    })
+    const req = {
+      count: 1,
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.8],
+      ]),
+    }
+    const gen1 = buildAutoPlanProposals(index, { ...req, seedGeneration: 1 })
+    expect(gen1).toHaveLength(2)
+    // Old behavior returned an EMPTY list at generation 2 (start past the
+    // last seed); the cyclic walk keeps every seed reachable. The ranked
+    // OUTPUT order is waste-first (0 packages tie → rating desc), so the
+    // window rotation shows up in WHICH seeds are chosen, never the order.
+    const gen2 = buildAutoPlanProposals(index, { ...req, seedGeneration: 2 })
+    expect(gen2).toHaveLength(2)
+    expect(gen2.map((p) => p.seedId).sort((a, b) => a - b)).toEqual([1, 2])
+  })
+
+  test('add mode: a continuity seed at the LAST window position still leaves 3 distinct cards (qodo round 1)', () => {
+    const index = idx({
+      '10': { i: [[0, 2, 1, 1]], s: 1 },
+      '1': { i: [[0, 0.5, 1, 1]], s: 1 }, // lowest-rated AND lowest marginal → continuity at window[2]
+      '2': { i: [[1, 2, 1, 1]], s: 1 },
+      '3': { i: [[2, 2, 1, 1]], s: 1 },
+    })
+    const proposals = buildAutoPlanProposals(index, {
+      count: 1,
+      baseIds: [10],
+      seedGeneration: 1,
+      ratings: ratings([
+        [1, 0.7],
+        [2, 0.8],
+        [3, 0.9],
+      ]),
+    })
+    const seedIds = proposals.map((p) => p.seedId)
+    expect(seedIds).toHaveLength(3)
+    expect(new Set(seedIds).size).toBe(3)
+    expect(proposals[0]).toMatchObject({ seedId: 1, kind: 'continuity' })
+    // The rated cards come from the non-continuity seeds, rotating from
+    // the generation's window start.
+    expect([...seedIds.slice(1)].sort()).toEqual([2, 3])
+  })
+
+  test('pool exhaustion warnings ride along on each proposal (qodo round 1)', () => {
+    const index = idx({ '1': { i: [], s: 0 }, '2': { i: [], s: 0 } })
+    const proposals = buildAutoPlanProposals(index, { count: 4 })
+    expect(proposals).toHaveLength(2)
+    for (const p of proposals) {
+      expect(p.warnings).toEqual(['Pool exhausted at 2/4 meals'])
+    }
   })
 })
