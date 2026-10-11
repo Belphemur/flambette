@@ -68,10 +68,56 @@ describe('getTimerHints (per-recipe sidecar, on demand)', () => {
     }
   })
 
-  test('a 200 whose body is not the sidecar (vite preview / nginx SPA fallback serving HTML for a missing .json) is an EMPTY list — the missing-file form, not "unknown"', async () => {
-    globalThis.fetch = (async () => new Response('<!doctype html><html>…</html>', { status: 200 })) as typeof fetch
+  test('a 200 whose body is the SPA fallback (vite preview / nginx serving HTML for a missing .json) is an EMPTY list — the missing-file form, not "unknown"', async () => {
+    globalThis.fetch = (async () =>
+      new Response('<!doctype html><html>…</html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      })) as typeof fetch
     try {
       const hints = await getTimerHints(424243)
+      expect(hints).toEqual([])
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
+  test('a 200 served as JSON whose body will not PARSE is null — a corrupt artifact is never a false "no cook time" (ADR-0081 §4)', async () => {
+    globalThis.fetch = (async () =>
+      new Response('{"steps":[{"step":0,"sec', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })) as typeof fetch
+    try {
+      const hints = await getTimerHints(424244)
+      expect(hints).toBeNull()
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
+  test('parseable JSON that is NOT the sidecar shape is null too — corrupt, not "none authored"', async () => {
+    globalThis.fetch = (async () =>
+      new Response('{"oops":true}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })) as typeof fetch
+    try {
+      const hints = await getTimerHints(424245)
+      expect(hints).toBeNull()
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
+  test('a sidecar with an EMPTY steps array is a real "none authored" — an EMPTY list', async () => {
+    globalThis.fetch = (async () =>
+      new Response('{"steps":[]}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })) as typeof fetch
+    try {
+      const hints = await getTimerHints(424246)
       expect(hints).toEqual([])
     } finally {
       globalThis.fetch = realFetch

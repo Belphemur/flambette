@@ -118,6 +118,21 @@ test('a cleared timer forgets its alert; a paused one never fires early', () => 
   expect(vibrateCalls).toHaveLength(1)
 })
 
+test('a timer cleared mid-countdown is FORGOTTEN — a restored id that arrives expired never fires', () => {
+  const t0 = 1_000_000
+  setTimers({ 5264: { 1: timer(1, 60, t0) } })
+  scanTimerCompletions(t0) // armed
+  // The cook cancels it while it counts: the cleanup walk must forget
+  // the ARMED key too (an `alerted`-only walk leaks it), or a later
+  // restore that re-creates 5264:1 already expired fires spuriously.
+  setTimers({ 5264: {} })
+  scanTimerCompletions(t0 + 10_000)
+  setTimers({ 5264: { 1: timer(1, 60, t0 - 7_200_000) } })
+  scanTimerCompletions(t0 + 20_000)
+  scanTimerCompletions(t0 + 25_000)
+  expect(vibrateCalls).toEqual([])
+})
+
 test('unlockTimerAlertAudio is gesture-safe without any AudioContext (bun test env)', () => {
   expect(() => unlockTimerAlertAudio()).not.toThrow()
 })

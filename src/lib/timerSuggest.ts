@@ -56,20 +56,43 @@ const cache = new Map<number, Promise<TimerHint[] | null>>()
  * The hints of ONE variant, fetched on demand from its sidecar. Resolution
  * classes (ADR-0081 decision 4's honest copy):
  *
- * - missing sidecar → EMPTY list: recipes with zero hints have no file, and
- *   both `vite preview` and the nginx SPA fallback answer a missing .json
- *   with 200 + HTML — so a 200 whose body will not parse IS the missing-file
- *   form, not an unknown (a 404 can rarely be observed).
- * - rejected fetch → NULL ('unknown'): the truth is not knowable, and the
- *   honest-copy rule forbids claiming "no cook time mentioned" on a guess —
- *   callers withhold the banner until the artifact actually resolves.
+ * - missing sidecar → EMPTY list: recipes with zero hints have no file.
+ *   Both `vite preview` and the nginx SPA fallback answer a missing .json
+ *   with 200 + HTML — recognized by its `text/html` content-type, since a
+ *   404 can rarely be observed behind them.
+ * - corrupt/truncated sidecar → NULL ('unknown'): a 200 that claims to be
+ *   JSON but fails to parse (or is not the sidecar shape) is a broken
+ *   artifact, not a fact about the recipe — the honest-copy rule forbids
+ *   claiming "no cook time mentioned" on a guess, so callers withhold the
+ *   banner until the artifact actually resolves.
+ * - rejected fetch → NULL ('unknown'): the truth is not knowable.
  */
+type HintsResolution = TimerHint[] | null
+/** Marker for the first stage: "the sidecar does not exist" (≠ unknown). */
+const MISSING = { kind: 'missing' } as const
+/** First-stage result: MISSING, or the parsed body as unshaped JSON. */
+type Stage1 = typeof MISSING | { kind: 'doc'; doc: unknown }
+
 export function getTimerHints(variantId: number): Promise<TimerHint[] | null> {
   let p = cache.get(variantId)
   if (!p) {
     p = fetch(`${BASE}data/recipes/${variantId}.timer.json`)
-      .then((res) => (res.ok ? res.json().catch(() => null) : null))
-      .then((doc) => (doc && Array.isArray((doc as TimerHintsDoc)?.steps) ? (doc as TimerHintsDoc).steps : []))
+      .then(async (res): Promise<Stage1> => {
+        if (!res.ok) return MISSING
+        // The SPA fallback's index.html is HOW a missing sidecar presents
+        // (200 + text/html); anything actually served as JSON that will
+        // not parse is a corrupt artifact, not a missing file.
+        if ((res.headers.get('content-type') ?? '').includes('html')) return MISSING
+        return { kind: 'doc', doc: await res.json().catch(() => null) }
+      })
+      .then((stage): HintsResolution => {
+        if (stage.kind === 'missing') return []
+        const steps = (stage.doc as TimerHintsDoc | null)?.steps
+        // An unparseable body arrived as `doc: null`, and parseable JSON
+        // that is NOT the sidecar shape is a corrupt artifact too — both
+        // resolve to UNKNOWN, never to a false "no cook time mentioned".
+        return Array.isArray(steps) ? steps : null
+      })
       .catch(() => null)
     cache.set(variantId, p)
   }

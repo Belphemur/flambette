@@ -79,7 +79,13 @@ function tick(now: number): void {
       }
     }
   }
-  for (const key of [...alerted]) {
+  // Forget every key of THIS recipe set that vanished while we were not
+  // looking (a timer cleared mid-countdown, a backup that rewrote the
+  // map): iterate the UNION — a key that is armed-but-never-alerted is
+  // exactly the leak a `alerted`-only walk misses, and a stale armed key
+  // would fire a spurious alert if a later restore re-created that id
+  // already expired (the seeding rule would never see it count).
+  for (const key of [...alerted, ...armed]) {
     if (!seen.has(key)) {
       alerted.delete(key)
       armed.delete(key)
