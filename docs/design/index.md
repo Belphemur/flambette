@@ -5,14 +5,14 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**85 records.** One file per decision (`ADR-NNNN-slug.md`),
+**86 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
 
 ## In force
 
-The 72 accepted records below all still govern. Skim the ones
+The 73 accepted records below all still govern. Skim the ones
 near your change before proposing anything -- they encode *why* the
 architecture is shaped the way it is.
 
@@ -90,6 +90,7 @@ architecture is shaped the way it is.
 | [0077](ADR-0077-stitch-alignment-pass.md) | The Stitch alignment pass — closing the remaining structural gaps on four surfaces | 2026-10-10 |
 | [0078](ADR-0078-home-hero.md) | The home page is a hero page | 2026-10-10 |
 | [0079](ADR-0079-room-chip-no-tooltip-roster-is-the-room-surface.md) | The room chip drops its tooltip; the roster sheet is the room's info surface _(supersedes ADR-0049)_ | 2026-10-11 |
+| [0080](ADR-0080-waste-first-proposals.md) | Auto-Plan proposals — waste-first ranking and the continuity seed _(supersedes ADR-0033)_ | 2026-10-11 |
 
 ## Not in force
 
@@ -127,8 +128,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0080**). Do not count the files -- that is how the
-   collisions above happened (85 files share 79 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0081**). Do not count the files -- that is how the
+   collisions above happened (86 files share 80 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.
