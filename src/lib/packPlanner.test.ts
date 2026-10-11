@@ -1071,3 +1071,32 @@ describe('buildAutoPlanProposals regeneration-variety amendment (ADR-0080, #74)'
     }
   })
 })
+
+test('add mode: the continuity seed INSIDE the top-9 does not collapse the windows to cyclic (kody round 3)', () => {
+  // 11 candidates, distinct descending ratings; the base meal shares
+  // nothing, so every candidate ties at the same marginal and the
+  // continuity seed is the top-RATED one — inside the top-9 slice. The
+  // filtered pool then reads 8 (< PROPOSAL_POOL), but the widened-pool
+  // regime must still apply: disjoint windows [0-2] / [3-5] / [6-7].
+  const recipes: Record<string, { i: Array<[number, number, number, number]>; s: number }> = {
+    '100': { i: [[0, 2, 1, 1]], s: 1 },
+  }
+  const ratingEntries: Array<[number, number]> = []
+  for (let id = 1; id <= 11; id++) {
+    recipes[String(id)] = { i: [[1, 1, 1, 1]], s: 1 }
+    ratingEntries.push([id, 1 - id * 0.05])
+  }
+  const index = idx(recipes, { ingredientKeys: ['ingA', 'ingB'] })
+  const req = { count: 1, baseIds: [100], ratings: ratings(ratingEntries) }
+  const seedsOf = (gen: number) =>
+    buildAutoPlanProposals(index, { ...req, seedGeneration: gen }).map((p) => p.seedId)
+  // PROPOSAL_COUNT caps TOTAL cards: continuity + 2 rated. The continuity
+  // lead itself rotates (tie-rotation: rank 0/1/2 = seeds 1/2/3) and the
+  // rated windows over the FILTERED pool are disjoint.
+  expect(seedsOf(0)).toEqual([1, 2, 3]) // continuity #1 + filtered ranks 0-1
+  expect(seedsOf(1)).toEqual([2, 5, 6]) // continuity #2 + filtered ranks 3-4 — disjoint
+  expect(seedsOf(2)).toEqual([3, 8, 9]) // continuity #3 + filtered ranks 6-7 — disjoint
+  // gen 3: continuity = tie rank 3 (#4); the rated pool re-filters to
+  // drop #4, so its window w=0 reads ranks 0-1 of THAT pool = #1, #2.
+  expect(seedsOf(3)).toEqual([4, 1, 2])
+})

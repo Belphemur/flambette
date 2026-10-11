@@ -515,11 +515,17 @@ export function buildAutoPlanProposals(index: PackIndex, req: PackPlanRequest): 
   // cheapest pack of one window cannot dominate the next generation.
   // Sub-pool catalogs keep the clamped cyclic walk so no eligible seed
   // becomes unreachable.
-  const ratedPool = byRating
-    .slice(0, Math.min(PROPOSAL_POOL, byRating.length))
-    .filter((id) => id !== continuitySeed)
+  // Disjointness is decided on the PRE-filter slice (kody round 3): in
+  // add mode the continuity seed usually ranks INSIDE the top-9, so the
+  // filtered pool reads 8 — testing the filtered pool for 9 would
+  // silently fall back to the overlapping cyclic walk exactly when the
+  // amendment matters. The regime is "widened pool" iff the top-9 slice
+  // is complete AND enough seeds remain after the continuity seed is
+  // removed to fill the cards.
+  const preFilter = byRating.slice(0, Math.min(PROPOSAL_POOL, byRating.length))
+  const ratedPool = preFilter.filter((id) => id !== continuitySeed)
   const generation = sanitizeGeneration(req.seedGeneration)
-  const disjoint = ratedPool.length >= PROPOSAL_POOL
+  const disjoint = preFilter.length >= PROPOSAL_POOL && ratedPool.length >= PROPOSAL_COUNT
   const start = disjoint ? (generation % WINDOW_SIZE) * WINDOW_SIZE : generation % Math.max(1, Math.min(WINDOW_SIZE, ratedPool.length))
   const cyclic = !disjoint
   const packKey = (variantIds: number[]): string =>
