@@ -240,6 +240,24 @@ test('proposals: the cheapest card is pre-selected and every card shows its pack
     (await selected.getByTestId('auto-plan-proposal-packages').textContent())!.match(/(\d+)/)![1],
   )
   expect(selectedPkgs).toBe(Math.min(...pkgs))
+
+  // Radio-group keyboard support (qodo round 1): an arrow key moves the
+  // selection (and focus) to the neighbouring card.
+  const cardSel = '[data-test="auto-plan-proposal"], [data-test="auto-plan-proposal-selected"]'
+  const selectedCardIndex = () =>
+    page
+      .locator(cardSel)
+      .evaluateAll((els) =>
+        els.findIndex((e) => e.getAttribute('data-test') === 'auto-plan-proposal-selected'),
+      )
+  const beforeArrow = await selectedCardIndex()
+  await page.getByTestId('auto-plan-proposal-selected').focus()
+  await page.keyboard.press('ArrowRight')
+  expect(await selectedCardIndex()).toBe((beforeArrow + 1) % 3)
+  // Focus followed the selection (roving tabindex).
+  expect(
+    await page.evaluate(() => document.activeElement?.getAttribute('data-test')),
+  ).toBe('auto-plan-proposal-selected')
   await expectZeroMealimeRequests(page)
 })
 

@@ -133,6 +133,8 @@ export interface PackProposal {
    * (ADR-0080 Decision 3). 'rated' — anchored on a rating-ranked window seed.
    */
   kind: 'continuity' | 'rated'
+  /** Pool-exhaustion warnings from the completion (qodo round 1). */
+  warnings?: string[]
 }
 
 /** Proposals per press (ADR-0080 Decision 2). */
@@ -418,10 +420,14 @@ export function buildAutoPlan(index: PackIndex, req: PackPlanRequest): PackPlan 
  * reorders proposals.
  *
  * Regenerate rotates the WINDOW: start = generation mod
- * (ROTATION_K − PROPOSAL_COUNT + 1). Replace mode shows window seeds
- * [w, w+1, w+2]; add mode shows the continuity proposal plus window
- * seeds [w, w+1], deduplicated against the continuity seed by taking the
- * next distinct window seed. `baseIds` footprints pre-commit into EVERY
+ * (ROTATION_K − PROPOSAL_COUNT + 1) over the rated seed pool — which in
+ * add mode EXCLUDES the continuity seed (ADR-0080 Decision 4: "the
+ * non-continuity seeds"), so dedupe is structural, not a patch. The pool
+ * is walked CYCLICALLY from the start, so a pool smaller than the window
+ * still yields its candidates (a one-candidate pool at generation 2
+ * shows its one proposal, never an empty preview) and a continuity seed
+ * sitting at the cut still leaves PROPOSAL_COUNT distinct cards.
+ * `baseIds` footprints pre-commit into EVERY
  * proposal's ledger (add mode semantics — `packagesBought` describes
  * base + additions, exactly as `buildAutoPlan` does).
  *
@@ -463,15 +469,20 @@ export function buildAutoPlanProposals(index: PackIndex, req: PackPlanRequest): 
   }
 
   // Window rotation (ADR-0080 Decision 4): every press shows a different
-  // deterministic set of window seeds.
-  const start = sanitizeGeneration(req.seedGeneration) % (ROTATION_K - PROPOSAL_COUNT + 1)
+  // deterministic set of window seeds. The rated pool EXCLUDES the
+  // continuity seed (add mode: "the non-continuity seeds"), the start
+  // modulus clamps to the pool (a 1-candidate pool can never start past
+  // its only seed), and the walk is cyclic so every eligible seed stays
+  // reachable from every generation.
+  const ratedPool = windowSeeds.filter((id) => id !== continuitySeed)
+  const span = Math.max(1, Math.min(ROTATION_K - PROPOSAL_COUNT + 1, ratedPool.length))
+  const start = sanitizeGeneration(req.seedGeneration) % span
   const chosen: Array<{ seedId: number; kind: PackProposal['kind'] }> = []
   if (continuitySeed != null) chosen.push({ seedId: continuitySeed, kind: 'continuity' })
-  for (let i = start; i < windowSeeds.length && chosen.length < PROPOSAL_COUNT; i++) {
-    // Deduplicate: a window seed that coincides with the continuity seed
-    // is skipped for the NEXT distinct window seed, so all cards differ.
-    if (!chosen.some((c) => c.seedId === windowSeeds[i])) {
-      chosen.push({ seedId: windowSeeds[i], kind: 'rated' })
+  for (let n = 0; n < ratedPool.length && chosen.length < PROPOSAL_COUNT; n++) {
+    const seedId = ratedPool[(start + n) % ratedPool.length]
+    if (!chosen.some((c) => c.seedId === seedId)) {
+      chosen.push({ seedId, kind: 'rated' })
     }
   }
 
@@ -486,6 +497,9 @@ export function buildAutoPlanProposals(index: PackIndex, req: PackPlanRequest): 
       scoredIngredients: plan.scoredIngredients,
       kind,
     }
+    // Pool-exhaustion warnings ride along (qodo round 1): a short pack
+    // must reach the confirm toast, not vanish into the lib.
+    if (plan.warnings) proposal.warnings = plan.warnings
     ;(kind === 'continuity' ? continuity : rated).push(proposal)
   }
 

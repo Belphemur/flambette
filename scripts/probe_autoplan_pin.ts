@@ -43,7 +43,7 @@ const metaById = new Map<number, any>([
   ...userEntries.map((r: any) => [r.meta.id, r.meta] as const),
 ])
 
-// Mirror useAutoPlan.runAutoPlan exactly (no diets, ruleset 'any', ADD mode):
+// Mirror useAutoPlan's request resolver exactly (no diets, ruleset 'any', ADD mode):
 // every catalog variant is eligible, and ratings are Bayesian-smoothed toward
 // the ELIGIBLE-slice mean with the variant's own rating_count as the weight.
 const RATING_PRIOR_WEIGHT = 10

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { Minus, Plus, Sparkles, X } from 'lucide-vue-next'
 import { catalog } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
@@ -203,6 +203,22 @@ const previewComplete = computed(
     selectedPack.value.variantIds.length,
 )
 
+/**
+ * Radio-group keyboard support (qodo round 1): arrow keys move the
+ * selection cyclically and move focus with it (roving tabindex below).
+ */
+async function onProposalsKeydown(event: KeyboardEvent) {
+  const key = event.key
+  if (key !== 'ArrowDown' && key !== 'ArrowUp' && key !== 'ArrowLeft' && key !== 'ArrowRight') return
+  const count = pendingProposals.value?.proposals.length ?? 0
+  if (count < 2) return
+  const delta = key === 'ArrowDown' || key === 'ArrowRight' ? 1 : -1
+  selectedProposal.value = (selectedProposal.value + delta + count) % count
+  event.preventDefault()
+  await nextTick()
+  ;(document.querySelector('[data-test="auto-plan-proposal-selected"]') as HTMLElement | null)?.focus()
+}
+
 /** Confirm/apply step: add mode APPENDS to the current plan (no
  * destructive confirm needed); replace mode REPLACES it after the
  * preview (confirm-before-destroy, unchanged from phase 19). */
@@ -269,8 +285,11 @@ function confirmAutoPlan() {
   plan.replacePlan(atConfirm, plan.customItems)
   plan.setClearedIngredients(clearedAtConfirm)
   }
+  const warning = result.warnings?.[0]
   ui.showToast(
-  replacing
+  warning
+  ? `Plan generated — ${warning}`
+  : replacing
   ? `Plan generated: ${result.variantIds.length} meals`
   : `${result.variantIds.length} meals added to your plan`,
   {
@@ -496,7 +515,10 @@ function setCategory(value: string) {
   <template v-if="plan.plan.length > 0">({{ plan.plan.length }} meals)</template>.
   </template>
   </p>
-  <p v-if="!previewComplete" class="text-xs text-warning">
+  <p v-if="pendingProposals.proposals.length === 0" class="text-xs text-warning">
+  No eligible recipes for this plan — widen the filters or lower the meal count.
+  </p>
+  <p v-else-if="!previewComplete" class="text-xs text-warning">
   Showing {{ proposalMeals[selectedProposal]?.length ?? 0 }} of {{ selectedPack?.variantIds.length ?? 0 }} meals — the rest are still
   loading, so this plan cannot be confirmed yet.
   </p>
@@ -514,12 +536,13 @@ function setCategory(value: string) {
   content is phrasing-only (spans) because a <button> cannot contain
   a <ul>; the tile GRAMMAR (image, clamped name, bubble, minutes) is
   unchanged. -->
-  <div role="radiogroup" aria-label="Plan proposals" data-test="auto-plan-proposals" class="space-y-2">
+  <div role="radiogroup" aria-label="Plan proposals" data-test="auto-plan-proposals" class="space-y-2" @keydown="onProposalsKeydown">
   <button
   v-for="(proposal, pi) in pendingProposals.proposals"
   :key="proposal.seedId"
   type="button"
   role="radio"
+  :tabindex="selectedProposal === pi ? 0 : -1"
   class="block w-full rounded-xl p-2 text-left ring-1 transition-colors"
   :class="selectedProposal === pi ? 'bg-brand-tint ring-border-strong' : 'bg-surface ring-border hover:bg-surface-sunken'"
   :aria-checked="selectedProposal === pi"
@@ -533,7 +556,7 @@ function setCategory(value: string) {
   </span>
   <span class="shrink-0 font-mono-data text-[10px] tabular-nums" data-test="auto-plan-proposal-packages">buys {{ proposal.packagesBought }} {{ proposal.packagesBought === 1 ? 'package' : 'packages' }}</span>
   </span>
-  <span class="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-hidden="true">
+  <span class="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
   <span
   v-for="meal in proposalMeals[pi] ?? []"
   :key="meal.id"

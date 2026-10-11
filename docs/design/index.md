@@ -12,7 +12,7 @@ flips the old one's Status; accepted records are never rewritten in place.
 
 ## In force
 
-The 73 accepted records below all still govern. Skim the ones
+The 72 accepted records below all still govern. Skim the ones
 near your change before proposing anything -- they encode *why* the
 architecture is shaped the way it is.
 
@@ -51,7 +51,6 @@ architecture is shaped the way it is.
 | [0030](ADR-0030-auto-plan-preview.md) | Auto-Plan previews the pack before it replaces the plan | 2026-09-29 |
 | [0031](ADR-0031-household-favorites-ratings.md) | Shared household favourites + per-recipe ratings | 2026-09-30 |
 | [0032](ADR-0032-cooked-history-shared-by-default.md) | Cooked history is shared by default, with a permanent opt-out _(supersedes ADR-0011)_ | 2026-09-29 |
-| [0033](ADR-0033-auto-plan-regenerate-seed.md) | An Auto-Plan "Regenerate" press rolls the seed | 2026-10-01 |
 | [0034](ADR-0034-cook-anytime.md) | Cook any recipe, and remember which plan a cook came from | 2026-10-01 |
 | [0037](ADR-0037-remembered-default-servings.md) | A remembered default serving size | 2026-10-01 |
 | [0038](ADR-0038-cloudflare-deployment.md) | Cloudflare hosts flambette.app — Workers with assets and a Durable Object relay | 2026-10-02 |
@@ -100,6 +99,7 @@ understand why the current shape is the shape.
 | ADR | Decision | Status | Date |
 | --- | --- | --- | --- |
 | [0004](ADR-0004-share-url-and-rooms.md) | Share via URL deep-link (`?p=`), rooms for interactive sync | accepted (superseded in part) | 2026-09-23 |
+| [0033](ADR-0033-auto-plan-regenerate-seed.md) | An Auto-Plan "Regenerate" press rolls the seed | accepted (superseded in part) | 2026-10-01 |
 | [0035](ADR-0035-design-tokens-and-categorical-hues.md) | A design-token layer (DESIGN.md), categorical food hues, and a wider desktop | superseded | 2026-10-01 |
 | [0036](ADR-0036-kitchen-companion-redesign.md) | A kitchen companion, not an accent-only reskin | proposed | 2026-10-01 |
 | [0038](ADR-0038-step-timers-move-under-step-views.md) | Step timers live on the step, not in a global strip | proposed | 2026-10-01 |

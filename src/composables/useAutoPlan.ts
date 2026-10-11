@@ -2,10 +2,8 @@ import { shallowRef } from 'vue'
 import { getCatalog } from '../lib/catalog'
 import { dietIndexFor, matchesAllDiets } from '../lib/dietFilter'
 import {
-  buildAutoPlan,
   buildAutoPlanProposals,
   type PackIndex,
-  type PackPlan,
   type PackPlanRequest,
   type PackProposal,
 } from '../lib/packPlanner'
@@ -85,11 +83,6 @@ export interface AutoPlanOptions {
   mode?: 'add' | 'replace'
   /** Rotating seed generation (persisted counter, ADR-0027). */
   seedGeneration?: number
-}
-
-export interface AutoPlanResult extends PackPlan {
-  /** Caller-side eligible pool size (diagnostics). */
-  eligibleCount: number
 }
 
 /** Bayesian prior weight for rating smoothing (ADR-0027 §smoothing). */
@@ -225,17 +218,6 @@ async function resolveAutoPlanRequest(options: AutoPlanOptions): Promise<{
   return { index, req, eligibleCount: eligible.size }
 }
 
-/**
- * The v2 single-pack entry point (ADR-0024/0027/0031): ONE pack at the
- * rotating seed. Kept for callers that want exactly the pinned v2
- * behavior; the dialog now consumes `runAutoPlanProposals` (ADR-0080).
- */
-export async function runAutoPlan(options: AutoPlanOptions): Promise<AutoPlanResult> {
-  const { index, req, eligibleCount } = await resolveAutoPlanRequest(options)
-  const result = buildAutoPlan(index, req)
-  return { ...result, eligibleCount }
-}
-
 export interface AutoPlanProposalsResult {
   /** Up to PROPOSAL_COUNT proposals, waste-ranked (ADR-0080). */
   proposals: PackProposal[]
@@ -247,7 +229,9 @@ export interface AutoPlanProposalsResult {
  * The ADR-0080 entry point: up to PROPOSAL_COUNT DISTINCT packs ranked
  * waste-first (packagesBought ASC), with the continuity seed pinned as
  * proposal #1 in add mode. Same eligibility, ratings, favourites and
- * error posture as `runAutoPlan` — only the lib call differs.
+ * error posture as the v2 request resolver — the single-pack lib entry
+ * point `buildAutoPlan` remains exported for the pinned v2 behavior, but
+ * its composable wrapper is gone with its only caller (qodo round 1).
  */
 export async function runAutoPlanProposals(
   options: AutoPlanOptions,

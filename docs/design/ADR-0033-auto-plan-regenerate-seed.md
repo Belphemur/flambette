@@ -1,6 +1,10 @@
 # ADR-0033: An Auto-Plan "Regenerate" press rolls the seed
 
-**Status:** Accepted (2026-10-01)
+**Status:** Accepted (2026-10-01); superseded IN PART by
+[ADR-0080](ADR-0080-waste-first-proposals.md) (2026-10-11) — a Regenerate
+press now rolls the PROPOSAL WINDOW, not a single blind seed. The TWO
+advance points (synchronously at press when a preview exists, and on
+apply) remain in force unchanged.
 **Refines:** [ADR-0027](ADR-0027-auto-plan-v2.md) §4 (the seed rotation
 contract) and [ADR-0027-auto-plan-v2](ADR-0027-auto-plan-v2.md)'s
 "rotate the seed" rule, which until now only fired on *apply*.

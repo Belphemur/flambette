@@ -822,4 +822,71 @@ describe('buildAutoPlanProposals (ADR-0080)', () => {
   test('empty pool → no proposals', () => {
     expect(buildAutoPlanProposals(idx({}), { count: 4 })).toEqual([])
   })
+
+  test('a one-candidate pool still yields its proposal at ANY generation (qodo round 1)', () => {
+    const index = idx({ '1': { i: [], s: 0 } })
+    for (const gen of [0, 1, 2, 7]) {
+      const proposals = buildAutoPlanProposals(index, { count: 1, seedGeneration: gen })
+      expect(proposals).toHaveLength(1)
+      expect(proposals[0].seedId).toBe(1)
+    }
+  })
+
+  test('a two-candidate pool shows BOTH seeds from every generation (cyclic window)', () => {
+    const index = idx({
+      '1': { i: [], s: 0 },
+      '2': { i: [], s: 0 },
+    })
+    const req = {
+      count: 1,
+      ratings: ratings([
+        [1, 0.9],
+        [2, 0.8],
+      ]),
+    }
+    const gen1 = buildAutoPlanProposals(index, { ...req, seedGeneration: 1 })
+    expect(gen1).toHaveLength(2)
+    // Old behavior returned an EMPTY list at generation 2 (start past the
+    // last seed); the cyclic walk keeps every seed reachable. The ranked
+    // OUTPUT order is waste-first (0 packages tie → rating desc), so the
+    // window rotation shows up in WHICH seeds are chosen, never the order.
+    const gen2 = buildAutoPlanProposals(index, { ...req, seedGeneration: 2 })
+    expect(gen2).toHaveLength(2)
+    expect(gen2.map((p) => p.seedId).sort((a, b) => a - b)).toEqual([1, 2])
+  })
+
+  test('add mode: a continuity seed at the LAST window position still leaves 3 distinct cards (qodo round 1)', () => {
+    const index = idx({
+      '10': { i: [[0, 2, 1, 1]], s: 1 },
+      '1': { i: [[0, 0.5, 1, 1]], s: 1 }, // lowest-rated AND lowest marginal → continuity at window[2]
+      '2': { i: [[1, 2, 1, 1]], s: 1 },
+      '3': { i: [[2, 2, 1, 1]], s: 1 },
+    })
+    const proposals = buildAutoPlanProposals(index, {
+      count: 1,
+      baseIds: [10],
+      seedGeneration: 1,
+      ratings: ratings([
+        [1, 0.7],
+        [2, 0.8],
+        [3, 0.9],
+      ]),
+    })
+    const seedIds = proposals.map((p) => p.seedId)
+    expect(seedIds).toHaveLength(3)
+    expect(new Set(seedIds).size).toBe(3)
+    expect(proposals[0]).toMatchObject({ seedId: 1, kind: 'continuity' })
+    // The rated cards come from the non-continuity seeds, rotating from
+    // the generation's window start.
+    expect([...seedIds.slice(1)].sort()).toEqual([2, 3])
+  })
+
+  test('pool exhaustion warnings ride along on each proposal (qodo round 1)', () => {
+    const index = idx({ '1': { i: [], s: 0 }, '2': { i: [], s: 0 } })
+    const proposals = buildAutoPlanProposals(index, { count: 4 })
+    expect(proposals).toHaveLength(2)
+    for (const p of proposals) {
+      expect(p.warnings).toEqual(['Pool exhausted at 2/4 meals'])
+    }
+  })
 })
