@@ -165,6 +165,48 @@ ruled the chooser must LOOK like a choice between plans:
   packages`); any e2e assertion pinned to the old "Option N" phrasing
   re-pins.
 
+## Regeneration-variety amendment (2026-10-11, owner bug report #74)
+
+"Plan A never changes when I press Regenerate." Measured, both modes:
+
+- **Replace mode:** the ranking collapses the rotation. Seed #13443 (rank 2
+  of the top-5) sits inside EVERY 3-wide window of a 5-seed pool, and
+  Decision 1 re-sorts by packages — its 4-package pack wins Plan A at every
+  generation (gens 0–6 identical). Only B/C rotate.
+- **Add mode:** the continuity seed is deterministic per base ledger, and
+  the minimal-marginal tie set is HUGE — 101 candidates tie at 0 marginal
+  cost against a 4-meal base. The rating tie-break pins #9889 forever.
+
+Regenerate must visibly change the pre-selected plan (ADR-0033's contract,
+which this ADR inherited). Decisions (owner-binding):
+
+1. **Continuity tie-rotation.** The continuity seed is the candidate at
+   rank `(seedGeneration mod min(tieCount, ROTATION_K))` of the
+   minimal-marginal tie set ordered by smoothed rating desc → id asc.
+   Rank 0 = today's pick, so generation 0 output is UNCHANGED and the
+   pinned pack survives. The proposal keeps `kind: 'continuity'` and the
+   EXTENDS YOUR PLAN pill — it still extends the plan at the same (zero)
+   marginal cost; WHICH tied candidate leads rotates.
+2. **Disjoint proposal windows.** The proposal seed pool widens to
+   `PROPOSAL_POOL = PROPOSAL_COUNT × 3` (9) top-rated candidates; window
+   `w = seedGeneration mod 3` covers ranks `[3w, 3w+2]`. Windows never
+   overlap, so the cheapest pack of one window cannot dominate the next
+   generation. Generation 0 covers ranks 0–2 = today's set exactly (pin
+   survives). Cost: 9 planner completions instead of 5 — measured
+   sub-frame (~50 ms).
+3. **Pack-content dedupe.** Distinct seeds can complete to the SAME
+   variantId set (measured: eight seeds → the identical 4-package pack).
+   Within one proposal set, a candidate whose pack equals an already-chosen
+   proposal's pack is skipped and the next ranked seed takes the slot; if
+   the pool exhausts, fewer cards render (never a duplicate card). The
+   window advance walks RANKS; the dedupe skips SEEDS already TAKEN, it
+   does not skip packs seen in other generations (no cross-generation
+   state — determinism per generation is preserved).
+4. e2e: the gen-0 pins stand (both amendments keep generation 0
+   bit-for-bit). New pins: Plan A differs across generations 0/1/2 in
+   replace mode, and across two consecutive Regenerates in add mode with a
+   non-empty plan.
+
 ## Alternatives considered
 
 - **Status quo (rating-ranked single seed).** Rejected: the default press
