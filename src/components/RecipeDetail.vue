@@ -34,12 +34,13 @@ import {
 } from '../lib/stepTimer'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { macroGrams } from '../lib/nutrition'
-import { usePlanStore } from '../stores/plan'
+import { usePlanStore, type CookedEntry, type PlanEntry } from '../stores/plan'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 import { displayRating, ratingNoScoreCorner, useRatingStore } from '../stores/rating'
 import { planServingsFor } from '../composables/usePlanServings'
 import RatingStars from './RatingStars.vue'
+import PostCookPrompt from './PostCookPrompt.vue'
 import NutritionModal from './NutritionModal.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
 import { useIntersectionObserver } from '@vueuse/core'
@@ -550,7 +551,65 @@ useIntersectionObserver(
 const cookedAlreadyToday = computed(() =>
   meta.value ? cooked.cookedToday(meta.value.id) : false,
 )
-const cookedPillVisible = computed(() => stepsInView.value && !cookedAlreadyToday.value)
+const cookedPillVisible = computed(
+  () => stepsInView.value && !cookedAlreadyToday.value && !pillPromptOpen.value,
+)
+
+/**
+ * The pill's trigger context (ADR-0083 addendum): the detail page owns
+ * what Undo restores — the exact prior state the pill's tap displaced,
+ * captured at press time (the same snapshot discipline the cooking
+ * session runs: plan entry + cleared-ingredient row, taken BEFORE
+ * markCooked drops the meal from the plan). The prompt component is
+ * reused AS-IS — triggers own only their context, the prompt owns the
+ * experience.
+ */
+const pillPromptOpen = ref(false)
+const pillEvent = ref<CookedEntry | null>(null)
+const pillPrior = ref<{ entry: PlanEntry | null; cleared: string[] | null } | null>(null)
+
+/**
+ * Pill tap = record + the SAME prompt, no separate flow: the ONE
+ * plan.markCooked path the cooking session uses (plan-aware — a planned
+ * meal leaves the plan, an unplanned cook still records, ADR-0032).
+ */
+function cookFromPill() {
+  if (!meta.value || pillEvent.value) return
+  const id = meta.value.id
+  const entry = plan.plan.find((e) => e.variantId === id)
+  const cleared = plan.clearedIngredients[id]
+  const prior = {
+    entry: entry ? { ...entry } : null,
+    cleared: cleared ? [...cleared] : null,
+  }
+  pillEvent.value = plan.markCooked(id)
+  pillPrior.value = prior
+  pillPromptOpen.value = true
+}
+
+/**
+ * Done (or scrim/Escape): History, where the cooked entry just landed
+ * (ADR-0083) — same close semantics the cooking session runs.
+ */
+function onPillPromptDone() {
+  pillPromptOpen.value = false
+  void router.push('/history')
+}
+
+/**
+ * Undo: the record is removed and the user STAYS on the detail page
+ * (there is no session to resume). cookedAlreadyToday recomputes, so the
+ * pill offers itself again.
+ */
+function onPillPromptUndo() {
+  pillPromptOpen.value = false
+  const event = pillEvent.value
+  const prior = pillPrior.value
+  if (!event || !prior) return
+  plan.undoMarkCooked(event, prior)
+  pillEvent.value = null
+  pillPrior.value = null
+}
 
 async function loadDoc() {
   const m = meta.value
@@ -611,6 +670,10 @@ function onKey(e: KeyboardEvent) {
   // The facts modal owns Escape while it is open (ADR-0039): this view
   // must not navigate away underneath it.
   if (nutritionOpen.value) return
+  // The post-cook prompt owns Escape while IT is open (ADR-0083) — the
+  // same registration-order rule the cooking session honours: this
+  // window handler fires BEFORE AppModal's, so it must yield.
+  if (pillPromptOpen.value) return
   if (e.key === 'Escape') close()
 }
 onMounted(() => {
@@ -1348,6 +1411,7 @@ function startCooking() {
         type="button"
         class="pointer-events-auto flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface-raised py-2 pl-3 pr-4 shadow-popover transition-colors hover:bg-surface"
         data-test="cooked-pill"
+        @click="cookFromPill"
       >
         <span class="size-2 shrink-0 rounded-full bg-brand" aria-hidden="true" />
         <Check :size="16" aria-hidden="true" class="text-brand-text" />
@@ -1355,6 +1419,16 @@ function startCooking() {
       </button>
     </div>
   </div>
+
+  <!-- The SAME post-cook prompt, raised over the detail page (ADR-0083
+  addendum): Done/scrim/Escape -> /history via onPillPromptDone; Undo
+  removes the record and the user STAYS on the detail page. -->
+  <PostCookPrompt
+    v-if="pillPromptOpen && pillEvent"
+    :variant-id="meta.id"
+    @done="onPillPromptDone"
+    @undo="onPillPromptUndo"
+  />
   </div>
   </div>
 </template>
