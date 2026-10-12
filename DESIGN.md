@@ -876,10 +876,18 @@ order. Nutrition belongs after the action area, not ahead of the next useful act
 
 Start cooking is the single primary action. Servings and Add/Update in plan stay
 available but are visually secondary. On desktop place actions near the recipe
-introduction; on phones use a full-width cooking button and compact secondary
-row. A sticky action area is allowed only if it clears the actual app-header
-height, does not cover content/focus, and does not consume most of a short screen.
+introduction; on phones use a full-width cooking button and compact secondary row.
+A sticky action area is allowed only if it clears the actual app-header height,
+does not cover content/focus, and does not consume most of a short screen.
 It must reflow for zoom/landscape rather than overlap the navigation.
+
+Rating is a labeled, touch-sized invitation (ADR-0082): a level-1 card headed
+"Rate this recipe" carrying the ONE `RatingStars` control at 32px (phone) /
+24px (desktop), the value in `font-mono-data` beside the stars, the helper
+"Tap a star — halves supported", and a "Synced to household" line only while a
+room is live. The metadata band keeps time, energy and servings — the rating
+cell is not in it. History rows carry the same control at 22px/24px with no
+per-row helper copy; browse cards keep the compact display.
 
 ### One visual language, different jobs
 
