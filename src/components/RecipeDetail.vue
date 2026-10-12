@@ -42,6 +42,7 @@ import { planServingsFor } from '../composables/usePlanServings'
 import RatingStars from './RatingStars.vue'
 import NutritionModal from './NutritionModal.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
+import { useIntersectionObserver } from '@vueuse/core'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
 import { recipeSeoHead } from '../lib/seo'
 import HueIcon from './HueIcon.vue'
@@ -51,6 +52,7 @@ import { useHead } from '@unhead/vue'
 import {
   ArrowLeft,
   BookOpen,
+  Check,
   ChefHat,
   ChevronDown,
   Clock,
@@ -524,6 +526,31 @@ const cookLastTitle = computed(() => {
   const last = meta.value ? cooked.last(meta.value.id) : null
   return last ? `Last cooked ${formatAbsolute(last)}` : undefined
 })
+
+/**
+ * The "Cooked this?" pill (ADR-0083 addendum): a compact floating
+ * affordance for marking the cook from the detail page — for the person
+ * who never enters cooking mode. It belongs to the END of the recipe
+ * ("I cooked this" becomes true at the steps), so it is visible while the
+ * instructions region is in view — an IntersectionObserver on the steps
+ * section, via @vueuse's useIntersectionObserver — and hidden once the
+ * cook is recorded TODAY (the same local-day rule the history prints).
+ * Design authority: Stitch "Flambette — Recipe Detail End (Mobile Dark)"
+ * (Warm Culinary Paper).
+ */
+const instructionsSection = ref<HTMLElement | null>(null)
+const stepsInView = ref(false)
+useIntersectionObserver(
+  instructionsSection,
+  (entries) => {
+    stepsInView.value = entries.some((e) => e.isIntersecting)
+  },
+  { threshold: 0 },
+)
+const cookedAlreadyToday = computed(() =>
+  meta.value ? cooked.cookedToday(meta.value.id) : false,
+)
+const cookedPillVisible = computed(() => stepsInView.value && !cookedAlreadyToday.value)
 
 async function loadDoc() {
   const m = meta.value
@@ -1193,7 +1220,9 @@ function startCooking() {
   </section>
   </section>
 
-  <section>
+  <!-- The section the "Cooked this?" pill watches (ADR-0083 addendum):
+  the pill is visible while THIS region intersects the viewport. -->
+  <section ref="instructionsSection">
   <!-- ADR-0077: the render's step-column head carries a mono total beside
        the H — the count is real (`scaledSteps.length`); the render's
        "Preparation Steps" wording is NOT adopted, because "Instructions"
@@ -1298,6 +1327,34 @@ function startCooking() {
   </section>
   </div>
   </template>
+
+  <!-- The "Cooked this?" pill (ADR-0083 addendum): a compact floating
+  affordance for marking the cook from the detail page — for the person
+  who never enters cooking mode. Design authority: Stitch "Flambette —
+  Recipe Detail End (Mobile Dark)" (Warm Culinary Paper): right edge,
+  ~120px above the bottom navigation, surface-raised fill, subtle
+  border, the ONE popover shadow (ADR-0068), warm accent dot. The
+  pointer-events-none wrapper keeps the fixed overlay from
+  intercepting taps outside the pill (the ADR-0049 hit-testing
+  lesson), while the app-width column keeps the pill on the right edge
+  of the CONTENT on desktop, not the viewport edge. Hidden while the
+  steps are out of view and once the cook is recorded today. -->
+  <div
+    v-if="doc && cookedPillVisible"
+    class="pointer-events-none fixed inset-x-0 bottom-[calc(120px+env(safe-area-inset-bottom))] z-40 flex justify-end"
+  >
+    <div class="mx-auto flex w-full max-w-app justify-end px-4">
+      <button
+        type="button"
+        class="pointer-events-auto flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface-raised py-2 pl-3 pr-4 shadow-popover transition-colors hover:bg-surface"
+        data-test="cooked-pill"
+      >
+        <span class="size-2 shrink-0 rounded-full bg-brand" aria-hidden="true" />
+        <Check :size="16" aria-hidden="true" class="text-brand-text" />
+        <span class="text-label-md font-semibold text-text">Cooked this?</span>
+      </button>
+    </div>
+  </div>
   </div>
   </div>
 </template>

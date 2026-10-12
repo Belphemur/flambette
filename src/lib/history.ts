@@ -48,6 +48,24 @@ export function lastCooked(events: CookedEntry[], variantId: number): number | n
 }
 
 /**
+ * Was any of these cook timestamps on the SAME LOCAL DAY as `now`
+ * (ADR-0083 addendum)? The detail pill's guard: a cook already recorded
+ * today must not invite a second one from the detail page — the day
+ * boundary is LOCAL, the same convention `formatDay` prints.
+ */
+export function cookedToday(cookedAts: number[], now = Date.now()): boolean {
+  const day = new Date(now)
+  return cookedAts.some((ts) => {
+    const d = new Date(ts)
+    return (
+      d.getFullYear() === day.getFullYear() &&
+      d.getMonth() === day.getMonth() &&
+      d.getDate() === day.getDate()
+    )
+  })
+}
+
+/**
  * Every cook EVENT of one variant, newest first (ADR-0034). The count
  * line answers "how often"; this answers "when exactly", which a
  * per-variant aggregate has thrown away.
@@ -168,6 +186,9 @@ export function useCookHistory() {
     count: (variantId: number) => cookCount(plan.cookedHistory, variantId),
     last: (variantId: number) => lastCooked(plan.cookedHistory, variantId),
     events: (variantId: number) => cookEventsFor(plan.cookedHistory, variantId),
+    /** Cooked on the same local day as now (the pill guard). */
+    cookedToday: (variantId: number) =>
+      cookedToday(cookEventsFor(plan.cookedHistory, variantId)),
   }
 }
 
