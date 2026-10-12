@@ -32,7 +32,7 @@ import {
   type RoomRegistry,
   type RoomStore,
 } from './relay-core/lifecycle'
-import { canonicalizeCode, mintLegacyCode, WORD_CODE_RE } from './relay-core/codes'
+import { canonicalizeCode, mintLegacyCode, resolveCreateIntent } from './relay-core/codes'
 import { IDLE_TTL_MS as IDLE_TTL_DEFAULT_MS, INACTIVITY_TTL_MS as INACTIVITY_TTL_DEFAULT_MS, RELAY_SERVICE } from './relay-core/policy'
 import { RELAY_ERRORS, type RelayMessage } from './relay-core/protocol'
 import { makeThrottle, MemoryAttemptBuckets } from './relay-core/throttle'
@@ -371,7 +371,13 @@ function mintFreeCode(): string {
  */
 function admit(ws: Socket, code: string, mode: 'create' | 'join'): void {
   const room = roomFor(code)
-  const verdict = room.registry.admit(mode, room.peers.size)
+  // The PRE-ARRIVAL headcount: `attach` deliberately keeps a socket that
+  // re-joins the room it is ALREADY in, so a set size that already
+  // contains this socket would make the core's `livePeers + 1` over-count
+  // by one. Honest input makes `verdict.count` correct by construction —
+  // no clamp to patch the verdict with afterwards.
+  const preArrival = room.peers.size - (room.peers.has(ws) ? 1 : 0)
+  const verdict = room.registry.admit(mode, preArrival)
   if (verdict.kind === 'refuse') {
     send(ws, { type: 'error', code: verdict.error })
     return
@@ -383,14 +389,7 @@ function admit(ws: Socket, code: string, mode: 'create' | 'join'): void {
   // (ADR-0049) — the same number `broadcastPeers` is about to tell the
   // room, stitched in so the joining peer learns it without waiting for a
   // second frame.
-  //
-  // Clamped to the set's real size: `attach` deliberately keeps a socket
-  // that re-joins the room it is ALREADY in, so `livePeers + 1` from the
-  // core would report one more peer than exists. The clamp is adapter
-  // work on purpose — only the adapter knows whether `attach` grew the
-  // set. (The `peers` fan-out below reports the same size, so a clamped
-  // join is confirmed a frame later.)
-  const count = Math.min(verdict.count, room.peers.size)
+  const count = verdict.count
   if (verdict.kind === 'establish') {
     send(ws, { type: 'created', code: verdict.code, rev: verdict.rev, count })
   } else {
@@ -401,24 +400,22 @@ function admit(ws: Socket, code: string, mode: 'create' | 'join'): void {
 
 /**
  * A create. The budget is charged HERE so a URL-carried intent and the
- * legacy message pay the same price.
- *
- * The message form predates the URL intent and only ever honoured word
- * codes (the client rolled them); the URL intent accepts the whole
- * ADR-0021 union through the shared canonicaliser, because that is what
- * the client sends and what the Durable Object relay honours.
+ * legacy message pay the same price. WHICH code qualifies is the core's
+ * decision (`resolveCreateIntent`): only an empty/absent code mints, a
+ * caller that named a specific code is answered for THAT code, and a
+ * named code that does not qualify is refused — never minted over.
  */
 function performCreate(ws: Socket, rawCode: unknown, { legacyMessage = false } = {}): void {
   if (!throttle.allow(ws)) {
     send(ws, { type: 'error', code: RELAY_ERRORS.rateLimited })
     return
   }
-  const wanted = legacyMessage
-    ? typeof rawCode === 'string' && WORD_CODE_RE.test(rawCode.trim())
-      ? rawCode.trim()
-      : ''
-    : canonicalizeCode(rawCode)
-  admit(ws, wanted || mintFreeCode(), 'create')
+  const intent = resolveCreateIntent(rawCode, { messageForm: legacyMessage })
+  if (intent.kind === 'notFound') {
+    send(ws, { type: 'error', code: RELAY_ERRORS.notFound })
+    return
+  }
+  admit(ws, intent.kind === 'create' ? intent.code : mintFreeCode(), 'create')
 }
 
 /**

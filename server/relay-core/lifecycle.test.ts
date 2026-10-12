@@ -29,7 +29,7 @@ import {
 } from './lifecycle'
 import { CODE_ALPHABET, IDLE_TTL_MS, INACTIVITY_TTL_MS } from './policy'
 import { RELAY_ERRORS } from './protocol'
-import { canonicalizeCode, WORD_CODE_RE, mintLegacyCode, normalizeRoomCode } from './codes'
+import { canonicalizeCode, WORD_CODE_RE, mintLegacyCode, normalizeRoomCode, resolveCreateIntent } from './codes'
 
 const HOUR = 60 * 60 * 1000
 
@@ -120,6 +120,35 @@ describe('room codes are canonicalised by the shared client helper', () => {
     expect(CODE_ALPHABET).toHaveLength(30)
     expect(CODE_ALPHABET).not.toMatch(/[AEIOU]/)
     expect(WORD_CODE_RE.test('mauve-peacock-candle')).toBe(true)
+  })
+})
+
+describe('create intents (ADR-0021/0038: never mint over a named code)', () => {
+  test('a word code qualifies in BOTH forms, case-insensitively', () => {
+    // The URL intent's vocabulary is the full ADR-0021 union.
+    expect(resolveCreateIntent('mauve-peacock-candle')).toEqual({ kind: 'create', code: 'mauve-peacock-candle' })
+    // The message form canonicalises through the SAME helper: a
+    // mixed-case word code must be answered for the room it named,
+    // not silently rerolled into a freshly minted one.
+    expect(resolveCreateIntent('Mauve-Peacock-Candle', { messageForm: true })).toEqual({
+      kind: 'create',
+      code: 'mauve-peacock-candle',
+    })
+    expect(resolveCreateIntent('mauvepeacockcandle')).toEqual({ kind: 'create', code: 'mauve-peacock-candle' })
+  })
+
+  test('a legacy code qualifies in the URL form and is REFUSED in the message form', () => {
+    expect(resolveCreateIntent('zz9zzz')).toEqual({ kind: 'create', code: 'ZZ9ZZZ' })
+    // The message form's vocabulary is word codes only: a caller that
+    // named a legacy code is refused like `join`, never minted over.
+    expect(resolveCreateIntent('zz9zzz', { messageForm: true })).toEqual({ kind: 'notFound' })
+    expect(resolveCreateIntent('ZZ9ZZZ', { messageForm: true })).toEqual({ kind: 'notFound' })
+  })
+
+  test('only an empty/absent code mints', () => {
+    expect(resolveCreateIntent(undefined)).toEqual({ kind: 'mint' })
+    expect(resolveCreateIntent('', { messageForm: true })).toEqual({ kind: 'mint' })
+    expect(resolveCreateIntent(undefined, { messageForm: true })).toEqual({ kind: 'mint' })
   })
 })
 

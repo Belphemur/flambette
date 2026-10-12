@@ -70,3 +70,38 @@ export function mintLegacyCode(): string {
   for (let i = 0; i < CODE_LENGTH; i++) code += CODE_ALPHABET[randomIndex(CODE_ALPHABET.length)]
   return code
 }
+/* ------------------------------------------------------- create intents */
+
+/**
+ * What a `create` request asks the relay to do with its code, decided ONCE
+ * here (ADR-0040) instead of per adapter:
+ *
+ * - `mint` — only an empty/unusable input mints: the caller did not name a
+ *   room, so the relay picks one (a legacy mint for the message form,
+ *   ADR-0038 §3).
+ * - `create` — the caller named a code the relay accepts under the form's
+ *   vocabulary; admit/create against exactly that code, never a different
+ *   one.
+ * - `notFound` — the caller named a specific code that canonicalises but
+ *   does NOT qualify under the form's vocabulary: refused like `join`,
+ *   never minted over (minting would land the socket in a freshly minted
+ *   room it never asked for).
+ */
+export type CreateIntent =
+  | { kind: 'mint' }
+  | { kind: 'create'; code: string }
+  | { kind: 'notFound' }
+
+/**
+ * The message protocol predates the URL intent and only ever honoured
+ * word codes (the client rolled them); the URL intent accepts the whole
+ * ADR-0021 union. That vocabulary split is the one `messageForm` branch —
+ * both forms canonicalise through the ONE canonicaliser first, so a
+ * mixed-case word code (`Mauve-Peacock-Candle`) qualifies in either form.
+ */
+export function resolveCreateIntent(raw: unknown, { messageForm = false }: { messageForm?: boolean } = {}): CreateIntent {
+  const code = canonicalizeCode(raw)
+  if (!code) return { kind: 'mint' }
+  if (WORD_ROOM_CODE_RE.test(code)) return { kind: 'create', code }
+  return messageForm ? { kind: 'notFound' } : { kind: 'create', code }
+}
