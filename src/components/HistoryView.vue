@@ -407,11 +407,19 @@ const hasAnyCook = computed(() => plan.cookedHistory.length > 0)
   tombstoned state and look identical doing it. Same precedence too:
   the stars show the household's rating, the catalog mean as fallback. -->
   <div class="flex items-center justify-between gap-2 pt-0.5">
+  <!-- ADR-0082: the history row gets the large interactive control at
+  22px (phone) / 24px (desktop, via lgSize) — no per-row helper copy
+  (the render's "Tap to rate" repeated N times is noise; the enlarged
+  stars, the mono value and the "Rated X of 5" toast carry the
+  affordance). `compact` stays: the row card is not itself tappable
+  navigation, but the preference row shares the card-mount's
+  presentation (no catalog hint text beside the stars). -->
   <RatingStars
   :variant-id="row.variantId"
   :catalog-rating="row.meta.rating"
   :fallback-rating="row.meta.rating"
-  :size="14"
+  :size="22"
+  :lg-size="24"
   compact
   />
   <FavouriteButton :variant-id="row.variantId" />
