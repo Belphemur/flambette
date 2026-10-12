@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { usePlanStore } from './plan'
 import { useUiStore } from './ui'
 import { useRoomStore, type RoomStatus } from './room'
+import { useRatingStore } from './rating'
 import { useIdentityStore } from './identity'
 import { STORE_SLICES } from '../lib/backup'
 
@@ -744,6 +745,28 @@ describe('room store — quick filters are household state (ADR-0028)', () => {
     await sleep(500) // PUSH_DEBOUNCE_MS
     const pushed = socket.frames('state').at(-1)!
     expect((pushed.state as { filters: { sortBy: string } }).filters.sortBy).toBe('latest')
+  })
+
+  test('a peer clear lands even while a local plan edit is queued (ADR-0082)', async () => {
+    // Tombstones are monotonic deletions — they cannot clobber the queued
+    // edit the way an LWW merge could, so they are applied even in the
+    // acceptRemote withholding window. Withholding them would let the
+    // queued push replace the relay's stored state with a snapshot that
+    // still holds the cleared rating and lacks its tombstone (review).
+    const { socket } = await startRoom()
+    const ratings = useRatingStore()
+    ratings.setRating(7, 4, 1_000)
+    await sleep(500) // the immediate rating push drains (localEditPending=false)
+    const plan = usePlanStore()
+    plan.replacePlan([{ variantId: 7, servings: 6 }], [])
+    // Still inside the debounce window: a peer snapshot carries a clear.
+    socket.receive({
+      type: 'state',
+      rev: 3,
+      state: { plan: [], customItems: [], checked: {}, ratingTombstones: { '7': 5_000 } },
+    })
+    expect(ratings.ratingFor(7)).toBe(0)
+    expect(ratings.tombstones['7']).toBe(5_000)
   })
 })
 

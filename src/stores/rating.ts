@@ -86,9 +86,13 @@ export function sanitizeTombstones(value: unknown): RatingTombstones {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return out
   for (const [key, stamp] of Object.entries(value as Record<string, unknown>)) {
     if (!/^\d+$/.test(key)) continue
-    const n = Number(stamp)
-    if (!Number.isFinite(n) || n <= 0) continue
-    out[key] = clampStamp(normalizeStamp(n, 0), Date.now())
+    // STRICT numeric: a numeric STRING is malformed on this wire, not a
+    // leniency case — the backup validator (rating_tombstones.json) and
+    // the store's own publish shape both require a real number, so the
+    // sanitizer must not quietly promote `"1700000000000"` into a
+    // deletion the other paths would refuse.
+    if (typeof stamp !== 'number' || !Number.isFinite(stamp) || stamp <= 0) continue
+    out[key] = clampStamp(normalizeStamp(stamp, 0), Date.now())
   }
   return out
 }
@@ -159,7 +163,17 @@ export const useRatingStore = defineStore(
     function setRating(variantId: number, value: number, updatedAt: number = Date.now()): void {
       const rating = normalizeStarValue(value)
       const key = String(variantId)
-      const stamp = normalizeStamp(updatedAt, Date.now())
+      // A tombstoned key must not receive a record at or before its clear
+      // (deletion wins ties): a device whose clock sits behind the clearing
+      // peer's would otherwise write stars that every OTHER device's
+      // mergeRemote rejects — the rating would show here and nowhere else.
+      // Advance the write one ms past the marker so it is a genuine
+      // post-clear opinion everywhere.
+      const tomb = tombstones.value[key]
+      const stamp = Math.max(
+        normalizeStamp(updatedAt, Date.now()),
+        tomb !== undefined ? tomb + 1 : 0,
+      )
       if (rating <= 0) {
         if (!(key in map.value)) return
         const next = { ...map.value }
@@ -185,7 +199,22 @@ export const useRatingStore = defineStore(
      */
     function clearRating(variantId: number, now: number = Date.now()): void {
       const key = String(variantId)
-      const stamp = clampStamp(normalizeStamp(now, Date.now()), Date.now())
+      // The tombstone must BEAT what it deletes (review, ADR-0082):
+      // a record adopted from a peer whose clock ran ahead carries a
+      // future-clamped `updatedAt` up to now+MAX_FUTURE_SKEW_MS, and a
+      // stamp of bare `now` would sit UNDER it — the peers would keep the
+      // record and re-arrival would resurrect it here. Cover the record
+      // being deleted AND any existing (possibly newer) marker, then
+      // clamp through the shared stamps.ts funnel like every timestamp.
+      const record = map.value[key]
+      const stamp = clampStamp(
+        Math.max(
+          normalizeStamp(now, Date.now()),
+          record?.updatedAt ?? 0,
+          tombstones.value[key] ?? 0,
+        ),
+        Date.now(),
+      )
       if (!(key in map.value)) {
         // Nothing to delete locally, but the tombstone is still written:
         // a peer may still hold the record this device once had, and it
@@ -204,7 +233,10 @@ export const useRatingStore = defineStore(
      * keep the NEWEST stamp per key, then delete any local record whose
      * `updatedAt <= tombstone` — DELETION WINS TIES, mirroring the
      * "a stale push cannot resurrect" rule (ADR-0031). A record written
-     * after the tombstone survives a re-rate and is never touched.
+     * after the tombstone survives a re-rate and is never touched. The
+     * record test uses the RETAINED marker (the max of what we held and
+     * what just arrived), never the incoming one: an older echo must not
+     * soften a deletion a newer marker already made.
      */
     function mergeTombstones(incoming: unknown): void {
       const clean = sanitizeTombstones(incoming)
@@ -219,24 +251,12 @@ export const useRatingStore = defineStore(
       const next: RatingsMap = { ...map.value }
       for (const key of keys) {
         const record = next[key]
-        if (record && record.updatedAt <= clean[key]) {
+        if (record && record.updatedAt <= nextTombs[key]) {
           delete next[key]
           changed = true
         }
       }
       if (changed) map.value = next
-    }
-
-    /**
-     * REPLACE the whole tombstone map (validated upstream) — the backup
-     * restore path for `rating_tombstones.json` (ADR-0013 registry).
-     * Records are deliberately NOT re-checked here: the ratings.json
-     * slice is applied BEFORE this one in STORE_SLICES order, so a
-     * backup that carries both tombstones and stale rows still converges
-     * (deletion wins ties) without this action knowing the apply order.
-     */
-    function replaceTombstones(value: unknown): void {
-      tombstones.value = sanitizeTombstones(value)
     }
 
     /**
@@ -280,7 +300,6 @@ export const useRatingStore = defineStore(
       clearRating,
       mergeRemote,
       mergeTombstones,
-      replaceTombstones,
     }
   },
   {

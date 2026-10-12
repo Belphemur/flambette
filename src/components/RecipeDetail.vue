@@ -914,14 +914,15 @@ function startCooking() {
   >
   Rate this recipe
   </h3>
-  <span class="flex items-baseline gap-1">
-  <span v-if="ratingDisplay" class="font-mono-data text-label-md font-semibold text-text">{{ ratingDisplay }}</span>
+  <span v-if="ratingDisplay" class="flex items-baseline gap-1">
+  <span class="font-mono-data text-label-md font-semibold text-text">{{ ratingDisplay }}</span>
   <span class="font-mono-data text-label-sm text-text-muted">/ 5.0</span>
   <!-- Clear (ADR-0082): small text control, only when the household
   has rated. Immediate, no confirm — reversible in one tap. -->
   <button
   v-if="ratingCount > 0"
   type="button"
+  aria-label="Clear your rating"
   class="ml-1 text-label-sm font-medium text-text-muted underline-offset-2 hover:text-text hover:underline focus-visible:underline"
   data-test="rating-clear"
   @click="clearRating"

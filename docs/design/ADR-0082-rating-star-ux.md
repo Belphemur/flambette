@@ -168,3 +168,38 @@ size resolution each live in exactly one place.
 - **No tombstones (clear stays single-device)** — rejected: the owner
   asked for a real removal; a clear that silently resurrects on the next
   peer snapshot is a false-delivery bug, not a v2 feature.
+
+## Change note — 2026-10-13, review round 2 (tombstone reconciliation hardening)
+
+Review found four ways the clear/tombstone story could lose a deletion or
+resurrect a record. The Decision above still holds (same tombstone pattern,
+same persistence, same "deletion wins ties"); the reconcile rules tighten:
+
+- **Clears beat what they clear.** `clearRating` stamps the marker at
+  `max(now, record.updatedAt, existing tombstone)` (then the usual
+  `clampStamp`), so a clear on a device whose clock sits behind the
+  clearing peer's still covers the future-clamped record it deletes, and a
+  repeat clear can never lower an existing newer marker.
+- **A re-rate is a genuine post-clear opinion.** `setRating` on a
+  tombstoned key advances the write stamp to `tombstone + 1`, so the record
+  is never born at-or-before the clear it follows (deletion wins ties would
+  otherwise make every OTHER device reject stars this device shows).
+- **Tombstone adoption reads the RETAINED marker.** `mergeTombstones`
+  deletes covered records against `max(held, incoming)` per key — an older
+  echo no longer softens a newer deletion.
+- **Backup restore MERGES tombstones, never replaces.** The
+  `rating_tombstones.json` slice's write now calls `mergeTombstones`
+  (newest stamp per key, covered local records deleted): an older archive
+  keeps this device's later clears, and a backup carrying a stale rating
+  plus its clear still ends deleted here. `replaceTombstones` is removed —
+  one action, one rule.
+- **Deletions cross the pending-edit window.** `acceptRemote` applies
+  inbound `ratingTombstones` even while a local edit is queued (same
+  rationale as the append-only cooked-history exception): the merge is
+  monotonic and cannot clobber the queued write, and withholding it would
+  let the queued push republish a cleared rating without its tombstone.
+- **Sanitize is strictly numeric.** `sanitizeTombstones` refuses numeric
+  STRING stamps, matching the backup validator and the publish shape.
+- The detail rate card hides the whole `N / 5.0` readout (not just the
+  number) when neither the household nor the catalog has a score, and the
+  Clear control carries `aria-label="Clear your rating"`.

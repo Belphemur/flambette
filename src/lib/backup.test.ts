@@ -570,6 +570,35 @@ describe('rating tombstones slice (ADR-0082 registry)', () => {
     expect(useRatingStore().ratingFor(17452)).toBe(0)
   })
 
+  test('restoring an OLDER backup keeps clears made since (merge, never replace)', () => {
+    // The archive is authoritative for the clears it RECORDED, not for
+    // the ones this device made after the backup was taken — a wholesale
+    // replace would drop those newer markers and a peer snapshot could
+    // then resurrect their records (review).
+    const store = useRatingStore()
+    store.clearRating(88, 9_000)
+    setActivePinia(createPinia())
+    const restored = useRatingStore()
+    restored.mergeTombstones({ '88': 9_000 }) // this device cleared 88 since the backup
+    tombstoneSlice().write({ '7': 1_000 }) // the older archive knows only the '7' clear
+    expect(restored.tombstones).toEqual({ '7': 1_000, '88': 9_000 })
+  })
+
+  test('a restored marker deletes a local record it covers (registry order)', () => {
+    // A backup that carries BOTH a stale rating row and its later clear:
+    // ratings.json is applied first (per-record merge adopts the stale
+    // row), then the tombstone slice must end it deleted HERE too — not
+    // just on peers (review).
+    const ratingsSlice = STORE_SLICES.find((s) => s.file === 'ratings.json')
+    if (!ratingsSlice) throw new Error('ratings.json slice missing from STORE_SLICES')
+    setActivePinia(createPinia())
+    ratingsSlice.write([{ id: 42, rating: 3, count: 1, updatedAt: 2_000 }])
+    expect(useRatingStore().ratingFor(42)).toBe(3)
+    tombstoneSlice().write({ '42': 5_000 })
+    expect(useRatingStore().ratingFor(42)).toBe(0)
+    expect(useRatingStore().tombstones['42']).toBe(5_000)
+  })
+
   test('an older backup simply lacks the file (absence = keep current)', () => {
     // applyBackup tolerates a missing slice file by reading CURRENT state;
     // the tombstone slice is no exception.

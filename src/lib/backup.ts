@@ -536,12 +536,16 @@ export const STORE_SLICES: SliceDef<any>[] = [
       return null
     },
     write(value) {
-      // REPLACE, not merge: the archive is the authoritative record of
-      // which clears this household ever made, and import is
-      // validation-first, so the sanitized map becomes the whole truth.
-      // Applied AFTER ratings.json (registry order), so a backup that
-      // carries both a stale row and its tombstone still ends deleted.
-      useRatingStore().replaceTombstones(value)
+      // MERGE, never replace (review): the archive is authoritative for
+      // the clears it RECORDED, but this device may have cleared more
+      // since the backup was taken — a wholesale replace would drop those
+      // newer markers and the next peer snapshot could resurrect their
+      // records. mergeTombstones keeps the newest stamp per key AND drops
+      // any local record a restored marker covers (so a backup carrying a
+      // stale rating + its clear ends deleted here too, matching the
+      // ratings.json slice's per-record merge). Applied AFTER ratings.json
+      // (registry order).
+      useRatingStore().mergeTombstones(value)
     },
   },
   /* This device's room identity (ADR-0063). Identity is DEVICE-scoped,

@@ -156,6 +156,50 @@ describe('useRatingStore (ADR-0031)', () => {
       expect(store.tombstones).toEqual({ '7': 5_000 })
     })
 
+    test('a clear beats a future-clamped record stamp (slower-clock device)', () => {
+      // A record adopted from a peer whose clock ran ahead carries an
+      // `updatedAt` up to now+MAX_FUTURE_SKEW_MS. A tombstone of bare
+      // `now` would sit UNDER it: the clearing device deletes locally but
+      // every peer keeps the record (and re-arrival resurrects it here).
+      const store = useRatingStore()
+      const futureStamp = Date.now() + 30 * 60_000 // within the skew window
+      store.mergeRemote({ '7': { rating: 4, count: 1, updatedAt: futureStamp } })
+      store.clearRating(7)
+      expect(store.ratingFor(7)).toBe(0)
+      expect(store.tombstones['7']!).toBeGreaterThanOrEqual(futureStamp)
+    })
+
+    test('a clear never lowers an existing newer tombstone', () => {
+      const store = useRatingStore()
+      store.mergeTombstones({ '7': 9_000 })
+      store.clearRating(7, 5_000)
+      expect(store.tombstones['7']).toBe(9_000)
+    })
+
+    test('a re-rating on a slower clock advances past the tombstone', () => {
+      // The device re-rates at t=6_000 while the clear it adopted was
+      // stamped t=9_000 (the clearing peer's clock ran ahead). A record
+      // stamped 6_000 would show stars here and be REJECTED by every
+      // other device's mergeRemote — one household, two opinions.
+      const store = useRatingStore()
+      store.mergeTombstones({ '7': 9_000 })
+      store.setRating(7, 3, 6_000)
+      expect(store.ratingFor(7)).toBe(3)
+      expect(store.map['7']!.updatedAt).toBe(9_001)
+    })
+
+    test('an older tombstone echo still deletes a record the RETAINED marker covers', () => {
+      // The store holds tombstone t=9_000 (kept from an earlier clear)
+      // and a record at t=8_000 that predates its arrival; an older echo
+      // t=2_000 must not soften the retained deletion.
+      const store = useRatingStore()
+      store.setRating(7, 4, 8_000)
+      store.tombstones = { '7': 9_000 }
+      store.mergeTombstones({ '7': 2_000 })
+      expect(store.tombstones['7']).toBe(9_000)
+      expect(store.ratingFor(7)).toBe(0)
+    })
+
     test('a clear survives a reload (the tombstone ref persists with the map)', () => {
       // The persist config is the contract; assert the refs it names.
       const store = useRatingStore()
@@ -224,6 +268,7 @@ describe('useRatingStore (ADR-0031)', () => {
           '7': 1_000,
           nope: 2_000,
           '8': 'later',
+          '11': '1000' as unknown as number, // numeric string = malformed, not leniency
           '9': 0,
           '10': -5,
         }),

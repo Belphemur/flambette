@@ -569,6 +569,15 @@ export const useRoomStore = defineStore('room', () => {
       // PERMANENTLY: our push is built from the local list, and nothing
       // would ever resend what we just refused (ADR-0032).
       if (Array.isArray(incoming.cookedHistory)) plan.mergeCookedHistory(incoming.cookedHistory)
+      // ADR-0082 (review): inbound rating TOMBSTONES are also applied —
+      // they are monotonic deletions (newest stamp per key wins, covered
+      // records drop), so they cannot clobber the queued edit the way an
+      // LWW merge could: our pending rating write is stamped later and
+      // survives (and setRating advances past any marker). Withholding
+      // them would let the queued push replace the relay's stored state
+      // with a snapshot that still holds the cleared rating and lacks its
+      // tombstone — resurrecting it for a late joiner.
+      if (incoming.ratingTombstones != null) ratings.mergeTombstones(incoming.ratingTombstones)
       return
     }
     applyRemote(incoming)
