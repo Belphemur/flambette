@@ -507,6 +507,43 @@ export const STORE_SLICES: SliceDef<any>[] = [
       )
     },
   },
+  /* ADR-0082 — stamps of cleared ratings (ratings store, dedicated slice).
+     A clear records a tombstone so the deletion reaches peers; the
+     tombstones are tiny and never pruned, and they must outlive the
+     backup/restore cycle like the ratings they deleted — otherwise a
+     restored device would republish a cleared record as live again (or
+     fail to adopt a peer's later tombstone). `ratings.json` keeps its
+     shape: an older backup simply lacks this file, and the import treats
+     absence as "keep current" like every other slice. Same store, second
+     slice — the registry allows that (persistKeys share the key). */
+  {
+    file: 'rating_tombstones.json',
+    label: 'cleared-rating tombstones',
+    persistKeys: ['mealime-planner:v1:ratings'],
+    read: () => ({ ...useRatingStore().tombstones }),
+    validate(value) {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return 'rating_tombstones.json must be an object'
+      }
+      for (const [key, stamp] of Object.entries(value)) {
+        if (!/^\d+$/.test(key)) return 'rating_tombstones.json keys must be variant ids'
+        // Positive, matching sanitizeTombstones (a 0/negative stamp can
+        // never be a real clear, and writing it would be dropped silently).
+        if (typeof stamp !== 'number' || !Number.isFinite(stamp) || stamp <= 0) {
+          return 'rating_tombstones.json stamps must be finite, positive timestamps'
+        }
+      }
+      return null
+    },
+    write(value) {
+      // REPLACE, not merge: the archive is the authoritative record of
+      // which clears this household ever made, and import is
+      // validation-first, so the sanitized map becomes the whole truth.
+      // Applied AFTER ratings.json (registry order), so a backup that
+      // carries both a stale row and its tombstone still ends deleted.
+      useRatingStore().replaceTombstones(value)
+    },
+  },
   /* This device's room identity (ADR-0063). Identity is DEVICE-scoped,
      deliberately NOT household state — it never merges and never rides a
      room snapshot — so import is REPLACE-on-apply: a backup restores

@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { createPinia, setActivePinia } from 'pinia'
-import { ratingsToRows, useRatingStore } from './rating'
+import {
+  ratingsToRows,
+  sanitizeTombstones,
+  useRatingStore,
+} from './rating'
 
 /**
  * Household rating reconciliation (ADR-0031).
@@ -131,5 +135,106 @@ describe('useRatingStore (ADR-0031)', () => {
       { id: 3, rating: 1, count: 1, updatedAt: 1_000 },
       { id: 20, rating: 4, count: 1, updatedAt: 3_000 },
     ])
+  })
+
+  /** ADR-0082 — the clear + tombstone story. */
+  describe('clearRating + tombstones (ADR-0082)', () => {
+    test('clear deletes the record and stamps a tombstone', () => {
+      const store = useRatingStore()
+      store.setRating(7, 4, 1_000)
+      store.clearRating(7, 5_000)
+      expect(store.ratingFor(7)).toBe(0)
+      expect(store.countFor(7)).toBe(0)
+      expect(store.tombstones).toEqual({ '7': 5_000 })
+    })
+
+    test('a tombstone is stamped even when this device holds no record', () => {
+      // A peer may still hold the record we once had; the deletion must
+      // be publishable regardless.
+      const store = useRatingStore()
+      store.clearRating(7, 5_000)
+      expect(store.tombstones).toEqual({ '7': 5_000 })
+    })
+
+    test('a clear survives a reload (the tombstone ref persists with the map)', () => {
+      // The persist config is the contract; assert the refs it names.
+      const store = useRatingStore()
+      store.setRating(7, 4, 1_000)
+      store.clearRating(7, 5_000)
+      expect(Object.keys(store.$state)).toEqual(
+        expect.arrayContaining(['map', 'tombstones']),
+      )
+    })
+
+    test('an inbound tombstone deletes the record it covers (tie goes to deletion)', () => {
+      const a = useRatingStore()
+      a.setRating(100, 4, 1_000)
+      // Peer B cleared it at exactly the record's stamp.
+      a.mergeTombstones({ '100': 1_000 })
+      expect(a.ratingFor(100)).toBe(0)
+      expect(a.tombstones).toEqual({ '100': 1_000 })
+    })
+
+    test('a record written AFTER the tombstone survives', () => {
+      const store = useRatingStore()
+      store.setRating(100, 4, 1_000)
+      store.mergeTombstones({ '100': 5_000 }) // a clear we adopt
+      expect(store.ratingFor(100)).toBe(0)
+      // The household changes its mind: a NEW write beats the old clear.
+      store.setRating(100, 3, 9_000)
+      expect(store.ratingFor(100)).toBe(3)
+    })
+
+    test('the NEWEST tombstone wins when two clears race', () => {
+      const store = useRatingStore()
+      store.mergeTombstones({ '7': 1_000 })
+      store.mergeTombstones({ '7': 9_000 })
+      expect(store.tombstones['7']).toBe(9_000)
+      store.mergeTombstones({ '7': 2_000 }) // an older echo never rolls back
+      expect(store.tombstones['7']).toBe(9_000)
+    })
+
+    test('mergeRemote refuses to resurrect a tombstoned record', () => {
+      // A clears at t=5000 while B (offline) still holds the t=1000
+      // record; B then pushes its stale snapshot. The record must not
+      // come back — A blocks it with its local tombstone.
+      const a = useRatingStore()
+      a.setRating(7, 4, 1_000)
+      a.clearRating(7, 5_000)
+      a.mergeRemote({ '7': { rating: 4, count: 1, updatedAt: 1_000 } })
+      expect(a.ratingFor(7)).toBe(0)
+      // A NEWER record (a re-rate after the clear) still lands.
+      a.mergeRemote({ '7': { rating: 2, count: 1, updatedAt: 6_000 } })
+      expect(a.ratingFor(7)).toBe(2)
+    })
+
+    test('mergeTombstones applies AFTER a ratings merge in one snapshot', () => {
+      // The room's applyRemote order: a snapshot that carries BOTH an
+      // old record and its tombstone still ends deleted.
+      const store = useRatingStore()
+      store.mergeRemote({ '7': { rating: 4, count: 1, updatedAt: 1_000 } })
+      store.mergeTombstones({ '7': 5_000 })
+      expect(store.ratingFor(7)).toBe(0)
+    })
+
+    test('sanitizeTombstones drops garbage keys/stamps and clamps the future', () => {
+      const now = Date.now()
+      expect(
+        sanitizeTombstones({
+          '7': 1_000,
+          nope: 2_000,
+          '8': 'later',
+          '9': 0,
+          '10': -5,
+        }),
+      ).toEqual({ '7': 1_000 })
+      // A far-future stamp is clamped into the plausible window — it
+      // must not delete honest future writes forever.
+      const clamped = sanitizeTombstones({ '7': now + 10 * 365 * 86_400_000 })
+      expect(clamped['7']).toBeGreaterThan(now)
+      expect(clamped['7']).toBeLessThan(now + 10 * 365 * 86_400_000)
+      expect(sanitizeTombstones('nope')).toEqual({})
+      expect(sanitizeTombstones(null)).toEqual({})
+    })
   })
 })

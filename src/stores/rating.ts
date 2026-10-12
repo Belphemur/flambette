@@ -3,6 +3,14 @@ import { ref } from 'vue'
 import { clampStamp, mergeLww, normalizeStamp } from '../lib/stamps'
 
 /**
+ * variantId → tombstone stamp (ADR-0082). A clear writes one so the
+ * deletion can outlive the record it deleted — the room transport
+ * publishes `ratings` only when non-empty and `mergeLww` never removes
+ * keys, so without a tombstone a clear could never reach peers.
+ */
+export type RatingTombstones = Record<string, number>
+
+/**
  * Per-recipe household ratings (ADR-0031).
  *
  * A rating is OPINION, never catalog truth: `variant_meta.rating` stays a
@@ -65,6 +73,26 @@ export function ratingsToRows(map: Readonly<RatingsMap>): RatingFileRow[] {
     .sort((a, b) => a.id - b.id)
 }
 
+/**
+ * Sanitize an untrusted tombstone payload (room peer, backup file) into
+ * {numericId: stamp}. An entry that cannot yield a real stamp is DROPPED,
+ * never defaulted to 0 — a garbage stamp must never delete a record
+ * (deleting on a stamp of 0 would erase every rating a peer ever took).
+ * Stamps are clamped like every timestamp (stamps.ts): a tombstone that
+ * claims a decade from now would delete honest future writes too.
+ */
+export function sanitizeTombstones(value: unknown): RatingTombstones {
+  const out: RatingTombstones = {}
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return out
+  for (const [key, stamp] of Object.entries(value as Record<string, unknown>)) {
+    if (!/^\d+$/.test(key)) continue
+    const n = Number(stamp)
+    if (!Number.isFinite(n) || n <= 0) continue
+    out[key] = clampStamp(normalizeStamp(n, 0), Date.now())
+  }
+  return out
+}
+
 /** Sanitize an untrusted ratings payload (room peer, backup file). */
 export function sanitizeRatings(value: unknown): RatingsMap {
   const out: RatingsMap = {}
@@ -90,6 +118,15 @@ export const useRatingStore = defineStore(
   () => {
     /** variantId → household rating. Reactive: the star widgets read it. */
     const map = ref<RatingsMap>({})
+
+    /**
+     * variantId → the stamp of the last clear (ADR-0082). Persisted with
+     * the map: a clear must survive a reload, or the next snapshot the
+     * device publishes could resurrect the record it just deleted.
+     * Never pruned — pruning needs to know every peer has adopted, which
+     * is unknowable, and the map stays tiny.
+     */
+    const tombstones = ref<RatingTombstones>({})
 
     /** Household rating for a recipe, or 0 when nobody rated it. */
     function ratingFor(variantId: number): number {
@@ -137,6 +174,72 @@ export const useRatingStore = defineStore(
     }
 
     /**
+     * Remove a rating and record WHY (ADR-0082). `setRating(id, 0)` already
+     * deletes the local record, but the room transport publishes `ratings`
+     * only when non-empty and `mergeLww` never removes keys — a bare
+     * delete could never reach peers. The tombstone carries the deletion:
+     * it rides every snapshot until every peer has dropped the record.
+     * The stamp is clamped through the shared stamps.ts helpers like
+     * every timestamp, and the record deletion and tombstone write happen
+     * in ONE action so the two can never disagree.
+     */
+    function clearRating(variantId: number, now: number = Date.now()): void {
+      const key = String(variantId)
+      const stamp = clampStamp(normalizeStamp(now, Date.now()), Date.now())
+      if (!(key in map.value)) {
+        // Nothing to delete locally, but the tombstone is still written:
+        // a peer may still hold the record this device once had, and it
+        // must learn the deletion regardless.
+        tombstones.value = { ...tombstones.value, [key]: stamp }
+        return
+      }
+      const next = { ...map.value }
+      delete next[key]
+      map.value = next
+      tombstones.value = { ...tombstones.value, [key]: stamp }
+    }
+
+    /**
+     * Adopt inbound tombstones (room snapshot, backup import — ADR-0082):
+     * keep the NEWEST stamp per key, then delete any local record whose
+     * `updatedAt <= tombstone` — DELETION WINS TIES, mirroring the
+     * "a stale push cannot resurrect" rule (ADR-0031). A record written
+     * after the tombstone survives a re-rate and is never touched.
+     */
+    function mergeTombstones(incoming: unknown): void {
+      const clean = sanitizeTombstones(incoming)
+      const keys = Object.keys(clean)
+      if (keys.length === 0) return
+      const nextTombs = { ...tombstones.value }
+      for (const key of keys) {
+        nextTombs[key] = Math.max(nextTombs[key] ?? 0, clean[key])
+      }
+      tombstones.value = nextTombs
+      let changed = false
+      const next: RatingsMap = { ...map.value }
+      for (const key of keys) {
+        const record = next[key]
+        if (record && record.updatedAt <= clean[key]) {
+          delete next[key]
+          changed = true
+        }
+      }
+      if (changed) map.value = next
+    }
+
+    /**
+     * REPLACE the whole tombstone map (validated upstream) — the backup
+     * restore path for `rating_tombstones.json` (ADR-0013 registry).
+     * Records are deliberately NOT re-checked here: the ratings.json
+     * slice is applied BEFORE this one in STORE_SLICES order, so a
+     * backup that carries both tombstones and stale rows still converges
+     * (deletion wins ties) without this action knowing the apply order.
+     */
+    function replaceTombstones(value: unknown): void {
+      tombstones.value = sanitizeTombstones(value)
+    }
+
+    /**
      * Reconcile a peer's ratings: PER-RECORD last-writer-wins by
      * `updatedAt`, adopted VERBATIM. Never a wholesale replace (ADR-0031)
      * — a peer that rated one recipe must not erase the rest.
@@ -152,15 +255,37 @@ export const useRatingStore = defineStore(
      */
     function mergeRemote(incoming: unknown): void {
       const clean = sanitizeRatings(incoming)
+      // A tombstoned key refuses older-or-equal records outright: a peer
+      // that has not adopted the tombstone yet (still publishing its
+      // pre-clear snapshot) must not resurrect the record here — this is
+      // the receive-side half of "deletion wins ties" (ADR-0082).
+      const blocked = Object.entries(clean).filter(
+        ([key, record]) => {
+          const tomb = tombstones.value[key]
+          return tomb !== undefined && record.updatedAt <= tomb
+        },
+      )
+      for (const [key] of blocked) delete clean[key]
       if (Object.keys(clean).length === 0) return
       map.value = mergeLww(map.value, clean)
     }
 
-    return { map, ratingFor, countFor, updatedAtFor, setRating, mergeRemote }
+    return {
+      map,
+      tombstones,
+      ratingFor,
+      countFor,
+      updatedAtFor,
+      setRating,
+      clearRating,
+      mergeRemote,
+      mergeTombstones,
+      replaceTombstones,
+    }
   },
   {
     // A plain record round-trips through JSON untouched — no custom
     // serializer needed (unlike the favourites store's Set).
-    persist: { key: 'mealime-planner:v1:ratings', pick: ['map'] },
+    persist: { key: 'mealime-planner:v1:ratings', pick: ['map', 'tombstones'] },
   },
 )
