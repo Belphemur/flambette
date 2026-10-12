@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { getCatalog } from '../lib/catalog'
+import { clampStamp, normalizeStamp } from '../lib/stamps'
 
 /**
  * Favourited variant ids, with DELETE MARKERS (ADR-0031).
@@ -73,10 +74,12 @@ export function sanitizeFavourites(value: unknown): FavouritesMap {
     if (typeof entry !== 'object' || entry === null) continue
     const { favorited, updatedAt } = entry as Partial<FavouriteRecord>
     if (typeof favorited !== 'boolean') continue
-    const stamp = Number(updatedAt)
+    // Same stamp trust as the ratings records (shared sanitizer): a
+    // far-future stamp would pin the tombstone/flag forever under the
+    // per-key LWW merge below.
     out[key] = {
       favorited,
-      updatedAt: Number.isFinite(stamp) && stamp >= 0 ? stamp : DEFAULT_STAMP,
+      updatedAt: clampStamp(normalizeStamp(updatedAt, DEFAULT_STAMP), Date.now()),
     }
   }
   return out

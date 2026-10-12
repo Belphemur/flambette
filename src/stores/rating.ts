@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { clampStamp, normalizeStamp } from '../lib/stamps'
 
 /**
  * Per-recipe household ratings (ADR-0031).
@@ -43,27 +44,6 @@ export interface RatingFileRow extends RatingRecord {
 export function normalizeStarValue(value: number): number {
   if (!Number.isFinite(value)) return 0
   return Math.min(5, Math.max(0, Math.round(value * 2) / 2))
-}
-
-/** A timestamp must be a finite, non-negative number of ms. */
-function normalizeStamp(value: unknown, fallback: number): number {
-  const n = Number(value)
-  return Number.isFinite(n) && n >= 0 ? n : fallback
-}
-
-/**
- * How far AHEAD of our own clock an inbound stamp may sit before we stop
- * trusting it. Clock skew between two phones on a LAN is seconds, not
- * hours — but a peer (or a hand-edited file) claiming a timestamp far in
- * the future would pin that recipe's rating forever: every later, honest
- * write looks "older" and is discarded. Clamping keeps a skewed peer
- * usable and bounds the damage of a bogus one.
- */
-const MAX_FUTURE_SKEW_MS = 60 * 60 * 1000
-
-/** Clamp an untrusted stamp into "plausible" territory. */
-function clampStamp(stamp: number, now: number): number {
-  return Math.min(stamp, now + MAX_FUTURE_SKEW_MS)
 }
 
 /** Map → the ratings.json row array. */

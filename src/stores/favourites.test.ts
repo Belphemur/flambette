@@ -62,6 +62,19 @@ describe('useFavouritesStore (ADR-0031 tombstones)', () => {
     expect(store.isFavourite(3)).toBe(true)
   })
 
+  test('a far-future peer stamp is clamped, so a later honest write can win', () => {
+    // Same trust rule as the ratings records: a stamp more than one hour
+    // ahead would pin the record forever under per-key LWW.
+    const store = useFavouritesStore()
+    const now = Date.now()
+    store.mergeRemote({ '7': { favorited: false, updatedAt: now + 10 * 60 * 60 * 1000 } })
+    expect(store.records['7']!.updatedAt).toBe(now + 60 * 60 * 1000)
+    // Because the tombstone was clamped, a later honest write still wins.
+    store.toggleFavourite(7, now + 2 * 60 * 60 * 1000)
+    store.mergeRemote({ '7': { favorited: false, updatedAt: now + 10 * 60 * 60 * 1000 } })
+    expect(store.isFavourite(7)).toBe(true)
+  })
+
   test('per-key merge: a peer starring one recipe never touches another', () => {
     const store = useFavouritesStore()
     store.toggleFavourite(1, 1_000)
