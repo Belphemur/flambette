@@ -85,3 +85,54 @@ to them.
 - Skip prompt when the household already rated the variant: rejected — the
   prompt also carries the favourite toggle and the Undo; a household that
   re-cooks may re-rate (half-grid overwrites, tombstone/clear unaffected).
+
+## Addendum (2026-10-12): marked as cooked anywhere — one completion experience
+
+Owner ruling: **"marked as cooked" IS "I have finished"** — the same
+completion experience wherever the mark happens, and the prompt must be
+reachable from the recipe detail page, because not everybody enters through
+cooking mode.
+
+- **The mid-cook mark raises the SAME prompt.** `markCookedEarly` no longer
+  keeps a private toast+Undo path: a mark at ANY point of the cooking
+  session records the cook and raises the PostCookPrompt. The dedicated
+  "Marked as cooked" toast is retired for this path — the modal IS the
+  acknowledgment. Finish and Mark converge on ONE code path (DRY):
+  record → prompt; Done → `/history` (session ends); Undo → record
+  removed, session resumes exactly as before (ADR-0020's
+  Finish-is-the-mark contract now reads: any mark is the mark).
+- **The detail page gains the floating "Cooked this?" pill.** Design
+  authority: Stitch project 2725470430841257407 (Warm Culinary Paper),
+  screen "Flambette — Recipe Detail End (Mobile Dark)": a compact
+  icon+label pill anchored to the RIGHT edge, ~120px above the bottom
+  navigation — `surface-raised` fill, subtle `#564438` border, soft popover
+  shadow, warm accent dot. Unobtrusive by contract: it covers no reading
+  content and never overlaps the tab bar. It appears while the
+  preparation-steps region is in view (scroll-positioned, an
+  IntersectionObserver on the steps section — the pill belongs to the END
+  of the recipe, where "I cooked this" becomes true), and is hidden once
+  the cook is recorded (or already recorded today — same guard the cooking
+  session uses).
+- **Tap = record + the SAME prompt, no separate flow.** The pill records
+  the cook through the ONE `plan.markCooked` path the cooking session uses
+  (plan-aware: a planned meal comes off the plan; an unplanned cook still
+  records, ADR-0032) and raises the PostCookPrompt over the detail page.
+  Done → `/history`; Undo → record removed and the user stays on the
+  detail page (there is no session to resume). The prompt component stays
+  trigger-agnostic: triggers own only their context (what Undo restores),
+  the prompt owns the experience.
+- **Naming**: the pill's label is "Cooked this?" (the render's words) —
+  NOT "Mark as cooked", which stays the cooking session's in-flow action.
+
+## Consequences (addendum)
+
+- `docs/agents/cooking.md` and the PRD cooking surface are updated in the
+  SAME change as the addendum's implementation (PRD rule).
+- e2e: the mid-cook mark prompts (its old toast+Undo spec flips to the
+  prompt contract — the flip the phase-2 gate already surfaced); the pill
+  appears when steps scroll into view and is absent once recorded; tap →
+  prompt → history; Undo from the pill keeps the user on the detail page
+  with the cook removed.
+- The plan-interaction edge (marking cooked from detail when the recipe is
+  not planned) follows the standing rule that a cook records regardless of
+  plan membership; nothing in the prompt reads plan state.
