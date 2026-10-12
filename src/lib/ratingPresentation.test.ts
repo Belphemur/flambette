@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { ratingFillDimmed } from '../stores/rating'
+import { ratingFillDimmed, ratingNoScoreCorner } from '../stores/rating'
 
 /**
  * ADR-0082 addendum — the dimmed catalog fill: the star strip's clipped
@@ -27,5 +27,30 @@ describe('ratingFillDimmed (ADR-0082 addendum)', () => {
 
   test('no catalog score means no fill to dim (the no-score corner)', () => {
     expect(ratingFillDimmed(0, 0, false)).toBe(false)
+  })
+})
+
+/**
+ * ADR-0082 addendum — the no-score corner helper line: 11 of 2,759
+ * catalog variants carry `rating: 0` / `rating_count: 0` (variant 32736,
+ * "Crumbled Orange-Ginger Tofu Rice Bowl"). When the household has not
+ * rated AND the catalog mean is 0, the rate card's helper reads "Be the
+ * first to rate this recipe"; every other state keeps the generic tap
+ * hint.
+ */
+describe('ratingNoScoreCorner (ADR-0082 addendum)', () => {
+  test('fires when neither household nor catalog has a score', () => {
+    expect(ratingNoScoreCorner(0, 0)).toBe(true)
+  })
+
+  test('a catalog mean keeps the generic tap hint', () => {
+    expect(ratingNoScoreCorner(0, 0.78)).toBe(false)
+    // The tiny but nonzero catalog means never read as zero.
+    expect(ratingNoScoreCorner(0, 0.001)).toBe(false)
+  })
+
+  test('a household rating keeps the generic tap hint', () => {
+    expect(ratingNoScoreCorner(1, 0)).toBe(false)
+    expect(ratingNoScoreCorner(2, 0.78)).toBe(false)
   })
 })

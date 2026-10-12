@@ -86,6 +86,18 @@ export function ratingFillDimmed(
   return !previewing && mine === 0 && fallbackRating01 > 0
 }
 
+/**
+ * The NO-SCORE corner (ADR-0082 addendum): neither the household nor the
+ * catalog has any score — `count === 0` and the Bayesian mean is 0 (11 of
+ * 2,759 catalog variants ship `rating: 0`). The rate card's helper line
+ * then reads "Be the first to rate this recipe" instead of the generic
+ * tap hint, and NO number is printed (there is no mean to show — a
+ * fabricated prior would violate the no-fictions rule).
+ */
+export function ratingNoScoreCorner(count: number, catalogRating01: number): boolean {
+  return count === 0 && catalogRating01 === 0
+}
+
 /** Map → the ratings.json row array. */
 export function ratingsToRows(map: Readonly<RatingsMap>): RatingFileRow[] {
   return Object.entries(map)

@@ -37,7 +37,7 @@ import { macroGrams } from '../lib/nutrition'
 import { usePlanStore } from '../stores/plan'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
-import { displayRating, useRatingStore } from '../stores/rating'
+import { displayRating, ratingNoScoreCorner, useRatingStore } from '../stores/rating'
 import { planServingsFor } from '../composables/usePlanServings'
 import RatingStars from './RatingStars.vue'
 import NutritionModal from './NutritionModal.vue'
@@ -276,6 +276,15 @@ const ratingDisplay = computed(() => {
  */
 const ratingCount = computed(() =>
   meta.value ? ratingStore.countFor(meta.value.id) : 0,
+)
+
+/**
+ * The no-score corner (ADR-0082 addendum): neither the household nor the
+ * catalog has a score, so the helper line invites the first rating. One
+ * predicate (ratingNoScoreCorner), unit-pinned beside the store helpers.
+ */
+const noScoreCorner = computed(() =>
+  meta.value ? ratingNoScoreCorner(ratingCount.value, meta.value.rating) : false,
 )
 
 /** Clear the household's rating (ADR-0082): immediate, one plain toast —
@@ -940,7 +949,8 @@ function startCooking() {
   :lg-size="24"
   />
   <p class="mt-2 text-body-sm text-text-muted">
-  <span>Tap a star — halves supported</span>
+  <span v-if="noScoreCorner" data-test="rating-first-rate">Be the first to rate this recipe</span>
+  <span v-else>Tap a star — halves supported</span>
   <span v-if="room.inRoom" data-test="rating-synced"> · Synced to household</span>
   </p>
   </section>
