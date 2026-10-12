@@ -366,7 +366,20 @@ function admit(ws: Socket, code: string, mode: 'create' | 'join'): void {
   // by one. Honest input makes `verdict.count` correct by construction —
   // no clamp to patch the verdict with afterwards.
   const preArrival = room.peers.size - (room.peers.has(ws) ? 1 : 0)
-  const verdict = room.registry.admit(mode, preArrival)
+  // Two numbers on purpose. The core's create-refuse gate asks "is anyone
+  // in this room?" and must see TRUE occupancy: a sole member re-sending
+  // `create` for its own code has a self-excluded headcount of 0, and
+  // answering that with `establish` would overwrite the stored snapshot
+  // while the socket stays attached. The REPORTED count, however, wants
+  // the pre-arrival headcount — `attach` keeps a socket that is already
+  // in the set, so a full count there would over-report by one. For
+  // create the two agree whenever establish is possible (an occupied room
+  // is refused before any count is reported); for join only the
+  // pre-arrival form is honest.
+  const verdict = room.registry.admit(
+    mode,
+    mode === 'create' ? room.peers.size : preArrival,
+  )
   if (verdict.kind === 'refuse') {
     send(ws, { type: 'error', code: verdict.error })
     return
