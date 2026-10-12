@@ -203,3 +203,32 @@ same persistence, same "deletion wins ties"); the reconcile rules tighten:
 - The detail rate card hides the whole `N / 5.0` readout (not just the
   number) when neither the household nor the catalog has a score, and the
   Clear control carries `aria-label="Clear your rating"`.
+
+## Addendum (2026-10-12, live-report round): the no-score corner and the background read
+
+Owner's live screenshots of the deployed card surfaced two clarity gaps this
+decision now owns:
+
+- **Catalog fill reads as background, not as opinion.** When the household
+  has not rated and the catalog Bayesian mean fills the stars, the fill
+  overlay renders at reduced opacity (`opacity-45` on the clipped overlay
+  ONLY when `mine === 0`), so the mean is a BACKGROUND number, visually
+  distinct from the household's own committed rating (full-strength
+  `text-warning`). The mono number beside the heading is unchanged — the
+  same value, the same precedence; hover/focus preview keeps full strength
+  so the target stays legible mid-gesture. Verified live (worktree build,
+  variant 5377, unrated): fill 100/100/100/87/0% and `3.9 / 5.0` printed.
+- **The no-score corner says why it is empty.** 11 of 2,759 catalog variants
+  carry `rating: 0` / `rating_count: 0` (owner's screenshot recipe:
+  variant 32736, "Crumbled Orange-Ginger Tofu Rice Bowl"). For those the
+  empty star row is an invitation, not a glitch: the card's helper line
+  reads **"Be the first to rate this recipe"** when `count === 0` and the
+  catalog score is 0 (replacing the generic "Tap a star — halves supported"
+  only in that corner). No number is printed (there is no Bayesian mean to
+  show — printing a fabricated prior would violate the no-fictions rule),
+  and the stars stay tappable at full ADR-0082 size. RecipeCard's compact
+  mount already hides its catalog hint at 0 and is untouched.
+
+The sizing, aria, and data-test contracts above are unchanged; both
+clarifications are presentation-only and land with ADR-0083's post-cook
+prompt in the same PR.

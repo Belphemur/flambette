@@ -5,14 +5,14 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**88 records.** One file per decision (`ADR-NNNN-slug.md`),
+**89 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
 
 ## In force
 
-The 72 accepted records below all still govern. Skim the ones
+The 73 accepted records below all still govern. Skim the ones
 near your change before proposing anything -- they encode *why* the
 architecture is shaped the way it is.
 
@@ -90,6 +90,7 @@ architecture is shaped the way it is.
 | [0080](ADR-0080-waste-first-proposals.md) | Auto-Plan proposals — waste-first ranking and the continuity seed _(supersedes ADR-0033)_ | 2026-10-11 |
 | [0081](ADR-0081-cooking-mode-composition.md) | Cooking mode adopts the card composition and honest timer suggestions _(supersedes ADR-0022)_ | 2026-10-11 |
 | [0082](ADR-0082-rating-star-ux.md) | The rating control — a labeled, touch-sized star card on detail and history | 2026-10-12 |
+| [0083](ADR-0083-post-cook-prompt.md) | The post-cook prompt — rate and favourite when the meal is done | 2026-10-12 |
 
 ## Not in force
 
@@ -130,8 +131,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0083**). Do not count the files -- that is how the
-   collisions above happened (88 files share 82 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0084**). Do not count the files -- that is how the
+   collisions above happened (89 files share 83 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.
