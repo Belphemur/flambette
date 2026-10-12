@@ -65,6 +65,27 @@ export function displayRating(mine: number, catalogRating01: number): number {
   return mine > 0 ? mine : catalogRating01 * 5
 }
 
+/**
+ * When the star strip's fill is the CATALOG fallback (ADR-0082 addendum):
+ * a fill drawn from the Bayesian mean is background information, not the
+ * household's opinion, so the clipped fill overlay dims (`opacity-45`).
+ * Three conditions, ALL required:
+ * - the household has not rated (`mine === 0`) — a committed rating is
+ *   always full strength;
+ * - a catalog score actually fills the stars (`fallbackRating > 0`) —
+ *   with no mean there is no fill to dim (the no-score corner, ADR-0082
+ *   addendum: the empty row is the invitation);
+ * - nothing is being previewed (`previewing` false) — hover/focus renders
+ *   FULL strength so the target stays legible mid-gesture.
+ */
+export function ratingFillDimmed(
+  mine: number,
+  fallbackRating01: number,
+  previewing: boolean,
+): boolean {
+  return !previewing && mine === 0 && fallbackRating01 > 0
+}
+
 /** Map → the ratings.json row array. */
 export function ratingsToRows(map: Readonly<RatingsMap>): RatingFileRow[] {
   return Object.entries(map)

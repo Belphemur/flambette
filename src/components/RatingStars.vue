@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
+import { displayRating, ratingFillDimmed, useRatingStore } from '../stores/rating'
 import { Star } from '@lucide/vue'
-import { displayRating, useRatingStore } from '../stores/rating'
 import { useUiStore } from '../stores/ui'
 
 /**
@@ -70,6 +70,15 @@ const display = computed(() => {
   // value printed beside them (the same fallback) and the fill agree.
   return displayRating(mine.value, props.fallbackRating ?? 0)
 })
+
+/**
+ * The fill overlay dims (ADR-0082 addendum) only while the displayed
+ * value IS the catalog fallback and nothing is hovered/focused — the
+ * one predicate, tested in src/lib/ratingPresentation.test.ts.
+ */
+const fillDimmed = computed(() =>
+  ratingFillDimmed(mine.value, props.fallbackRating ?? 0, hovered.value !== null),
+)
 
 /** Five slots, each split in two half-star targets. */
 const slots = [1, 2, 3, 4, 5].map((n) => ({ n, halves: [n - 0.5, n] }))
@@ -151,6 +160,7 @@ const previewLabel = computed(() =>
   as a half star without shipping half-star glyphs. -->
   <span
   class="pointer-events-none absolute inset-0 overflow-hidden text-warning"
+  :class="fillDimmed ? 'opacity-45' : ''"
   :style="{ width: `${fillPercent(slot.n)}%` }"
   aria-hidden="true"
   >
