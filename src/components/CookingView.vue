@@ -32,6 +32,7 @@ import {
   type CookTimer,
 } from '../lib/stepTimer'
 import CookTimerChip from './CookTimerChip.vue'
+import PostCookPrompt from './PostCookPrompt.vue'
 import { hintForStep, suggestionFromHint, type TimerSuggestion } from '../lib/timerSuggest'
 import { useTimerHints } from '../composables/useTimerHints'
 import {
@@ -576,6 +577,21 @@ const sessionCooked = ref<CookedEntry | null>(null)
 const sessionRecorded = computed(() => sessionCooked.value !== null)
 
 /**
+ * The exact plan/checked-ingredient state to restore on an undo, captured
+ * at mark time. Session state (not a module global): the post-cook
+ * prompt's Undo (ADR-0083) needs it long after the toast's Undo would
+ * have used it, and two cook sessions must never share one snapshot.
+ */
+type SessionPrior = { entry: PlanEntry | null; cleared: string[] | null }
+const sessionPrior = ref<SessionPrior | null>(null)
+
+/**
+ * The post-cook prompt (ADR-0083): raised by the Finish completion, over
+ * the still-mounted session — not a route, one extra step before close.
+ */
+const postCookOpen = ref(false)
+
+/**
  * Record this cook, with an undo that restores the exact prior state
  * (ADR-0034). The snapshot is taken at press time, before markCooked
  * drops the meal from the plan and forgets its cleared ingredients —
@@ -588,19 +604,29 @@ const sessionRecorded = computed(() => sessionCooked.value !== null)
  */
 function recordCook(opts: { message: string; close: boolean }): boolean {
   if (sessionCooked.value) {
-  if (opts.close) close()
+  if (opts.close) openPostCook()
   return true
   }
   if (!confirmTimerBeforeLeaving()) return false
   const id = props.id
   const entry = plan.plan.find((e) => e.variantId === id)
   const cleared = plan.clearedIngredients[id]
-  const prior: { entry: PlanEntry | null; cleared: string[] | null } = {
+  const prior: SessionPrior = {
   entry: entry ? { ...entry } : null,
   cleared: cleared ? [...cleared] : null,
   }
   const event: CookedEntry = plan.markCooked(id, sessionPlan)
   sessionCooked.value = event
+  sessionPrior.value = prior
+  // ADR-0083: the Finish completion is acknowledged by the post-cook
+  // prompt — the modal IS the acknowledgment, so the toast (and its Undo
+  // action, which the prompt carries instead) does not also fire. The
+  // mid-cook mark (close: false) keeps the toast + Undo and never
+  // prompts.
+  if (opts.close) {
+  openPostCook()
+  return true
+  }
   ui.showToast(opts.message, {
   actions: [
   {
@@ -611,14 +637,49 @@ function recordCook(opts: { message: string; close: boolean }): boolean {
   run: () => {
   plan.undoMarkCooked(event, prior)
   sessionCooked.value = null
+  sessionPrior.value = null
   },
   testId: 'cook-undo',
   },
   ],
   duration: 6000,
   })
-  if (opts.close) close()
   return true
+}
+
+/**
+ * Raise the post-cook prompt (ADR-0083) over the still-mounted session.
+ * The session does NOT close here: every non-Undo exit of the prompt
+ * navigates to /history, and Undo keeps the session open.
+ */
+function openPostCook() {
+  postCookOpen.value = true
+}
+
+/**
+ * Every non-Undo close of the prompt (Done, scrim, Escape) does ONE
+ * thing: go to History, where the cooked entry just landed (ADR-0032,
+ * ADR-0083 — there is no "dismiss and stay").
+ */
+function onPostCookDone() {
+  postCookOpen.value = false
+  void router.push('/history')
+}
+
+/**
+ * The prompt's Undo calls the SAME plan.undoMarkCooked(event, prior) the
+ * old toast Undo called, clears the session's recorded cook, and the
+ * cook STAYS open — the record is gone and the session resumes (ADR-0083;
+ * ADR-0020's Finish-is-the-mark contract, carried not dropped).
+ */
+function onPostCookUndo() {
+  postCookOpen.value = false
+  const event = sessionCooked.value
+  const prior = sessionPrior.value
+  if (!event || !prior) return
+  plan.undoMarkCooked(event, prior)
+  sessionCooked.value = null
+  sessionPrior.value = null
 }
 
 /** Mid-cook mark: record the event and KEEP COOKING (ADR-0034). */
@@ -634,7 +695,6 @@ function markCookedEarly() {
 function finishCooked() {
   recordCook({ message: 'Enjoy! Marked as cooked', close: true })
 }
-
 function onKey(e: KeyboardEvent) {
   if (e.key === 'ArrowRight') {
   e.preventDefault()
@@ -653,6 +713,10 @@ function onKey(e: KeyboardEvent) {
   return
   }
   e.preventDefault()
+  // The post-cook prompt (ADR-0083) owns Escape while it is open —
+  // AppModal handles the key and routes the close (Done/Escape both go
+  // to History); closing the cook session under it would race the modal.
+  if (postCookOpen.value) return
   if (confirmTimerBeforeLeaving()) close()
   }
 }
@@ -1345,4 +1409,14 @@ function onTouchEnd(e: TouchEvent) {
   </div>
   </footer>
   </div>
+
+  <!-- Post-cook prompt (ADR-0083): the Finish completion raises it over
+  the still-mounted session. Done/scrim/Escape -> /history via
+  onPostCookDone; Undo restores the prior and keeps the session open. -->
+  <PostCookPrompt
+  v-if="postCookOpen && sessionCooked"
+  :variant-id="props.id"
+  @done="onPostCookDone"
+  @undo="onPostCookUndo"
+  />
 </template>
