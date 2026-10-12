@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
 import { Star } from '@lucide/vue'
 import { displayRating, useRatingStore } from '../stores/rating'
 import { useUiStore } from '../stores/ui'
@@ -18,8 +19,16 @@ const props = defineProps<{
   variantId: number
   /** Catalog rating 0..1, shown as a dimmed read-only hint. */
   catalogRating?: number
-  /** Star size in px. */
+  /** Star size in px (the compact/base size, mobile-first). */
   size?: number
+  /**
+   * Star size in px at the desktop breakpoint (ADR-0082): when given,
+   * the component resolves `(min-width: 1024px)` itself — the repo's
+   * established responsive signal — so EVERY mount becomes
+   * viewport-responsive from one place. Omitting it keeps the mount
+   * size-fixed (RecipeCard's compact display).
+   */
+  lgSize?: number
   /** Card density: the card variant sits inside a tappable article. */
   compact?: boolean
   /**
@@ -33,6 +42,16 @@ const props = defineProps<{
 
 const ratingStore = useRatingStore()
 const ui = useUiStore()
+
+/**
+ * The resolved glyph/tap-target size (ADR-0082): `lgSize` wins at the
+ * desktop breakpoint, else `size`, else the historical 18. ONE place —
+ * every responsive mount inherits this; no caller computes sizes twice.
+ */
+const isDesktop = useMediaQuery('(min-width: 1024px)')
+const resolvedSize = computed(() =>
+  props.lgSize && isDesktop.value ? props.lgSize : (props.size ?? 18),
+)
 
 const mine = computed(() => ratingStore.ratingFor(props.variantId))
 const count = computed(() => ratingStore.countFor(props.variantId))
@@ -118,11 +137,14 @@ const previewLabel = computed(() =>
   v-for="slot in slots"
   :key="slot.n"
   class="relative inline-flex shrink-0"
-  :style="{ width: `${size ?? 18}px`, height: `${size ?? 18}px` }"
+  :style="{ width: `${resolvedSize}px`, height: `${resolvedSize}px` }"
   >
+  <!-- Unrated outline: espresso-muted (the text-muted family) so a
+  large glyph never reads as a heavy ink block (ADR-0082) — the same
+  token utility that flips with the dark theme. -->
   <Star
-  :size="size ?? 18"
-  class="absolute inset-0 text-text"
+  :size="resolvedSize"
+  class="absolute inset-0 text-text-muted"
   aria-hidden="true"
   />
   <!-- The filled portion is a clipped overlay, so a half star reads
@@ -132,7 +154,7 @@ const previewLabel = computed(() =>
   :style="{ width: `${fillPercent(slot.n)}%` }"
   aria-hidden="true"
   >
-  <Star :size="size ?? 18" :fill="'currentColor'" class="absolute inset-0" />
+  <Star :size="resolvedSize" :fill="'currentColor'" class="absolute inset-0" />
   </span>
   <button
   v-for="half in slot.halves"
