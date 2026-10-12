@@ -614,20 +614,33 @@ test('mark as cooked also asks before discarding a running timer', async ({ page
   page.once('dialog', (d) => void d.dismiss())
   await cooking.getByTestId('mark-cooked').click()
   await expect(cooking).toBeVisible()
-  // The toast is the assertion surface: the button ALSO reads "Marked as
-  // cooked" once recorded, so a bare getByText would match both.
+  // The prompt is the assertion surface: the button ALSO reads "Marked
+  // as cooked" once recorded, so a bare getByText would match both. A
+  // refused mark records nothing and raises nothing.
+  await expect(page.getByTestId('post-cook-prompt')).toHaveCount(0)
   await expect(page.getByTestId('toast')).toHaveCount(0)
   await expect(cooking.getByTestId('mark-cooked')).toBeEnabled()
 
   page.once('dialog', (d) => void d.accept())
   await cooking.getByTestId('mark-cooked').click()
-  await expect(page.getByTestId('toast')).toContainText('Marked as cooked')
-  // Recording the cook mid-way does not end the cook…
+  // ADR-0083 addendum: the mid-cook mark raises the SAME prompt as
+  // Finish — the modal IS the acknowledgment, no toast.
+  const prompt = page.getByTestId('post-cook-prompt')
+  await expect(prompt).toBeVisible()
+  await expect(page.getByTestId('toast')).toHaveCount(0)
+  // Recording the cook mid-way does not end the cook (the session is
+  // still mounted behind the modal)…
   await expect(cooking).toBeVisible()
   // …and the session records ONE cook: the button now reports it and
   // stops inviting a second one (ADR-0034).
   await expect(cooking.getByTestId('mark-cooked')).toContainText('Marked as cooked')
   await expect(cooking.getByTestId('mark-cooked')).toBeDisabled()
+  // The prompt's Undo restores the un-recorded state and the session
+  // RESUMES — the button invites the mark again.
+  await prompt.getByTestId('post-cook-undo').click()
+  await expect(prompt).toHaveCount(0)
+  await expect(cooking).toBeVisible()
+  await expect(cooking.getByTestId('mark-cooked')).toBeEnabled()
   await expectZeroMealimeRequests(page)
 })
 /**

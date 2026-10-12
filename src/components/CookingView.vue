@@ -599,12 +599,19 @@ const postCookOpen = ref(false)
  *
  * A session records at most ONE cook: marking mid-way and then pressing
  * Finish is one cook, not two, and the button is disabled after the mark so
- * the user is never asked to choose. Finish after a mid-cook mark therefore
- * just closes — the cook is already recorded and the plan already updated.
+ * the user is never asked to choose.
+ *
+ * ADR-0083 addendum — "marked as cooked" IS "I have finished": Finish and
+ * the mid-cook mark converge on ONE code path. The record raises the
+ * post-cook prompt — the modal IS the acknowledgment, wherever the mark
+ * happens — so the dedicated "Marked as cooked" toast (and its toast Undo)
+ * is retired; the prompt carries the Undo instead. Done ends the session
+ * for /history; Undo restores the prior and the cook resumes exactly as
+ * before.
  */
-function recordCook(opts: { message: string; close: boolean }): boolean {
+function recordCook(): boolean {
   if (sessionCooked.value) {
-  if (opts.close) openPostCook()
+  openPostCook()
   return true
   }
   if (!confirmTimerBeforeLeaving()) return false
@@ -618,32 +625,10 @@ function recordCook(opts: { message: string; close: boolean }): boolean {
   const event: CookedEntry = plan.markCooked(id, sessionPlan)
   sessionCooked.value = event
   sessionPrior.value = prior
-  // ADR-0083: the Finish completion is acknowledged by the post-cook
-  // prompt — the modal IS the acknowledgment, so the toast (and its Undo
-  // action, which the prompt carries instead) does not also fire. The
-  // mid-cook mark (close: false) keeps the toast + Undo and never
-  // prompts.
-  if (opts.close) {
+  // ADR-0083 addendum: the record raises the prompt on BOTH paths — the
+  // modal IS the acknowledgment. Done (or scrim/Escape) ends the session
+  // for /history; Undo restores the prior and keeps the session open.
   openPostCook()
-  return true
-  }
-  ui.showToast(opts.message, {
-  actions: [
-  {
-  label: 'Undo',
-  // Undo hands the session back its un-recorded state, so a Finish
-  // after it records the cook properly instead of being swallowed by
-  // the "already marked" guard.
-  run: () => {
-  plan.undoMarkCooked(event, prior)
-  sessionCooked.value = null
-  sessionPrior.value = null
-  },
-  testId: 'cook-undo',
-  },
-  ],
-  duration: 6000,
-  })
   return true
 }
 
@@ -682,9 +667,14 @@ function onPostCookUndo() {
   sessionPrior.value = null
 }
 
-/** Mid-cook mark: record the event and KEEP COOKING (ADR-0034). */
+/**
+ * Mid-cook mark (ADR-0034): the SAME record+prompt path as Finish — the
+ * ADR-0083 addendum makes any mark the mark. The prompt's Undo is what
+ * keeps you cooking now (record removed, session resumed); the toast
+ * path is retired.
+ */
 function markCookedEarly() {
-  recordCook({ message: 'Marked as cooked', close: false })
+  recordCook()
 }
 
 /**
@@ -693,7 +683,7 @@ function markCookedEarly() {
  * the buttons, not the store), then close (ADR-0034).
  */
 function finishCooked() {
-  recordCook({ message: 'Enjoy! Marked as cooked', close: true })
+  recordCook()
 }
 function onKey(e: KeyboardEvent) {
   if (e.key === 'ArrowRight') {

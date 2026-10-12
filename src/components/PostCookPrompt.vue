@@ -4,10 +4,12 @@ import FavouriteButton from './FavouriteButton.vue'
 import RatingStars from './RatingStars.vue'
 
 /**
- * The post-cook prompt (ADR-0083): the cooking session raises this modal
- * after a successful Finish — the completion's acknowledgment. The modal
- * IS the acknowledgment, so the "Enjoy! Marked as cooked" toast does not
- * also fire on this path (the mid-cook mark keeps its toast + Undo).
+ * The post-cook prompt (ADR-0083, addendum): raised by the cooking
+ * session after a successful Finish OR a mid-cook mark — the two have
+ * converged on ONE completion path, so "marked as cooked" IS "I have
+ * finished" and the modal IS the acknowledgment wherever the mark
+ * happens (the dedicated toast is retired). The RecipeDetail
+ * "Cooked this?" pill raises the same component over the detail page.
  *
  * Content is the existing controls, mounted, never re-implemented (DRY):
  * the ONE RatingStars at the rate card's sizes (32 phone / 24 desktop via

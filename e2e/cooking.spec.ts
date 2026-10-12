@@ -253,7 +253,7 @@ test('Finish takes a planned meal out of the plan, and Undo puts it back', async
   await expectZeroMealimeRequests(page)
 })
 
-test('mark as cooked is available at EVERY step and keeps you cooking (ADR-0034)', async ({ page }) => {
+test('mark as cooked is available at EVERY step and converges on the prompt (ADR-0034, ADR-0083 addendum)', async ({ page }) => {
   const { cooking, name } = await startCooking(page)
 
   // Reachable on the first step, not only at the end.
@@ -261,11 +261,23 @@ test('mark as cooked is available at EVERY step and keeps you cooking (ADR-0034)
   await expect(mark).toBeVisible()
   await mark.click()
 
-  // Mid-cook marking records the cook and LEAVES YOU IN THE COOK.
-  await expect(page.getByTestId('toast').getByText('Marked as cooked')).toBeVisible()
+  // ADR-0083 addendum: the mid-cook mark raises the SAME post-cook
+  // prompt as Finish — the modal IS the acknowledgment, no toast.
+  const prompt = page.getByTestId('post-cook-prompt')
+  await expect(prompt).toBeVisible()
+  await expect(page.getByTestId('toast')).toHaveCount(0)
+  await expect(cooking).toBeVisible()
+  expect(await cookedHistoryCount(page)).toBe(1)
+
+  // Undo removes the record and the session RESUMES exactly where it
+  // was — the ADR-0034 keep-cooking contract, carried by the prompt's
+  // Undo now that the toast is retired.
+  await prompt.getByTestId('post-cook-undo').click()
+  await expect(prompt).toHaveCount(0)
   await expect(cooking).toBeVisible()
   await expect(cooking.getByText(/Step 1 \/ \d+/)).toBeVisible()
-  await expect(cooking.getByTestId('mark-cooked')).toBeDisabled()
+  await expect(cooking.getByTestId('mark-cooked')).toBeEnabled()
+  expect(await cookedHistoryCount(page)).toBe(0)
 
   // A session records ONE cook: finishing after the mid-cook mark
   // raises the prompt WITHOUT writing a second event (ADR-0034/0083).
@@ -303,7 +315,10 @@ test('marking mid-cook does not rescale the cook (ADR-0034)', async ({ page }) =
   await expect(cooking.getByTestId('cook-serves')).toContainText('serves 2')
   await expect(cooking.getByTestId('mark-cooked')).toBeVisible()
   await cooking.getByTestId('mark-cooked').click()
-  await expect(page.getByTestId('toast')).toContainText('Marked as cooked')
+  // ADR-0083 addendum: the mid-cook mark raises the prompt (no toast);
+  // the session stays mounted behind it.
+  await expect(page.getByTestId('post-cook-prompt')).toBeVisible()
+  await expect(page.getByTestId('toast')).toHaveCount(0)
 
   // Same servings, same step, after the meal is off the plan.
   await expect(cooking.getByTestId('cook-serves')).toContainText('serves 2')
