@@ -161,6 +161,7 @@ test('full round-trip: seed, export, fresh context, import — everything is res
     'identity.json',
     'meta.json',
     'plan.json',
+    'rating_tombstones.json',
     'ratings.json',
     'settings.json',
   ])
@@ -177,6 +178,8 @@ test('full round-trip: seed, export, fresh context, import — everything is res
   // ADR-0031: household stars travel in their own slice, and an UNRATED
   // profile exports an empty object (never a missing key, never a wipe).
   expect(json('ratings.json')).toEqual([])
+  // ADR-0082: the tombstone slice rides along, empty for the seed.
+  expect(json('rating_tombstones.json')).toEqual({})
   // ADR-0063: the identity travels too — the seed joined a household, so
   // this device HAS one (a UUID-shaped id + its safe-word name).
   const identity = json('identity.json')

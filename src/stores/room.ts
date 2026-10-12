@@ -620,9 +620,13 @@ export const useRoomStore = defineStore('room', () => {
   )
 
   // ADR-0031: household stars publish IMMEDIATELY — same push path, same
-  // echo guard, no debounce (see schedulePush).
+  // echo guard, no debounce (see schedulePush). ADR-0082: tombstones
+  // publish immediately too — a clear that deletes a record changes both
+  // refs in one tick (one push), and a tombstone adopted from a PEER
+  // (which may delete our record without touching tombstones-first)
+  // must also reach the room rather than wait for the next edit.
   watch(
-    () => ratings.map,
+    () => [ratings.map, ratings.tombstones],
     () => schedulePush(true),
     { deep: true, flush: 'sync' },
   )

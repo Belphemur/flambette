@@ -6,6 +6,7 @@ import {
   gotoTab,
   liveRoomCode,
   openFirstRecipeDetail,
+  openRecipeDetail,
   recipeCards,
   waitForCatalog,
 } from './helpers'
@@ -34,6 +35,14 @@ async function ratingsOf(page: Page): Promise<Record<string, RatingRecord>> {
   return page.evaluate(() => {
     const pinia = document.querySelector('#app')?.__vue_app__?.config?.globalProperties?.$pinia
     return (pinia?.state?.value?.ratings?.map ?? {}) as Record<string, { rating: number; count: number; updatedAt: number }>
+  })
+}
+
+/** The persisted clear tombstones (ADR-0082), keyed by variant id. */
+async function tombstonesOf(page: Page): Promise<Record<string, number>> {
+  return page.evaluate(() => {
+    const pinia = document.querySelector('#app')?.__vue_app__?.config?.globalProperties?.$pinia
+    return (pinia?.state?.value?.ratings?.tombstones ?? {}) as Record<string, number>
   })
 }
 
@@ -278,6 +287,131 @@ test('room: the LAST rating written wins, and both devices agree', async ({ brow
   expect(merged.count).toBe(1)
   // Both devices now hold the same record.
   expect((await ratingsOf(b))[variantId]).toEqual(merged)
+  await expectZeroMealimeRequests(a)
+  await expectZeroMealimeRequests(b)
+})
+
+test('detail: the rate card labels the control and the glyphs are touch-sized (ADR-0082)', async ({
+  page,
+  isMobile,
+}) => {
+  await openFirstRecipeDetail(page)
+  const dialog = page.getByRole('dialog')
+  const card = dialog.getByTestId('recipe-detail-rating')
+
+  // The card is a labeled invitation: heading + stars + helper.
+  await expect(card.getByRole('heading', { name: 'Rate this recipe' })).toBeVisible()
+  await expect(card.getByText('Tap a star — halves supported')).toBeVisible()
+  // A standalone install is NOT told it syncs (room-gated line).
+  await expect(card.getByTestId('rating-synced')).toBeHidden()
+
+  // The strip's Rating cell retired: no dt says Rating anymore.
+  await expect(dialog.getByTestId('detail-metadata-strip')).not.toContainText('Rating')
+
+  // A star GLYPH is at least 24px tall on BOTH projects (32px phone /
+  // 24px desktop via the component's own lgSize) — the whole point of
+  // the ADR. On the Pixel 7 project it must be the full 32.
+  const glyph = dialog.getByTestId('rating-stars').locator('svg').first()
+  const box = (await glyph.boundingBox())!
+  expect(box.height).toBeGreaterThanOrEqual(24)
+  if (isMobile) {
+    expect(box.height).toBe(32)
+  }
+
+  // Rate from the card itself: the role-based interaction is untouched.
+  await dialog.getByRole('button', { name: 'Rate 4 of 5 stars' }).click()
+  await expect(dialog.getByTestId('rating-stars')).toHaveAttribute('data-rating', '4')
+  await expect(card.getByText('Synced to household')).toBeHidden() // not in a room
+  await expectZeroMealimeRequests(page)
+})
+
+test('detail: Clear removes the rating with a plain toast, and it stays cleared (ADR-0082)', async ({
+  page,
+}) => {
+  const name = await openFirstRecipeDetail(page)
+  const dialog = page.getByRole('dialog')
+  const card = dialog.getByTestId('recipe-detail-rating')
+  const id = await dialog
+    .getByTestId('rating-stars')
+    .getAttribute('data-variant-id')
+
+  // No rating yet → no Clear control.
+  await expect(dialog.getByTestId('rating-clear')).toBeHidden()
+
+  await dialog.getByRole('button', { name: 'Rate 4 of 5 stars' }).click()
+  expect((await ratingsOf(page))[id!]).toMatchObject({ rating: 4, count: 1 })
+  await expect(dialog.getByTestId('rating-clear')).toBeVisible()
+
+  // Clear: immediate, one plain toast, no confirm — reversible in one tap.
+  await dialog.getByTestId('rating-clear').click()
+  await expect(page.getByTestId('toast')).toContainText('Rating cleared')
+  expect(await ratingsOf(page)).toEqual({})
+  // The deletion is stamped, not silent: a tombstone carries it.
+  expect((await tombstonesOf(page))[id!]).toBeGreaterThan(0)
+  await expect(dialog.getByTestId('rating-clear')).toBeHidden()
+
+  // And it survives a reload (the tombstone persists with the map).
+  // The reload reopens the detail at the same recipe (restored route),
+  // so the dialog is already up — no catalog wait, no re-open.
+  await page.reload()
+  const restored = page.getByRole('dialog')
+  await expect(restored.getByTestId('recipe-detail-rating')).toBeVisible({ timeout: 15_000 })
+  await expect(restored.getByTestId('rating-stars')).toHaveAttribute('data-rating', '0')
+  await expect(restored.getByTestId('rating-clear')).toBeHidden()
+  void name
+  await expectZeroMealimeRequests(page)
+})
+
+test('room: a rating CLEAR propagates as a tombstone and is not resurrected (ADR-0082)', async ({
+  browser,
+}) => {
+  const ctxA = await browser.newContext()
+  const a = await ctxA.newPage()
+  await blockExternalRequests(a)
+  await a.goto('/recipes')
+  await waitForCatalog(a)
+  const name = await planFirstRecipe(a)
+  const roomUrl = await startLiveRoom(a)
+
+  // A rates the recipe 4.
+  const cardA = recipeCards(a).filter({ has: a.getByRole('heading', { name, exact: true }) })
+  const variantId = (await cardA.getAttribute('data-variant-id'))!
+  await cardA.getByRole('button', { name: 'Rate 4 of 5 stars' }).click()
+
+  // B joins afterwards and adopts the rating.
+  const ctxB = await browser.newContext()
+  const b = await ctxB.newPage()
+  await blockExternalRequests(b)
+  await b.goto(roomUrl)
+  await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 10_000 })
+  await dismissJoinCongrats(b)
+  await gotoTab(b, 'Recipes')
+  const cardB = recipeCards(b).filter({ has: b.getByRole('heading', { name, exact: true }) })
+  await expect(cardB.getByTestId('rating-stars')).toHaveAttribute('data-rating', '4')
+  expect((await ratingsOf(b))[variantId]).toMatchObject({ rating: 4, count: 1 })
+
+  // A CLEARS it from the detail card. B must lose the record — deletion
+  // wins ties — and stamp the tombstone it adopted.
+  await openRecipeDetail(a, name)
+  await a.getByRole('dialog').getByTestId('rating-clear').click()
+  await a.getByRole('button', { name: 'Back' }).click()
+
+  await expect
+    .poll(async () => Object.keys(await ratingsOf(b)).length, { timeout: 10_000 })
+    .toBe(0)
+  expect((await tombstonesOf(b))[variantId]).toBeGreaterThan(0)
+  await expect(cardB.getByTestId('rating-stars')).toHaveAttribute('data-rating', '0')
+
+  // A stale push must not resurrect: A republishes (a rating on a
+  // DIFFERENT recipe) — B's cleared record stays gone.
+  const other = recipeCards(a)
+    .filter({ hasNot: a.locator(`[data-variant-id="${variantId}"]`) })
+    .first()
+  await other.getByRole('button', { name: 'Rate 2 of 5 stars' }).click()
+  await expect
+    .poll(async () => Object.keys(await ratingsOf(b)).length, { timeout: 10_000 })
+    .toBe(1)
+  expect((await ratingsOf(b))[variantId]).toBeUndefined()
   await expectZeroMealimeRequests(a)
   await expectZeroMealimeRequests(b)
 })
