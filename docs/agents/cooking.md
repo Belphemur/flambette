@@ -54,10 +54,30 @@ two cards, then the action deck.
   has moved into the modal (carried, not dropped — no ADR-0020
   regression). Done, scrim and Escape all close the prompt and navigate
   to `/history`; Undo closes it and STAYS in the session with the record
-  removed. The mid-cook mark (`close: false`) keeps toast + Undo and
-  never prompts; Finish after a mid-cook mark raises the prompt with the
-  original prior. `data-test`: `post-cook-prompt`, `post-cook-done`,
+  removed. `data-test`: `post-cook-prompt`, `post-cook-done`,
   `post-cook-undo`.
+- **Mark-anywhere (ADR-0083 addendum)**: "marked as cooked" IS "I have
+  finished". The mid-cook mark and Finish converge on ONE code path —
+  `recordCook()` records and raises the SAME prompt (the modal IS the
+  acknowledgment wherever the mark happens, so the dedicated
+  "Marked as cooked" toast + toast Undo is RETIRED). The prompt's Undo
+  is what keeps you cooking now: record removed, session resumes exactly
+  where it was. The window Escape handler yields while the prompt is
+  open (registration order — it fires before AppModal's).
+- **The detail "Cooked this?" pill (ADR-0083 addendum)**: RecipeDetail
+  gains the compact floating pill from the Stitch render ("Recipe Detail
+  End (Mobile Dark)", Warm Culinary Paper) — right edge of the app
+  column, 120px above the bottom navigation (safe-area aware),
+  `bg-surface-raised`, subtle `border` token, the ONE `shadow-popover`,
+  warm brand accent dot. Visible while the instructions section
+  intersects the viewport (`useIntersectionObserver` from @vueuse —
+  never a hand-rolled observer) and hidden once the recipe is already
+  cooked TODAY (`cookedToday()` in `src/lib/history.ts`, local-day
+  rule). A tap records through the ONE `plan.markCooked` path (captures
+  the prior exactly like the session does) and raises the SAME
+  `PostCookPrompt` over the detail page: Done → `/history`; Undo →
+  record removed and the user STAYS on detail. `data-test`:
+  `cooked-pill`; the prompt keeps the prompt's own hooks.
 - Rejected render fictions: the "ACTION STEP" badge, difficulty labels,
   est-times beyond the recipe's own minutes.
 
