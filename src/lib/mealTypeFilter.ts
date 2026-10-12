@@ -18,7 +18,7 @@
  * counted for partition parity but never offered as a meal.
  */
 
-import recipeTypesJson from '../../public/data/recipe_types.json'
+import recipeTypesJson from '../../public/data/recipe_types.json' with { type: 'json' }
 import { mealRole } from './palette'
 
 export type MealTypeId = -1 | -2 | -3 | -4 | -5 | -6
