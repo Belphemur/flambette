@@ -53,8 +53,10 @@ import {
   type RoomStore,
 } from '../relay-core/lifecycle'
 import { IDLE_TTL_MS, INACTIVITY_TTL_MS } from '../relay-core/policy'
-import { RELAY_ERRORS, type RelayErrorCode, type RelayMessage } from '../relay-core/protocol'
+import { parseClientFrame, RELAY_ERRORS, type RelayErrorCode, type RelayMessage } from '../relay-core/protocol'
 import { canonicalizeCode } from '../relay-core/codes'
+import { refuseSocket } from './refuseSocket'
+import type { ExpiryReason } from '../relay-core/lifecycle'
 
 /**
  * What `deserializeAttachment` carries: this socket's peer identity AND
@@ -308,20 +310,9 @@ export class Room extends DurableObject<Env> {
    * "connection failed" instead of "that code is taken".
    */
   #refuse(client: WebSocket, server: WebSocket, code: RelayErrorCode): Response {
-    // `accept()` (not `ctx.acceptWebSocket`) is deliberate: a refused
-    // socket is never hibernated, so it cannot linger in this room's
-    // peer set and cannot be revived by a later message. The client end
-    // is still what gets returned, which is what completes the handshake
-    // and delivers the error.
-    server.accept()
-    try {
-      server.send(JSON.stringify({ type: 'error', code }))
-    } catch {
-      // The peer is gone before the refusal could land; nothing to do.
-    } finally {
-      server.close(1000, code)
-    }
-    return new Response(null, { status: 101, webSocket: client })
+    // The accept-before-refuse subtlety and the handshake completion
+    // live in the one shared helper (see refuseSocket.ts).
+    return refuseSocket(client, server, code)
   }
 
   /**
@@ -378,7 +369,7 @@ export class Room extends DurableObject<Env> {
    * client treats `room_expired` as TERMINAL — a re-join would
    * join-or-create an empty room and read as silent household data loss.
    */
-  #notifyExpired(reason: 'inactive' | 'idle'): void {
+  #notifyExpired(reason: ExpiryReason): void {
     for (const ws of this.ctx.getWebSockets()) {
       try {
         ws.send(JSON.stringify({ type: 'error', code: RELAY_ERRORS.roomExpired, reason }))
@@ -443,17 +434,14 @@ export class Room extends DurableObject<Env> {
     const attachment = ws.deserializeAttachment() as PeerAttachment | null
     const member = !!attachment && attachment.code === this.#code && attachment.id.startsWith('p')
 
-    let msg: Record<string, unknown>
-    try {
-      msg = JSON.parse(typeof raw === 'string' ? raw : new TextDecoder().decode(raw))
-    } catch {
-      this.#fail(ws, RELAY_ERRORS.badJson)
+    // The frame gate lives in the core (ADR-0040): unparseable bytes AND
+    // a parsed non-object frame are refused `bad_json` on both relays.
+    const frame = parseClientFrame(raw)
+    if (!frame.ok) {
+      this.#fail(ws, frame.error)
       return
     }
-    if (!msg || typeof msg !== 'object') {
-      this.#fail(ws, RELAY_ERRORS.badJson)
-      return
-    }
+    const msg = frame.msg
 
     switch (msg.type) {
       case 'keepalive': {

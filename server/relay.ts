@@ -33,27 +33,16 @@ import {
   type RoomStore,
 } from './relay-core/lifecycle'
 import { canonicalizeCode, mintLegacyCode, resolveCreateIntent } from './relay-core/codes'
-import { IDLE_TTL_MS as IDLE_TTL_DEFAULT_MS, INACTIVITY_TTL_MS as INACTIVITY_TTL_DEFAULT_MS, RELAY_SERVICE } from './relay-core/policy'
-import { RELAY_ERRORS, type RelayMessage } from './relay-core/protocol'
+import { healthPayload, IDLE_TTL_MS as IDLE_TTL_DEFAULT_MS, INACTIVITY_TTL_MS as INACTIVITY_TTL_DEFAULT_MS, parsePositiveNumber } from './relay-core/policy'
+import { parseClientFrame, RELAY_ERRORS, type RelayMessage } from './relay-core/protocol'
+import type { ExpiryReason } from './relay-core/lifecycle'
 import { makeThrottle, MemoryAttemptBuckets } from './relay-core/throttle'
 
 /* ------------------------------------------------------------------ config */
 
-/**
- * Read a numeric env override, falling back when it is absent or
- * nonsense. The e2e suite shrinks the TTLs to exercise expiry in
- * milliseconds, so a typo'd value must not become `NaN` and close every
- * room instantly.
- */
-function envNumber(raw: string | undefined, fallback: number): number {
-  if (raw === undefined) return fallback
-  const value = Number(raw)
-  return Number.isFinite(value) && value > 0 ? value : fallback
-}
-
-const PORT = envNumber(process.env.PORT, 8081)
-const INACTIVITY_TTL_MS = envNumber(process.env.RELAY_INACTIVITY_TTL_MS, INACTIVITY_TTL_DEFAULT_MS)
-const IDLE_TTL_MS = envNumber(process.env.RELAY_IDLE_TTL_MS, IDLE_TTL_DEFAULT_MS)
+const PORT = parsePositiveNumber(process.env.PORT, 8081)
+const INACTIVITY_TTL_MS = parsePositiveNumber(process.env.RELAY_INACTIVITY_TTL_MS, INACTIVITY_TTL_DEFAULT_MS)
+const IDLE_TTL_MS = parsePositiveNumber(process.env.RELAY_IDLE_TTL_MS, IDLE_TTL_DEFAULT_MS)
 /** Transport liveness only — see the heartbeat at the bottom. */
 const HEARTBEAT_MS = 30_000
 
@@ -239,7 +228,7 @@ function roomFor(code: string): Room {
  * `roomCode` cleared: a stale socket that kept the code could otherwise
  * write into — or `leave` and delete — a room re-created under it.
  */
-function notifyExpired(code: string, reason: 'inactive' | 'idle'): void {
+function notifyExpired(code: string, reason: ExpiryReason): void {
   const room = rooms.get(code)
   if (!room) return
   for (const peer of room.peers) {
@@ -268,7 +257,7 @@ function send(ws: Socket, payload: RelayMessage): void {
  * `RELAY_ATTEMPT_LIMIT` was raised.
  */
 const throttle = makeThrottle({
-  limit: envNumber(process.env.RELAY_ATTEMPT_LIMIT, 30),
+  limit: parsePositiveNumber(process.env.RELAY_ATTEMPT_LIMIT, 30),
   buckets: new MemoryAttemptBuckets(),
   peerAddress: (peer) => (peer as Socket).data?.ip ?? 'unknown',
 })
@@ -489,15 +478,11 @@ try {
       // operator) can tell two relays apart without guessing: a leftover
       // listener from an earlier run with DIFFERENT TTLs must never be
       // mistaken for the one a spec asked for.
-      return new Response(
-        JSON.stringify({
-          service: RELAY_SERVICE,
-          inactivityTtlMs: INACTIVITY_TTL_MS,
-          idleTtlMs: IDLE_TTL_MS,
-          attemptLimit: throttle.limit,
-        }),
-        { headers: { 'content-type': 'application/json' } },
-      )
+      return new Response(JSON.stringify(healthPayload({
+        inactivityTtlMs: INACTIVITY_TTL_MS,
+        idleTtlMs: IDLE_TTL_MS,
+        attemptLimit: throttle.limit,
+      })), { headers: { 'content-type': 'application/json' } })
     },
     websocket: {
       open(ws) {
@@ -511,20 +496,16 @@ try {
       },
 
       message(ws, data) {
-        let msg: {
-          type?: unknown
-          code?: unknown
-          rev?: unknown
-          state?: unknown
-          profile?: unknown
-          name?: unknown
-        }
-        try {
-          msg = JSON.parse(typeof data === 'string' ? data : new TextDecoder().decode(data))
-        } catch {
-          send(ws, { type: 'error', code: RELAY_ERRORS.badJson })
+        // The frame gate lives in the core (ADR-0040): unparseable bytes
+        // AND a parsed non-object frame are refused `bad_json` on both
+        // relays — the Bun adapter used to answer `unknown_type` here
+        // through its switch default.
+        const frame = parseClientFrame(data)
+        if (!frame.ok) {
+          send(ws, { type: 'error', code: frame.error })
           return
         }
+        const msg = frame.msg
 
         const room = ws.data.roomCode ? rooms.get(ws.data.roomCode) : undefined
         // Membership, not just a code: a socket whose room expired (its

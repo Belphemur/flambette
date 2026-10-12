@@ -41,6 +41,39 @@ export const DEFAULT_ATTEMPT_LIMIT = 30
 export const ATTEMPT_WINDOW_MS = 60_000
 
 /**
+ * Parse a numeric env/var override, falling back when it is absent or
+ * nonsense. The e2e suite shrinks the TTLs to exercise expiry in
+ * milliseconds, so a typo'd value must not become `NaN` and close every
+ * room instantly. Both adapters feed their raw environment string into
+ * this ONE parser — the Bun relay's `process.env` and the worker's vars
+ * binding are the same untrusted `string | undefined`.
+ */
+export function parsePositiveNumber(raw: string | undefined | null, fallback: number): number {
+  if (raw === undefined || raw === null) return fallback
+  const value = Number(raw)
+  return Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+/**
+ * The health payload BOTH relays answer a plain GET with, shaped once so
+ * the keys cannot drift (tests assert them). The VALUES stay
+ * adapter-resolved — only the adapter knows its own live TTL overrides
+ * and throttle limit.
+ */
+export function healthPayload(config: {
+  inactivityTtlMs: number
+  idleTtlMs: number
+  attemptLimit: number
+}): {
+  service: typeof RELAY_SERVICE
+  inactivityTtlMs: number
+  idleTtlMs: number
+  attemptLimit: number
+} {
+  return { service: RELAY_SERVICE, ...config }
+}
+
+/**
  * Shared-state members that are PRESERVED when an inbound snapshot omits
  * them (ADR-0028's "absent means don't touch", made per key because
  * `planIdentity` is explicitly nullable — ADR-0034).

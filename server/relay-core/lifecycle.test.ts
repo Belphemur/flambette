@@ -28,7 +28,7 @@ import {
   type RoomStore,
 } from './lifecycle'
 import { CODE_ALPHABET, IDLE_TTL_MS, INACTIVITY_TTL_MS } from './policy'
-import { RELAY_ERRORS } from './protocol'
+import { parseClientFrame, RELAY_ERRORS } from './protocol'
 import { canonicalizeCode, WORD_CODE_RE, mintLegacyCode, normalizeRoomCode, resolveCreateIntent } from './codes'
 
 const HOUR = 60 * 60 * 1000
@@ -120,6 +120,30 @@ describe('room codes are canonicalised by the shared client helper', () => {
     expect(CODE_ALPHABET).toHaveLength(30)
     expect(CODE_ALPHABET).not.toMatch(/[AEIOU]/)
     expect(WORD_CODE_RE.test('mauve-peacock-candle')).toBe(true)
+  })
+})
+
+describe('the frame gate is ONE decision for both relays (ADR-0040)', () => {
+  test('a message object passes, carrying the record', () => {
+    const frame = parseClientFrame('{"type":"keepalive"}')
+    expect(frame.ok).toBe(true)
+    if (frame.ok) expect(frame.msg).toEqual({ type: 'keepalive' })
+  })
+
+  test('unparseable bytes are refused bad_json', () => {
+    expect(parseClientFrame('not json')).toEqual({ ok: false, error: RELAY_ERRORS.badJson })
+    expect(parseClientFrame(new TextEncoder().encode('['))).toEqual({ ok: false, error: RELAY_ERRORS.badJson })
+  })
+
+  test('a parsed NON-OBJECT frame is refused bad_json on BOTH relays', () => {
+    // The Bun adapter used to answer unknown_type for these (its switch
+    // default) while the DO answered bad_json — the same bytes, a
+    // different error per deployment, under a client that keys retry
+    // behaviour off these codes (src/lib/relayErrors.ts).
+    expect(parseClientFrame('42')).toEqual({ ok: false, error: RELAY_ERRORS.badJson })
+    expect(parseClientFrame('"hi"')).toEqual({ ok: false, error: RELAY_ERRORS.badJson })
+    expect(parseClientFrame('null')).toEqual({ ok: false, error: RELAY_ERRORS.badJson })
+    expect(parseClientFrame('[1,2,3]')).toEqual({ ok: false, error: RELAY_ERRORS.badJson })
   })
 })
 
