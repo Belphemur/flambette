@@ -7,11 +7,9 @@ import {
   ensureRemoved,
   ensureSwaps,
   groceryDisplayLines,
-  isDropName,
   isRemovedByRestriction,
   normalizeRestrictionIds,
   restrictedDocView,
-  swapName,
 } from './restrictions'
 import { nameKey } from './grocery'
 
@@ -282,44 +280,6 @@ describe('isRemovedByRestriction (ladder)', () => {
   })
   test('empty index never removes', () => {
     expect(isRemovedByRestriction(50, [1], buildLadderIndex())).toBe(false)
-  })
-})
-
-/* ---------- swapName (ladder) ---------- */
-
-describe('swapName (ladder)', () => {
-  test('returns the substitute when a swap matches the nameKey', () => {
-    const idx = indexWithSwaps(sampleSwaps, sampleDrops)
-    expect(swapName('soy sauce', idx)).toBe('tamari soy sauce')
-    expect(swapName('rotini pasta', idx)).toBe('gluten free rotini pasta')
-    expect(swapName('fettuccine pasta', idx)).toBe('gluten free fettuccine pasta')
-    expect(swapName('butter, unsalted', idx)).toBe('virgin coconut oil')
-  })
-  test('returns the original when no swap matches', () => {
-    const idx = indexWithSwaps(sampleSwaps, sampleDrops)
-    expect(swapName('broccoli', idx)).toBe('broccoli')
-    expect(swapName('garlic', idx)).toBe('garlic')
-  })
-  test('nameKey matching is case-insensitive', () => {
-    const idx = indexWithSwaps(sampleSwaps, sampleDrops)
-    expect(swapName('SOY SAUCE', idx)).toBe('tamari soy sauce')
-  })
-  test('pre-load: returns original when swaps not loaded', () => {
-    const idx = buildLadderIndex() // swaps is null
-    expect(swapName('soy sauce', idx)).toBe('soy sauce')
-  })
-})
-
-/* ---------- isDropName ---------- */
-
-describe('isDropName', () => {
-  test('returns true for nameKeys in the drops set', () => {
-    const drops = activeDrops([DF_ID], indexWithSwaps(sampleSwaps, sampleDrops))
-    expect(isDropName('crumbled feta cheese', drops)).toBe(true)
-  })
-  test('returns false for nameKeys not in the drops set', () => {
-    const drops = activeDrops([DF_ID], indexWithSwaps(sampleSwaps, sampleDrops))
-    expect(isDropName('broccoli', drops)).toBe(false)
   })
 })
 

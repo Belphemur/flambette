@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { VariantMeta } from '../lib/types'
+import { normalizePlanServings } from '../lib/servings'
 
 export interface PlanEntry {
   variantId: number
@@ -44,7 +45,6 @@ export interface PlanIdentity {
 
 /** cookedHistory keeps at most this many entries, newest first. */
 const COOKED_HISTORY_CAP = 200
-const COOKED_RECENT_MS = 30 * 24 * 60 * 60 * 1000
 
 /**
  * Stable identity key for a cook event: the per-device id when the row
@@ -164,7 +164,7 @@ export const usePlanStore = defineStore(
      * at 1, as the UI's own stepper does.
      */
     function addToPlan(meta: VariantMeta, servings: number): void {
-      const count = Number.isFinite(servings) ? Math.max(1, Math.round(servings)) : 1
+      const count = normalizePlanServings(servings)
       const existing = plan.value.find((e) => e.variantId === meta.id)
       if (existing) {
         existing.servings = count
@@ -196,7 +196,7 @@ export const usePlanStore = defineStore(
 
     function setServings(variantId: number, servings: number): void {
       const entry = plan.value.find((e) => e.variantId === variantId)
-      if (entry) entry.servings = Math.max(1, servings)
+      if (entry) entry.servings = normalizePlanServings(servings)
     }
 
     function clearPlan(): void {
@@ -292,12 +292,6 @@ export const usePlanStore = defineStore(
       if (i < 0) return false
       cookedHistory.value.splice(i, 1)
       return true
-    }
-
-    /** True when the meal was cooked in the last 30 days. */
-    function isCookedRecently(variantId: number): boolean {
-      const cutoff = Date.now() - COOKED_RECENT_MS
-      return cookedHistory.value.some((e) => e.variantId === variantId && e.cookedAt >= cutoff)
     }
 
     /** Replace the cooked history wholesale (backup import). */
@@ -409,11 +403,36 @@ export const usePlanStore = defineStore(
       }
     }
 
+    /**
+     * Re-run the ONE servings rule over a plan hydrated from localStorage
+     * (the same rule `replacePlan` applies to an inbound snapshot).
+     *
+     * Hydration is the one ingress no store action covers: a blob written
+     * by an older build — whose write paths only floored at 1 — can carry
+     * counts above the cap. Without this, the sharing device keeps its
+     * oversized count while the receiving device stores the capped one,
+     * and the two households disagree about meal quantities. Normalizing
+     * BOTH sides (here, and on every write path) is the migration policy:
+     * a shared legacy plan converges on the cap. Idempotent, and it only
+     * rewrites entries whose count actually moved, so a clean blob never
+     * triggers a pointless persistence write.
+     */
+    function normalizePersistedPlan(): void {
+      let changed = false
+      const next = plan.value.map((e) => {
+        const servings = normalizePlanServings(e.servings)
+        if (servings === e.servings) return e
+        changed = true
+        return { ...e, servings }
+      })
+      if (changed) plan.value = next
+    }
+
     /** Replace the whole plan (used when importing a shared plan). */
     function replacePlan(entries: PlanEntry[], custom: string[] = []): void {
       plan.value = entries.map((e) => ({
         variantId: e.variantId,
-        servings: Math.max(1, Math.round(e.servings)),
+        servings: normalizePlanServings(e.servings),
       }))
       customItems.value = custom
       // A wholesale replacement IS a new plan (Auto-Plan in replace mode,
@@ -450,8 +469,8 @@ export const usePlanStore = defineStore(
       markCooked,
       unmarkCooked,
       undoMarkCooked,
-      isCookedRecently,
       replacePlan,
+      normalizePersistedPlan,
       cookedHistory,
       clearedIngredients,
     }
@@ -467,6 +486,12 @@ export const usePlanStore = defineStore(
         'cookedHistory',
         'clearedIngredients',
       ],
+      // The persisted blob may hold pre-cap counts written by an older
+      // build. Hydration has already run when this fires — the same shape
+      // as grocery.ts's and ui.ts's afterHydrate migrations.
+      afterHydrate: (context) => {
+        ;(context.store as unknown as { normalizePersistedPlan: () => void }).normalizePersistedPlan()
+      },
     },
   },
 )

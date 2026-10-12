@@ -173,3 +173,12 @@ export function aisleIcon(section: string): AisleIcon | null {
   const name = section as StoreSection
   return { glyph: AISLE_GLYPHS[name], className: AISLE_HUES[name] }
 }
+
+/**
+ * The derived aisle NUMBER (1-based, STORE_SECTIONS order — never
+ * hand-numbered): the grocery band prints `(Aisle N)` on BOTH screens
+ * (GroceryTab, ShopView), so the derivation lives beside aisleIcon.
+ */
+export function aisleNumber(name: string): number {
+  return STORE_SECTIONS.indexOf(name as StoreSection) + 1
+}

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useClipboard } from '@vueuse/core'
 import {
   Check,
   CircleDot,
@@ -19,7 +18,10 @@ import { usePlanStore } from '../stores/plan'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 import AutoPlanDialog from './AutoPlanDialog.vue'
+import AppModal from './AppModal.vue'
 import TooltipBubble from './TooltipBubble.vue'
+import { useShareRoomLink } from '../composables/useShareRoomLink'
+import { confirmToast } from '../composables/useConfirm'
 
 const plan = usePlanStore()
 const room = useRoomStore()
@@ -33,9 +35,10 @@ const autoPlanDialog = ref<InstanceType<typeof AutoPlanDialog> | null>(null)
 /* ---------- Share sheet ---------- */
 
 const shareSheetOpen = ref(false)
-// legacy: true falls back to document.execCommand('copy') on insecure
-// origins (plain-HTTP LAN IPs), where navigator.clipboard is undefined.
-const { copy: copyText, copied } = useClipboard({ legacy: true, copiedDuring: 2000 })
+// ADR-0023: the copy goes through the ONE share composable (verify +
+// never-fail-silently); this surface just mirrors the copied state in
+// its button label.
+const { shareRoomLink, copied } = useShareRoomLink()
 
 /**
  * The sheet is ROOM-ONLY since ADR-0051 retired one-shot `?p=` links: the
@@ -63,25 +66,19 @@ function confirmLeaveRoom() {
   // the action leaves only if the CURRENT room is still that one.
   const target = room.code
   if (!target) return
-  ui.showToast(`Leave room ${target}? Your plan stops syncing with the household.`, {
-    duration: 10_000,
-    actions: [
-      {
-        label: 'Leave',
-        run: () => {
-          ui.dismissToast()
-          if (room.code === target) room.leave()
-        },
-      },
-      { label: 'Cancel', run: () => ui.dismissToast() },
-    ],
+  confirmToast(`Leave room ${target}? Your plan stops syncing with the household.`, {
+    confirmLabel: 'Leave',
+    onConfirm: () => {
+      ui.dismissToast()
+      // The action leaves only if the CURRENT room is still the one the
+      // toast named (the reader may have joined another in the 10s).
+      if (room.code === target) room.leave()
+    },
   })
 }
 
 function copyRoomLink() {
-  const link = room.roomLink()
-  if (!link) return
-  void copyText(link).catch(() => ui.showToast("Couldn't copy the link"))
+  void shareRoomLink()
 }
 
 /* ---------- Live room ---------- */
@@ -296,17 +293,15 @@ function canMore(meal: PlannedMeal): boolean {
   a plan concern, and here it sat under a list the user reads, not
   edits. The Plan tab keeps the share / live-room surface. -->
 
-  <!-- Share sheet -->
-  <Teleport to="body">
-  <div
+  <!-- Share sheet: through THE modal surface (AppModal owns the teleport,
+  overlay, focus trap, Escape and focus restore; this tab owns the content
+  and the bottom-sheet look via the class props). -->
+  <AppModal
   v-if="shareSheetOpen"
-  class="fixed inset-0 z-40 flex items-end justify-center modal-scrim"
-  @click.self="closeShareSheet"
-  >
-  <div
-  class="w-full max-w-app space-y-3 rounded-t-2xl bg-surface-raised p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
-  role="dialog"
-  aria-label="Share your meal plan"
+  dialog-label="Share your meal plan"
+  overlay-class="z-40 flex items-end justify-center modal-scrim"
+  panel-class="w-full max-w-app space-y-3 rounded-t-2xl bg-surface-raised p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+  @close="closeShareSheet"
   >
   <div class="flex items-center justify-between">
   <h3 class="text-headline-sm">Share your plan</h3>
@@ -398,9 +393,7 @@ off the shared plan. -->
   </button>
   </div>
 
-  </div>
-  </div>
-  </Teleport>
+  </AppModal>
 
   <!-- Auto-Plan dialog (ADR-0046 §2.1): its own component now; the
   trigger buttons above open it through `defineExpose`. -->

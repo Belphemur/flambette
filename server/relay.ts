@@ -32,28 +32,17 @@ import {
   type RoomRegistry,
   type RoomStore,
 } from './relay-core/lifecycle'
-import { canonicalizeCode, mintLegacyCode, WORD_CODE_RE } from './relay-core/codes'
-import { IDLE_TTL_MS as IDLE_TTL_DEFAULT_MS, INACTIVITY_TTL_MS as INACTIVITY_TTL_DEFAULT_MS, RELAY_SERVICE } from './relay-core/policy'
-import { RELAY_ERRORS, type RelayMessage } from './relay-core/protocol'
+import { canonicalizeCode, mintLegacyCode, resolveCreateIntent } from './relay-core/codes'
+import { healthPayload, IDLE_TTL_MS as IDLE_TTL_DEFAULT_MS, INACTIVITY_TTL_MS as INACTIVITY_TTL_DEFAULT_MS, parsePositiveNumber } from './relay-core/policy'
+import { parseClientFrame, RELAY_ERRORS, type RelayMessage } from './relay-core/protocol'
+import type { ExpiryReason } from './relay-core/lifecycle'
 import { makeThrottle, MemoryAttemptBuckets } from './relay-core/throttle'
 
 /* ------------------------------------------------------------------ config */
 
-/**
- * Read a numeric env override, falling back when it is absent or
- * nonsense. The e2e suite shrinks the TTLs to exercise expiry in
- * milliseconds, so a typo'd value must not become `NaN` and close every
- * room instantly.
- */
-function envNumber(raw: string | undefined, fallback: number): number {
-  if (raw === undefined) return fallback
-  const value = Number(raw)
-  return Number.isFinite(value) && value > 0 ? value : fallback
-}
-
-const PORT = envNumber(process.env.PORT, 8081)
-const INACTIVITY_TTL_MS = envNumber(process.env.RELAY_INACTIVITY_TTL_MS, INACTIVITY_TTL_DEFAULT_MS)
-const IDLE_TTL_MS = envNumber(process.env.RELAY_IDLE_TTL_MS, IDLE_TTL_DEFAULT_MS)
+const PORT = parsePositiveNumber(process.env.PORT, 8081)
+const INACTIVITY_TTL_MS = parsePositiveNumber(process.env.RELAY_INACTIVITY_TTL_MS, INACTIVITY_TTL_DEFAULT_MS)
+const IDLE_TTL_MS = parsePositiveNumber(process.env.RELAY_IDLE_TTL_MS, IDLE_TTL_DEFAULT_MS)
 /** Transport liveness only — see the heartbeat at the bottom. */
 const HEARTBEAT_MS = 30_000
 
@@ -239,7 +228,7 @@ function roomFor(code: string): Room {
  * `roomCode` cleared: a stale socket that kept the code could otherwise
  * write into — or `leave` and delete — a room re-created under it.
  */
-function notifyExpired(code: string, reason: 'inactive' | 'idle'): void {
+function notifyExpired(code: string, reason: ExpiryReason): void {
   const room = rooms.get(code)
   if (!room) return
   for (const peer of room.peers) {
@@ -268,7 +257,7 @@ function send(ws: Socket, payload: RelayMessage): void {
  * `RELAY_ATTEMPT_LIMIT` was raised.
  */
 const throttle = makeThrottle({
-  limit: envNumber(process.env.RELAY_ATTEMPT_LIMIT, 30),
+  limit: parsePositiveNumber(process.env.RELAY_ATTEMPT_LIMIT, 30),
   buckets: new MemoryAttemptBuckets(),
   peerAddress: (peer) => (peer as Socket).data?.ip ?? 'unknown',
 })
@@ -371,7 +360,26 @@ function mintFreeCode(): string {
  */
 function admit(ws: Socket, code: string, mode: 'create' | 'join'): void {
   const room = roomFor(code)
-  const verdict = room.registry.admit(mode, room.peers.size)
+  // The PRE-ARRIVAL headcount: `attach` deliberately keeps a socket that
+  // re-joins the room it is ALREADY in, so a set size that already
+  // contains this socket would make the core's `livePeers + 1` over-count
+  // by one. Honest input makes `verdict.count` correct by construction —
+  // no clamp to patch the verdict with afterwards.
+  const preArrival = room.peers.size - (room.peers.has(ws) ? 1 : 0)
+  // Two numbers on purpose. The core's create-refuse gate asks "is anyone
+  // in this room?" and must see TRUE occupancy: a sole member re-sending
+  // `create` for its own code has a self-excluded headcount of 0, and
+  // answering that with `establish` would overwrite the stored snapshot
+  // while the socket stays attached. The REPORTED count, however, wants
+  // the pre-arrival headcount — `attach` keeps a socket that is already
+  // in the set, so a full count there would over-report by one. For
+  // create the two agree whenever establish is possible (an occupied room
+  // is refused before any count is reported); for join only the
+  // pre-arrival form is honest.
+  const verdict = room.registry.admit(
+    mode,
+    mode === 'create' ? room.peers.size : preArrival,
+  )
   if (verdict.kind === 'refuse') {
     send(ws, { type: 'error', code: verdict.error })
     return
@@ -383,14 +391,7 @@ function admit(ws: Socket, code: string, mode: 'create' | 'join'): void {
   // (ADR-0049) — the same number `broadcastPeers` is about to tell the
   // room, stitched in so the joining peer learns it without waiting for a
   // second frame.
-  //
-  // Clamped to the set's real size: `attach` deliberately keeps a socket
-  // that re-joins the room it is ALREADY in, so `livePeers + 1` from the
-  // core would report one more peer than exists. The clamp is adapter
-  // work on purpose — only the adapter knows whether `attach` grew the
-  // set. (The `peers` fan-out below reports the same size, so a clamped
-  // join is confirmed a frame later.)
-  const count = Math.min(verdict.count, room.peers.size)
+  const count = verdict.count
   if (verdict.kind === 'establish') {
     send(ws, { type: 'created', code: verdict.code, rev: verdict.rev, count })
   } else {
@@ -401,24 +402,22 @@ function admit(ws: Socket, code: string, mode: 'create' | 'join'): void {
 
 /**
  * A create. The budget is charged HERE so a URL-carried intent and the
- * legacy message pay the same price.
- *
- * The message form predates the URL intent and only ever honoured word
- * codes (the client rolled them); the URL intent accepts the whole
- * ADR-0021 union through the shared canonicaliser, because that is what
- * the client sends and what the Durable Object relay honours.
+ * legacy message pay the same price. WHICH code qualifies is the core's
+ * decision (`resolveCreateIntent`): only an empty/absent code mints, a
+ * caller that named a specific code is answered for THAT code, and a
+ * named code that does not qualify is refused — never minted over.
  */
 function performCreate(ws: Socket, rawCode: unknown, { legacyMessage = false } = {}): void {
   if (!throttle.allow(ws)) {
     send(ws, { type: 'error', code: RELAY_ERRORS.rateLimited })
     return
   }
-  const wanted = legacyMessage
-    ? typeof rawCode === 'string' && WORD_CODE_RE.test(rawCode.trim())
-      ? rawCode.trim()
-      : ''
-    : canonicalizeCode(rawCode)
-  admit(ws, wanted || mintFreeCode(), 'create')
+  const intent = resolveCreateIntent(rawCode, { messageForm: legacyMessage })
+  if (intent.kind === 'notFound') {
+    send(ws, { type: 'error', code: RELAY_ERRORS.notFound })
+    return
+  }
+  admit(ws, intent.kind === 'create' ? intent.code : mintFreeCode(), 'create')
 }
 
 /**
@@ -492,15 +491,11 @@ try {
       // operator) can tell two relays apart without guessing: a leftover
       // listener from an earlier run with DIFFERENT TTLs must never be
       // mistaken for the one a spec asked for.
-      return new Response(
-        JSON.stringify({
-          service: RELAY_SERVICE,
-          inactivityTtlMs: INACTIVITY_TTL_MS,
-          idleTtlMs: IDLE_TTL_MS,
-          attemptLimit: throttle.limit,
-        }),
-        { headers: { 'content-type': 'application/json' } },
-      )
+      return new Response(JSON.stringify(healthPayload({
+        inactivityTtlMs: INACTIVITY_TTL_MS,
+        idleTtlMs: IDLE_TTL_MS,
+        attemptLimit: throttle.limit,
+      })), { headers: { 'content-type': 'application/json' } })
     },
     websocket: {
       open(ws) {
@@ -514,20 +509,16 @@ try {
       },
 
       message(ws, data) {
-        let msg: {
-          type?: unknown
-          code?: unknown
-          rev?: unknown
-          state?: unknown
-          profile?: unknown
-          name?: unknown
-        }
-        try {
-          msg = JSON.parse(typeof data === 'string' ? data : new TextDecoder().decode(data))
-        } catch {
-          send(ws, { type: 'error', code: RELAY_ERRORS.badJson })
+        // The frame gate lives in the core (ADR-0040): unparseable bytes
+        // AND a parsed non-object frame are refused `bad_json` on both
+        // relays — the Bun adapter used to answer `unknown_type` here
+        // through its switch default.
+        const frame = parseClientFrame(data)
+        if (!frame.ok) {
+          send(ws, { type: 'error', code: frame.error })
           return
         }
+        const msg = frame.msg
 
         const room = ws.data.roomCode ? rooms.get(ws.data.roomCode) : undefined
         // Membership, not just a code: a socket whose room expired (its

@@ -17,8 +17,7 @@ import { useGroceryList } from '../lib/useGroceryList'
 import { extraCollapseKey, groupExtras, storeCollapseKey } from '../lib/extraSections'
 import { extraCheckedKey } from '../lib/extraCheckedKeys'
 import type { GroceryItem } from '../lib/grocery'
-import { STORE_SECTIONS } from '../lib/sections'
-import { aisleIcon } from '../lib/aisleRole'
+import { aisleIcon, aisleNumber } from '../lib/aisleRole'
 import { imageSrc, onImgError } from '../lib/images'
 
 import { usePlanStore } from '../stores/plan'
@@ -208,9 +207,7 @@ function sectionTotalCount(section: { items: GroceryItem[] }): number {
  * hand-drift when a section is added. Extras sub-sections deliberately
  * carry NO number: they are a view (ADR-0050 §2), not an aisle.
  */
-function aisleNumber(name: string): number {
-  return STORE_SECTIONS.indexOf(name as (typeof STORE_SECTIONS)[number]) + 1
-}
+
 
 /* ---------- Progress ---------- */
 

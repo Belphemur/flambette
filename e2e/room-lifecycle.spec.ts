@@ -421,3 +421,40 @@ test('a peer that re-joins the room it is already in does not delete that room',
   b.close()
   a.close()
 })
+
+test('a sole member re-sending create for its own code is code_taken, never a state-wiping establish', async () => {
+  // The adapter passes the self-excluded PRE-ARRIVAL headcount for the
+  // reported count (a re-join must not double-count itself), but the
+  // create-refuse gate in the core needs TRUE occupancy: with the
+  // self-excluded 0 a lone member re-creating its own code reached
+  // `establish`, which overwrote the stored snapshot with state null
+  // while the socket stayed attached — later joiners inherited an empty
+  // room. The pre-arrival form stays correct for join; create reports
+  // occupancy (a refusal carries no count, so nothing over-reports).
+  const code = 'brave-heron-pot'
+  const a = await Peer.open()
+  a.send({ type: 'create', code })
+  await a.waitFor('created')
+  a.send({ type: 'state', rev: 9, state: { plan: [{ variantId: 3, servings: 2 }] } })
+  await wait(100)
+
+  a.send({ type: 'create', code })
+  expect(await a.waitFor('error')).toMatchObject({ code: 'code_taken' })
+
+  // The stored snapshot survived the refused create, for a fresh joiner…
+  const b = await Peer.open()
+  b.send({ type: 'join', code })
+  expect(await b.waitFor('joined')).toMatchObject({
+    code,
+    rev: 9,
+    state: { plan: [{ variantId: 3, servings: 2 }] },
+  })
+
+  // …and the sole member is still attached and can keep writing.
+  a.send({ type: 'state', rev: 10, state: { plan: [{ variantId: 3, servings: 4 }] } })
+  expect(await b.waitFor('state')).toMatchObject({ rev: 10 })
+  expect(b.received.filter((m) => m.type === 'error')).toEqual([])
+
+  b.close()
+  a.close()
+})

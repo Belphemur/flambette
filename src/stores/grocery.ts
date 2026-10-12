@@ -21,10 +21,6 @@ export const useGroceryStore = defineStore(
       else map.value[key] = true
     }
 
-    function clearChecked(): void {
-      map.value = {}
-    }
-
     /**
      * Drop ONE key (e.g. an extra that was removed). Extras' checkbox
      * keys are derived from their NAME, so removing an extra must also
@@ -91,14 +87,13 @@ export const useGroceryStore = defineStore(
 
     /** Wipe the whole checkbox map (used by the clear-grocery workflow). */
     function clearAll(): void {
-      clearChecked()
+      map.value = {}
     }
 
     return {
       map,
       isChecked,
       toggleChecked,
-      clearChecked,
       clearAll,
       forget,
       reconcileExtras,

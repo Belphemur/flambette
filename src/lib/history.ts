@@ -203,3 +203,11 @@ export function formatAbsolute(ts: number): string {
     timeStyle: 'short',
   })
 }
+
+/** Date-only voice for the history group rule ("Feb 18, 2025"): the
+ * render's mono date chip. `formatAbsolute` carries the time too, which
+ * the group rule does not want; the per-card tooltip keeps the full stamp.
+ */
+export function formatDay(ts: number): string {
+  return new Date(ts).toLocaleDateString(undefined, { dateStyle: 'medium' })
+}

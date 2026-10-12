@@ -27,16 +27,20 @@ import {
   TIMER_PRESETS_MIN,
   announceCountdown,
   formatCountdown,
+  isCounting,
   remainingSeconds,
   type CookTimer,
 } from '../lib/stepTimer'
-import { getTimerHints, hintForStep, suggestionFromHint, type TimerSuggestion } from '../lib/timerSuggest'
+import CookTimerChip from './CookTimerChip.vue'
+import { hintForStep, suggestionFromHint, type TimerSuggestion } from '../lib/timerSuggest'
+import { useTimerHints } from '../composables/useTimerHints'
 import {
   ensureTimerAlertPolling,
   unlockTimerAlertAudio,
 } from '../lib/timerAlertHost'
 import type { RecipeDoc } from '../lib/types'
 import { usePlanStore, type CookedEntry, type PlanEntry, type PlanIdentity } from '../stores/plan'
+import { planServingsFor } from '../composables/usePlanServings'
 import { useUiStore } from '../stores/ui'
 
 const plan = usePlanStore()
@@ -91,8 +95,8 @@ const servings = computed(() => {
   const id = meta.value?.id
   if (id === undefined) return 1
   if (frozenServings === null) {
-    const entry = plan.plan.find((e) => e.variantId === id)
-    frozenServings = entry?.servings ?? ui.defaultServings
+    // ADR-0037's chain (plan entry ?? remembered default), ONE helper.
+    frozenServings = planServingsFor(id)
   }
   return frozenServings
 })
@@ -275,7 +279,7 @@ function timerProgress(t: CookTimer): string {
  * matter what the flag claims — its button offers Restart, not Pause.
  */
 function isRunning(t: CookTimer): boolean {
-  return remainingSeconds(t, now.value) > 0 && t.running
+  return isCounting(t, now.value)
 }
 
 /**
@@ -321,20 +325,7 @@ const recipeTotalSuggestion = computed(() => {
  * `hintsLoaded` then stays false and the honest banner is WITHHELD — the
  * card never claims "no cook time mentioned" on a guess (ADR-0081 §4).
  */
-const hints = ref<Awaited<ReturnType<typeof getTimerHints>> | null>(null)
-
-watch(
-  () => meta.value?.id,
-  (id) => {
-    hints.value = null
-    if (id === undefined) return
-    void getTimerHints(id).then((loaded) => {
-      // A stale fetch (the cook navigated to another recipe) never wins.
-      if (meta.value?.id === id) hints.value = loaded
-    })
-  },
-  { immediate: true },
-)
+const { hints } = useTimerHints(() => meta.value?.id)
 
 /**
  * The duration THIS step view's authored text carries, from the artifact
@@ -1211,35 +1202,20 @@ function onTouchEnd(e: TouchEvent) {
   class="flex shrink-0 items-center gap-1 rounded-xl border border-border-strong px-2 py-1"
   :data-test="`timer-chip-${t.id}`"
   >
-  <span
-  class="max-w-28 truncate text-xs font-semibold"
-  data-test="chip-name"
-  >{{ t.label }}</span
-  >
-  <button
-  class="flex h-11 min-w-24 shrink-0 items-center justify-center gap-1 px-1 font-mono-data text-xl font-semibold tabular-nums text-saffron"
-  data-test="step-timer"
-  aria-live="polite"
-  :aria-label="
-  isRunning(t)
-  ? `Pause ${t.label} timer, ${formatCountdown(remainingOf(t))} left`
-  : `Start ${t.label} timer, ${formatCountdown(remainingOf(t))} left`
-  "
-  @click="toggle(t)"
-  >
-  <Pause v-if="isRunning(t)" :size="16" aria-hidden="true" />
-  <Play v-else :size="16" aria-hidden="true" />
-  <span>{{ formatCountdown(remainingOf(t)) }}</span>
-  <span class="sr-only">{{ announce(t) }}</span>
-  </button>
-  <button
-  class="flex size-11 shrink-0 items-center justify-center"
-  data-test="timer-clear"
-  :aria-label="`Delete the ${t.label} timer`"
-  @click="clear(t)"
-  >
-  <X :size="16" aria-hidden="true" />
-  </button>
+  <CookTimerChip
+  :timer="t"
+  :remaining="remainingOf(t)"
+  :running="isRunning(t)"
+  countdown-test="step-timer"
+  clear-test="timer-clear"
+  countdown-class="text-saffron"
+  name-class="max-w-28 truncate text-xs font-semibold"
+  name-test="chip-name"
+  live
+  :sr-announce="announce(t)"
+  @toggle="toggle(t)"
+  @clear="clear(t)"
+  />
   </div>
   </div>
 
@@ -1293,29 +1269,17 @@ function onTouchEnd(e: TouchEvent) {
   class="flex items-center gap-2 rounded-xl border border-border-strong px-2 py-1"
   data-test="timer-manage-row"
   >
-  <span class="min-w-0 flex-1 truncate text-sm font-semibold">{{ t.label }}</span>
-  <button
-  class="flex h-11 min-w-24 shrink-0 items-center justify-center gap-1 px-1 font-mono-data text-xl font-semibold tabular-nums text-text"
-  :data-test="`timer-manage-toggle-${t.id}`"
-  :aria-label="
-  isRunning(t)
-  ? `Pause ${t.label} timer, ${formatCountdown(remainingOf(t))} left`
-  : `Start ${t.label} timer, ${formatCountdown(remainingOf(t))} left`
-  "
-  @click="toggle(t)"
-  >
-  <Pause v-if="isRunning(t)" :size="16" aria-hidden="true" />
-  <Play v-else :size="16" aria-hidden="true" />
-  <span>{{ formatCountdown(remainingOf(t)) }}</span>
-  </button>
-  <button
-  class="flex size-11 shrink-0 items-center justify-center"
-  :data-test="`timer-manage-clear-${t.id}`"
-  :aria-label="`Delete the ${t.label} timer`"
-  @click="clear(t)"
-  >
-  <X :size="16" aria-hidden="true" />
-  </button>
+  <CookTimerChip
+  :timer="t"
+  :remaining="remainingOf(t)"
+  :running="isRunning(t)"
+  :countdown-test="`timer-manage-toggle-${t.id}`"
+  :clear-test="`timer-manage-clear-${t.id}`"
+  countdown-class="text-text"
+  name-class="min-w-0 flex-1 truncate text-sm font-semibold"
+  @toggle="toggle(t)"
+  @clear="clear(t)"
+  />
   </li>
   </ul>
   </div>

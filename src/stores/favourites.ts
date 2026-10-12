@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { getCatalog } from '../lib/catalog'
+import { clampStamp, mergeLww, normalizeStamp } from '../lib/stamps'
 
 /**
  * Favourited variant ids, with DELETE MARKERS (ADR-0031).
@@ -47,6 +48,9 @@ export type FavouritesMap = Record<string, FavouriteRecord>
  */
 export const DEFAULT_STAMP = 0
 
+/** The persist key AND the first-run seed's "was anything persisted?" probe. */
+const FAVOURITES_KEY = 'mealime-planner:v1:favourites'
+
 function materialize(records: FavouritesMap): Set<number> {
   const out = new Set<number>()
   for (const [key, record] of Object.entries(records)) {
@@ -73,10 +77,12 @@ export function sanitizeFavourites(value: unknown): FavouritesMap {
     if (typeof entry !== 'object' || entry === null) continue
     const { favorited, updatedAt } = entry as Partial<FavouriteRecord>
     if (typeof favorited !== 'boolean') continue
-    const stamp = Number(updatedAt)
+    // Same stamp trust as the ratings records (shared sanitizer): a
+    // far-future stamp would pin the tombstone/flag forever under the
+    // per-key LWW merge below.
     out[key] = {
       favorited,
-      updatedAt: Number.isFinite(stamp) && stamp >= 0 ? stamp : DEFAULT_STAMP,
+      updatedAt: clampStamp(normalizeStamp(updatedAt, DEFAULT_STAMP), Date.now()),
     }
   }
   return out
@@ -92,9 +98,6 @@ export const useFavouritesStore = defineStore(
      * by construction, which is what the room's `snapshot()` relies on.
      */
     const ids = computed(() => materialize(records.value))
-    /** True once the store has been seeded/initialized from the catalog. */
-    const seeded = ref(false)
-
     function isFavourite(variantId: number): boolean {
       return ids.value.has(variantId)
     }
@@ -119,13 +122,7 @@ export const useFavouritesStore = defineStore(
     function mergeRemote(incoming: unknown): void {
       const clean = sanitizeFavourites(incoming)
       if (Object.keys(clean).length === 0) return
-      const next = { ...records.value }
-      for (const [key, record] of Object.entries(clean)) {
-        const local = next[key]
-        if (local && record.updatedAt <= local.updatedAt) continue
-        next[key] = record
-      }
-      records.value = next
+      records.value = mergeLww(records.value, clean)
     }
 
     /**
@@ -202,7 +199,6 @@ export const useFavouritesStore = defineStore(
       records,
       replaceAll,
       seedFrom,
-      seeded,
       isFavourite,
       toggleFavourite,
       mergeRemote,
@@ -211,7 +207,7 @@ export const useFavouritesStore = defineStore(
   },
   {
     persist: {
-      key: 'mealime-planner:v1:favourites',
+      key: FAVOURITES_KEY,
       // `records` is the truth, but the ON-DISK format is unchanged by
       // ADR-0031: still a plain array of starred ids (tombstones stay in
       // memory). Hydration therefore rebuilds records at DEFAULT_STAMP.
@@ -225,8 +221,6 @@ export const useFavouritesStore = defineStore(
   },
 )
 
-const FAVOURITES_KEY = 'mealime-planner:v1:favourites'
-
 /**
  * Initialize favourites after the catalog loads: if nothing was persisted
  * yet, seed from the snapshot's favourited variants.
@@ -237,6 +231,5 @@ export function initFavourites(): Promise<void> {
     if (localStorage.getItem(FAVOURITES_KEY) === null) {
       store.seedFrom(catalog.favouriteIds)
     }
-    store.seeded = true
   })
 }

@@ -352,11 +352,6 @@ export function violatesDiet(names: readonly string[], diet: DietId): boolean {
   return (ingredientGroups(names) & DIET_FORBIDS[diet]) !== 0
 }
 
-/** True when the recipe satisfies `diet` (no forbidden ingredient). */
-export function matchesDiet(names: readonly string[], diet: DietId): boolean {
-  return !violatesDiet(names, diet)
-}
-
 /** Diet results for one recipe, keyed by rule. */
 export type DietVerdict = Record<DietId, boolean>
 

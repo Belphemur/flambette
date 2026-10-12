@@ -19,6 +19,7 @@ import type { CustomIngredient } from '../stores/customIngredients'
 import { DIET_IDS, type DietId } from './dietFilter'
 import { normalizeQuickFilters, type QuickFilters } from './quickFilters'
 import { isServings, FALLBACK_SERVINGS, MAX_SERVINGS, MIN_SERVINGS } from './servings'
+import { onlyTrueKeys } from './grocery'
 import { isStepTimer } from './stepTimer'
 import { isUnitSystem, UNIT_SYSTEMS } from './units'
 import { zipStore, unzipStore, type ZipEntry } from './zip'
@@ -166,11 +167,9 @@ export const STORE_SLICES: SliceDef<any>[] = [
     },
     write(value) {
       const grocery = useGroceryStore()
-      const map: Record<string, boolean> = {}
-      // Keep only true entries, matching the room-sync apply convention.
-      for (const [key, val] of Object.entries(value as Record<string, boolean>)) {
-        if (val) map[key] = true
-      }
+      // Keep only true entries — the ONE convention helper (the room's
+      // snapshot/apply use it too).
+      const map = onlyTrueKeys(value as Record<string, boolean>)
       grocery.clearAll()
       grocery.map = map
       // `plan.json` (which carries `customItems`) is applied BEFORE this

@@ -8,7 +8,7 @@ import type { VariantMeta } from '../lib/types'
 import { catalog } from '../lib/catalog'
 import { isUserRecipeId, showNewBadge } from '../lib/userRecipes'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
-import { useRatingStore } from '../stores/rating'
+import { displayRating, useRatingStore } from '../stores/rating'
 import { Clock, Star } from 'lucide-vue-next'
 
 const props = defineProps<{ meta: VariantMeta }>()
@@ -37,11 +37,9 @@ const mealTypeRole = computed(() => mealRole(props.meta.ruleset))
  * read-only fallback — the same precedence `RatingStars` uses, so the
  * disc and the control below it can never print two different numbers.
  */
-const ratingValue = computed(() => {
-  const mine = ratings.ratingFor(props.meta.id)
-  if (mine > 0) return mine
-  return Math.round(props.meta.rating * 5 * 10) / 10
-})
+const ratingValue = computed(() =>
+  Math.round(displayRating(ratings.ratingFor(props.meta.id), props.meta.rating) * 10) / 10,
+)
 const ratingSource = computed<'household' | 'catalog'>(() =>
   ratings.ratingFor(props.meta.id) > 0 ? 'household' : 'catalog',
 )

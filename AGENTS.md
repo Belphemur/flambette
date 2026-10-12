@@ -70,6 +70,11 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
 - `AGENTS.md` is the entry point only — do not grow it back into a
   monolith; new depth goes into a topic file and gets a row in the table
   above.
+- **Design ADRs**: every design decision lives in `docs/design/` — the
+  generated [`docs/design/index.md`](docs/design/index.md) is the only
+  place that lists them, and `test:data` fails when the index is stale.
+  How to add (and supersede) one is in
+  [`docs/agents/conventions.md`](docs/agents/conventions.md).
 - Git discipline: never `git add -A` at repo root (scrape scripts/raw
   archives are gitignored but sit in the workdir; add files by explicit
   path); NO `Co-Authored-By` trailers, ever; identity comes from git

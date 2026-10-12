@@ -4,7 +4,6 @@ import {
   KCAL_PER_G,
   NUTRITION_KEYS,
   NUTRITION_GROUPS,
-  formatNutritionRow,
   formatNutritionValue,
   macroGrams,
   macroSplit,
@@ -251,7 +250,9 @@ describe('the nutrition group layout', () => {
     const row = (key: string) => {
       const found = groups.flatMap((g) => g.rows).find((r) => r.key === key)
       expect(found).toBeDefined()
-      return formatNutritionRow(found!)
+      // formatNutritionRow was deleted (dead code); the assertions now
+      // pin formatNutritionValue + the unit directly — same contract.
+      return { value: formatNutritionValue(found!.value, found!.unit), unit: found!.unit }
     }
     expect(row('potassium')).toEqual({ value: '1190', unit: 'mg' })
     expect(row('calcium')).toEqual({ value: '190', unit: 'mg' })

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { createPinia, setActivePinia } from 'pinia'
 import { usePlanStore } from './plan'
+import { MAX_SERVINGS } from '../lib/servings'
 import type { VariantMeta } from '../lib/types'
 
 /**
@@ -67,6 +68,54 @@ describe('plan identity (ADR-0034)', () => {
     plan.replacePlan([], [])
     expect(plan.planId).toBe('')
     expect(plan.planCreatedAt).toBe(0)
+  })
+})
+
+describe('a persisted legacy plan normalizes at hydrate', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  /** Reproduce what pinia-plugin-persistedstate does: patch the picked
+   *  members from the blob, verbatim — no store action runs, so the ONE
+   *  write-path rule never sees these values. */
+  function hydrateLegacyBlob(entries: { variantId: number; servings: number }[]) {
+    const plan = usePlanStore()
+    ;(plan as unknown as { plan: { variantId: number; servings: number }[] }).plan = entries
+    return plan
+  }
+
+  test('a pre-cap count (>99) written by an older build is clamped, like replacePlan clamps it', () => {
+    // The sharing device and the receiving device must agree: the sender
+    // normalizes its own hydration to the same value replacePlan stores
+    // on the receiver.
+    const plan = hydrateLegacyBlob([
+      { variantId: 1, servings: MAX_SERVINGS + 50 },
+      { variantId: 2, servings: 4 },
+    ])
+    ;(plan as unknown as { normalizePersistedPlan: () => void }).normalizePersistedPlan()
+    expect(plan.plan.map((e) => e.servings)).toEqual([MAX_SERVINGS, 4])
+
+    // An inbound snapshot of the SAME entries lands on the same counts —
+    // the divergence qodo flagged cannot happen.
+    plan.replacePlan([
+      { variantId: 1, servings: MAX_SERVINGS + 50 },
+      { variantId: 2, servings: 4 },
+    ])
+    expect(plan.plan.map((e) => e.servings)).toEqual([MAX_SERVINGS, 4])
+  })
+
+  test('garbage in a hydrated entry falls to one serving, not to the remembered default', () => {
+    const plan = hydrateLegacyBlob([
+      { variantId: 1, servings: Number.NaN as unknown as number },
+    ])
+    ;(plan as unknown as { normalizePersistedPlan: () => void }).normalizePersistedPlan()
+    expect(plan.plan[0]!.servings).toBe(1)
+  })
+
+  test('a clean blob is left untouched (idempotent, no rewrite)', () => {
+    const plan = hydrateLegacyBlob([{ variantId: 1, servings: 4 }])
+    const before = plan.plan[0]
+    ;(plan as unknown as { normalizePersistedPlan: () => void }).normalizePersistedPlan()
+    expect(plan.plan[0]).toBe(before) // same object: no persistence write
   })
 })
 

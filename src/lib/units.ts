@@ -24,7 +24,15 @@
  * Pure lib: no Vue/Pinia imports, unit-tested like the rest of `src/lib`.
  */
 
-import { formatAmount, formatFraction, parseQuantity } from './quantity'
+import {
+  formatAmount,
+  formatFraction,
+  isMultiple,
+  parseQuantity,
+  qzTo,
+  OZ_GRAMS as GRAMS_PER_OUNCE,
+  FL_OZ_ML as MILLILITRES_PER_FLUID_OUNCE,
+} from './quantity'
 
 /**
  * The three settings. `dual` — the catalog exactly as authored — is the
@@ -67,12 +75,15 @@ function isSingleSystem(system: UnitSystem): boolean {
 
 /* ---------- Exact-ish conversion factors ---------- */
 
-/** International avoirdupois ounce, grams. */
-export const GRAMS_PER_OUNCE = 28.3495
+/**
+ * Ounce constants live in quantity.ts (the dependency-free leaf — they
+ * mirror NOTHING anymore); imported AND re-exported under this module's
+ * public names so every existing importer keeps spelling
+ * `GRAMS_PER_OUNCE`.
+ */
+export { GRAMS_PER_OUNCE, MILLILITRES_PER_FLUID_OUNCE }
 /** Kilogram per pound. */
 export const KILOGRAMS_PER_POUND = 0.453592
-/** US fluid ounce, millilitres. */
-export const MILLILITRES_PER_FLUID_OUNCE = 29.5735
 /** Centimetres per inch. */
 export const CENTIMETRES_PER_INCH = 2.54
 
@@ -379,16 +390,6 @@ const MILLILITRES_PER_CUP = 240
 /** US cup, US fluid ounces. */
 const FLUID_OUNCES_PER_CUP = 8
 
-/** Quantize to a fraction grid: `qzTo(15.87, 0.5)` → `16`. */
-function qzTo(v: number, step: number): number {
-  return Math.round(v / step) * step
-}
-
-function isMultiple(v: number, step: number): boolean {
-  const q = v / step
-  return Math.abs(q - Math.round(q)) < 1e-6
-}
-
 /**
  * Spoon-scale ml the us profile keeps AS ml (ADR-0057, measured): `90 ml`
  * (69×), `135 ml` (33×), `45 ml` (15×), `30 ml` (5×), `270 ml` and `720 ml`
@@ -570,7 +571,6 @@ export function localizeQuantity(
  * `localizeQuantity`, named for its call site so a reader knows the
  * canonical key basis is deliberately NOT what this touches.
  */
-export const localizeLine = localizeQuantity
 
 /**
  * Localize scaled instruction steps for display. ONE helper, called by

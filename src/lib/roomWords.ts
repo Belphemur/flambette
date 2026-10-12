@@ -199,11 +199,6 @@ export function isRoomCode(code: string): boolean {
   return WORD_ROOM_CODE_RE.test(code) || LEGACY_ROOM_CODE_RE.test(code)
 }
 
-/** True when the code is the new three-word format. */
-export function isWordRoomCode(code: string): boolean {
-  return WORD_ROOM_CODE_RE.test(code)
-}
-
 /**
  * A generated display name, shown Title Case (ADR-0063): `<adjective> <noun>`
  * — "Brave Otter". The name is stored exactly as returned (displayed,

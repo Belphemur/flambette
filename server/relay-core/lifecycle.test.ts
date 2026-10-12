@@ -28,8 +28,8 @@ import {
   type RoomStore,
 } from './lifecycle'
 import { CODE_ALPHABET, IDLE_TTL_MS, INACTIVITY_TTL_MS } from './policy'
-import { RELAY_ERRORS } from './protocol'
-import { canonicalizeCode, WORD_CODE_RE, mintLegacyCode, normalizeRoomCode } from './codes'
+import { parseClientFrame, RELAY_ERRORS } from './protocol'
+import { canonicalizeCode, WORD_CODE_RE, mintLegacyCode, normalizeRoomCode, resolveCreateIntent } from './codes'
 
 const HOUR = 60 * 60 * 1000
 
@@ -120,6 +120,59 @@ describe('room codes are canonicalised by the shared client helper', () => {
     expect(CODE_ALPHABET).toHaveLength(30)
     expect(CODE_ALPHABET).not.toMatch(/[AEIOU]/)
     expect(WORD_CODE_RE.test('mauve-peacock-candle')).toBe(true)
+  })
+})
+
+describe('the frame gate is ONE decision for both relays (ADR-0040)', () => {
+  test('a message object passes, carrying the record', () => {
+    const frame = parseClientFrame('{"type":"keepalive"}')
+    expect(frame.ok).toBe(true)
+    if (frame.ok) expect(frame.msg).toEqual({ type: 'keepalive' })
+  })
+
+  test('unparseable bytes are refused bad_json', () => {
+    expect(parseClientFrame('not json')).toEqual({ ok: false, error: RELAY_ERRORS.badJson })
+    expect(parseClientFrame(new TextEncoder().encode('['))).toEqual({ ok: false, error: RELAY_ERRORS.badJson })
+  })
+
+  test('a parsed NON-OBJECT frame is refused bad_json on BOTH relays', () => {
+    // The Bun adapter used to answer unknown_type for these (its switch
+    // default) while the DO answered bad_json — the same bytes, a
+    // different error per deployment, under a client that keys retry
+    // behaviour off these codes (src/lib/relayErrors.ts).
+    expect(parseClientFrame('42')).toEqual({ ok: false, error: RELAY_ERRORS.badJson })
+    expect(parseClientFrame('"hi"')).toEqual({ ok: false, error: RELAY_ERRORS.badJson })
+    expect(parseClientFrame('null')).toEqual({ ok: false, error: RELAY_ERRORS.badJson })
+    expect(parseClientFrame('[1,2,3]')).toEqual({ ok: false, error: RELAY_ERRORS.badJson })
+  })
+})
+
+describe('create intents (ADR-0021/0038: never mint over a named code)', () => {
+  test('a word code qualifies in BOTH forms, case-insensitively', () => {
+    // The URL intent's vocabulary is the full ADR-0021 union.
+    expect(resolveCreateIntent('mauve-peacock-candle')).toEqual({ kind: 'create', code: 'mauve-peacock-candle' })
+    // The message form canonicalises through the SAME helper: a
+    // mixed-case word code must be answered for the room it named,
+    // not silently rerolled into a freshly minted one.
+    expect(resolveCreateIntent('Mauve-Peacock-Candle', { messageForm: true })).toEqual({
+      kind: 'create',
+      code: 'mauve-peacock-candle',
+    })
+    expect(resolveCreateIntent('mauvepeacockcandle')).toEqual({ kind: 'create', code: 'mauve-peacock-candle' })
+  })
+
+  test('a legacy code qualifies in the URL form and is REFUSED in the message form', () => {
+    expect(resolveCreateIntent('zz9zzz')).toEqual({ kind: 'create', code: 'ZZ9ZZZ' })
+    // The message form's vocabulary is word codes only: a caller that
+    // named a legacy code is refused like `join`, never minted over.
+    expect(resolveCreateIntent('zz9zzz', { messageForm: true })).toEqual({ kind: 'notFound' })
+    expect(resolveCreateIntent('ZZ9ZZZ', { messageForm: true })).toEqual({ kind: 'notFound' })
+  })
+
+  test('only an empty/absent code mints', () => {
+    expect(resolveCreateIntent(undefined)).toEqual({ kind: 'mint' })
+    expect(resolveCreateIntent('', { messageForm: true })).toEqual({ kind: 'mint' })
+    expect(resolveCreateIntent(undefined, { messageForm: true })).toEqual({ kind: 'mint' })
   })
 })
 
@@ -276,6 +329,23 @@ describe('the per-code rev floor', () => {
     h.now(IDLE_TTL_MS + 1)
     expect(h.registry.floor()).toBe(0)
     expect(h.store.floors.size).toBe(0)
+  })
+
+  test('a stale entry keeps the HIGHER floor: a lower rev never moves it backwards', () => {
+    // The floor is monotone PER CODE (review F4). A keepalive-only gap
+    // longer than the idle TTL refreshes the entry's AGE, and the push
+    // that follows must replace that AGE, not the rev.
+    const h = harness()
+    h.registry.admit('join', 0)
+    h.registry.push(11, { a: 1 }, 'p1')
+    expect(h.registry.floor()).toBe(11)
+    // Keepalives alone past the idle TTL make the entry stale.
+    h.now(IDLE_TTL_MS + 1)
+    h.registry.keepalive()
+    expect(h.store.floors.get('mauve-peacock-candle')!.rev).toBe(11)
+    // A push with a LOWER rev arrives: the floor stays at 11.
+    h.registry.push(7, { a: 2 }, 'p1')
+    expect(h.registry.floor()).toBe(11)
   })
 
   test('a room’s peer serial never repeats across re-creations of the same code', () => {

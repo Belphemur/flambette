@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test'
 import {
   DEFAULT_UNIT_SYSTEM,
   isUnitSystem,
-  localizeLine,
   localizeQuantity,
   localizeSteps,
   localizeText,
@@ -33,7 +32,6 @@ describe('unit system identity', () => {
   test('DUAL is the IDENTITY everywhere — the catalog, verbatim', () => {
     for (const q of ['450 g', '1.5 kg', '250 ml', '½ (142 g) pkg', '1 (142 g) pkg', '3 (2 ½ cm) pieces', '2 cups', '3 tbsp', '6 cloves', '', 'a pinch']) {
       expect(localizeQuantity(q, 'dual')).toBe(q)
-      expect(localizeLine(q, 'dual')).toBe(q)
     }
     // …including the dual temperature notation a metric/imperial reader
     // asked to collapse.
@@ -47,7 +45,6 @@ describe('unit system identity', () => {
   test('metric quantities are the IDENTITY — no rounding churn on any authored line', () => {
     for (const q of ['450 g', '1.5 kg', '250 ml', '½ (142 g) pkg', '1 (142 g) pkg', '3 (2 ½ cm) pieces', '3 tbsp', '6 cloves', '', 'a pinch']) {
       expect(localizeQuantity(q, 'metric')).toBe(q)
-      expect(localizeLine(q, 'metric')).toBe(q)
     }
   })
 })

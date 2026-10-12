@@ -93,16 +93,6 @@ export const catalog = shallowRef<Catalog | null>(null)
  */
 const userDocsById = new Map<number, RecipeDoc>()
 
-/** The recipe document embedded in the user-recipes artifact, if any. */
-export function userRecipeDoc(id: number): RecipeDoc | undefined {
-  return userDocsById.get(id)
-}
-
-/** The household's addedAt for a user recipe, if it is one. */
-export function userRecipeAddedAt(id: number): number | undefined {
-  return catalog.value?.userRecipeAddedAt.get(id)
-}
-
 /**
  * Merge the two sources into the catalog's indexes.
  *

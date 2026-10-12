@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { clampServings, FALLBACK_SERVINGS, isServings, MAX_SERVINGS } from './servings'
+import { clampServings, FALLBACK_SERVINGS, isServings, MAX_SERVINGS, normalizePlanServings } from './servings'
 
 /**
  * The remembered default serving size (ADR-0037). The clamp is the only
@@ -69,5 +69,31 @@ describe('isServings', () => {
     expect(isServings(NaN)).toBe(false)
     expect(isServings('4')).toBe(false)
     expect(isServings(undefined)).toBe(false)
+  })
+})
+
+/**
+ * `normalizePlanServings` is the ONE rule for a plan ENTRY's count
+ * (ADR-0037): the plan store's add/re-scale/replace paths and the detail
+ * stepper all route through it. Unlike `clampServings` (a DEFAULT), a
+ * broken entry count falls to ONE serving — a planned meal must always
+ * have a usable count, and the remembered default belongs to a different
+ * recipe.
+ */
+describe('normalizePlanServings', () => {
+  test('rounds a fraction, clamps the range', () => {
+    expect(normalizePlanServings(4.6)).toBe(5)
+    expect(normalizePlanServings(0.5)).toBe(1)
+    expect(normalizePlanServings(-3)).toBe(1)
+    expect(normalizePlanServings(MAX_SERVINGS + 1)).toBe(MAX_SERVINGS)
+    expect(normalizePlanServings(MAX_SERVINGS)).toBe(MAX_SERVINGS)
+  })
+
+  test('a non-finite count becomes ONE serving, never a persisted NaN', () => {
+    expect(normalizePlanServings(NaN)).toBe(1)
+    expect(normalizePlanServings(Infinity)).toBe(1)
+    expect(normalizePlanServings(-Infinity)).toBe(1)
+    expect(normalizePlanServings(undefined)).toBe(1)
+    expect(normalizePlanServings('4')).toBe(1)
   })
 })

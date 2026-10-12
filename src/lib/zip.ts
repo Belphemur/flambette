@@ -162,7 +162,3 @@ export function unzipStore(zip: Uint8Array): Map<string, Uint8Array> | string {
   }
   return files
 }
-
-export function textDecoder(): TextDecoder {
-  return new TextDecoder()
-}

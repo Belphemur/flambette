@@ -29,6 +29,7 @@ import {
 } from '../lib/quickFilters'
 import { popularityScore } from '../lib/quantity'
 import {
+  mealTypeDropdownRows,
   OFFERED_MEAL_TYPES,
   matchesMealType,
   type MealTypeId,
@@ -232,13 +233,8 @@ function setSource(value: string) {
  */
 const mealOptions: FilterDropdownOption[] = [
   { value: 'any', label: 'Any', ariaLabel: 'Any meal type', icon: Sparkles },
-  ...OFFERED_MEAL_TYPES.map((option) => ({
-    value: String(option.id),
-    label: option.label,
-    ariaLabel: `${option.label}, ${option.count} recipes`,
-    count: option.count,
-    iconRole: mealRole(option.ruleset),
-  })),
+  // The ONE rows builder (mealTypeFilter); this surface values by id.
+  ...mealTypeDropdownRows((o) => String(o.id)),
 ]
 
 const mealSelectedIndex = computed(() => {

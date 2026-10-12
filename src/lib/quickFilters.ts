@@ -158,21 +158,6 @@ export function defaultQuickFilters(): QuickFilters {
   }
 }
 
-/** Human label of a sort mode (falls back to the first option). */
-export function sortLabel(sortBy: SortBy): string {
-  return SORT_OPTIONS.find((o) => o.value === sortBy)?.label ?? SORT_OPTIONS[0].label
-}
-
-/** Human label of a protein chip. */
-export function proteinLabel(protein: ProteinFilter): string {
-  return PROTEIN_OPTIONS.find((o) => o.value === protein)?.label ?? PROTEIN_OPTIONS[0].label
-}
-
-/** Human label of a source option (falls back to the first option). */
-export function sourceLabel(source: SourceFilter): string {
-  return SOURCE_OPTIONS.find((o) => o.value === source)?.label ?? SOURCE_OPTIONS[0].label
-}
-
 function asDietId(value: unknown): DietId | null {
   return typeof value === 'string' && DIET_IDS.includes(value as DietId) ? (value as DietId) : null
 }

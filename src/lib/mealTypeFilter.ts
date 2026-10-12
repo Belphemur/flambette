@@ -18,7 +18,8 @@
  * counted for partition parity but never offered as a meal.
  */
 
-import recipeTypesJson from '../../public/data/recipe_types.json'
+import recipeTypesJson from '../../public/data/recipe_types.json' with { type: 'json' }
+import { mealRole } from './palette'
 
 export type MealTypeId = -1 | -2 | -3 | -4 | -5 | -6
 
@@ -89,4 +90,30 @@ export function matchesMealType(ruleset: string | undefined, selected: MealTypeI
   if (selected === null) return true
   const want = RULESET_BY_ID.get(selected)
   return want !== undefined && ruleset === want
+}
+
+/* ---------- FilterDropdown rows (ONE builder, two dropdowns) ---------- */
+
+/**
+ * The meal-type dropdown's option rows, built ONCE for the two surfaces
+ * that offer the filter (RecipesTab, AutoPlanDialog): label, the
+ * `${label}, ${count} recipes` aria pattern, the build-time count badge
+ * and the ADR-0043/0036 icon role. `valueOf` is each surface's own value
+ * identity (the tab selects by id, the Auto-Plan dialog by ruleset); the
+ * 'Any' row stays at the call site (each surface greets it differently).
+ */
+export function mealTypeDropdownRows(valueOf: (o: MealTypeOption) => string): {
+  value: string
+  label: string
+  ariaLabel: string
+  count: number
+  iconRole: ReturnType<typeof mealRole>
+}[] {
+  return OFFERED_MEAL_TYPES.map((option) => ({
+    value: valueOf(option),
+    label: option.label,
+    ariaLabel: `${option.label}, ${option.count} recipes`,
+    count: option.count,
+    iconRole: mealRole(option.ruleset),
+  }))
 }

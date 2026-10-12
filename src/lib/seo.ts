@@ -39,6 +39,7 @@
 import type { RecipeDoc, VariantMeta } from './types'
 import { localImageUrl } from './images'
 import { DEFAULT_SITE_URL } from './siteUrl'
+import { MEAL_TYPE_OPTIONS } from './mealTypeFilter'
 
 export { DEFAULT_SITE_URL }
 
@@ -57,15 +58,16 @@ declare const __SITE_URL__: string
 export const SITE_URL: string =
   typeof __SITE_URL__ === 'undefined' ? DEFAULT_SITE_URL : __SITE_URL__
 
-/** Meal-occasion label per catalog `ruleset`, matching ADR-0043's table. */
-const OCCASION_LABEL: Record<string, string> = {
-  breakfast: 'breakfast',
-  dessert: 'dessert',
-  snack: 'snack',
-  simple: 'lunch',
-  dinner: 'dinner',
-  cpg: 'branded',
-}
+/**
+ * Meal-occasion label per catalog `ruleset` — DERIVED from the ADR-0043
+ * table (mealTypeFilter.ts, which owns the ruleset→label mapping via the
+ * committed recipe_types.json) instead of a hand-copied table that could
+ * drift when the catalog's taxonomy changes. The unknown-ruleset fallback
+ * ('meal') is this module's own decision and stays.
+ */
+const OCCASION_LABEL: Record<string, string> = Object.fromEntries(
+  MEAL_TYPE_OPTIONS.map((o) => [o.ruleset, o.label.toLowerCase()]),
+)
 
 /**
  * Minutes as an ISO 8601 duration (`PT30M`, `PT1H30M`) for

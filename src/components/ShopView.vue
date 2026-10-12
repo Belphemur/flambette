@@ -6,8 +6,7 @@ import { useGroceryList } from '../lib/useGroceryList'
 import { extraCollapseKey, groupExtras, storeCollapseKey, type ExtraGroup } from '../lib/extraSections'
 import { sinkChecked } from '../lib/sink'
 import { extraCheckedKey } from '../lib/extraCheckedKeys'
-import { STORE_SECTIONS } from '../lib/sections'
-import { aisleIcon } from '../lib/aisleRole'
+import { aisleIcon, aisleNumber } from '../lib/aisleRole'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
 import IngredientAutocomplete from './IngredientAutocomplete.vue'
 
@@ -112,9 +111,7 @@ function storeKey(name: string): string {
  * Grocery tab prints, so a shopper reading either screen counts the same
  * aisles (ADR-0071 delta 3, re-converged in ADR-0075's grammar sweep).
  */
-function aisleNumber(name: string): number {
-  return STORE_SECTIONS.indexOf(name as (typeof STORE_SECTIONS)[number]) + 1
-}
+
 
 /**
  * A group is "done" when every grocery line under it is checked. ONE map

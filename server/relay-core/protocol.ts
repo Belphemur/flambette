@@ -1,10 +1,9 @@
 /**
  * The relay wire protocol, declared once (ADR-0040).
  *
- * These are the message shapes the client sends and both relays answer.
- * They are TYPE-only declarations plus the `RELAY_ERRORS` taxonomy, so
- * importing this module costs nothing at runtime — a `import type` on the
- * client, a value import on the relays for the error codes.
+ * These are the message shapes the client sends and both relays answer,
+ * plus the `RELAY_ERRORS` taxonomy and the ONE gate every inbound frame
+ * passes (`parseClientFrame`).
  *
  * The taxonomy being one export is the point: the relays can no longer
  * disagree on a spelling, and `src/lib/relayErrors.ts` keys its
@@ -100,3 +99,36 @@ export const RELAY_ERRORS = {
 } as const
 
 export type RelayErrorCode = (typeof RELAY_ERRORS)[keyof typeof RELAY_ERRORS]
+
+/**
+ * The result of the frame gate: a parsed message OBJECT, or the error
+ * code both relays refuse the frame with.
+ */
+export type ClientFrame =
+  | { ok: true; msg: Record<string, unknown> }
+  | { ok: false; error: RelayErrorCode }
+
+/**
+ * The gate every inbound WebSocket frame passes, once, in the core
+ * (ADR-0040): bytes → JSON → message object, or a refusal. The adapters
+ * used to spell this inline and DISAGREE on the refusal code — the Bun
+ * adapter answered `unknown_type` for a parsed non-object frame (its
+ * switch default), the Durable Object `bad_json` — the same bytes, a
+ * different error per deployment, while `src/lib/relayErrors.ts` keys its
+ * retry behaviour off these codes. A non-object frame (`42`, `"hi"`,
+ * `[1,2,3]`) is malformed JSON-ish input and is refused `bad_json` on
+ * BOTH relays. An OBJECT whose `type` the relay does not speak is a
+ * different verdict — `unknown_type` — and stays the adapter's.
+ */
+export function parseClientFrame(raw: string | ArrayBuffer | Uint8Array): ClientFrame {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(typeof raw === 'string' ? raw : new TextDecoder().decode(raw))
+  } catch {
+    return { ok: false, error: RELAY_ERRORS.badJson }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ok: false, error: RELAY_ERRORS.badJson }
+  }
+  return { ok: true, msg: parsed as Record<string, unknown> }
+}

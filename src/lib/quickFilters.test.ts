@@ -7,12 +7,12 @@ import {
   migrateLegacyUiFilters,
   legacyProOnlySource,
   normalizeQuickFilters,
-  proteinLabel,
   sameQuickFilters,
-  sortLabel,
-  sourceLabel,
   toSharedFilters,
   type QuickFilters,
+  PROTEIN_OPTIONS,
+  SORT_OPTIONS,
+  SOURCE_OPTIONS,
 } from './quickFilters'
 import { USER_RECIPE_ID_BASE } from './userRecipes'
 
@@ -273,13 +273,17 @@ describe('legacyProOnlySource (ADR-0054 §3 — the RAW-blob migration)', () => 
 })
 
 describe('labels', () => {
+  // The option TABLES carry the labels (the dropdowns read
+  // `option.label` directly); the sortLabel/proteinLabel/sourceLabel
+  // lookup wrappers were deleted dead code — the contract pins the
+  // tables instead.
   test('every sort mode and protein has a label', () => {
-    expect(sortLabel('rating')).toBe('Top rated')
-    expect(sortLabel('calories')).toBe('Fewest calories')
-    expect(proteinLabel('')).toBe('Any protein')
-    expect(proteinLabel('fish')).toBe('Fish')
-    expect(sourceLabel('all')).toBe('All sources')
-    expect(sourceLabel('pro')).toBe('PRO')
-    expect(sourceLabel('new')).toBe('New')
+    expect(SORT_OPTIONS.find((o) => o.value === 'rating')?.label).toBe('Top rated')
+    expect(SORT_OPTIONS.find((o) => o.value === 'calories')?.label).toBe('Fewest calories')
+    expect(PROTEIN_OPTIONS.find((o) => o.value === '')?.label).toBe('Any protein')
+    expect(PROTEIN_OPTIONS.find((o) => o.value === 'fish')?.label).toBe('Fish')
+    expect(SOURCE_OPTIONS.find((o) => o.value === 'all')?.label).toBe('All sources')
+    expect(SOURCE_OPTIONS.find((o) => o.value === 'pro')?.label).toBe('PRO')
+    expect(SOURCE_OPTIONS.find((o) => o.value === 'new')?.label).toBe('New')
   })
 })

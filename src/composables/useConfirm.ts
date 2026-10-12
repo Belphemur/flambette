@@ -32,6 +32,40 @@ export function registerClearSnapshotProvider(fn: () => Record<number, string[]>
   snapshotProvider = fn
 }
 
+/**
+ * THE confirm toast (DRY): a question toast with a confirm action and a
+ * Cancel — three call sites (the grocery clear, PlanTab's leave-room,
+ * SettingsTab's leave-household) kept hand-rolling the same shape.
+ *
+ * `onConfirm` is the WHOLE confirm action, deliberately: a site that
+ * REPLACES the toast with a result (the grocery clear) must not have the
+ * helper dismiss on top of the replacement, and a site that dismisses
+ * first (leave-room, so the room is not left under a toast that already
+ * answered) does it itself. `onDismiss` passes straight through — the ui
+ * store fires it exactly once on every end path (AGENTS.md), and
+ * confirmAndClearGrocery's settled guard depends on that.
+ *
+ * Cancel is always `dismissToast()`: its meaning never varies.
+ */
+export function confirmToast(
+  message: string,
+  options: {
+    confirmLabel: string
+    onConfirm: () => void
+    onDismiss?: () => void
+    duration?: number
+  },
+): void {
+  useUiStore().showToast(message, {
+    duration: options.duration ?? 10_000,
+    onDismiss: options.onDismiss,
+    actions: [
+      { label: options.confirmLabel, run: options.onConfirm },
+      { label: 'Cancel', run: () => useUiStore().dismissToast() },
+    ],
+  })
+}
+
 /** True when at least one grocery line is checked. */
 function anythingChecked(): boolean {
   return Object.values(useGroceryStore().map).some(Boolean)
@@ -81,24 +115,18 @@ export function confirmAndClearGrocery(
       resolve()
     }
 
-    ui.showToast(message, {
-      duration: 10_000,
+    confirmToast(message, {
+      confirmLabel: 'Clear',
+      // REPLACE (not dismiss): the result toast takes over, and its
+      // replacement fires the question toast's onDismiss — settled=true
+      // makes that a no-op (qodo finding 1).
+      onConfirm: () => {
+        settle(true)
+        ui.showToast(
+          'Grocery list cleared — ingredients return when you plan again',
+        )
+      },
       onDismiss: () => settle(false),
-      actions: [
-        {
-          label: 'Clear',
-          run: () => {
-            settle(true)
-            ui.showToast(
-              'Grocery list cleared — ingredients return when you plan again',
-            )
-          },
-        },
-        {
-          label: 'Cancel',
-          run: () => ui.dismissToast(), // onDismiss settles the promise
-        },
-      ],
     })
   })
 }

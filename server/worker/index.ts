@@ -28,8 +28,9 @@
 import { mintLegacyCode, canonicalizeCode } from '../relay-core/codes'
 import { RELAY_ERRORS } from '../relay-core/protocol'
 import { Room } from './room'
+import { refuseSocket } from './refuseSocket'
 import { makeThrottle } from '../relay-core/throttle'
-import { DEFAULT_ATTEMPT_LIMIT, IDLE_TTL_MS, INACTIVITY_TTL_MS, RELAY_SERVICE } from '../relay-core/policy'
+import { DEFAULT_ATTEMPT_LIMIT, healthPayload, IDLE_TTL_MS, INACTIVITY_TTL_MS, parsePositiveNumber } from '../relay-core/policy'
 
 export { Room }
 
@@ -70,9 +71,7 @@ let currentAddress: string = 'unknown'
 let throttle: ReturnType<typeof makeThrottle> | null = null
 
 function attemptLimit(env: Env): number {
-  const raw = env.RELAY_ATTEMPT_LIMIT
-  const limit = raw === undefined ? DEFAULT_ATTEMPT_LIMIT : Number(raw)
-  return Number.isFinite(limit) && limit > 0 ? limit : DEFAULT_ATTEMPT_LIMIT
+  return parsePositiveNumber(env.RELAY_ATTEMPT_LIMIT, DEFAULT_ATTEMPT_LIMIT)
 }
 
 function getThrottle(env: Env): ReturnType<typeof makeThrottle> {
@@ -89,33 +88,18 @@ function clientAddress(request: Request): string {
 }
 
 function health(env: Env): Response {
-  return Response.json({
-    service: RELAY_SERVICE,
+  return Response.json(healthPayload({
     inactivityTtlMs: INACTIVITY_TTL_MS,
     idleTtlMs: IDLE_TTL_MS,
     attemptLimit: getThrottle(env).limit,
-  })
+  }))
 }
 
 function isUpgrade(request: Request): boolean {
   return request.headers.get('Upgrade')?.toLowerCase() === 'websocket'
 }
 
-/** Refuse at the WebSocket layer, with a relay `error` the client can read. */
-function refuseWith(code: string): Response {
-  const pair = new WebSocketPair()
-  const client = pair[0]
-  const server = pair[1]
-  server.accept()
-  try {
-    server.send(JSON.stringify({ type: 'error', code }))
-  } catch {
-    // The peer vanished before the refusal landed.
-  } finally {
-    server.close(1000, code)
-  }
-  return new Response(null, { status: 101, webSocket: client })
-}
+
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -134,7 +118,10 @@ export default {
       // A collision surfaces as `code_taken` and the client re-rolls.
       code = mintLegacyCode()
     }
-    if (!code) return refuseWith(RELAY_ERRORS.notFound)
+    if (!code) {
+      const pair = new WebSocketPair()
+      return refuseSocket(pair[0], pair[1], RELAY_ERRORS.notFound)
+    }
 
     // One attempt against BOTH the per-socket and per-IP budgets. The
     // socket bucket is a per-attempt no-op (each upgrade is a fresh id);
@@ -143,7 +130,8 @@ export default {
     // each time.
     currentAddress = clientAddress(request)
     if (!getThrottle(env).allow({ data: { peerId: crypto.randomUUID() } })) {
-      return refuseWith(RELAY_ERRORS.rateLimited)
+      const pair = new WebSocketPair()
+      return refuseSocket(pair[0], pair[1], RELAY_ERRORS.rateLimited)
     }
 
     // Route by name: the code IS the Durable Object's name, so two

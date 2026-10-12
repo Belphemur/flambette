@@ -65,6 +65,24 @@ export function clampServings(value: unknown, fallback: number = FALLBACK_SERVIN
 }
 
 /**
+ * Normalize a PLAN ENTRY's serving count (ADR-0037). One rule for every
+ * write path into the plan store (add, re-scale, replace) and the detail
+ * stepper, so no surface can persist a NaN (bare `Math.max(1, NaN)`) or
+ * invent its own floor.
+ *
+ * Deliberately NOT `clampServings`: a plan ENTRY must always carry a
+ * usable count — garbage-in falls to `MIN_SERVINGS` ("one serving" is the
+ * honest reading of a broken count for a planned meal) rather than to the
+ * remembered default, which is a DIFFERENT recipe's count. A fraction is
+ * rounded, and an out-of-range count is clamped into
+ * [MIN_SERVINGS, MAX_SERVINGS] like any other serving value.
+ */
+export function normalizePlanServings(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return MIN_SERVINGS
+  return Math.min(MAX_SERVINGS, Math.max(MIN_SERVINGS, Math.round(value)))
+}
+
+/**
  * True when `value` is a serving count we would accept as-is. Used by the
  * backup validator, which must REJECT a malformed `settings.json` rather
  * than silently repair it (import is validation-first, ADR-0013).

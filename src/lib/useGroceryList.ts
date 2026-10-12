@@ -2,7 +2,7 @@ import { computed, ref, watch } from 'vue'
 import { catalog, getRecipe } from './catalog'
 import {
   aggregateGroceries,
-  nameKey,
+  aggregateRowKeys,
   type GroceryItemView,
 } from './grocery'
 import { localizeQuantity } from './units'
@@ -107,16 +107,13 @@ export function useGroceryList() {
   const mealSummaries = computed<MealLineSummary[]>(() => {
     if (aggregateInputs.value.length !== plannedMetas.value.length) return []
     return aggregateInputs.value.map((input) => {
-      // The SAME rows `aggregateGroceries` walks, normalised the SAME way
-      // (its overlay path is `keyName`; the base path derives it from the
-      // ingredient name), matched with the SAME cleared set — so the count
-      // cannot disagree with the list by construction.
-      const rows: readonly { keyName: string }[] =
-        input.displayLines ??
-        input.doc.line_items.map((li) => ({ keyName: nameKey(li.ingredient_name) }))
+      // The SAME keys `aggregateGroceries` walks (the shared
+      // aggregateRowKeys derivation), matched with the SAME cleared set —
+      // the count cannot disagree with the list by construction.
+      const keys = aggregateRowKeys(input)
       const lines = input.cleared
-        ? rows.filter((row) => !input.cleared!.has(row.keyName)).length
-        : rows.length
+        ? keys.filter((key) => !input.cleared!.has(key)).length
+        : keys.length
       return {
         id: input.doc.id,
         name: input.recipeName,
@@ -217,14 +214,12 @@ export function useGroceryList() {
     const byVariant: Record<number, string[]> = {}
     for (const { doc, displayLines } of aggregateInputs.value) {
       // The snapshot keys are the SAME keys the aggregation groups on —
-      // the display rows' keyNames when the restriction seam is active.
-      // A substituted-extra row (an overlay line with no base counterpart,
-      // e.g. GF rid 1292's butter lettuce) keys to itself and would never
-      // appear in a base-doc-derived snapshot, so Clear would leave it
-      // visible while the rest of the meal hides.
-      const keys = displayLines
-        ? displayLines.map((row) => row.keyName)
-        : doc.line_items.map((item) => nameKey(item.ingredient_name))
+      // the shared aggregateRowKeys derivation. A substituted-extra row
+      // (an overlay line with no base counterpart, e.g. GF rid 1292's
+      // butter lettuce) keys to itself and would never appear in a
+      // base-doc-derived snapshot, so Clear would leave it visible while
+      // the rest of the meal hides.
+      const keys = aggregateRowKeys({ doc, displayLines })
       byVariant[doc.id] = keys.filter((key) => key.length > 0)
     }
     return byVariant

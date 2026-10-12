@@ -34,10 +34,15 @@ export interface NormalizedVersion {
   fixes: ChangelogEntry[]
 }
 
-/** Accepts `vMAJOR.MINOR.PATCH` plus an optional prerelease suffix
+/**
+ * Accepts `vMAJOR.MINOR.PATCH` plus an optional prerelease suffix
  * (`v2.3.0-rc1`); the generator sorts those between releases (ADR-0060 §2).
- * Build metadata (`+…`) is NOT accepted — tags carry none in this repo. */
-const VALID_VERSION_RE = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
+ * Build metadata (`+…`) is NOT accepted — tags carry none in this repo.
+ * ONE grammar for validity AND the captured tuple (major/minor/patch/
+ * prerelease): validity and the semver sort read the same regex, so they
+ * can never disagree about what a version is.
+ */
+const VERSION_RE = /^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/
 
 function normalizeEntry(raw: unknown): ChangelogEntry | null {
   if (raw === null || typeof raw !== 'object') return null
@@ -56,7 +61,7 @@ function normalizeVersion(raw: unknown): NormalizedVersion | null {
   if (raw === null || typeof raw !== 'object') return null
   const v = raw as Record<string, unknown>
   const version = typeof v.version === 'string' ? v.version : ''
-  if (!version || !VALID_VERSION_RE.test(version)) return null
+  if (!VERSION_RE.test(version)) return null
   const title = typeof v.title === 'string' && v.title.length > 0 ? v.title : version
   const date = typeof v.date === 'string' && v.date.length > 0 ? v.date : ''
   const features = Array.isArray(v.features)
@@ -86,7 +91,7 @@ export function parseChangelog(raw: unknown): ChangelogDoc | null {
   // a release sorts ABOVE its own prerelease (`v2.3.0` > `v2.3.0-rc1`), and
   // two prereleases of the same triple compare by identifier string.
   const semver = (t: string): [number, number, number, number, string] => {
-    const m = t.match(/^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/)
+    const m = VERSION_RE.exec(t)
     if (!m) return [0, 0, 0, 0, '']
     const pre = m[4] ?? ''
     return [Number(m[1]), Number(m[2]), Number(m[3]), pre ? 0 : 1, pre]
