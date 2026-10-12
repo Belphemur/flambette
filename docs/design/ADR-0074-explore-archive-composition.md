@@ -1,6 +1,6 @@
 # ADR-0074: Explore is the archive — count line, sort menu, and the card overlay grammar
 
-Status: accepted (2026-10-09)
+Status: accepted (superseded in part by ADR-0082) (2026-10-09) — the detail strip's Rating cell is superseded by the dedicated rate card; the rest of the band grammar stands
 
 ## Context
 
