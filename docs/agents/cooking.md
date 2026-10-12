@@ -42,6 +42,22 @@ two cards, then the action deck.
 - **Action deck**: outlined Previous + filled-tomato Next (flex-1); a
   full-width tonal success-green "Mark as cooked" below — TOMATO =
   begin, SUCCESS = complete (ADR-0072).
+- **Post-cook prompt (ADR-0083)**: a successful Finish raises
+  `PostCookPrompt` on `AppModal` over the still-mounted session —
+  heading "Enjoyed it?", the ONE `RatingStars` (32/24, same ratings
+  store, half-grid) and the ONE `FavouriteButton` for the cooked
+  variant, a Done control and an "Undo — not actually cooked" text
+  control calling the SAME `plan.undoMarkCooked(event, prior)` the old
+  toast Undo called (the prior is captured alongside `sessionCooked` in
+  session state — `sessionPrior`). The modal IS the acknowledgment: the
+  "Enjoy! Marked as cooked" toast does NOT fire on this path, and Undo
+  has moved into the modal (carried, not dropped — no ADR-0020
+  regression). Done, scrim and Escape all close the prompt and navigate
+  to `/history`; Undo closes it and STAYS in the session with the record
+  removed. The mid-cook mark (`close: false`) keeps toast + Undo and
+  never prompts; Finish after a mid-cook mark raises the prompt with the
+  original prior. `data-test`: `post-cook-prompt`, `post-cook-done`,
+  `post-cook-undo`.
 - Rejected render fictions: the "ACTION STEP" badge, difficulty labels,
   est-times beyond the recipe's own minutes.
 
