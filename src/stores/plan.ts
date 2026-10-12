@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { VariantMeta } from '../lib/types'
+import { normalizePlanServings } from '../lib/servings'
 
 export interface PlanEntry {
   variantId: number
@@ -164,7 +165,7 @@ export const usePlanStore = defineStore(
      * at 1, as the UI's own stepper does.
      */
     function addToPlan(meta: VariantMeta, servings: number): void {
-      const count = Number.isFinite(servings) ? Math.max(1, Math.round(servings)) : 1
+      const count = normalizePlanServings(servings)
       const existing = plan.value.find((e) => e.variantId === meta.id)
       if (existing) {
         existing.servings = count
@@ -196,7 +197,7 @@ export const usePlanStore = defineStore(
 
     function setServings(variantId: number, servings: number): void {
       const entry = plan.value.find((e) => e.variantId === variantId)
-      if (entry) entry.servings = Math.max(1, servings)
+      if (entry) entry.servings = normalizePlanServings(servings)
     }
 
     function clearPlan(): void {
@@ -413,7 +414,7 @@ export const usePlanStore = defineStore(
     function replacePlan(entries: PlanEntry[], custom: string[] = []): void {
       plan.value = entries.map((e) => ({
         variantId: e.variantId,
-        servings: Math.max(1, Math.round(e.servings)),
+        servings: normalizePlanServings(e.servings),
       }))
       customItems.value = custom
       // A wholesale replacement IS a new plan (Auto-Plan in replace mode,

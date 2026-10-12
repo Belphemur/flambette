@@ -18,7 +18,7 @@ import {
   UNIT_SYSTEM_LABEL,
   type UnitSystem,
 } from '../lib/units'
-import { MAX_SERVINGS } from '../lib/servings'
+import { MAX_SERVINGS, normalizePlanServings } from '../lib/servings'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
 import {
   getTimerHints,
@@ -123,14 +123,14 @@ const servings = ref(1)
  * 6 on the next recipe, which is exactly the complaint this replaces.
  *
  * BOTH values are clamped to `MAX_SERVINGS`, and the LOCAL ref is set from
- * the same normalization the store applied. Letting the sheet show 100
- * while the memory holds 99 would be worse than either value alone: the
- * displayed quantities and the remembered default would silently disagree,
- * and Start cooking would then cook a different number from the one on
- * screen. One bound, applied once, to both.
+ * the shared entry normalization (the plan store's own paths use it too).
+ * Letting the sheet show 100 while the memory holds 99 would be worse than
+ * either value alone: the displayed quantities and the remembered default
+ * would silently disagree, and Start cooking would then cook a different
+ * number from the one on screen. One bound, applied once, to both.
  */
 function setServings(next: number) {
-  const count = Math.min(MAX_SERVINGS, Math.max(1, next))
+  const count = normalizePlanServings(next)
   servings.value = count
   ui.setDefaultServings(count)
 }
