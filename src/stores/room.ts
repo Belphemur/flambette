@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
+import { onlyTrueKeys } from '../lib/grocery'
 import { describeRelayError } from '../lib/relayErrors'
 import {
   mergeSharedFilters,
@@ -275,6 +276,27 @@ export const useRoomStore = defineStore('room', () => {
    * prove our state is newer — and `sendState` clears it.
    */
   let unsentLocalEdit = false
+  /**
+   * One place that CARRIES the unsent-edit flag (the doc comment above it
+   * explains the load-bearing gate): only while actually on our way into
+   * a room — with no room at all (status idle, code null) there is
+   * nothing to publish into, and carrying the flag would make a join much
+   * later skip adoption and push a stale local plan over the household's
+   * — the exact overwrite this flag exists to prevent.
+   */
+  function carryUnsentEdit() {
+    if (code.value !== null) unsentLocalEdit = true
+  }
+
+  /**
+   * True when the socket is open AND the room is live — the ONE liveness
+   * predicate every send/keepalive path asks, instead of five hand-copies
+   * of it.
+   */
+  function socketLive(): boolean {
+    return status.value === 'live' && ws !== null && ws.readyState === WebSocket.OPEN
+  }
+
   /** The three-word code we asked the relay to create with (ADR-0021). */
   let wantedCode: string | null = null
   let codeRerolls = 0
@@ -307,10 +329,7 @@ export const useRoomStore = defineStore('room', () => {
   /* ---------- state conversion ---------- */
 
   function snapshot(): SharedState {
-    const checked: Record<string, boolean> = {}
-    for (const [key, value] of Object.entries(grocery.map)) {
-      if (value) checked[key] = true
-    }
+    const checked = onlyTrueKeys(grocery.map)
     const state: SharedState = {
       plan: plan.plan.map((e) => ({ variantId: e.variantId, servings: e.servings })),
       customItems: [...plan.customItems],
@@ -363,11 +382,7 @@ export const useRoomStore = defineStore('room', () => {
       // ("the plan is empty"), an ABSENT key is silence (an older peer) and
       // leaves ours alone — the two are deliberately distinct.
       if (state.planIdentity !== undefined) plan.setPlanIdentity(state.planIdentity)
-      const checked: Record<string, boolean> = {}
-      for (const [key, value] of Object.entries(state.checked ?? {})) {
-        if (value) checked[key] = true
-      }
-      grocery.map = checked
+      grocery.map = onlyTrueKeys(state.checked ?? {})
       // A snapshot carries `customItems` and `checked` as SEPARATE fields
       // with no invariant tying them together, so any peer (at any app
       // version) can send a `custom||<name>` key for an extra that is not
@@ -468,10 +483,8 @@ export const useRoomStore = defineStore('room', () => {
       //
       // Only while we are actually ON OUR WAY INTO a room. With no room
       // at all (status idle, code null) there is nothing to publish
-      // into, and carrying the flag would make a join much later skip
-      // adoption and push a stale local plan over the household's — the
-      // exact overwrite this flag exists to prevent.
-      if (code.value !== null) unsentLocalEdit = true
+      // into — carryUnsentEdit encodes exactly that gate.
+      carryUnsentEdit()
       return
     }
     localEditPending = true
@@ -480,8 +493,8 @@ export const useRoomStore = defineStore('room', () => {
     // send is the same whole state, at a strictly higher rev.
     if (immediate) {
       pushTimer = null
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        if (code.value !== null) unsentLocalEdit = true
+      if (!socketLive()) {
+        carryUnsentEdit()
         return
       }
       localRev = Math.max(localRev, maxSeenRev) + 1
@@ -490,10 +503,10 @@ export const useRoomStore = defineStore('room', () => {
     }
     pushTimer = setTimeout(() => {
       pushTimer = null
-      if (status.value !== 'live' || !ws || ws.readyState !== WebSocket.OPEN) {
+      if (!socketLive()) {
         // The socket went away inside the debounce window: the edit never
         // reached the room and must be published on the next join.
-        if (code.value !== null) unsentLocalEdit = true
+        carryUnsentEdit()
         return
       }
       localRev = Math.max(localRev, maxSeenRev) + 1
@@ -503,12 +516,13 @@ export const useRoomStore = defineStore('room', () => {
 
   /** One place that writes a snapshot, so the rev floor (F4) is never missed. */
   function sendState() {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    if (!socketLive()) return
     // The queued edit is now on the wire; later snapshots may apply again.
     localEditPending = false
     unsentLocalEdit = false
     writeRevFloor(code.value, localRev)
-    ws.send(JSON.stringify({ type: 'state', rev: localRev, state: snapshot() }))
+    // socketLive() proved the socket open; TS cannot see through the helper.
+    ws!.send(JSON.stringify({ type: 'state', rev: localRev, state: snapshot() }))
   }
 
   /**
@@ -617,9 +631,9 @@ export const useRoomStore = defineStore('room', () => {
   function startKeepalive() {
     if (keepaliveTimer) clearInterval(keepaliveTimer)
     keepaliveTimer = setInterval(() => {
-      if (status.value !== 'live' || !ws || ws.readyState !== WebSocket.OPEN) return
+      if (!socketLive()) return
       try {
-        ws.send(JSON.stringify({ type: 'keepalive' }))
+        ws!.send(JSON.stringify({ type: 'keepalive' })) // socketLive proved open
       } catch {
         // Socket is on its way out; onclose drives the reconnect.
         stopKeepalive()
@@ -870,7 +884,7 @@ export const useRoomStore = defineStore('room', () => {
     // UNSENT edit so the next join publishes it instead of adopting an
     // older snapshot over it. Without this, a socket drop inside the
     // 300ms debounce silently loses the tap.
-    if (localEditPending || pushTimer) unsentLocalEdit = true
+    if (localEditPending || pushTimer) carryUnsentEdit()
     // A queued edit can never reach the wire now; keeping the flag would
     // make the re-join ignore the room's snapshot FOREVER (a stuck
     // localEditPending is a permanent "don't apply remote state").
@@ -1000,9 +1014,9 @@ export const useRoomStore = defineStore('room', () => {
    * single edit, and the relay's throttle only prices create/join.
    */
   function announceProfile(): void {
-    if (status.value !== 'live' || !ws || ws.readyState !== WebSocket.OPEN) return
+    if (!socketLive()) return
     try {
-      ws.send(JSON.stringify({ type: 'profile', name: identity.displayName }))
+      ws!.send(JSON.stringify({ type: 'profile', name: identity.displayName })) // socketLive proved open
     } catch {
       /* socket closing; the next join re-announces */
     }

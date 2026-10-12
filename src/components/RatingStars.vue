@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Star } from 'lucide-vue-next'
-import { useRatingStore } from '../stores/rating'
+import { displayRating, useRatingStore } from '../stores/rating'
 import { useUiStore } from '../stores/ui'
 
 /**
@@ -47,10 +47,9 @@ const count = computed(() => ratingStore.countFor(props.variantId))
 const hovered = ref<number | null>(null)
 const display = computed(() => {
   if (hovered.value !== null) return hovered.value
-  if (mine.value > 0) return mine.value
   // No household opinion yet: the catalog mean fills the stars so the
   // value printed beside them (the same fallback) and the fill agree.
-  return (props.fallbackRating ?? 0) * 5
+  return displayRating(mine.value, props.fallbackRating ?? 0)
 })
 
 /** Five slots, each split in two half-star targets. */

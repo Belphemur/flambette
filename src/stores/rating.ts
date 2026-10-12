@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { clampStamp, normalizeStamp } from '../lib/stamps'
+import { clampStamp, mergeLww, normalizeStamp } from '../lib/stamps'
 
 /**
  * Per-recipe household ratings (ADR-0031).
@@ -44,6 +44,17 @@ export interface RatingFileRow extends RatingRecord {
 export function normalizeStarValue(value: number): number {
   if (!Number.isFinite(value)) return 0
   return Math.min(5, Math.max(0, Math.round(value * 2) / 2))
+}
+
+/**
+ * The rating PRECEDENCE (ADR-0031/0074): the household's own stars when
+ * it has one, else the catalog's Bayesian mean (0..1 → 0..5 stars). ONE
+ * helper — the card disc, the detail number and the star strip used to
+ * spell it three times. Returns the RAW 0..5 star value; callers keep
+ * their own rounding/rendering.
+ */
+export function displayRating(mine: number, catalogRating01: number): number {
+  return mine > 0 ? mine : catalogRating01 * 5
 }
 
 /** Map → the ratings.json row array. */
@@ -142,13 +153,7 @@ export const useRatingStore = defineStore(
     function mergeRemote(incoming: unknown): void {
       const clean = sanitizeRatings(incoming)
       if (Object.keys(clean).length === 0) return
-      const next = { ...map.value }
-      for (const [key, record] of Object.entries(clean)) {
-        const local = next[key]
-        if (local && record.updatedAt <= local.updatedAt) continue
-        next[key] = record
-      }
-      map.value = next
+      map.value = mergeLww(map.value, clean)
     }
 
     return { map, ratingFor, countFor, updatedAtFor, setRating, mergeRemote }

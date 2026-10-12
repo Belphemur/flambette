@@ -21,14 +21,14 @@ import {
 import { MAX_SERVINGS, normalizePlanServings } from '../lib/servings'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
 import {
-  getTimerHints,
-  hintForStep,
   suggestionFromHint,
   type TimerHint,
   type TimerSuggestion,
 } from '../lib/timerSuggest'
+import { useTimerHints } from '../composables/useTimerHints'
 import {
   formatCountdown,
+  isCounting,
   remainingSeconds,
   MAX_CONCURRENT_TIMERS,
 } from '../lib/stepTimer'
@@ -36,7 +36,8 @@ import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { macroGrams } from '../lib/nutrition'
 import { usePlanStore } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
-import { useRatingStore } from '../stores/rating'
+import { displayRating, useRatingStore } from '../stores/rating'
+import { planServingsFor } from '../composables/usePlanServings'
 import RatingStars from './RatingStars.vue'
 import NutritionModal from './NutritionModal.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
@@ -257,8 +258,7 @@ const macroSegments = computed(() => {
  */
 const ratingDisplay = computed(() => {
   if (!meta.value) return null
-  const mine = ratingStore.ratingFor(meta.value.id)
-  const value = mine > 0 ? mine : meta.value.rating * 5
+  const value = displayRating(ratingStore.ratingFor(meta.value.id), meta.value.rating)
   return value > 0 ? value.toFixed(1) : null
 })
 
@@ -318,17 +318,21 @@ const armedByStep = ref(new Map<number, number>())
 
 /**
  * The recipe's build-time timer hints, loaded on demand from the sidecar
- * and cached per session — the same artifact and the same lazy pattern
- * the cooking view uses, so the two surfaces cannot disagree about what
- * a step's duration is. A recipe with no sidecar resolves to no hints,
+ * and cached per session — the ONE loader (useTimerHints owns the
+ * stale-fetch guard), so the two surfaces cannot disagree about what a
+ * step's duration is. A recipe with no sidecar resolves to no hints,
  * which is a fact about the catalog (ADR-0041).
  */
-const hints = ref<TimerHint[] | null>(null)
+const { hintAt: hintAtFor } = useTimerHints(() => meta.value?.id)
+
+/** The hint for one step index, if the authored text carries a duration. */
+function hintAt(index: number): TimerHint | null {
+  return hintAtFor([index])
+}
 
 watch(
   () => meta.value?.id,
-  (id) => {
-    hints.value = null
+  () => {
     readyIngredients.value = new Set()
     // The step->timer mapping is scoped to ONE recipe. The sheet component
     // is reused (`<component :is>` with no key), so without this reset a
@@ -336,20 +340,9 @@ watch(
     // recipe's same-indexed step disabled for good, with a dismiss button
     // whose `clearTimer(nextId, staleId)` is a silent no-op.
     armedByStep.value = new Map()
-    if (id === undefined) return
-    void getTimerHints(id).then((loaded) => {
-      // A stale fetch (the reader moved to another recipe) never wins.
-      if (meta.value?.id === id) hints.value = loaded
-    })
   },
   { immediate: true },
 )
-
-/** The hint for one step index, if the authored text carries a duration. */
-function hintAt(index: number): TimerHint | null {
-  if (!hints.value) return null
-  return hintForStep(hints.value, [index])
-}
 
 /**
  * Measured amounts for one step's detail lines (ADR-0022) — the SAME pure
@@ -373,7 +366,7 @@ let tick: ReturnType<typeof setInterval> | null = null
 function syncTick(): void {
   const live = [...armedByStep.value.values()].some((id) => {
     const t = ui.stepTimers[meta.value?.id ?? -1]?.[id]
-    return t !== undefined && remainingSeconds(t, now.value) > 0 && t.running
+    return isCounting(t, now.value)
   })
   if (live && tick === null) {
     tick = setInterval(() => {
@@ -515,12 +508,11 @@ async function loadDoc() {
   // (ADR-0037). Only the latter was the authored-6 complaint. Re-read per
   // load so a recipe opened after the user changed the default elsewhere
   // starts at the current one.
-  const entry = plan.plan.find((e) => e.variantId === m.id)
   // ONE seeding rule for every recipe, household-authored or not: the
-  // owner's saved default defines the servings (a settings decision, not a
-  // per-recipe one). The fractional-noise problem that scaling creates is
-  // handled where it belongs - the DISPLAY rounding (humanizeScaledQuantity).
-  servings.value = entry?.servings ?? ui.defaultServings
+  // plan entry ?? the owner's saved default (ADR-0037's chain, ONE helper).
+  // The fractional-noise problem that scaling creates is handled where it
+  // belongs - the DISPLAY rounding.
+  servings.value = planServingsFor(m.id)
   try {
     const loaded = await getRecipe(m)
     // Race guard: navigating to another recipe while this fetch is in

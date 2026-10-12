@@ -198,6 +198,35 @@ export interface RestrictedDisplayLine {
  * - skip ingredients cleared per meal (cleared set): an ingredient cleared
  *   by one meal still appears if another planned meal uses it
  */
+/**
+ * The aggregation-row KEY list for one input: the display rows' keyNames
+ * when the restriction seam is active, else each base line's nameKey —
+ * the ONE derivation the consumers share. aggregateGroceries walks these
+ * rows (plus their names/quantities); the sidebar card counts the
+ * SURVIVING rows from this list and the clear-snapshot provider
+ * snapshots it. Exported so the "SAME rows by construction" comments
+ * become structurally true instead of asserted in prose (DRY).
+ */
+export function aggregateRowKeys(input: Pick<AggregateInput, 'doc' | 'displayLines'>): string[] {
+  return input.displayLines
+    ? input.displayLines.map((row) => row.keyName)
+    : input.doc.line_items.map((li) => nameKey(li.ingredient_name))
+}
+
+/**
+ * The checked-map's stored convention, ONE spelling: only TRUE entries
+ * are kept — absent/false means unchecked, so a stale `false` can never
+ * resurrect a done item. The room snapshot, the room's applyRemote and
+ * backup's checked.json writer all used to spell this loop by hand.
+ */
+export function onlyTrueKeys(map: Record<string, boolean>): Record<string, boolean> {
+  const out: Record<string, boolean> = {}
+  for (const [key, value] of Object.entries(map)) {
+    if (value) out[key] = true
+  }
+  return out
+}
+
 export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   const groups = new Map<string, Group>()
 

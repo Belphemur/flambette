@@ -27,16 +27,19 @@ import {
   TIMER_PRESETS_MIN,
   announceCountdown,
   formatCountdown,
+  isCounting,
   remainingSeconds,
   type CookTimer,
 } from '../lib/stepTimer'
-import { getTimerHints, hintForStep, suggestionFromHint, type TimerSuggestion } from '../lib/timerSuggest'
+import { hintForStep, suggestionFromHint, type TimerSuggestion } from '../lib/timerSuggest'
+import { useTimerHints } from '../composables/useTimerHints'
 import {
   ensureTimerAlertPolling,
   unlockTimerAlertAudio,
 } from '../lib/timerAlertHost'
 import type { RecipeDoc } from '../lib/types'
 import { usePlanStore, type CookedEntry, type PlanEntry, type PlanIdentity } from '../stores/plan'
+import { planServingsFor } from '../composables/usePlanServings'
 import { useUiStore } from '../stores/ui'
 
 const plan = usePlanStore()
@@ -91,8 +94,8 @@ const servings = computed(() => {
   const id = meta.value?.id
   if (id === undefined) return 1
   if (frozenServings === null) {
-    const entry = plan.plan.find((e) => e.variantId === id)
-    frozenServings = entry?.servings ?? ui.defaultServings
+    // ADR-0037's chain (plan entry ?? remembered default), ONE helper.
+    frozenServings = planServingsFor(id)
   }
   return frozenServings
 })
@@ -275,7 +278,7 @@ function timerProgress(t: CookTimer): string {
  * matter what the flag claims — its button offers Restart, not Pause.
  */
 function isRunning(t: CookTimer): boolean {
-  return remainingSeconds(t, now.value) > 0 && t.running
+  return isCounting(t, now.value)
 }
 
 /**
@@ -321,20 +324,7 @@ const recipeTotalSuggestion = computed(() => {
  * `hintsLoaded` then stays false and the honest banner is WITHHELD — the
  * card never claims "no cook time mentioned" on a guess (ADR-0081 §4).
  */
-const hints = ref<Awaited<ReturnType<typeof getTimerHints>> | null>(null)
-
-watch(
-  () => meta.value?.id,
-  (id) => {
-    hints.value = null
-    if (id === undefined) return
-    void getTimerHints(id).then((loaded) => {
-      // A stale fetch (the cook navigated to another recipe) never wins.
-      if (meta.value?.id === id) hints.value = loaded
-    })
-  },
-  { immediate: true },
-)
+const { hints } = useTimerHints(() => meta.value?.id)
 
 /**
  * The duration THIS step view's authored text carries, from the artifact

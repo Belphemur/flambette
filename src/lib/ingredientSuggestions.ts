@@ -56,16 +56,13 @@ function loadIndex(): Promise<IndexEntry[]> {
   return indexPromise
 }
 
-function scoreIndexEntry(entry: IndexEntry, key: string): Tier | null {
-  const nk = entry.nameKey
-  if (nk.startsWith(key)) return 0
-  if (new RegExp(`\\b${key}`).test(nk)) return 1
-  if (nk.includes(key)) return 2
-  return null
-}
-
-function scoreCustom(entry: CustomIngredient, key: string): Tier | null {
-  const nk = entry.nameKey
+/**
+ * Rank a nameKey against the query key (DRY): the index rows and the
+ * household's custom rows are the SAME shape for scoring, so one
+ * scorer serves both. Tier 0 = the key starts the nameKey, tier 1 =
+ * a word boundary matches, tier 2 = a substring match.
+ */
+function scoreNameKey(nk: string, key: string): Tier | null {
   if (nk.startsWith(key)) return 0
   if (new RegExp(`\\b${key}`).test(nk)) return 1
   if (nk.includes(key)) return 2
@@ -87,7 +84,7 @@ export async function suggestIngredients(
 
   const scoredIndex: Scored[] = []
   for (const entry of index) {
-    const tier = scoreIndexEntry(entry, key)
+    const tier = scoreNameKey(entry.nameKey, key)
     if (tier !== null) {
       scoredIndex.push({
         suggestion: {
@@ -106,7 +103,7 @@ export async function suggestIngredients(
   const seenKeys = new Set(scoredIndex.map((s) => s.suggestion.nameKey))
   for (const entry of custom) {
     if (seenKeys.has(entry.nameKey)) continue
-    const tier = scoreCustom(entry, key)
+    const tier = scoreNameKey(entry.nameKey, key)
     if (tier !== null) {
       seenKeys.add(entry.nameKey)
       scoredCustom.push({

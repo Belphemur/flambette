@@ -161,6 +161,16 @@ export function remainingSeconds(timer: StepTimer | undefined, now: number = Dat
   return clampSeconds(timer.remaining - (now - timer.startedAt) / 1000)
 }
 
+/**
+ * True when the timer is RUNNING and still has time left. Derived, never
+ * the persisted `running` flag alone (qodo 4128519641): a countdown at
+ * zero is finished no matter what the flag claims. THE one spelling —
+ * CookingView and RecipeDetail used to hand-copy it.
+ */
+export function isCounting(timer: StepTimer | undefined, now: number = Date.now()): boolean {
+  return !!timer && timer.running && remainingSeconds(timer, now) > 0
+}
+
 /** True when a running timer has already hit zero. */
 export function isFinished(timer: StepTimer | undefined, now: number = Date.now()): boolean {
   return !!timer && timer.running && remainingSeconds(timer, now) <= 0

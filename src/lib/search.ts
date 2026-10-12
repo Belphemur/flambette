@@ -374,13 +374,7 @@ async function loadSearchIndex(): Promise<MiniSearch<SearchDoc>> {
     return MiniSearch.loadJSON<SearchDoc>(json, INDEX_OPTIONS)
   } catch {
     const fallback = new MiniSearch<SearchDoc>(INDEX_OPTIONS)
-    fallback.addAll(
-      c.variantMeta.map((meta) => ({
-        id: meta.id,
-        name: meta.name,
-        ingredients: meta.ingredient_names.join(' '),
-      })),
-    )
+    fallback.addAll(c.variantMeta.map((meta) => buildSearchDoc(meta)))
     return fallback
   }
 }

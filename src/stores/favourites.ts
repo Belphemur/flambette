@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { getCatalog } from '../lib/catalog'
-import { clampStamp, normalizeStamp } from '../lib/stamps'
+import { clampStamp, mergeLww, normalizeStamp } from '../lib/stamps'
 
 /**
  * Favourited variant ids, with DELETE MARKERS (ADR-0031).
@@ -47,6 +47,9 @@ export type FavouritesMap = Record<string, FavouriteRecord>
  * state (see src/stores/room.ts).
  */
 export const DEFAULT_STAMP = 0
+
+/** The persist key AND the first-run seed's "was anything persisted?" probe. */
+const FAVOURITES_KEY = 'mealime-planner:v1:favourites'
 
 function materialize(records: FavouritesMap): Set<number> {
   const out = new Set<number>()
@@ -122,13 +125,7 @@ export const useFavouritesStore = defineStore(
     function mergeRemote(incoming: unknown): void {
       const clean = sanitizeFavourites(incoming)
       if (Object.keys(clean).length === 0) return
-      const next = { ...records.value }
-      for (const [key, record] of Object.entries(clean)) {
-        const local = next[key]
-        if (local && record.updatedAt <= local.updatedAt) continue
-        next[key] = record
-      }
-      records.value = next
+      records.value = mergeLww(records.value, clean)
     }
 
     /**
@@ -214,7 +211,7 @@ export const useFavouritesStore = defineStore(
   },
   {
     persist: {
-      key: 'mealime-planner:v1:favourites',
+      key: FAVOURITES_KEY,
       // `records` is the truth, but the ON-DISK format is unchanged by
       // ADR-0031: still a plain array of starred ids (tombstones stay in
       // memory). Hydration therefore rebuilds records at DEFAULT_STAMP.
@@ -227,8 +224,6 @@ export const useFavouritesStore = defineStore(
     },
   },
 )
-
-const FAVOURITES_KEY = 'mealime-planner:v1:favourites'
 
 /**
  * Initialize favourites after the catalog loads: if nothing was persisted

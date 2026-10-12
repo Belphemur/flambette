@@ -27,3 +27,25 @@ export const MAX_FUTURE_SKEW_MS = 60 * 60 * 1000
 export function clampStamp(stamp: number, now: number): number {
   return Math.min(stamp, now + MAX_FUTURE_SKEW_MS)
 }
+
+/**
+ * The per-key last-writer-wins merge BOTH household-preference stores
+ * reconcile room snapshots with (ADR-0031): a record lands only when it is
+ * strictly NEWER than what we hold — an equal timestamp is not a new
+ * opinion, so an echo/replay can never flap. Never a wholesale replace:
+ * two peers editing different keys must not clobber each other. The
+ * sanitize step stays per-store (each store validates its own shape);
+ * this is only the merge loop.
+ */
+export function mergeLww<T extends { updatedAt: number }>(
+  local: Record<string, T>,
+  incoming: Record<string, T>,
+): Record<string, T> {
+  const next = { ...local }
+  for (const [key, record] of Object.entries(incoming)) {
+    const current = next[key]
+    if (current && record.updatedAt <= current.updatedAt) continue
+    next[key] = record
+  }
+  return next
+}

@@ -215,7 +215,7 @@ export async function ensurePair(
   fetchImpl: typeof fetch,
   baseUrl: string,
 ): Promise<void> {
-  const pairKey = a < b ? `${a}-${b}` : `${b}-${a}`
+  const pairKey = restrictionPairKey(a, b)
   if (index.pairs.has(pairKey)) return
   const doc = await fetchLadderJson<{ extras: number[] }>(
     fetchImpl,
@@ -293,6 +293,16 @@ export function isRemovedByRestriction(
   return false
 }
 
+/**
+ * Canonical pair key: the two slugs ascending (a < b by string
+ * comparison) — ONE spelling, shared by ensurePair's fetch path and
+ * pairExtrasSet's lookup (they must agree on the filename the pairs
+ * tree uses).
+ */
+export function restrictionPairKey(a: string, b: string): string {
+  return a < b ? `${a}-${b}` : `${b}-${a}`
+}
+
 // Memoized Set views over the index's removed/pairs arrays. The index object
 // is the memo key's owner: the Maps live alongside the arrays they shadow and
 // rebuild only when the underlying array is (re)loaded (identity change).
@@ -318,9 +328,7 @@ function pairExtrasSet(idA: number, idB: number, index: LadderIndex): Set<number
   const aEntry = index.restrictions.find((r) => r.id === idA)
   const bEntry = index.restrictions.find((r) => r.id === idB)
   if (!aEntry || !bEntry) return undefined
-  const pairKey = aEntry.slug < bEntry.slug
-    ? `${aEntry.slug}-${bEntry.slug}`
-    : `${bEntry.slug}-${aEntry.slug}`
+  const pairKey = restrictionPairKey(aEntry.slug, bEntry.slug)
   const extras = index.pairs.get(pairKey)
   if (!extras) return undefined
   let byKey = pairExtrasMemos.get(index)
@@ -391,21 +399,33 @@ export function swapName(name: string, index: LadderIndex): string {
  * later entry's `from` names are matched against the CURRENT display name,
  * so a composed rework chains the way upstream's own combined profiles do).
  */
+/**
+ * The per-doc events entries the active ids carry for THIS recipe, in id
+ * order — the ONE lookup walk shared by eventsDocView (which applies
+ * them) and eventsDisplayLines (which recovers the swap keys from them).
+ */
+function docEvents(
+  doc: RecipeDoc,
+  index: LadderIndex,
+  activeIds: number[],
+): { id: number; slug: string; ev: RecipeEvents }[] {
+  const entries: { id: number; slug: string; ev: RecipeEvents }[] = []
+  for (const id of [...activeIds].sort((a, b) => a - b)) {
+    const slug = SLUG_BY_ID.get(id)
+    if (!slug) continue
+    const ev = index.events.get(slug)?.[String(doc.recipe_id)]
+    if (ev) entries.push({ id, slug, ev })
+  }
+  return entries
+}
+
 export function eventsDocView(
   doc: RecipeDoc,
   index: LadderIndex | null | undefined,
   activeIds: number[],
 ): RecipeDoc | null {
   if (!index || activeIds.length === 0) return null
-  const entries: { id: number; slug: string; ev: RecipeEvents }[] = []
-  for (const id of [...activeIds].sort((a, b) => a - b)) {
-    const slug = SLUG_BY_ID.get(id)
-    if (!slug) continue
-    const byRecipe = index.events.get(slug)
-    if (!byRecipe) continue
-    const ev = byRecipe[String(doc.recipe_id)]
-    if (ev) entries.push({ id, slug, ev })
-  }
+  const entries = docEvents(doc, index, activeIds)
   if (entries.length === 0) return null
   // Apply the entries in id order; each pass matches `from` against the
   // CURRENT line names so chained reworks compose.
@@ -460,14 +480,11 @@ export function eventsDisplayLines(
   activeIds: number[],
 ): RestrictedDisplayLine[] | null {
   const view = eventsDocView(doc, index, activeIds)
-  if (!view) return null
+  if (!view || !index) return null
   // Recover the base keys: a line whose CURRENT name equals a swap's `to`
   // keys on the swap's `from`; everything else keys on its own name.
   const toByFrom = new Map<string, { from: string; qty?: string }>()
-  for (const id of [...activeIds].sort((a, b) => a - b)) {
-    const slug = SLUG_BY_ID.get(id)
-    const byRecipe = slug ? index?.events.get(slug) : undefined
-    const ev = byRecipe?.[String(doc.recipe_id)]
+  for (const { ev } of docEvents(doc, index, activeIds)) {
     for (const [from, to] of ev?.s ?? []) toByFrom.set(to, { from })
   }
   const rows: RestrictedDisplayLine[] = []
@@ -502,7 +519,11 @@ export function restrictedDocView(
   if (!index) return doc
   if (!index.swaps || index.swaps.length === 0) return doc
   const drops = activeDrops(activeIds, index)
-  if (drops.size === 0 && index.swaps.length === 0) return doc
+  // No "no drops → return doc" here: the swaps guard above already
+  // returned when swaps are absent, so a swaps-only profile falls through
+  // and applies them. (The `drops.size === 0 && swaps.length === 0` early
+  // return that used to sit here could never fire — swaps.length > 0 is
+  // guaranteed by the guard above — and it was deleted, not un-fragmented.)
   const line_items: LineItem[] = []
   for (const li of doc.line_items) {
     const lk = nameKey(li.ingredient_name)
@@ -536,7 +557,8 @@ export function groceryDisplayLines(
   if (!index) return null
   if (!index.swaps || index.swaps.length === 0) return null
   const drops = activeDrops(activeIds, index)
-  if (drops.size === 0 && index.swaps.length === 0) return null
+  // Same dead-early-return deletion as restrictedDocView above: swaps
+  // being loaded (non-empty) is already guaranteed here.
   let changed = false
   const rows: RestrictedDisplayLine[] = []
   for (const li of doc.line_items) {
@@ -567,11 +589,8 @@ export function groceryDisplayLines(
 
 /* ---------- Constants ---------- */
 
-export interface RestrictionEntryFull {
-  id: number
-  slug: string
-  label: string
-}
+/** Same shape as the index.json entry — ONE type. */
+export type RestrictionEntryFull = RestrictionEntry
 
 /**
  * Display order (the Settings selector reads this array in order):
