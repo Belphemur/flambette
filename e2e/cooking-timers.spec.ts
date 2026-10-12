@@ -527,11 +527,13 @@ test('Finish asks before discarding a running timer', async ({ page }) => {
   await expect(cooking).toBeVisible()
   await expect(chips(cooking)).toHaveCount(1)
 
-  // Accepting leaves — the toast is the finish confirmation, not a timer nag.
+  // Accepting leaves — the post-cook prompt (ADR-0083) is the finish
+  // acknowledgment, not a timer nag and not a toast.
   page.once('dialog', (d) => void d.accept())
   await cooking.getByRole('button', { name: /Finish/ }).click()
-  await expect(cooking).not.toBeVisible()
-  await expect(page.getByTestId('toast').getByText('Enjoy!')).toBeVisible()
+  await expect(page.getByTestId('post-cook-prompt')).toBeVisible()
+  await expect(cooking).toBeVisible()
+  await expect(page.getByTestId('toast')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
 
@@ -555,8 +557,9 @@ test('Finish names EVERY timer that is still running', async ({ page }) => {
 
   page.once('dialog', (d) => void d.accept())
   await cooking.getByRole('button', { name: /Finish/ }).click()
-  await expect(cooking).not.toBeVisible()
-  await expect(page.getByTestId('toast').getByText('Enjoy!')).toBeVisible()
+  await expect(page.getByTestId('post-cook-prompt')).toBeVisible()
+  await expect(cooking).toBeVisible()
+  await expect(page.getByTestId('toast')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
 
@@ -578,10 +581,11 @@ test('an expired timer does not block Finish and offers Restart (qodo 4128519641
   await expect(countdown(cooking)).toHaveAttribute('aria-label', /^Start .* timer, /)
   expect(await secondsAt(cooking)).toBe(0)
 
-  // Finish needs NO confirmation for an expired timer.
+  // Finish needs NO confirmation for an expired timer: the post-cook
+  // prompt raises directly (ADR-0083) — the acknowledgment, no toast.
   await cooking.getByRole('button', { name: /Finish/ }).click()
-  await expect(cooking).not.toBeVisible()
-  await expect(page.getByTestId('toast').getByText('Enjoy!')).toBeVisible()
+  await expect(page.getByTestId('post-cook-prompt')).toBeVisible()
+  await expect(page.getByTestId('toast')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
 
