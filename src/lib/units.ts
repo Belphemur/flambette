@@ -571,7 +571,6 @@ export function localizeQuantity(
  * `localizeQuantity`, named for its call site so a reader knows the
  * canonical key basis is deliberately NOT what this touches.
  */
-export const localizeLine = localizeQuantity
 
 /**
  * Localize scaled instruction steps for display. ONE helper, called by

@@ -11,9 +11,9 @@
  * The ladder: `loadIndex`, `ensureSwaps`, `ensureRemoved(slug)`, `ensurePair(a, b)` —
  * each cached, retryable, injectable fetch (the tests inject fakes).
  * `isRemovedByRestriction` consults the loaded union (from removed/*) + pair extras
- * (from pairs/*); `swapName` consults swaps only when loaded (pre-load behaviour:
- * identity — no restriction is "active-looking" until its data arrives; the existing
- * aria/loading semantics are kept).
+ * (from pairs/*); the swaps dictionary is consulted only when loaded (pre-load
+ * behaviour: identity — no restriction is "active-looking" until its data
+ * arrives).
  *
  * Pure lib: no Vue, no Pinia, no fetch at module scope. The async pieces
  * (loadIndex, ensureSwaps, ensureRemoved, ensurePair) take the fetch + base URL
@@ -362,28 +362,6 @@ export function activeDrops(activeIds: number[], index: LadderIndex): Set<string
     for (const drop of byId) out.add(nameKey(drop.from))
   }
   return out
-}
-
-/**
- * Is this nameKey in the drops set (union across all loaded drops)?
- * Drops are ingredients that DISAPPEAR in kept recipes under a restriction
- * with NO swap counterpart. Used for display-only hiding.
- */
-export function isDropName(name: string, drops: Set<string>): boolean {
-  return drops.has(nameKey(name))
-}
-
-/**
- * Apply the swap to a display name when a swap matches this nameKey.
- * Returns the substitute name when a swap applies, otherwise the original
- * name unchanged. swapName consults swaps.json ONLY when it has loaded
- * (pre-load behaviour: identity — no restriction is "active-looking" until
- * its data arrives; the existing aria/loading semantics are kept).
- */
-export function swapName(name: string, index: LadderIndex): string {
-  if (!index.swaps) return name
-  const swap = index.swaps.find((s) => s.from === name || s.from === nameKey(name))
-  return swap ? swap.to : name
 }
 
 /**

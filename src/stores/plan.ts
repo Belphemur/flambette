@@ -45,7 +45,6 @@ export interface PlanIdentity {
 
 /** cookedHistory keeps at most this many entries, newest first. */
 const COOKED_HISTORY_CAP = 200
-const COOKED_RECENT_MS = 30 * 24 * 60 * 60 * 1000
 
 /**
  * Stable identity key for a cook event: the per-device id when the row
@@ -295,12 +294,6 @@ export const usePlanStore = defineStore(
       return true
     }
 
-    /** True when the meal was cooked in the last 30 days. */
-    function isCookedRecently(variantId: number): boolean {
-      const cutoff = Date.now() - COOKED_RECENT_MS
-      return cookedHistory.value.some((e) => e.variantId === variantId && e.cookedAt >= cutoff)
-    }
-
     /** Replace the cooked history wholesale (backup import). */
     function replaceCookedHistory(rows: CookedEntry[]): void {
       cookedHistory.value = rows
@@ -451,7 +444,6 @@ export const usePlanStore = defineStore(
       markCooked,
       unmarkCooked,
       undoMarkCooked,
-      isCookedRecently,
       replacePlan,
       cookedHistory,
       clearedIngredients,

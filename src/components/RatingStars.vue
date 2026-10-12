@@ -155,7 +155,10 @@ const previewLabel = computed(() =>
   class="ml-0.5 text-[11px] text-text-muted"
   data-test="rating-catalog-hint"
   >
-  {{ Math.round(catalogRating * 5 * 10) / 10 }}★
+  {{ Math.round(catalogRating * 5 * 10) / 10 }}
+  <!-- ADR-0029: no glyph characters — the hint's star is the bundled
+  lucide glyph, matching RecipeCard's rating disc. -->
+  <Star :size="10" class="inline align-baseline" aria-hidden="true" />
   </span>
   </div>
 </template>

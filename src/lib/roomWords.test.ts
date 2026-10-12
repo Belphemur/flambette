@@ -11,7 +11,6 @@ import {
   generateDisplayName,
   generateRoomCode,
   isRoomCode,
-  isWordRoomCode,
   normalizeRoomCode,
   titleCaseName,
   wordListProblem,
@@ -104,8 +103,10 @@ describe('isRoomCode', () => {
   })
 
   test('the two regexes do not overlap', () => {
-    expect(isWordRoomCode('amber-falcon-lantern')).toBe(true)
-    expect(isWordRoomCode('ZZ9ZZZ')).toBe(false)
+    // isWordRoomCode was deleted dead code — WORD_ROOM_CODE_RE is the
+    // spelling every caller uses directly.
+    expect(WORD_ROOM_CODE_RE.test('amber-falcon-lantern')).toBe(true)
+    expect(WORD_ROOM_CODE_RE.test('ZZ9ZZZ')).toBe(false)
     expect(LEGACY_ROOM_CODE_RE.test('ZZ9ZZZ')).toBe(true)
   })
 })

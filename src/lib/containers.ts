@@ -88,6 +88,11 @@ function pluralizeNoun(singular: string): string {
   return `${singular}s`
 }
 
+/** True when a summed container amount is a whole number of containers. */
+export function isWholeContainer(amount: number): boolean {
+  return Math.abs(amount - Math.round(amount)) < 1e-9
+}
+
 /**
  * Render a container count. Integers print as integers (`1 (142 g) pkg`,
  * `2 (142 g) pkgs`); a summed remainder keeps its fraction
@@ -98,7 +103,7 @@ export function formatContainerQuantity(amount: number, container: string, annot
   const lastSeen = tokens.pop() ?? 'pkg'
   const adjectives = tokens.join(' ')
   const canonical = CANONICAL_NOUN.get(unitKey(lastSeen)) ?? unitKey(lastSeen)
-  const noun = Math.abs(amount - Math.round(amount)) < 1e-9
+  const noun = isWholeContainer(amount)
     ? (Math.round(amount) === 1 ? canonical : pluralizeNoun(canonical))
     : pluralizeNoun(canonical)
   const head = formatFraction(amount)
@@ -121,7 +126,3 @@ export function containerContribution(count: number, factor: number): number {
   return Math.max(1, Math.ceil(count * factor - 1e-9))
 }
 
-/** True when a summed container amount is a whole number of containers. */
-export function isWholeContainer(amount: number): boolean {
-  return Math.abs(amount - Math.round(amount)) < 1e-9
-}

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { classifyDiets, dietVerdictFor, matchesDiet, matchesAllDiets, resetDietVerdictCache } from './dietFilter'
+import { classifyDiets, dietVerdictFor, matchesAllDiets, resetDietVerdictCache } from './dietFilter'
 
 const chicken = ['chicken breast', 'olive oil', 'salt']
 const porkRecipe = ['pork shoulder', 'white sugar', 'bBQ sauce']
@@ -11,6 +11,12 @@ const creamyPasta = ['pasta', 'milk', 'butter', 'parmesan']
 const eggDish = ['eggs', 'spinach', 'feta cheese']
 const plantMilkBake = ['oat milk', 'cocoa powder', 'banana']
 const mysteryStock = ['vegetable stock', 'carrot', 'celery']
+// matchesDiet was deleted dead code (live paths use verdicts +
+// matchesAllDiets); the keyword-table contract pins the SAME semantics
+// through classifyDiets — one pass, satisfy = no forbidden group.
+const matchesDiet = (names: readonly string[], diet: keyof ReturnType<typeof classifyDiets>): boolean =>
+  classifyDiets(names)[diet]
+
 
 describe('diet rules (ADR-0018)', () => {
   test('no-pork is a strict pork-only rule', () => {

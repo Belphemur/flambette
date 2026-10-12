@@ -98,9 +98,6 @@ export const useFavouritesStore = defineStore(
      * by construction, which is what the room's `snapshot()` relies on.
      */
     const ids = computed(() => materialize(records.value))
-    /** True once the store has been seeded/initialized from the catalog. */
-    const seeded = ref(false)
-
     function isFavourite(variantId: number): boolean {
       return ids.value.has(variantId)
     }
@@ -202,7 +199,6 @@ export const useFavouritesStore = defineStore(
       records,
       replaceAll,
       seedFrom,
-      seeded,
       isFavourite,
       toggleFavourite,
       mergeRemote,
@@ -235,6 +231,5 @@ export function initFavourites(): Promise<void> {
     if (localStorage.getItem(FAVOURITES_KEY) === null) {
       store.seedFrom(catalog.favouriteIds)
     }
-    store.seeded = true
   })
 }

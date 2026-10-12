@@ -359,7 +359,3 @@ export function formatNutritionValue(value: number, unit: NutritionUnit): string
   return String(Math.round(value))
 }
 
-/** `label` + value + unit, the three columns every facts row renders. */
-export function formatNutritionRow(row: NutritionRow): { value: string; unit: string } {
-  return { value: formatNutritionValue(row.value, row.unit), unit: row.unit }
-}

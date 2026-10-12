@@ -304,14 +304,12 @@ function browseRecipes() {
                   <span
                     class="flex size-5 items-center justify-center rounded-full border-2 border-surface text-[10px] font-bold text-text-muted"
                     aria-label="Alex"
-                    title="Alex"
-                    >A</span
+>A</span
                   >
                   <span
                     class="flex size-5 items-center justify-center rounded-full border-2 border-surface text-[10px] font-bold text-brand-text"
                     aria-label="Sam"
-                    title="Sam"
-                    >S</span
+>S</span
                   >
                 </div>
               </div>

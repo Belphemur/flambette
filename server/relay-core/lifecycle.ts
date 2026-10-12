@@ -236,8 +236,6 @@ export interface RegistryOptions {
 
 export interface RoomRegistry {
   readonly code: string
-  /** The row, or null. */
-  snapshot: () => RoomRecord | null
   /** The canonical rev this code has reached (0 when unknown or stale). */
   floor: () => number
   /** Decide, and persist, what an upgrade should be answered with. */
@@ -246,8 +244,6 @@ export interface RoomRegistry {
   keepalive: () => { kind: 'ok' } | { kind: 'refuse'; error: RelayErrorCode }
   /** Commit a snapshot and refresh the clocks. */
   push: (rev: unknown, state: unknown, from: string) => PushVerdict
-  /** Restart both clocks without changing state. */
-  touch: () => void
   /**
    * Mint the next peer serial for this room and persist it. Needed by
    * adapters that derive a peer's identity from it (the Durable Object
@@ -273,7 +269,7 @@ export interface RoomRegistry {
 }
 
 /** Guard shared by `push` in both relays: membership + shape, one error. */
-export function isCommitShape(rev: unknown, state: unknown): boolean {
+function isCommitShape(rev: unknown, state: unknown): boolean {
   return typeof rev === 'number' && Number.isFinite(rev) && typeof state === 'object' && state !== null
 }
 
@@ -536,12 +532,10 @@ export function createRoomRegistry({
 
   return {
     code,
-    snapshot: () => store.read(),
     floor: floorRev,
     admit,
     keepalive,
     push,
-    touch: () => void touchIfLive(),
     nextSerial,
     leave,
     tick,
