@@ -109,10 +109,15 @@ writes a **tombstone**, the same pattern favourites already use
   ties, mirroring "a stale push cannot resurrect" (ADR-0031). The sender
   keeps publishing its tombstones on every snapshot until peers have
   adopted, so a peer that joins late still loses the cleared record.
-- Tombstones PERSIST inside the ratings slice (`ratings.json` gains a
-  `tombstones` key; `sanitizeRatings` accepts and clamps it; the backup
-  validator round-trips it). They are pruned never — they are tiny, and
-  pruning requires knowing every peer has adopted, which is unknowable.
+- Tombstones PERSIST as a dedicated `rating_tombstones.json` backup slice
+  (map variantId → stamp) joined to STORE_SLICES in the SAME change
+  (ADR-0013 standing rule; assertRegistryCoverage fails loudly). The
+  `ratings.json` rows array keeps its shape — an older backup simply lacks
+  the new file, so no importer migration is needed; the store's persist
+  `pick` gains the tombstone ref alongside `map`. Stamps are clamped
+  through the shared `stamps.ts` helpers like every timestamp. Tombstones
+  are pruned never — they are tiny, and pruning requires knowing every
+  peer has adopted, which is unknowable.
 - Clear is immediate with a plain "Rating cleared" feedback toast — no
   confirm step: clearing is fully reversible by re-rating with one tap,
   so this is not a destructive action under the border-danger + confirm
