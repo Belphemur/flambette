@@ -362,6 +362,53 @@ test('detail: Clear removes the rating with a plain toast, and it stays cleared 
   await expectZeroMealimeRequests(page)
 })
 
+test('detail: the catalog fallback fill reads as background until rated (ADR-0082 addendum)', async ({
+  page,
+}) => {
+  await openFirstRecipeDetail(page)
+  const dialog = page.getByRole('dialog')
+  const card = dialog.getByTestId('recipe-detail-rating')
+  const stars = dialog.getByTestId('rating-stars')
+  const fills = stars.getByTestId('rating-fill')
+
+  // The catalog mean is present (the hint prints it), so the fill the
+  // stars show IS the fallback — and it dims while the household has
+  // no opinion: background, not a rating.
+  await expect(card.getByTestId('rating-catalog-hint')).toBeVisible()
+  await expect(fills).toHaveCount(5)
+  for (const f of await fills.all()) await expect(f).toHaveClass(/opacity-45/)
+
+  // A committed household rating renders FULL strength (and the catalog
+  // hint retires with it).
+  await dialog.getByRole('button', { name: 'Rate 4 of 5 stars' }).click()
+  await expect(stars).toHaveAttribute('data-rating', '4')
+  for (const f of await fills.all()) await expect(f).not.toHaveClass(/opacity-45/)
+  await expect(card.getByTestId('rating-catalog-hint')).toBeHidden()
+  await expectZeroMealimeRequests(page)
+})
+
+test('detail: the no-score corner invites the first rating (ADR-0082 addendum)', async ({ page }) => {
+  // Variant 32736 ("Crumbled Orange-Ginger Tofu Rice Bowl") ships
+  // rating 0 / rating_count 0 — one of the 11 no-score variants.
+  await page.goto('/recipe/32736')
+  const dialog = page.getByRole('dialog')
+  const card = dialog.getByTestId('recipe-detail-rating')
+  await expect(card).toBeVisible({ timeout: 15_000 })
+
+  // The invitation replaces the generic tap hint in THIS corner only.
+  await expect(card.getByTestId('rating-first-rate')).toHaveText(
+    'Be the first to rate this recipe',
+  )
+  await expect(card.getByText('Tap a star — halves supported')).toHaveCount(0)
+  // No fabricated prior: no number is printed and no catalog hint shows.
+  await expect(card.getByText('/ 5.0')).toHaveCount(0)
+  await expect(card.getByTestId('rating-catalog-hint')).toHaveCount(0)
+  // The stars stay tappable at full ADR-0082 size.
+  await dialog.getByRole('button', { name: 'Rate 4 of 5 stars' }).click()
+  await expect(dialog.getByTestId('rating-stars')).toHaveAttribute('data-rating', '4')
+  await expectZeroMealimeRequests(page)
+})
+
 test('room: a rating CLEAR propagates as a tombstone and is not resurrected (ADR-0082)', async ({
   browser,
 }) => {

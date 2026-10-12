@@ -157,12 +157,15 @@ const previewLabel = computed(() =>
   aria-hidden="true"
   />
   <!-- The filled portion is a clipped overlay, so a half star reads
-  as a half star without shipping half-star glyphs. -->
+  as a half star without shipping half-star glyphs. The overlay is the
+  ADR-0082 addendum's dimming surface: opacity-45 while the displayed
+  value is the catalog fallback and nothing is previewed. -->
   <span
   class="pointer-events-none absolute inset-0 overflow-hidden text-warning"
   :class="fillDimmed ? 'opacity-45' : ''"
   :style="{ width: `${fillPercent(slot.n)}%` }"
   aria-hidden="true"
+  data-test="rating-fill"
   >
   <Star :size="resolvedSize" :fill="'currentColor'" class="absolute inset-0" />
   </span>
