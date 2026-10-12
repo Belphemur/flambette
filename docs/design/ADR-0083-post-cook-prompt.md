@@ -1,6 +1,6 @@
 # ADR-0083: The post-cook prompt — rate and favourite when the meal is done
 
-Status: accepted (2026-10-12)
+Status: accepted (2026-10-12) — implemented in PR #84
 
 ## Context
 
