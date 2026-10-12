@@ -5,8 +5,8 @@ import { catalog } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
 import { MAX_MEALS, MIN_MEALS, type PackProposal } from '../lib/packPlanner'
 import { runAutoPlanProposals } from '../composables/useAutoPlan'
-import { OFFERED_MEAL_TYPES } from '../lib/mealTypeFilter'
-import { mealRole, proteinRole } from '../lib/palette'
+import { mealTypeDropdownRows } from '../lib/mealTypeFilter'
+import { proteinRole } from '../lib/palette'
 import { usePlanStore } from '../stores/plan'
 import { useFavouritesStore } from '../stores/favourites'
 import { useUiStore, type AutoPlanRuleset } from '../stores/ui'
@@ -354,13 +354,8 @@ function confirmAutoPlan() {
  */
 const mealOptions: FilterDropdownOption[] = [
   { value: 'any', label: 'Any' },
-  ...OFFERED_MEAL_TYPES.map((option) => ({
-    value: option.ruleset,
-    label: option.label,
-    ariaLabel: `${option.label}, ${option.count} recipes`,
-    count: option.count,
-    iconRole: mealRole(option.ruleset),
-  })),
+  // The ONE rows builder (mealTypeFilter); this surface values by ruleset.
+  ...mealTypeDropdownRows((o) => o.ruleset),
 ]
 
 const mealSelectedIndex = computed(() => {

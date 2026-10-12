@@ -70,5 +70,7 @@ export function useShareRoomLink() {
     return { label: 'Share link', run: () => void shareRoomLink(code) }
   }
 
-  return { shareRoomLink, shareAction, shareableCode }
+  // Exposed for surfaces that mirror the copy state in their OWN control
+  // (the Plan tab's share sheet flips its button label to 'Copied').
+  return { shareRoomLink, shareAction, shareableCode, copied }
 }

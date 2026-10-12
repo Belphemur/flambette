@@ -6,6 +6,7 @@ import { catalog } from '../lib/catalog'
 import {
   filterHistoryEvents,
   formatAbsolute,
+  formatDay,
   formatRelative,
   groupHistoryByPlan,
   summarizeHistory,
@@ -83,13 +84,6 @@ function openRecipe(id: number) {
  *  category data, the same registry the cards and the detail sheet use. */
 function roleFor(row: Row) {
   return ingredientRole(catalog.value?.dataById.get(row.variantId)?.category_name)
-}
-
-/** Date-only voice for the group rule ("Feb 18, 2025"): the render's mono
- *  date chip. `formatAbsolute` carries the time too, which the group rule
- *  does not want; the per-card tooltip keeps the full stamp. */
-function formatDay(ts: number): string {
-  return new Date(ts).toLocaleDateString(undefined, { dateStyle: 'medium' })
 }
 
 /* ---------- Client-side name filter (ADR-0077) ----------

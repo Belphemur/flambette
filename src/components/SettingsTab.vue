@@ -46,6 +46,7 @@ import { UNIT_SYSTEMS, UNIT_SYSTEM_LABEL, type UnitSystem } from '../lib/units'
 import { RESTRICTIONS } from '../lib/restrictions'
 import { useRestrictions } from '../composables/useRestrictions'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
+import { confirmToast } from '../composables/useConfirm'
 import { getCatalog } from '../lib/catalog'
 import { USER_RECIPE_ID_BASE } from '../lib/userRecipes'
 import {
@@ -403,12 +404,9 @@ function confirmLeaveHousehold() {
   const question = target
     ? `Leave room ${target}? This device will not rejoin on future launches.`
     : 'Leave the household room? This device will not rejoin on future launches.'
-  ui.showToast(question, {
-    duration: 10_000,
-    actions: [
-      { label: 'Leave', run: () => leaveHouseholdCode(target) },
-      { label: 'Cancel', run: () => ui.dismissToast() },
-    ],
+  confirmToast(question, {
+    confirmLabel: 'Leave',
+    onConfirm: () => leaveHouseholdCode(target),
   })
 }
 
