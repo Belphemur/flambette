@@ -134,32 +134,75 @@ export function formatFraction(amount: number): string {
 
 /* ---------- ADR-0057: the upstream profile scaling model ---------- */
 
-/** International avoirdupois ounce, grams (mirrors units.ts). */
-const OZ_GRAMS = 28.3495
-/** US fluid ounce, millilitres (mirrors units.ts). */
-const FL_OZ_ML = 29.5735
+/**
+ * International avoirdupois ounce, grams. ONE home: this module is the
+ * dependency-free leaf of the unit stack, so units.ts re-exports it under
+ * its public name (GRAMS_PER_OUNCE) instead of hand-mirroring the value
+ * here.
+ */
+export const OZ_GRAMS = 28.3495
+/** US fluid ounce, millilitres (units.ts re-exports as MILLILITRES_PER_FLUID_OUNCE). */
+export const FL_OZ_ML = 29.5735
 /** The cup the upstream profiles quantize volumes to: the US cup proper
  * (236.5882 ml), NOT the 240 ml legal cup — 354 ml is 3 ml off 1 ½ cups
  * and must stay on the fl-oz grid, while 1420 ml sits exactly on 6 cups. */
 const CUP_ML = 236.5882
 
-function isMultiple(v: number, step: number): boolean {
+export function isMultiple(v: number, step: number): boolean {
   const q = v / step
   return Math.abs(q - Math.round(q)) < 1e-6
 }
 
-/** Quantize to a fraction grid: `qzTo(0.984, 0.25)` → `1`. */
-function qzTo(v: number, step: number): number {
+/** Quantize to a fraction grid: `qzTo(0.984, 0.25)` → `1`. Exported as
+ * the ONE spelling — units.ts's copy was byte-identical. */
+export function qzTo(v: number, step: number): number {
   return Math.round(v / step) * step
 }
 
-/** Same naive singularization containers.ts/grocery.ts use. */
-function collapseUnitKey(unit: string): string {
+/**
+ * Collapse unit spellings that denote the same measure so "2 cloves" and
+ * "1 clove" merge: lowercase + naive singularization (strip trailing
+ * 'es'/'s'). "cups"→"cup", "bunches"→"bunch", "pkgs"→"pkg"; short units
+ * ("g", "ml") and already-singular forms are untouched. THE one spelling
+ * of this rule — grocery.ts's `unitKey` and containers.ts's `collapseUnit`
+ * were byte-identical copies.
+ */
+export function unitKey(unit: string): string {
   const u = unit.trim().toLowerCase()
   if (u.length > 3 && u.endsWith('es')) return u.slice(0, -2)
   if (u.length > 2 && u.endsWith('s')) return u.slice(0, -1)
   return u
 }
+
+/**
+ * Purchasable container nouns (singular, canonical spelling) — ONE table
+ * for BOTH the ADR-0017 grocery rule (containers.ts) and the ADR-0057
+ * per-recipe display grammar below. Deliberately excludes count/measure
+ * nouns that are NOT containers: cloves, slices, pieces, cups, stalks,
+ * sprigs, leaves. Lives in quantity.ts so containers.ts can import it
+ * without a cycle (quantity.ts imports nothing).
+ */
+export const CONTAINER_NOUNS: readonly string[] = [
+  'pkg',
+  'package',
+  'bunch',
+  'head',
+  'can',
+  'block',
+  'bag',
+  'jar',
+  'log',
+  'loaf',
+  'bottle',
+  'box',
+  'tin',
+  'carton',
+  'ear',
+  'stick',
+  'crown',
+  'heart',
+  'cap',
+]
 
 /**
  * Scale an authored metric amount the way the upstream profiles do
@@ -180,7 +223,7 @@ function collapseUnitKey(unit: string): string {
  *   result renders as cups or swaps to ml).
  */
 export function scaleMetricAmount(amount: number, factor: number, unit: string): number {
-  const key = collapseUnitKey(unit)
+  const key = unitKey(unit)
   const p = amount * factor
   switch (key) {
     case 'g': {
@@ -279,7 +322,7 @@ function tspGrammar(p: number): number {
 const SPOON_FIRST_TOKENS: ReadonlySet<string> = new Set(['tsp', 'teaspoon', 'tbsp', 'tablespoon'])
 
 export function quantizeSpoons(amount: number, unit: string): number {
-  const first = collapseUnitKey(unit.trim().toLowerCase().split(/\s+/)[0] ?? '')
+  const first = unitKey(unit.trim().toLowerCase().split(/\s+/)[0] ?? '')
   if (!SPOON_FIRST_TOKENS.has(first)) return amount
   return tspGrammar(Math.round(amount * 8) / 8)
 }
@@ -314,7 +357,7 @@ function scaleMl(v: number, f: number): number {
  * for values that are neither integer nor on a fraction grid.
  */
 export function formatMetricAmount(value: number, unit: string): string {
-  const key = collapseUnitKey(unit)
+  const key = unitKey(unit)
   if (key === 'g' || key === 'ml') {
     if (Math.abs(value - Math.round(value)) < 1e-6) return String(Math.round(value))
     if (Math.abs(value * 2 - Math.round(value * 2)) < 1e-6) return formatFraction(value)
@@ -365,27 +408,7 @@ function scaleCupQuantity(amount: number, factor: number, unit: string): string 
  * `1 ½ pkgs ×⅔ → 1 pkg`. Same noun family as ADR-0017's grocery rule,
  * but this is the per-recipe DISPLAY path — no ceil here.
  */
-const CONTAINER_COUNT_NOUNS: ReadonlySet<string> = new Set([
-  'pkg',
-  'package',
-  'bunch',
-  'head',
-  'can',
-  'block',
-  'bag',
-  'jar',
-  'log',
-  'loaf',
-  'bottle',
-  'box',
-  'tin',
-  'carton',
-  'ear',
-  'stick',
-  'crown',
-  'heart',
-  'cap',
-])
+const CONTAINER_COUNT_NOUNS: ReadonlySet<string> = new Set(CONTAINER_NOUNS)
 
 /** `2 cloves` ×⅔ renders `1 clove` — the profiles singularize at 1. */
 const SINGULAR_EXCEPTIONS: ReadonlyMap<string, string> = new Map([
@@ -421,8 +444,8 @@ export function scaleQuantity(raw: string, factor: number): string {
   const parsed = parseQuantity(raw)
   if (!parsed || factor === 1) return raw
   const unit = parsed.unit
-  const nounKey = collapseUnitKey(unit.split(/\s+/).pop() ?? '')
-  if (collapseUnitKey(unit) === 'cup' || nounKey === 'cup') {
+  const nounKey = unitKey(unit.split(/\s+/).pop() ?? '')
+  if (unitKey(unit) === 'cup' || nounKey === 'cup') {
     return scaleCupQuantity(parsed.amount, factor, unit)
   }
   if (CONTAINER_COUNT_NOUNS.has(nounKey)) {

@@ -154,6 +154,32 @@ export function scaleQuantity(
   return round3(Math.min(scaled, cap))
 }
 
+/**
+ * ONE seasoning-aware scale (ADR-0055's shared vocabulary), extracted
+ * from its four byte-identical copies (the grocery sum's three branches
+ * + the measured-amount chip): a seasoning keeps `scaleQuantity`'s
+ * sub-linear rule rendered through the shared spoon vocabulary,
+ * everything else scales through `scaleMetricAmount`'s quantized
+ * grammar. `factor` is the servings multiplier exactly as each caller
+ * holds it — the branch does not re-derive it (target = base · factor is
+ * computed identically to every caller), so the grocery sum, the chip
+ * and this helper can never disagree on a value.
+ *
+ * The key-vs-display distinctions (which NAME classifies the line) stay
+ * at the call sites: they pass the ingredient whose verdict applies.
+ */
+export function scaleSeasoningAware(
+  amount: number,
+  base: number,
+  factor: number,
+  unit: string,
+  ingredient: string,
+): number {
+  return isSeasoning(ingredient)
+    ? quantizeSpoons(scaleQuantity(amount, base, base * factor, true, ingredient), unit)
+    : scaleMetricAmount(amount, factor, unit)
+}
+
 /* ---------- Instruction-step scaling ---------- */
 
 /**
@@ -179,6 +205,10 @@ function scaleStepLine(line: string, base: number, target: number, factor: numbe
   const unitToken = parsed.unit.split(/\s+/)[0] ?? ''
   const amount = isSeasoning(line)
     ? quantizeSpoons(scaleQuantity(parsed.amount, base, target, true, line), parsed.unit)
+    // The non-seasoning branch dispatches on the LEADING unit token
+    // (scaleMetricAmount matches EXACT unit keys; the full line rest
+    // would fall through to the count branch), so this site keeps its
+    // own call instead of the shared helper.
     : scaleMetricAmount(parsed.amount, factor, unitToken)
   // The seasoning result joins the SAME spoon vocabulary: upstream never
   // authors a decimal spoon, so `2.523 tsp` reads `2 ½ tsp` — the ⅛-grid

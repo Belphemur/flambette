@@ -18,8 +18,8 @@
 
 import { containerContribution, formatContainerQuantity, parseContainerQuantity } from './containers'
 import { nameKey } from './grocery'
-import { formatMetricAmount, parseQuantity, quantizeSpoons, scaleMetricAmount } from './quantity'
-import { isSeasoning, scaleQuantity } from './recipe'
+import { formatMetricAmount, parseQuantity } from './quantity'
+import { scaleSeasoningAware } from './recipe'
 import { localizeQuantity, type UnitSystem } from './units'
 import type { LineItem, RecipeDoc } from './types'
 
@@ -117,19 +117,10 @@ export function measuredQuantity(item: LineItem, factor: number, base: number): 
   const parsed = parseQuantity(item.quantity)
   if (!parsed) return null
   if (factor === 1) return item.quantity.trim()
-  // ADR-0057: the SAME vocabulary as the grocery sum and the detail sheet —
-  // seasonings keep `recipe.scaleQuantity`'s sub-linear rule, everything
-  // else scales through `scaleMetricAmount`'s quantized grammar. One model,
-  // so the chip can never disagree with either surface.
-  const scaled = isSeasoning(item.ingredient_name)
-    ? // ADR-0055: the sub-linear intermediate joins the same spoon
-      // vocabulary as everywhere else — upstream never authors a decimal
-      // spoon (`2.523 tsp` reads `2 ½ tsp`).
-      quantizeSpoons(
-        scaleQuantity(parsed.amount, base, base * factor, true, item.ingredient_name),
-        parsed.unit,
-      )
-    : scaleMetricAmount(parsed.amount, factor, parsed.unit)
+  // ADR-0055/0057: ONE seasoning-aware scale (recipe.ts's
+  // scaleSeasoningAware) — the SAME vocabulary as the grocery sum and the
+  // detail sheet, so the chip can never disagree with either surface.
+  const scaled = scaleSeasoningAware(parsed.amount, base, factor, parsed.unit, item.ingredient_name)
   // ADR-0057: unit-aware rendering — integer ml/g, fraction glyphs.
   const rendered = formatMetricAmount(scaled, parsed.unit)
   return parsed.unit ? `${rendered} ${parsed.unit}` : rendered

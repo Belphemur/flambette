@@ -13,7 +13,7 @@
  * `grocery.ts` is the only caller.
  */
 
-import { formatFraction, parseQuantity } from './quantity'
+import { CONTAINER_NOUNS, formatFraction, parseQuantity, unitKey } from './quantity'
 
 /** Size adjectives seen in front of a container noun in the catalog. */
 const CONTAINER_ADJECTIVES: ReadonlySet<string> = new Set([
@@ -27,46 +27,16 @@ const CONTAINER_ADJECTIVES: ReadonlySet<string> = new Set([
 ])
 
 /**
- * Purchasable container nouns (singular, canonical spelling). Deliberately
- * excludes count/measure nouns that are NOT containers: cloves, slices,
- * pieces, cups, stalks, sprigs, leaves.
+ * The noun table itself lives in quantity.ts (ONE table for both the
+ * ADR-0017 grocery rule and quantity.ts's ADR-0057 display grammar).
  */
-const CONTAINER_NOUNS: readonly string[] = [
-  'pkg',
-  'package',
-  'bunch',
-  'head',
-  'can',
-  'block',
-  'bag',
-  'jar',
-  'log',
-  'loaf',
-  'bottle',
-  'box',
-  'tin',
-  'carton',
-  'ear',
-  'stick',
-  'crown',
-  'heart',
-  'cap',
-]
 
 const CONTAINER_NOUN_KEYS: ReadonlySet<string> = new Set(CONTAINER_NOUNS)
 
 /** Canonical singular spelling per unitKey (e.g. `pkgs` → `pkg`). */
 const CANONICAL_NOUN: ReadonlyMap<string, string> = new Map(
-  CONTAINER_NOUNS.map((n) => [collapseUnit(n), n]),
+  CONTAINER_NOUNS.map((n) => [unitKey(n), n]),
 )
-
-/** Same naive singularization grocery.ts uses for unit merging. */
-function collapseUnit(unit: string): string {
-  const u = unit.trim().toLowerCase()
-  if (u.length > 3 && u.endsWith('es')) return u.slice(0, -2)
-  if (u.length > 2 && u.endsWith('s')) return u.slice(0, -1)
-  return u
-}
 
 export interface ContainerQuantity {
   /** Container count, fractional when the recipe says so (`½ (142 g) pkg` → 0.5). */
@@ -102,7 +72,7 @@ export function parseContainerQuantity(raw: string): ContainerQuantity | null {
   const tokens = rest.split(/\s+/).filter(Boolean)
   const noun = tokens[tokens.length - 1]
   const adjectives = tokens.slice(0, -1)
-  if (!CONTAINER_NOUN_KEYS.has(collapseUnit(noun))) return null
+  if (!CONTAINER_NOUN_KEYS.has(unitKey(noun))) return null
   if (adjectives.some((a) => !CONTAINER_ADJECTIVES.has(a.toLowerCase()))) return null
 
   return { count: parsed.amount, container: tokens.join(' '), annotation, raw: raw.trim() }
@@ -110,7 +80,7 @@ export function parseContainerQuantity(raw: string): ContainerQuantity | null {
 
 /** Merge key: two lines merge only when container AND annotation match. */
 export function containerKey(container: string, annotation: string): string {
-  return `${collapseUnit(container)}|${annotation}`
+  return `${unitKey(container)}|${annotation}`
 }
 
 function pluralizeNoun(singular: string): string {
@@ -127,7 +97,7 @@ export function formatContainerQuantity(amount: number, container: string, annot
   const tokens = container.split(/\s+/).filter(Boolean)
   const lastSeen = tokens.pop() ?? 'pkg'
   const adjectives = tokens.join(' ')
-  const canonical = CANONICAL_NOUN.get(collapseUnit(lastSeen)) ?? collapseUnit(lastSeen)
+  const canonical = CANONICAL_NOUN.get(unitKey(lastSeen)) ?? unitKey(lastSeen)
   const noun = Math.abs(amount - Math.round(amount)) < 1e-9
     ? (Math.round(amount) === 1 ? canonical : pluralizeNoun(canonical))
     : pluralizeNoun(canonical)

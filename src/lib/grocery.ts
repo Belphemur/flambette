@@ -4,8 +4,8 @@ import {
   formatContainerQuantity,
   parseContainerQuantity,
 } from './containers'
-import { parseQuantity, formatAmount, formatMetricAmount, quantizeSpoons, scaleMetricAmount } from './quantity'
-import { isSeasoning, scaleQuantity } from './recipe'
+import { parseQuantity, formatAmount, formatMetricAmount, unitKey } from './quantity'
+import { scaleSeasoningAware } from './recipe'
 import { bucketFor, type StoreSection } from './sections'
 import type { RecipeDoc } from './types'
 
@@ -57,19 +57,6 @@ export interface GroceryItem {
   recipes: string[]
   /** One line per unit of measure (distinct units stay separate). */
   lines: GroceryLine[]
-}
-
-/**
- * Collapse unit spellings that denote the same measure so "2 cloves" and
- * "1 clove" merge: lowercase + naive singularization (strip trailing 'es'/'s').
- * "cups"→"cup", "bunches"→"bunch", "pkgs"→"pkg"; short units ("g", "ml") and
- * already-singular forms are untouched.
- */
-function unitKey(unit: string): string {
-  const u = unit.trim().toLowerCase()
-  if (u.length > 3 && u.endsWith('es')) return u.slice(0, -2)
-  if (u.length > 2 && u.endsWith('s')) return u.slice(0, -1)
-  return u
 }
 
 /**
@@ -216,9 +203,8 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
 
   for (const { doc, factor, recipeName, cleared, displayLines } of inputs) {
     // ADR-0009: seasonings scale sub-linearly against the recipe's own
-    // authored serving count, so keep base/target, not just the ratio.
+    // authored serving count — the shared scaler takes base + factor.
     const base = doc.serving_count
-    const target = base * factor
     // The rows the grocery displays: the restriction's display rows when the
     // overlay is active for this doc, else the base doc's own lines. Either
     // way a row's (name, quantity) pair co-occurs in ONE authoritative doc.
@@ -302,21 +288,13 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       if (parsed) {
         const key = unitKey(parsed.unit)
         const keyParsed = keyContainer ? null : parseQuantity(keySource)
-        // ADR-0054: non-seasonings scale through the QUANTIZED grammar
-        // (`scaleMetricAmount` — the same vocabulary recipe detail uses), so
-        // the grocery sum and the recipe-detail chip can never disagree:
-        // `2129 ml ×⅔` renders `1420 ml` on BOTH surfaces. Summing two
-        // ½-quanta yields integers, so the aggregate keeps the vocabulary;
-        // seasonings keep `recipe.scaleQuantity`'s sub-linear rule.
-        const scaled = isSeasoning(row.name)
-          ? // ADR-0055: the sub-linear intermediate joins the same spoon
-            // vocabulary as everywhere else — upstream never authors a
-            // decimal spoon (`2.523 tsp` reads `2 ½ tsp`).
-            quantizeSpoons(
-              scaleQuantity(parsed.amount, base, target, true, row.name),
-              parsed.unit,
-            )
-          : scaleMetricAmount(parsed.amount, factor, parsed.unit)
+        // ADR-0054/0055: ONE seasoning-aware scale (recipe.ts's
+        // scaleSeasoningAware) — seasonings keep the sub-linear rule on
+        // the shared spoon vocabulary, everything else scales through
+        // scaleMetricAmount's quantized grammar, so the grocery sum, the
+        // recipe-detail chip and the step lines can never disagree:
+        // `2129 ml ×⅔` renders `1420 ml` on BOTH surfaces.
+        const scaled = scaleSeasoningAware(parsed.amount, base, factor, parsed.unit, row.name)
         // The key side runs the SAME scale rule on the key source's amount,
         // classified by the KEY ingredient (the base doc's name — a
         // substitute that crosses the seasoning verdict must not
@@ -325,12 +303,7 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
         // under the display line's unit key).
         const keyIngredient = row.keyIngredient ?? row.name
         const keyScaled = keyParsed && unitKey(keyParsed.unit) === key
-          ? isSeasoning(keyIngredient)
-            ? quantizeSpoons(
-                scaleQuantity(keyParsed.amount, base, target, true, keyIngredient),
-                keyParsed.unit,
-              )
-            : scaleMetricAmount(keyParsed.amount, factor, keyParsed.unit)
+          ? scaleSeasoningAware(keyParsed.amount, base, factor, keyParsed.unit, keyIngredient)
           : scaled
         const current = group.byUnit.get(key)
         if (current) {
@@ -350,9 +323,7 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
           const kp = keyContainer ? null : parseQuantity(keySource)
           if (kp) {
             const keyIngredient = row.keyIngredient ?? row.name
-            const keyScaled = isSeasoning(keyIngredient)
-              ? quantizeSpoons(scaleQuantity(kp.amount, base, target, true, keyIngredient), kp.unit)
-              : scaleMetricAmount(kp.amount, factor, kp.unit)
+            const keyScaled = scaleSeasoningAware(kp.amount, base, factor, kp.unit, keyIngredient)
             group.raw.set(display, lineKeyBasis(keyScaled, kp.unit))
           } else {
             group.raw.set(display, `raw||${(row.keyQuantity ?? row.quantity).trim()}`)

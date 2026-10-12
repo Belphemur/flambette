@@ -28,6 +28,7 @@
  * PURE LIB: no Vue, no Pinia, no fetch. The index is loaded outside
  * (see src/composables/useAutoPlan.ts) and passed in.
  */
+import { containerContribution } from './containers'
 
 /** Shape of the committed public/data/pack_index.json. */
 export interface PackIndex {
@@ -223,8 +224,10 @@ function createLedger(index: PackIndex, req: PackPlanRequest): PackLedger {
       if (isContainer && amount > 0) {
         const key = containerKeyId(keyId, unitId)
         // Scaled base meals (qodo round 2): a meal planned for more
-        // servings buys whole containers — ceil per ADR-0017.
-        const contribution = factor === 1 ? amount : Math.max(1, Math.ceil(amount * factor - EPS))
+        // servings buys whole containers — ceil per ADR-0017, the ONE
+        // rule (containers.ts's containerContribution), not a local
+        // re-spelling of it.
+        const contribution = containerContribution(amount, factor)
         totals.set(key, (totals.get(key) ?? 0) + contribution)
       }
     }
