@@ -403,6 +403,31 @@ export const usePlanStore = defineStore(
       }
     }
 
+    /**
+     * Re-run the ONE servings rule over a plan hydrated from localStorage
+     * (the same rule `replacePlan` applies to an inbound snapshot).
+     *
+     * Hydration is the one ingress no store action covers: a blob written
+     * by an older build — whose write paths only floored at 1 — can carry
+     * counts above the cap. Without this, the sharing device keeps its
+     * oversized count while the receiving device stores the capped one,
+     * and the two households disagree about meal quantities. Normalizing
+     * BOTH sides (here, and on every write path) is the migration policy:
+     * a shared legacy plan converges on the cap. Idempotent, and it only
+     * rewrites entries whose count actually moved, so a clean blob never
+     * triggers a pointless persistence write.
+     */
+    function normalizePersistedPlan(): void {
+      let changed = false
+      const next = plan.value.map((e) => {
+        const servings = normalizePlanServings(e.servings)
+        if (servings === e.servings) return e
+        changed = true
+        return { ...e, servings }
+      })
+      if (changed) plan.value = next
+    }
+
     /** Replace the whole plan (used when importing a shared plan). */
     function replacePlan(entries: PlanEntry[], custom: string[] = []): void {
       plan.value = entries.map((e) => ({
@@ -445,6 +470,7 @@ export const usePlanStore = defineStore(
       unmarkCooked,
       undoMarkCooked,
       replacePlan,
+      normalizePersistedPlan,
       cookedHistory,
       clearedIngredients,
     }
@@ -460,6 +486,12 @@ export const usePlanStore = defineStore(
         'cookedHistory',
         'clearedIngredients',
       ],
+      // The persisted blob may hold pre-cap counts written by an older
+      // build. Hydration has already run when this fires — the same shape
+      // as grocery.ts's and ui.ts's afterHydrate migrations.
+      afterHydrate: (context) => {
+        ;(context.store as unknown as { normalizePersistedPlan: () => void }).normalizePersistedPlan()
+      },
     },
   },
 )
