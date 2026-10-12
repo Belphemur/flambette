@@ -345,11 +345,16 @@ export function createRoomRegistry({
   function noteFloor(rev: number, serial = store.readFloor()?.serial ?? 0): void {
     const t = now()
     const entry = store.readFloor()
-    // Either the rev moves forward, or the entry was stale (and is being
-    // replaced anyway); otherwise only the AGE is refreshed, so a busy
-    // household never has its floor pruned underneath it.
-    if (!entry || rev > entry.rev || t - entry.at > idleTtlMs) {
-      store.writeFloor({ code, rev, at: t, serial })
+    // Either the rev moves forward, or the entry was stale (and its AGE is
+    // being replaced anyway); otherwise only the AGE is refreshed, so a
+    // busy household never has its floor pruned underneath it. A stale
+    // entry's AGE is replaced, never its REV: the floor is monotone PER
+    // CODE, so a push whose rev is lower than a keepalive-refreshed entry
+    // (a keepalive-only gap longer than the idle TTL) must not move it
+    // backwards.
+    const stale = entry !== null && t - entry.at > idleTtlMs
+    if (!entry || stale || rev > entry.rev) {
+      store.writeFloor({ code, rev: stale ? Math.max(rev, entry!.rev) : rev, at: t, serial })
       return
     }
     store.writeFloor({ ...entry, at: t, serial })

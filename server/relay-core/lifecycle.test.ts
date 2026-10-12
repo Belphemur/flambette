@@ -307,6 +307,23 @@ describe('the per-code rev floor', () => {
     expect(h.store.floors.size).toBe(0)
   })
 
+  test('a stale entry keeps the HIGHER floor: a lower rev never moves it backwards', () => {
+    // The floor is monotone PER CODE (review F4). A keepalive-only gap
+    // longer than the idle TTL refreshes the entry's AGE, and the push
+    // that follows must replace that AGE, not the rev.
+    const h = harness()
+    h.registry.admit('join', 0)
+    h.registry.push(11, { a: 1 }, 'p1')
+    expect(h.registry.floor()).toBe(11)
+    // Keepalives alone past the idle TTL make the entry stale.
+    h.now(IDLE_TTL_MS + 1)
+    h.registry.keepalive()
+    expect(h.store.floors.get('mauve-peacock-candle')!.rev).toBe(11)
+    // A push with a LOWER rev arrives: the floor stays at 11.
+    h.registry.push(7, { a: 2 }, 'p1')
+    expect(h.registry.floor()).toBe(11)
+  })
+
   test('a room’s peer serial never repeats across re-creations of the same code', () => {
     const h = harness()
     h.registry.admit('join', 0)
