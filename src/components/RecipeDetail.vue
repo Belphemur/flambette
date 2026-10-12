@@ -35,6 +35,7 @@ import {
 import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { macroGrams } from '../lib/nutrition'
 import { usePlanStore } from '../stores/plan'
+import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 import { displayRating, useRatingStore } from '../stores/rating'
 import { planServingsFor } from '../composables/usePlanServings'
@@ -63,9 +64,14 @@ import {
 import { isUserRecipeId } from '../lib/userRecipes'
 
 const plan = usePlanStore()
-// The strip's rating NUMBER reads the same store the stars control
-// (ADR-0031): one precedence, so the digits and the glyphs cannot drift.
+// The rate card's rating NUMBER reads the same store the stars control
+// (ADR-0031/0082): one precedence, so the digits and the glyphs cannot
+// drift. The strip's Rating cell retired — the card owns it now.
 const ratingStore = useRatingStore()
+// "Synced to household" shows ONLY while a room is live (ADR-0082):
+// ratings are room-synced, and a standalone install must not be told
+// it syncs.
+const room = useRoomStore()
 const router = useRouter()
 
 /** Recipe variant id, passed as a route prop from /recipe/:id. */
@@ -250,17 +256,35 @@ const macroSegments = computed(() => {
 })
 
 /**
- * The number beside the strip's stars (the render's "4.9 ★★★★"): the
- * household's own rating when one exists, the catalog Bayesian mean
- * otherwise — the SAME precedence RatingStars displays, so the number and
- * the stars can never disagree (ADR-0074's addendum). Null when neither
- * exists: an unrated recipe with no catalog score prints nothing.
+ * The number beside the rate card's stars (ADR-0082; the render's
+ * "4.5 / 5.0"): the household's own rating when one exists, the catalog
+ * Bayesian mean otherwise — the SAME precedence RatingStars displays, so
+ * the number and the stars can never disagree (ADR-0074's addendum; ONE
+ * computed, shared by nothing else — the strip cell that used to print
+ * it retired with ADR-0082). Null when neither exists: an unrated
+ * recipe with no catalog score prints nothing.
  */
 const ratingDisplay = computed(() => {
   if (!meta.value) return null
   const value = displayRating(ratingStore.ratingFor(meta.value.id), meta.value.rating)
   return value > 0 ? value.toFixed(1) : null
 })
+
+/**
+ * The Clear control (ADR-0082) shows only when the household has rated
+ * this recipe — an unrated recipe has nothing to clear.
+ */
+const ratingCount = computed(() =>
+  meta.value ? ratingStore.countFor(meta.value.id) : 0,
+)
+
+/** Clear the household's rating (ADR-0082): immediate, one plain toast —
+ * no confirm, clearing is reversible by re-rating with one tap. */
+function clearRating() {
+  if (!meta.value) return
+  ratingStore.clearRating(meta.value.id)
+  useUiStore().showToast('Rating cleared', { duration: 2000 })
+}
 
 /** The bar's accessible reading: one image role, one sentence. */
 const macroAria = computed(() => {
@@ -708,7 +732,7 @@ function startCooking() {
   cluttered boxes, the owner's "looks bad"). Macro splits,
   difficulty, test counts and SKUs stay rejected fictions. -->
   <dl
-  class="grid grid-cols-2 gap-3 rounded-lg bg-surface px-4 py-3 sm:grid-cols-4"
+  class="grid grid-cols-2 gap-3 rounded-lg bg-surface px-4 py-3 sm:grid-cols-3"
   data-test="detail-metadata-strip"
   >
   <div class="flex flex-col gap-1">
@@ -724,25 +748,6 @@ function startCooking() {
   <dd class="flex items-baseline gap-1 whitespace-nowrap" data-test="detail-metadata-calories">
   <span class="text-headline-sm font-bold text-text">{{ Math.round(meta.calories) }}</span>
   <span class="font-mono-data text-label-sm text-text-muted">kcal/srv</span>
-  </dd>
-  </div>
-  <!-- The household's verdict rides the strip beside the facts it
-       modifies (ADR-0031): the same RatingStars control, with the NUMBER
-  the render prints beside it — household rating when one exists, the
-  catalog Bayesian mean otherwise, the same precedence the stars show. -->
-  <div class="flex flex-col gap-1" data-test="recipe-detail-rating">
-  <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted">Rating</dt>
-  <dd class="flex items-center gap-1">
-  <span v-if="ratingDisplay" class="text-headline-sm font-bold text-text">{{ ratingDisplay }}</span>
-  <!-- Owner sizing: the mock's stars ride `text-xs` beside the number —
-  size 12 so the strip never reads star-dominant. -->
-  <RatingStars
-  :variant-id="meta.id"
-  :catalog-rating="meta.rating"
-  :fallback-rating="meta.rating"
-  :size="12"
-  compact
-  />
   </dd>
   </div>
   <!-- Servings: the stepper is the control it has always been — same ref,
@@ -887,6 +892,57 @@ function startCooking() {
   </button>
   </div>
   </div>
+
+  <!-- Rate card (ADR-0082): a level-1 card headed "Rate this recipe" —
+  the ONE RatingStars control at 32px (phone) / 24px (desktop, via the
+  component's own lgSize), the SAME displayRating value in mono beside
+  the heading (the render's "4.5 / 5.0"), the helper line, and the
+  room-gated sync line. The strip's Rating cell retired: the card owns
+  the rating now (no SKUs, no Material Symbols, no new hex — render
+  fictions rejected per the ADR). -->
+  <section
+  v-if="meta"
+  class="rounded-xl border border-border bg-surface p-4"
+  data-test="recipe-detail-rating"
+  aria-labelledby="rate-card-heading"
+  >
+  <div class="flex items-baseline justify-between gap-2">
+  <h3
+  id="rate-card-heading"
+  class="text-label-md font-semibold uppercase tracking-wide text-text"
+  data-test="rate-card-heading"
+  >
+  Rate this recipe
+  </h3>
+  <span class="flex items-baseline gap-1">
+  <span v-if="ratingDisplay" class="font-mono-data text-label-md font-semibold text-text">{{ ratingDisplay }}</span>
+  <span class="font-mono-data text-label-sm text-text-muted">/ 5.0</span>
+  <!-- Clear (ADR-0082): small text control, only when the household
+  has rated. Immediate, no confirm — reversible in one tap. -->
+  <button
+  v-if="ratingCount > 0"
+  type="button"
+  class="ml-1 text-label-sm font-medium text-text-muted underline-offset-2 hover:text-text hover:underline focus-visible:underline"
+  data-test="rating-clear"
+  @click="clearRating"
+  >
+  Clear
+  </button>
+  </span>
+  </div>
+  <RatingStars
+  class="mt-2"
+  :variant-id="meta.id"
+  :catalog-rating="meta.rating"
+  :fallback-rating="meta.rating"
+  :size="32"
+  :lg-size="24"
+  />
+  <p class="mt-2 text-body-sm text-text-muted">
+  <span>Tap a star — halves supported</span>
+  <span v-if="room.inRoom" data-test="rating-synced"> · Synced to household</span>
+  </p>
+  </section>
 
   <!-- Nutrition: at the bottom of the SAME card, after the actions
   (DESIGN.md Recipe detail). ADR-0077 fix pass: the render's ONE
