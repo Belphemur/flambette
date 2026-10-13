@@ -139,7 +139,10 @@ as `{remaining, running, startedAt}` in `ui.stepTimers[variantId]`
 counter, so a reload mid-cook resumes honestly. The countdown NEVER uses
 the toast surface; minute ticks go through `announceCountdown()` in the
 polite live region only. Finishing a cook with a timer running must ask
-first. `startTimer`'s arm rule: a no-seconds press RESUMES the frozen
+first — the ONE confirm modal (ADR-0084), never `window.confirm()`: the
+leave is intercepted, the modal names the running timer(s) with
+remaining time, and Confirm completes the leave (Cancel/Escape stays in
+the cook). `startTimer`'s arm rule: a no-seconds press RESUMES the frozen
 segment while the timer is live and RE-ARMS the armed `total` once it
 has expired (never an invented 300).
 

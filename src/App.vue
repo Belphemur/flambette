@@ -7,7 +7,6 @@ import ChangelogModal from './components/ChangelogModal.vue'
 import { checkVersion, type VersionState } from './lib/versionCheck'
 import { TABS, useUiStore } from './stores/ui'
 import { getCatalog } from './lib/catalog'
-import { useShareRoomLink } from './composables/useShareRoomLink'
 import { ensureTimerAlertPolling } from './lib/timerAlertHost'
 import { usePlanStore } from './stores/plan'
 import { useRoomStore, type RoomStatus } from './stores/room'
@@ -50,7 +49,6 @@ const room = useRoomStore()
 // ADR-0063: instantiating here runs the identity store's hydration-time
 // migration (generate when absent while a household room is saved).
 const identity = useIdentityStore()
-const { shareAction } = useShareRoomLink()
 
 /** The app-level head (ADR-0048): see the block comment above — ONE
  *  owner, the hero and the recipes list, homepage head everywhere else. */
@@ -321,13 +319,11 @@ function autoJoinHousehold() {
   const code = ui.householdRoom
   if (!code || room.inRoom || room.status !== 'idle') return
   room.join(code, false)
-  // The toast doubles as the share affordance: the second phone gets the
-  // link straight from this confirmation (ADR-0023).
-  ui.showToast(`Household sync active — ${code}`, {
-  kind: 'household',
-  actions: [shareAction(code)],
-  duration: 6000,
-  })
+  // ADR-0084 decision 5: the SUCCESS toast is REMOVED — a join that
+  // succeeded is visible in the room chip (and share lives on the roster
+  // sheet's `roster-share`, ADR-0079, and the Plan tab, ADR-0023); the
+  // app does not announce a state the header already shows. The FAILURE
+  // toast below STAYS: it reports something the chip does not show.
 }
 
 // A room we can't reach (relay down, code expired after a relay restart)
@@ -620,7 +616,7 @@ onBeforeUnmount(() => {
   <div
   v-if="ui.toast"
   role="status"
-  class="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-surface-dark px-4 py-2 text-sm font-medium text-on-brand shadow-popover"
+  class="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-popover px-4 py-2 text-sm font-medium text-text shadow-popover"
   :data-test="ui.toast.kind ? `${ui.toast.kind}-toast` : 'toast'"
   >
   <span>{{ ui.toast.message }}</span>
@@ -628,7 +624,7 @@ onBeforeUnmount(() => {
   v-for="(action, i) in ui.toast.actions ?? []"
   :key="action.label"
   class="rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide"
-  :class="i === 0 ? 'bg-brand text-on-brand' : 'text-text-dark-muted hover:text-on-brand'"
+  :class="i === 0 ? 'bg-brand text-on-brand' : 'text-text-muted hover:text-text'"
   :data-test="action.testId ?? (i === 0 ? 'toast-action-primary' : 'toast-action-secondary')"
   @click="action.run()"
   >
