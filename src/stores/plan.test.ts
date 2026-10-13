@@ -69,6 +69,42 @@ describe('plan identity (ADR-0034)', () => {
     expect(plan.planId).toBe('')
     expect(plan.planCreatedAt).toBe(0)
   })
+
+  test('replacePlan restores an EXPLICIT identity (the re-plan undo, ADR-0085 §3)', () => {
+    // The undo of "cook that week again" re-installs the displaced plan
+    // verbatim — identity included — so the plan's NEXT cooks stay in the
+    // SAME history group (ADR-0034) instead of forking under a third id.
+    const plan = usePlanStore()
+    plan.addToPlan(meta(1), 4)
+    const original = { planId: plan.planId, planCreatedAt: plan.planCreatedAt }
+    plan.replacePlan([{ variantId: 2, servings: 3 }])
+    expect(plan.planId).not.toBe(original.planId)
+
+    plan.replacePlan([{ variantId: 1, servings: 4 }], ['milk'], original)
+    expect(plan.planId).toBe(original.planId)
+    expect(plan.planCreatedAt).toBe(original.planCreatedAt)
+    expect(plan.plan.map((e) => e.variantId)).toEqual([1])
+    expect(plan.customItems).toEqual(['milk'])
+
+    // Omitting the identity keeps the mint rule (the default above).
+    plan.replacePlan([{ variantId: 3, servings: 2 }])
+    expect(plan.planId).not.toBe(original.planId)
+  })
+
+  test('an explicit EMPTY identity restores the no-identity state, never mints', () => {
+    // A plan hydrated from a pre-ADR-0034 blob can be non-empty with
+    // planId '' — the undo must reinstall THAT state verbatim: minting
+    // an identity over it would change its provenance (History heading
+    // + the id its next cooks file under) out from under exact state.
+    const plan = usePlanStore()
+    plan.replacePlan([{ variantId: 1, servings: 4 }])
+    expect(plan.planId).not.toBe('')
+
+    plan.replacePlan([{ variantId: 2, servings: 3 }], [], { planId: '', planCreatedAt: 0 })
+    expect(plan.plan.map((e) => e.variantId)).toEqual([2])
+    expect(plan.planId).toBe('')
+    expect(plan.planCreatedAt).toBe(0)
+  })
 })
 
 describe('a persisted legacy plan normalizes at hydrate', () => {
