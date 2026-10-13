@@ -201,7 +201,8 @@ test('the household auto-join opens NO modal — nobody handed that device a lin
   await page.evaluate(() => sessionStorage.clear())
   await page.reload()
   await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
-  await expect(page.getByTestId('household-toast')).toBeVisible()
+  // ADR-0084 decision 5: the auto-join is SILENT — no success toast.
+  await expect(page.getByTestId('household-toast')).toHaveCount(0)
   await expect(page.getByTestId('join-congrats')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
@@ -228,15 +229,16 @@ test('a link join ADOPTS the household — the next launch re-joins on its own',
   await expect(page.getByTestId('household-room-clear')).toBeVisible()
 
   // A FRESH session — sessionStorage cleared, so nothing can be a resume —
-  // re-joins on its own (ADR-0019), with the auto-join toast and NO
-  // congrats modal: this launch was not handed a link, and congratulating
-  // the auto-join would congratulate the device for nothing.
+  // re-joins on its own (ADR-0019), SILENTLY (ADR-0084 decision 5: the
+  // success toast is gone) and with NO congrats modal: this launch was
+  // not handed a link, and congratulating the auto-join would
+  // congratulate the device for nothing.
   await page.evaluate(() => sessionStorage.clear())
   await page.reload()
   await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, {
     timeout: 20_000,
   })
-  await expect(page.getByTestId('household-toast')).toBeVisible()
+  await expect(page.getByTestId('household-toast')).toHaveCount(0)
   await expect(page.getByTestId('join-congrats')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })

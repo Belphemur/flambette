@@ -85,7 +85,7 @@ test('the copy is never silent when the clipboard refuses', async ({ page }) => 
   await expectZeroMealimeRequests(page)
 })
 
-test('the join toast shares the link without a second tap', async ({ page, browser }) => {
+test('the roster sheet shares the link after a silent join', async ({ page, browser }) => {
   test.setTimeout(90_000)
   await openFirstRecipeDetail(page)
   await page.getByRole('dialog').getByRole('button', { name: 'Add to plan' }).click()
@@ -106,13 +106,21 @@ test('the join toast shares the link without a second tap', async ({ page, brows
   await seed.getByTestId('start-room').click()
   const code = await liveRoomCode(seed)
 
-  // Settings → "Join now" carries a Share link action on its toast.
+  // Settings → "Join now" joins SILENTLY (ADR-0084 decision 5: the
+  // join toast is gone — the room chip is the standing indicator), and
+  // the SHARE affordance is the roster sheet's `roster-share`
+  // (ADR-0079), going through the one useShareRoomLink funnel.
   await gotoTab(page, 'Settings')
   await page.getByTestId('household-room-input').fill(code)
   await page.getByTestId('household-room-join').click()
-  const toast = page.getByTestId('household-toast')
-  await expect(toast).toContainText(code)
-  await toast.getByTestId('toast-action-primary').click()
+  await expect(page.getByTestId('household-toast')).toHaveCount(0)
+  await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, {
+    timeout: 20_000,
+  })
+  await page.getByTestId('room-chip').click()
+  await expect(page.getByTestId('roster-sheet')).toBeVisible()
+  await expect(page.getByTestId('roster-code')).toContainText(code)
+  await page.getByTestId('roster-share').click()
   await expect(page.getByTestId('share-room-toast')).toContainText('Copied!')
   expect(await clipboardText(page)).toContain(`/plan?room=${code}`)
 

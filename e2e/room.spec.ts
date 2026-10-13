@@ -179,7 +179,7 @@ test('room sync: A clears the grocery list and B sees it empty', async ({ browse
   await expect(a.locator('main label').first()).toBeVisible({ timeout: 10_000 })
   await a.locator('main input[type=checkbox]').first().click()
   await a.locator('[data-test=clear-list]').click()
-  await a.getByTestId('toast').getByTestId('toast-action-primary').click()
+  await a.getByTestId('confirm-action').click()
   await expect(a.getByTestId('cleared-empty')).toBeVisible()
 
   // …and B's list empties live (cleared ingredients are household state).

@@ -307,30 +307,29 @@ function joinHouseholdRoom() {
   ui.setHouseholdRoom(code)
 
   // Already LIVE in THIS room: reconnecting would drop a healthy socket
-  // just to re-establish it, so the setting is saved and the state
-  // confirmed without touching the connection. `live` and not merely
-  // `inRoom`: the store keeps the code through `error`, the reconnect
-  // backoff and a latched `roomGone`, and in those states the old
-  // condition short-circuited to a success toast that never retried —
-  // the user had to press Leave and join again to get out of a dead room.
+  // just to re-establish it, so the setting is saved without touching
+  // the connection. `live` and not merely `inRoom`: the store keeps the
+  // code through `error`, the reconnect backoff and a latched `roomGone`.
+  // ADR-0084 decision 5: NO success toast on this path either — a join
+  // that succeeded is visible in the room chip (and the status line
+  // below), and the app does not announce a state the header shows.
   if (room.status === 'live' && room.inRoom && room.code === code) {
-    ui.showToast(`Household sync active — ${code}`, { kind: 'household' })
     return
   }
 
   // From here the card OWNS the outcome: a `code_taken` re-roll moves
   // this device into a different room than the one just saved, and the
   // watcher below adopts whatever code we actually ended up in.
+  // ADR-0084 decision 5: the join itself is SILENT — no "Joining…"
+  // toast (the chip's Connecting state is that feedback) and no share
+  // action on a toast (share is the roster sheet's `roster-share`,
+  // ADR-0079, and the card's own Share button below, ADR-0023). The
+  // card still announces the OUTCOMES the chip cannot show: the
+  // code_taken re-roll notice in the watcher, and App.vue's
+  // "Household sync unavailable" failure toast.
   pendingHouseholdJoin = true
   if (isNewCode) room.create(code)
   else room.join(code)
-  // The toast carries the share action: joining and sharing are the
-  // same two-phone moment (ADR-0023).
-  ui.showToast(`Joining household ${code}…`, {
-    kind: 'household',
-    actions: [{ label: 'Share link', run: () => void shareRoomLink(code) }],
-    duration: 6000,
-  })
 }
 
 /**
