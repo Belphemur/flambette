@@ -1,14 +1,14 @@
 # ADR-0085: "Cook that week again" — one-tap re-plan of a past week from cooked history
 
-**Status:** Accepted (2026-10-13)
+**Status:** Accepted (2026-10-13) — implemented in PR #87
 **Implements:** Belphemur/flambette#78
 **Extends:** ADR-0032 (cooked history), ADR-0034 (history grouped by plan),
 ADR-0030 (preview before replace + exact-state undo), ADR-0037 (remembered
 default servings).
 
-> Numbering note: ADR-0084 is reserved by the open PR #86
-> (feat/confirm-modal) and is not yet on main; this record takes the next
-> free number past that reservation.
+> Numbering note: ADR-0084 (ConfirmModal) landed on main from PR #86
+> between this record's drafting and its implementation; the numbers do
+> not collide.
 
 ## Context
 
