@@ -686,6 +686,13 @@ function finishCooked() {
   recordCook()
 }
 function onKey(e: KeyboardEvent) {
+  // The post-cook prompt (ADR-0083) owns the keys while it is open —
+  // ALL of them, not just Escape (review): navigation must not advance
+  // the covered session behind the modal, or a later Undo would resume
+  // on an unseen, shifted step. Escape routes through AppModal's own
+  // handler (it emits the close), so CookingView yields everything,
+  // exactly as the manage sheet below owns Escape in its own layer.
+  if (postCookOpen.value) return
   if (e.key === 'ArrowRight') {
   e.preventDefault()
   next()
@@ -703,10 +710,8 @@ function onKey(e: KeyboardEvent) {
   return
   }
   e.preventDefault()
-  // The post-cook prompt (ADR-0083) owns Escape while it is open —
-  // AppModal handles the key and routes the close (Done/Escape both go
-  // to History); closing the cook session under it would race the modal.
-  if (postCookOpen.value) return
+  // A stray Escape while nothing else is up closes the session — but
+  // only after the timer gate above had its say.
   if (confirmTimerBeforeLeaving()) close()
   }
 }
@@ -1389,7 +1394,7 @@ function onTouchEnd(e: TouchEvent) {
   v-if="!isLast"
   class="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-success/25 bg-success/8 text-sm font-semibold text-success transition-colors hover:bg-success/12 disabled:opacity-60"
   data-test="mark-cooked"
-  aria-label="Mark as cooked and keep cooking"
+  aria-label="Mark as cooked"
   :disabled="sessionRecorded"
   @click="markCookedEarly"
   >

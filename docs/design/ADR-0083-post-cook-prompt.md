@@ -124,6 +124,21 @@ cooking mode.
 - **Naming**: the pill's label is "Cooked this?" (the render's words) —
   NOT "Mark as cooked", which stays the cooking session's in-flow action.
 
+## Review hardening (2026-10-13, PR #84 round 2)
+
+Two clarifications from code review; no behavior contract changes:
+
+- **The prompt owns ALL keys while it is open.** The cooking session's
+  `onKey` yields before its ArrowRight/ArrowLeft/Escape branches, so
+  keyboard navigation cannot advance the covered session behind the
+  modal (a later Undo would otherwise resume on an unseen, shifted
+  step). Escape still routes through AppModal's close, exactly as the
+  "every close returns to History" bullet already specifies.
+- **The mid-cook mark button's accessible name is "Mark as cooked"** —
+  the former "…and keep cooking" suffix overstated what the mark does
+  now that the prompt (whose non-Undo exit ends the session) is the
+  mark's acknowledgment.
+
 ## Consequences (addendum)
 
 - `docs/agents/cooking.md` and the PRD cooking surface are updated in the

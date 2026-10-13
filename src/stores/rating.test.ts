@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { createPinia, setActivePinia } from 'pinia'
+import { MAX_FUTURE_SKEW_MS } from '../lib/stamps'
 import {
   ratingsToRows,
   sanitizeTombstones,
@@ -139,6 +140,27 @@ describe('useRatingStore (ADR-0031)', () => {
 
   /** ADR-0082 — the clear + tombstone story. */
   describe('clearRating + tombstones (ADR-0082)', () => {
+    test('the re-rate stamp stays inside the future bound (skew-ceiling collapse)', () => {
+      const store = useRatingStore()
+      const ceiling = Date.now() + MAX_FUTURE_SKEW_MS
+      // A tombstone AT the ceiling (a skewed peer's record was cleared
+      // against it): tomb+1 would sit one ms OUTSIDE the bound, and a
+      // peer re-clamping the record down to its own ceiling would then
+      // compare a different stamp than this device stored.
+      store.tombstones = { '7': ceiling }
+      store.setRating(7, 4, 1_000)
+      // Clamped, never out of bounds — which collapses the advance to
+      // the marker itself: no strictly newer stamp exists inside the
+      // bound, so deletion wins ties (ADR-0082) and the fresh opinion
+      // converges to the deletion on the next inbound reconcile instead
+      // of surviving with an out-of-bound stamp.
+      expect(store.map['7'].updatedAt).toBe(ceiling)
+      // Below the ceiling the tomb+1 advance survives intact.
+      store.tombstones = { '8': ceiling - 50 }
+      store.setRating(8, 4, 1_000)
+      expect(store.map['8'].updatedAt).toBe(ceiling - 49)
+    })
+
     test('clear deletes the record and stamps a tombstone', () => {
       const store = useRatingStore()
       store.setRating(7, 4, 1_000)

@@ -203,9 +203,27 @@ export const useRatingStore = defineStore(
       // Advance the write one ms past the marker so it is a genuine
       // post-clear opinion everywhere.
       const tomb = tombstones.value[key]
-      const stamp = Math.max(
-        normalizeStamp(updatedAt, Date.now()),
-        tomb !== undefined ? tomb + 1 : 0,
+      // The write stamp goes through the SAME future bound as every other
+      // timestamp in this store (the stamps.ts funnel — review, ADR-0082):
+      // a tombstone sitting AT the skew ceiling would push tomb+1 one ms
+      // past now+MAX_FUTURE_SKEW_MS, and peers re-clamping that record
+      // DOWN to their ceiling would then compare a different number than
+      // we stored — mergeLww and the deletion-wins-ties test would see
+      // mismatched stamps across devices, the exact divergence the tomb+1
+      // advance exists to prevent.
+      //
+      // Ceiling collapse: when the tombstone sits exactly at the bound,
+      // no strictly-newer stamp exists inside it, so the clamped stamp
+      // EQUALS the marker. That is convergent, not divergent: deletion
+      // wins ties (ADR-0082), so the fresh opinion loses to the marker on
+      // the next inbound reconcile everywhere, instead of surviving with
+      // an out-of-bound stamp peers would silently rewrite.
+      const stamp = clampStamp(
+        Math.max(
+          normalizeStamp(updatedAt, Date.now()),
+          tomb !== undefined ? tomb + 1 : 0,
+        ),
+        Date.now(),
       )
       if (rating <= 0) {
         if (!(key in map.value)) return
