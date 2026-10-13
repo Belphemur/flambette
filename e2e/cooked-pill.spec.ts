@@ -24,6 +24,15 @@ import {
 /** How many of the LAST steps carry the pill. */
 const TAIL = 3
 
+/** The pill count a recipe actually renders: min(rendered steps, TAIL).
+ * The tail clamps at 0 for short recipes, so an exact TAIL assertion on
+ * whatever recipe `openFirstRecipeDetail` opens is a catalog-order
+ * assumption the catalog can break (review, PR #84). */
+async function renderedTailCount(page: Page): Promise<number> {
+  const total = await page.getByTestId('detail-step').count()
+  return Math.min(total, TAIL)
+}
+
 async function openDetail(page: Page) {
   await blockExternalRequests(page)
   await page.goto('/recipes')
@@ -75,7 +84,7 @@ test('the same structural contract on desktop (no observer dependency)', async (
     'phone layout: covered by the mobile leg above',
   )
   await openDetail(page)
-  await expect(page.getByTestId('cooked-pill')).toHaveCount(TAIL)
+  await expect(page.getByTestId('cooked-pill')).toHaveCount(await renderedTailCount(page))
   await expectZeroMealimeRequests(page)
 })
 
@@ -144,7 +153,7 @@ test('pill Undo removes the record and STAYS on the detail page', async ({ page 
   // The recipe reads uncooked again, and the tail pills offer themselves
   // again.
   await expect(page.getByTestId('cook-history')).toHaveCount(0)
-  await expect(page.getByTestId('cooked-pill')).toHaveCount(TAIL)
+  await expect(page.getByTestId('cooked-pill')).toHaveCount(await renderedTailCount(page))
   await expectZeroMealimeRequests(page)
 })
 

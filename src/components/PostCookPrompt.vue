@@ -57,6 +57,7 @@ const emit = defineEmits<{ done: []; undo: [] }>()
     type="button"
     class="h-11 w-full rounded-xl bg-brand px-3 text-sm font-semibold text-on-brand active:bg-brand-strong"
     data-test="post-cook-done"
+    aria-label="Done — back to History"
     @click="emit('done')"
   >
     Done
@@ -65,6 +66,7 @@ const emit = defineEmits<{ done: []; undo: [] }>()
     type="button"
     class="mx-auto block text-label-sm font-medium text-text-muted underline-offset-2 hover:text-text hover:underline focus-visible:underline"
     data-test="post-cook-undo"
+    aria-label="Undo — not actually cooked"
     @click="emit('undo')"
   >
     Undo — not actually cooked

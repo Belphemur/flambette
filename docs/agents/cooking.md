@@ -64,16 +64,16 @@ two cards, then the action deck.
   is what keeps you cooking now: record removed, session resumes exactly
   where it was. The window Escape handler yields while the prompt is
   open (registration order — it fires before AppModal's).
-- **The detail "Cooked this?" pill (ADR-0083 addendum)**: RecipeDetail
-  gains the compact floating pill from the Stitch render ("Recipe Detail
-  End (Mobile Dark)", Warm Culinary Paper) — right edge of the app
-  column, 120px above the bottom navigation (safe-area aware),
-  `bg-surface-raised`, subtle `border` token, the ONE `shadow-popover`,
-  warm brand accent dot. Visible once the LAST THREE STEPS come into
-  view (a sentinel rides the third-from-last step —
-  `useIntersectionObserver` from @vueuse, never a hand-rolled observer;
-  NOT the instructions section, which on desktop is in view on load, so
-  a section trigger lit the pill before any scroll) and hidden once the
+- **The detail "Cooked this?" pill (ADR-0083 addendum, inline ruling
+  2026-10-13)**: RecipeDetail renders the compact pill from the Stitch
+  render ("Recipe Detail End (Mobile Dark)", Warm Culinary Paper) INLINE
+  in the TITLE ROW of each of the LAST THREE steps — beside the number
+  badge, in document flow, never over the step text (`bg-surface-raised`,
+  subtle `border` token, warm brand accent dot). The trigger is
+  STRUCTURAL: the tail steps simply carry the pill — NO
+  IntersectionObserver and no scroll precondition (an observer's callbacks
+  never fire in hidden or occluded tabs — the Firefox no-pill report).
+  Hidden once the
   recipe is already cooked TODAY (`cookedToday()` in
   `src/lib/history.ts`, local-day rule). A tap records through the ONE `plan.markCooked` path (captures
   the prior exactly like the session does) and raises the SAME

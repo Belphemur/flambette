@@ -153,3 +153,27 @@ Two clarifications from code review; no behavior contract changes:
 - The plan-interaction edge (marking cooked from detail when the recipe is
   not planned) follows the standing rule that a cook records regardless of
   plan membership; nothing in the prompt reads plan state.
+
+## Change note — 2026-10-13, owner ruling: the pill is INLINE (no observer)
+
+The addendum's pill bullet (and its consequences line, "the pill appears
+when steps scroll into view") originally specified the FLOATING right-edge
+pill with an IntersectionObserver on a tail sentinel. On review the owner
+ruled the pill STRUCTURAL and INLINE (commit `c0d2eea`, this PR): it renders
+in the TITLE ROW of each of the LAST THREE steps — beside the number badge,
+in document flow — and the trigger is the step list itself, with NO
+IntersectionObserver and no scroll precondition. Two reasons, both recorded
+in the code comment at the render site:
+
+- the fixed overlay blocked the step text on both layouts (the owner's
+  "going from title to title" refinement);
+- the Firefox no-pill report is fixed at the root: an IntersectionObserver's
+  callbacks never fire in a hidden or occluded tab, so an observer-based
+  trigger can silently never light — a structural render cannot.
+
+The floating/observer wording above is therefore superseded WITHIN this PR
+(ADR-0083 has not landed on main separately from this fix, so no new record
+is opened); the bullet is kept for the decision trail. `docs/agents/cooking.md`
+and the PRD cooking surface carry the shipped inline contract in the same
+change (PRD rule). The e2e tail contract is pinned by `e2e/cooked-pill.spec.ts`
+("exactly the LAST three steps carry the pill, in their title rows").

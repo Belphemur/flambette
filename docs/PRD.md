@@ -85,7 +85,7 @@ Unlike generic recipe scrapers, calorie-counting diaries, or bloated ad-supporte
 - **Completion & History (ADR-0032)**:
   - Cooking completion logs an entry to the user's cooking history (shared with household room by default with opt-out).
   - Marking a meal cooked — finishing the cook session, marking mid-cook, or tapping the recipe detail's "Cooked this?" pill — is ONE completion experience (ADR-0083): a post-cook prompt to rate the meal (same household rating store) and/or favourite it, with an in-modal undo of the cook record; any other close returns to the History tab, where the entry just landed.
-  - The detail pill appears while the preparation steps are in view and hides once the recipe is already cooked today; its undo keeps the user on the detail page with the record removed.
+  - The detail pill rides the title rows of the LAST THREE preparation steps — inline in document flow, no scroll trigger (ADR-0083 addendum, inline ruling 2026-10-13) — and hides once the recipe is already cooked today; its undo keeps the user on the detail page with the record removed.
   - The History tab (ADR-0034) reads that log as a plan-grouped chronological record with period pills (All time / Past 30 days / Past 90 days — a read window, not a household preference), mono dates/counts and the household sharing note; never ranked or gamified.
 
 ### 3.5 Surface 5: Household Sync & Roster (ADR-0063)
