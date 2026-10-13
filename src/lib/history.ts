@@ -1,5 +1,10 @@
 import { computed } from 'vue'
-import { usePlanStore, type CookedEntry } from '../stores/plan'
+import {
+  cookedEventKey,
+  usePlanStore,
+  type CookedEntry,
+  type PlanEntry,
+} from '../stores/plan'
 
 /**
  * Read-side selectors over the plan store's cooked history (ADR-0011,
@@ -132,6 +137,44 @@ export function groupHistoryByPlan(events: CookedEntry[]): PlanHistoryGroup[] {
     (a, b) =>
       (b.planCreatedAt ?? b.lastAt) - (a.planCreatedAt ?? a.lastAt) || b.lastAt - a.lastAt,
   )
+}
+
+/* ---------- Re-plan reconstruction (ADR-0085) ---------- */
+
+/**
+ * "Cook that week again" (ADR-0085): reconstruct one history group's meal
+ * set as the entries a `plan.replacePlan` confirm would write.
+ *
+ * One pure function is BOTH the pill's visibility input and the preview's
+ * content: distinct variantIds only (a dish cooked twice in the week is
+ * planned once), catalog-present ones only (a recipe that left the catalog
+ * cannot be planned again), in the group's most-recent-cook-first order,
+ * every meal at the caller's servings — the remembered household default
+ * (ADR-0037); the historical per-meal counts are deliberately NOT replayed.
+ *
+ * `knownIds` is the catalog's `byId` keys as a plain set so the selector
+ * stays catalog-agnostic (and unit-testable without a fixture catalog).
+ * The sort carries the same deterministic tie-break as
+ * `mergeCookedHistory`, so two devices reconstruct the same order even
+ * when two cooks share a timestamp.
+ */
+export function replanEntries(
+  events: CookedEntry[],
+  knownIds: ReadonlySet<number>,
+  servings: number,
+): PlanEntry[] {
+  const ordered = [...events].sort(
+    (a, b) =>
+      b.cookedAt - a.cookedAt || cookedEventKey(a).localeCompare(cookedEventKey(b)),
+  )
+  const seen = new Set<number>()
+  const entries: PlanEntry[] = []
+  for (const e of ordered) {
+    if (seen.has(e.variantId) || !knownIds.has(e.variantId)) continue
+    seen.add(e.variantId)
+    entries.push({ variantId: e.variantId, servings })
+  }
+  return entries
 }
 
 /* ---------- Period window + summary (EXPERIENCE.md §7, History) ---------- */

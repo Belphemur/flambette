@@ -6,6 +6,7 @@ import {
   cookEventsFor,
   filterHistoryEvents,
   groupHistoryByPlan,
+  replanEntries,
   summarizeHistory,
 } from './history'
 import type { CookedEntry } from '../stores/plan'
@@ -154,5 +155,45 @@ describe('cookedToday (the detail pill guard, ADR-0083 addendum)', () => {
 
   test('an empty log never counts', () => {
     expect(cookedToday([], today)).toBe(false)
+  })
+})
+
+describe('replanEntries ("cook that week again", ADR-0085)', () => {
+  const known = new Set([1, 2, 3])
+
+  test('dedupes, drops catalog-missing dishes, orders most-recent-cook first', () => {
+    // Cooked out of order on purpose: the newest cook wins the head.
+    const events = [
+      event(1, 10, 'p1', 1),
+      event(3, 30, 'p1', 1),
+      event(1, 20, 'p1', 1), // dup — cooked twice this week
+      event(9, 40, 'p1', 1), // left the catalog
+      event(2, 25, 'p1', 1),
+    ]
+    expect(replanEntries(events, known, 4)).toEqual([
+      { variantId: 3, servings: 4 }, // newest cook (30)
+      { variantId: 2, servings: 4 }, // (25)
+      { variantId: 1, servings: 4 }, // most recent cook of 1 is 20
+    ])
+  })
+
+  test('empty group or an all-gone catalog yields nothing', () => {
+    expect(replanEntries([], known, 4)).toEqual([])
+    expect(replanEntries([event(9, 10, 'p1', 1)], known, 4)).toEqual([])
+    expect(replanEntries([event(1, 10, 'p1', 1)], new Set<number>(), 4)).toEqual([])
+  })
+
+  test('carries the caller\'s servings verbatim (ADR-0037 remembered default)', () => {
+    expect(replanEntries([event(2, 10, 'p1', 1)], known, 2)).toEqual([
+      { variantId: 2, servings: 2 },
+    ])
+  })
+
+  test('ties on cookedAt order deterministically (same rule as the history merge)', () => {
+    const a = event(1, 50, 'p1', 1)
+    const b = event(2, 50, 'p1', 1)
+    const forward = replanEntries([a, b], known, 4)
+    const backward = replanEntries([b, a], known, 4)
+    expect(forward).toEqual(backward)
   })
 })
