@@ -136,7 +136,8 @@ limit passed explicitly (no `process.env` read at import).
 - `wrangler` (project-pinned ^4, same as SoundSwitch's `website/`).
 - `@cloudflare/workers-types` and generated binding types via `wrangler types`
   — never a hand-written `Env`.
-- `vitest` + `@cloudflare/vitest-pool-workers` for DO tests inside workerd —
+- `vitest` + `@cloudflare/vitest-plugin` for DO tests inside workerd
+  (the renamed `@cloudflare/vitest-pool-workers`, 2026-10-13) —
   the room lifecycle is the most heavily-tested logic in the repo and the DO
   reimplementation must be held to the same bar (join-or-create,
   `code_taken`, preserve-when-absent, rev floor, alarm expiry, hibernation

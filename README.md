@@ -245,7 +245,7 @@ no CI deploy job and no deploy token in the repo.
 bun run deploy:web              # wrangler deploy (web, needs bun run build first)
 bun run deploy:relay            # wrangler deploy -c server/wrangler.jsonc
 bun run dev:relay               # the DO relay locally on :8787
-bun run test:worker             # DO specs in workerd (vitest-pool-workers)
+bun run test:worker             # DO specs in workerd (@cloudflare/vitest-plugin)
 bunx wrangler deploy --dry-run  # worker-side gate, run for BOTH configs
 ```
 

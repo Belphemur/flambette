@@ -157,7 +157,7 @@ export class Room extends DurableObject<Env> {
 
   /**
    * Re-verify the schema against the actual database. Storage isolation
-   * (vitest-pool-workers rolls each test's storage back) and any future
+   * (@cloudflare/vitest-plugin rolls each test's storage back) and any future
    * storage reset can leave an object that remembers `#schemaReady`
    * looking at a database without its tables, so "did I run the DDL" is
    * answered from SQLite, not from a flag. Cheap: one indexed lookup.

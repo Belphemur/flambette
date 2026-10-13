@@ -10,7 +10,7 @@
   "name": "flambette-relay",
   "main": "./worker/index.ts",
   // 2026-05-01, deliberately NOT the newest date: the vitest pool that runs
-  // `bun run test:worker` (@cloudflare/vitest-pool-workers) bundles miniflare
+  // `bun run test:worker` (@cloudflare/vitest-plugin) bundles miniflare
   // 5.20260815.0-alpha, whose workerd rejects anything past 2026-08-04, and
   // a config the local test runtime refuses would make the DO specs cover an
   // aspirational runtime instead of the shipping one. The relay uses nothing

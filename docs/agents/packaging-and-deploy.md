@@ -36,7 +36,8 @@ spoken by a Durable Object instead of a Bun process.
 | relay | `server/wrangler.jsonc` | `server/worker/index.ts` + `Room` DO | `ws.flambette.app` |
 
 - Commands: `bun run deploy:web`, `bun run deploy:relay`, `bun run dev:relay`
-  (workerd locally, :8787), `bun run test:worker` (vitest-pool-workers),
+  (workerd locally, :8787), `bun run test:worker` (`@cloudflare/vitest-plugin`,
+  the renamed `@cloudflare/vitest-pool-workers`),
   `bun run types:worker` (regenerates `server/worker-configuration.d.ts`),
   `bun run typecheck:worker`, `bun run typecheck:relay` (the Bun adapter).
   `bunx wrangler deploy --dry-run` on BOTH configs is the worker-side gate
