@@ -69,11 +69,13 @@ two cards, then the action deck.
   End (Mobile Dark)", Warm Culinary Paper) — right edge of the app
   column, 120px above the bottom navigation (safe-area aware),
   `bg-surface-raised`, subtle `border` token, the ONE `shadow-popover`,
-  warm brand accent dot. Visible while the instructions section
-  intersects the viewport (`useIntersectionObserver` from @vueuse —
-  never a hand-rolled observer) and hidden once the recipe is already
-  cooked TODAY (`cookedToday()` in `src/lib/history.ts`, local-day
-  rule). A tap records through the ONE `plan.markCooked` path (captures
+  warm brand accent dot. Visible once the LAST THREE STEPS come into
+  view (a sentinel rides the third-from-last step —
+  `useIntersectionObserver` from @vueuse, never a hand-rolled observer;
+  NOT the instructions section, which on desktop is in view on load, so
+  a section trigger lit the pill before any scroll) and hidden once the
+  recipe is already cooked TODAY (`cookedToday()` in
+  `src/lib/history.ts`, local-day rule). A tap records through the ONE `plan.markCooked` path (captures
   the prior exactly like the session does) and raises the SAME
   `PostCookPrompt` over the detail page: Done → `/history`; Undo →
   record removed and the user STAYS on detail. `data-test`:

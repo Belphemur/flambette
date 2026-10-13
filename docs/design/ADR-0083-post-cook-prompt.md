@@ -107,10 +107,12 @@ cooking mode.
   icon+label pill anchored to the RIGHT edge, ~120px above the bottom
   navigation — `surface-raised` fill, subtle `#564438` border, soft popover
   shadow, warm accent dot. Unobtrusive by contract: it covers no reading
-  content and never overlaps the tab bar. It appears while the
-  preparation-steps region is in view (scroll-positioned, an
-  IntersectionObserver on the steps section — the pill belongs to the END
-  of the recipe, where "I cooked this" becomes true), and is hidden once
+  content and never overlaps the tab bar. It appears when the LAST THREE
+  STEPS come into view (an IntersectionObserver on a sentinel riding the
+  third-from-last step — the pill belongs to the END of the recipe, where
+  "I cooked this" becomes true; on desktop the instructions COLUMN is in
+  view on load, so a section-level trigger would light the pill before
+  any scroll — owner refinement, 2026-10-13), and is hidden once
   the cook is recorded (or already recorded today — same guard the cooking
   session uses).
 - **Tap = record + the SAME prompt, no separate flow.** The pill records
