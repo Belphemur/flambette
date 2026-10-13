@@ -195,3 +195,22 @@ cooked-today suppression, the single `plan.markCooked` path, and the
 prompt's Done → `/history` / Undo → stay semantics are unchanged. Pinned by
 `e2e/cooked-pill.spec.ts` ("exactly ONE pill, on the latest step whose
 title entered the viewport").
+
+## Change note — 2026-10-13, owner ruling: the pill is ICON-ONLY on the STATIC last-3 tail
+
+The slide contract above was superseded the same day: the owner asked to
+"go back to the fully sliding version from instructions last -3, but with
+one change, use an icon instead of text, one that look like checkmark or
+cooked meal". Decoded, the owner names the ZONE (the last three steps)
+and reverts to the STATIC contract: every one of the LAST THREE steps
+carries the pill in its title row, structural rendering, NO scroll
+tracking and NO observer (the slide machinery — rAF scroll read, ref
+map, one-at-a-time handoff — is deleted). The one change vs. the
+static-tail draft is the pill's CONTENT: ICON-ONLY — a CookingPot glyph
+(the "cooked meal" icon; ChefHat stays the Start-cooking CTA, the
+generic Check is retired) beside the brand accent dot, with the
+accessible name `Cooked this? (reached step N)` carrying the words. The
+cooked-today suppression, the single `plan.markCooked` path, and the
+prompt's Done → `/history` / Undo → stay semantics are unchanged. Pinned
+by `e2e/cooked-pill.spec.ts` (tail counts with no scroll precondition,
+icon-only content).

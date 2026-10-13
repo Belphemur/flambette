@@ -64,18 +64,16 @@ two cards, then the action deck.
   is what keeps you cooking now: record removed, session resumes exactly
   where it was. The window Escape handler yields while the prompt is
   open (registration order — it fires before AppModal's).
-- **The detail "Cooked this?" pill (ADR-0083 addendum, "slide" ruling
-  2026-10-13)**: RecipeDetail renders the compact pill from the Stitch
-  render ("Recipe Detail End (Mobile Dark)", Warm Culinary Paper) INLINE
-  in the TITLE ROW of the LATEST step that has entered the viewport —
-  beside the number badge, in document flow, never over the step text
-  (`bg-surface-raised`, subtle `border` token, warm brand accent dot).
-  Exactly ONE pill exists at a time: scrolling hands it off to the next
-  step's title, scrolling back hops it back ("only visible on the visible
-  instruction, always the latest one"). The trigger is a passive,
-  rAF-throttled window-scroll read of the steps' geometry — NO
-  IntersectionObserver (an observer's callbacks never fire in hidden or
-  occluded tabs — the Firefox no-pill report). Hidden once the
+- **The detail "Cooked this?" pill (ADR-0083 addendum, icon-static ruling
+  2026-10-13, superseding the slide contract)**: RecipeDetail renders the
+  compact pill from the Stitch render ("Recipe Detail End (Mobile Dark)",
+  Warm Culinary Paper) INLINE in the TITLE ROW of each of the LAST THREE
+  preparation steps — beside the number badge, in document flow, never
+  over the step text (`bg-surface-raised`, subtle `border` token, warm
+  brand accent dot). STATIC structural rendering: no scroll tracking, no
+  observer. ICON-ONLY: the dot + one CookingPot glyph (the "cooked meal"
+  icon; ChefHat stays the Start-cooking CTA) — the accessible name
+  `Cooked this? (reached step N)` carries the words. Hidden once the
   recipe is already cooked TODAY (`cookedToday()` in
   `src/lib/history.ts`, local-day rule). A tap records through the ONE `plan.markCooked` path (captures
   the prior exactly like the session does) and raises the SAME
