@@ -1,6 +1,183 @@
 {
-  "generatedAt": "2026-10-12T15:16:05Z",
+  "generatedAt": "2026-10-13T15:59:02Z",
   "versions": [
+    {
+      "version": "v2.10.0",
+      "date": "2026-10-13",
+      "title": "Desktop placement \u2014 full text label beside the instructions, icon-only wiggle kept",
+      "features": [
+        {
+          "text": "desktop placement \u2014 full text label beside the instructions, icon-only wiggle kept",
+          "scope": "pill",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "the \"Cooked this?\" pill lights on the LAST THREE steps",
+          "scope": "detail",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "pill tap records the cook and raises the SAME prompt (ADR-0083 addendum)",
+          "scope": "detail",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "the floating \"Cooked this?\" pill (ADR-0083 addendum)",
+          "scope": "detail",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "any mark is the mark \u2014 mid-cook mark raises the post-cook prompt (ADR-0083 addendum)",
+          "scope": "cooking",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "post-cook prompt \u2014 rate, favourite, undo",
+          "scope": "cooking",
+          "pr": null,
+          "adr": "ADR-0083"
+        },
+        {
+          "text": "no-score helper line invites the first rating (ADR-0082 addendum)",
+          "scope": "ratings",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "dim the catalog fallback fill (ADR-0082 addendum)",
+          "scope": "ratings",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "history rows rate at 22px/24px",
+          "scope": "history",
+          "pr": null,
+          "adr": "ADR-0082"
+        },
+        {
+          "text": "dedicated \"Rate this recipe\" card with Clear",
+          "scope": "detail",
+          "pr": null,
+          "adr": "ADR-0082"
+        },
+        {
+          "text": "RatingStars resolves its desktop size itself",
+          "scope": "rating",
+          "pr": null,
+          "adr": "ADR-0082"
+        },
+        {
+          "text": "tombstoned clear \u2014 store, room transport, backup slice",
+          "scope": "ratings",
+          "pr": null,
+          "adr": null
+        }
+      ],
+      "fixes": [
+        {
+          "text": "reset the flick-dismiss latch when the recipe changes (kody)",
+          "scope": "pill",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "desktop margin placement restored with the raised-surface palette",
+          "scope": "pill",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "restore the raised-surface palette on desktop \u2014 drop the brand-fill overrides",
+          "scope": "pill",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "desktop pill in the page margin beside the instructions \u2014 never over the text",
+          "scope": "pill",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "freeze the clock in the skew-ceiling collapse pin",
+          "scope": "test",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "pill always visible \u2014 pulsing pot wiggle, flick-to-dismiss, Firefox parity",
+          "scope": "detail",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "review round \u2014 midnight-aware cooked-today guard + e2e race guard",
+          "scope": "pill",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "the cooked pill FLOATS again \u2014 Stitch design, icon-only, tail sentinel",
+          "scope": "detail",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "the cooked pill SLIDES WITHIN the last-3 zone, icon-only",
+          "scope": "detail",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "the cooked pill is ICON-ONLY on the static last-3 tail",
+          "scope": "detail",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "the cooked pill SLIDES \u2014 one at a time, hooked on the latest visible step",
+          "scope": "detail",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "inline-pill docs aligned, desktop tail derived, prompt labels",
+          "scope": "review",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "timer alerts takes the full row; identity sits beside the room",
+          "scope": "settings",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "the cooked pill rides the step TITLES, inline \u2014 no overlay, no observer",
+          "scope": "detail",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "rating stamp clamp + prompt owns all keys + mark aria-label",
+          "scope": "review",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "tombstone reconciliation hardening (ADR-0082, review round 2)",
+          "scope": "ratings",
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
     {
       "version": "v2.9.1",
       "date": "2026-10-12",
