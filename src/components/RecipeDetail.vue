@@ -1606,7 +1606,7 @@ function startCooking() {
     <div class="mx-auto flex w-full max-w-app justify-end px-4">
       <button
         type="button"
-        class="pointer-events-auto touch-none relative flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface-raised py-2 pl-3 pr-4 shadow-popover transition-colors hover:bg-surface xl:translate-x-[calc(100%+40px)] xl:bg-brand xl:text-white xl:hover:bg-brand"
+        class="pointer-events-auto touch-none relative flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface-raised py-2 pl-3 pr-4 shadow-popover transition-colors hover:bg-surface"
         aria-label="Cooked this?"
         data-test="cooked-pill"
         @click="cookFromPill"
@@ -1615,14 +1615,14 @@ function startCooking() {
         @pointerup="onPillPointerEnd"
         @pointercancel="onPillPointerEnd"
       >
-        <span class="size-2 shrink-0 rounded-full bg-brand xl:bg-white" aria-hidden="true" />
+        <span class="size-2 shrink-0 rounded-full bg-brand" aria-hidden="true" />
         <span
-          class="cooked-pill-label hidden text-sm font-medium 2xl:inline xl:text-white 2xl:text-text"
+          class="cooked-pill-label hidden text-sm font-medium text-text lg:inline"
         >Cooked this?</span>
         <CookingPot
           :size="16"
           aria-hidden="true"
-          class="text-brand-text xl:text-white"
+          class="text-brand-text"
           :class="pillWiggle ? 'pill-wiggle' : undefined"
         />
       </button>
