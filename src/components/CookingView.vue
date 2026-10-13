@@ -553,7 +553,18 @@ function replaceWith(id: number) {
  * Confirm completes it (Cancel/Escape/simply staying keeps the timers
  * running and the session open). The countdown in the message is the
  * remaining time at ask time, exactly as the native dialog's message was.
+ *
+ * Whether THIS session has a confirm-modal question outstanding (`confirmLease`).
+ * The confirm slot is APP-level (App.vue's single host), so the question would
+ * otherwise outlive the session: a browser/system Back while the modal is
+ * up unmounts CookingView but strands the prompt over the next page with
+ * this session's `complete` closure still attached — a later Confirm would
+ * router.back() from the wrong page or mark an abandoned recipe cooked.
+ * The lease is dropped on EVERY end path (Confirm and the ui store's
+ * settle-once onDismiss), and onUnmounted settles a still-leased prompt.
  */
+let confirmLease = false
+
 function leaveOrConfirm(complete: () => void): void {
   const live = timers.value.filter((t) => isRunning(t))
   if (live.length === 0) {
@@ -564,9 +575,16 @@ function leaveOrConfirm(complete: () => void): void {
     live.length === 1
       ? `The ${live[0].label} timer is still running (${formatCountdown(remainingOf(live[0]))} left). Leave anyway?`
       : `${live.length} timers are still running (${live.map((t) => t.label).join(', ')}). Leave anyway?`
+  confirmLease = true
   confirmModal(message, {
     confirmLabel: 'Leave',
-    onConfirm: complete,
+    onConfirm: () => {
+      confirmLease = false
+      complete()
+    },
+    onDismiss: () => {
+      confirmLease = false
+    },
   })
 }
 
@@ -709,9 +727,11 @@ function onKey(e: KeyboardEvent) {
   // exactly as the manage sheet below owns Escape in its own layer.
   if (postCookOpen.value) return
   // The confirm modal (ADR-0084) owns the keys while its question is up —
-  // same layering as the post-cook prompt: this handler is registered
-  // FIRST, so it must yield or one Escape would close both the modal AND
-  // the cook session behind it.
+  // The confirm modal (ADR-0084) owns the keys while its question is up —
+  // same layering as the post-cook prompt. Registration order is NOT
+  // assumed in either direction: AppModal's Escape handler stops sibling
+  // listeners outright (it consumes the key), and when THIS handler runs
+  // first the prompt is still open and it yields here.
   if (ui.confirm) return
   if (e.key === 'ArrowRight') {
   e.preventDefault()
@@ -806,6 +826,13 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKey)
   document.removeEventListener('visibilitychange', onVisibility)
   void releaseWakeLock()
+  // End the session's own confirm question with the session (see
+  // confirmLease): settleConfirm is a no-op when nothing is open, so a
+  // prompt that already ended can never be dismissed twice.
+  if (confirmLease) {
+    confirmLease = false
+    ui.settleConfirm(false)
+  }
 })
 
 /* ---------- Swipe left/right on the step body (bonus) ---------- */

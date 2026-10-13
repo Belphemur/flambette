@@ -130,6 +130,21 @@ Implementation goes to a supervised pi run against the committed ADR.
 - The one-mount==one-open AppModal assumption holds: the prompt state
   is a single reactive slot in the ui store, so App.vue's host is
   mounted exactly while a question is open.
+- **Stacked modals settle one at a time.** A confirm can open OVER
+  another AppModal (leave-room over the share sheet, an inbound-grocery
+  confirm over the changelog). Escape and Tab belong to the top-most
+  open modal only (AppModal's module-scope `openModals` stack), and the
+  modal that consumes an Escape stops sibling `window` listeners with
+  `stopImmediatePropagation()` — `stopPropagation()` cannot arbitrate
+  listeners on the same target, so one Escape ends exactly one dialog
+  and never re-processes in a view handler registered after the modal's.
+- **A session's question dies with the session.** CookingView's
+  timer-leave prompt lives in the app-level slot, so the session tracks
+  its outstanding question (`confirmLease`) and settles it on unmount:
+  a browser/system Back while the modal is up ends the prompt with the
+  session instead of stranding a stale `complete` (router.back() from
+  the wrong page, a mark-cooked on an abandoned recipe) over whatever
+  page the user landed on.
 - Two-phone onboarding loses the toast's share button; the roster
   sheet (room chip) is now THE surface that hands a new device the
   link — the join-congrats modal (new joiner) already shows the code.

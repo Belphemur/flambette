@@ -617,6 +617,30 @@ test('the header close button routes through the timer confirmation (qodo 412851
   await expectZeroMealimeRequests(page)
 })
 
+test('browser Back with the leave confirm open ends the question with the session', async ({ page }) => {
+  const cooking = await startCooking(page)
+  await goToLastStep(cooking)
+  await armPreset(cooking, 5)
+  await expect(countdown(cooking)).toContainText('5:00')
+
+  // The confirm modal is APP-level (App.vue hosts the ONE question). If
+  // the user leaves with the browser/system Back while it is up, the
+  // session unmounts — and the question must end WITH the session, never
+  // strand over the next page holding this session's complete closure
+  // (a later Confirm there would router.back() from the wrong page or
+  // mark an abandoned recipe cooked).
+  await cooking.getByRole('button', { name: /Finish/ }).click()
+  const modal = page.getByTestId('confirm-modal')
+  await expect(modal).toContainText('The Step timer is still running')
+  await page.goBack()
+  await expect(cooking).not.toBeVisible()
+  await expect(modal).toHaveCount(0)
+  // Nothing was confirmed on the way out: no cook was recorded, no
+  // post-cook prompt exists to answer, and the plan entry survives.
+  await expect(page.getByTestId('post-cook-prompt')).toHaveCount(0)
+  await expectZeroMealimeRequests(page)
+})
+
 test('mark as cooked also asks before discarding a running timer', async ({ page }) => {
   // ADR-0034: the mark is available from the FIRST step, and a mid-cook
   // mark keeps you cooking — it is the same timer gate Finish runs.

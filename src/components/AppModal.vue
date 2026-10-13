@@ -1,3 +1,12 @@
+<script lang="ts">
+/**
+ * THE open-modal stack — GENUINE module scope (a `<script setup>` const
+ * would be per-instance, giving every modal a one-entry stack where it is
+ * always top). See the header note on stacking in the setup block.
+ */
+const openModals: object[] = []
+</script>
+
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 
@@ -31,6 +40,12 @@ import { nextTick, onMounted, onUnmounted, ref } from 'vue'
  * `dismissable: false` (JoinCongratsModal) removes the Escape and scrim
  * dismissal — the only way out is the caller's own control — while the focus
  * machinery stays, because `aria-modal="true"` is a promise either way.
+ *
+ * STACKING (qodo, ADR-0084): when two AppModals are open at once (the
+ * confirm over the share sheet, an inbound-grocery confirm over the
+ * changelog), Escape and Tab belong to the TOP-MOST one only — one Escape
+ * closes one dialog, and only the top dialog's focus trap is live. See
+ * `openModals` below.
  */
 const props = withDefaults(
   defineProps<{
@@ -55,6 +70,18 @@ const emit = defineEmits<{ close: [] }>()
 const panel = ref<HTMLElement | null>(null)
 
 let restoreFocusTo: HTMLElement | null = null
+
+/**
+ * ONE open-modal stack (module scope — shared by every AppModal instance).
+ * Every consumer mounts `v-if`-gated — one mount == one open — so the stack
+ * is the z-order truth of which dialog is on top. Escape and Tab belong to
+ * the TOP-MOST modal only: a confirm opened over the share sheet or the
+ * changelog must not close BOTH dialogs on one Escape, and two focus traps
+ * must never fight over the same Tab. `stopPropagation()` cannot do this
+ * (it stops nothing among sibling listeners on the same window target), so
+ * the gate reads the stack at event time instead.
+ */
+const modalToken: object = {}
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -104,8 +131,18 @@ function trapTab(e: KeyboardEvent): void {
 }
 
 function onKey(e: KeyboardEvent) {
+  // Escape and Tab belong to the TOP-MOST open modal only (see openModals):
+  // stopPropagation() cannot provide that — it stops nothing among sibling
+  // listeners on the same window target.
+  if (openModals[openModals.length - 1] !== modalToken) return
   if (e.key === 'Escape' && props.dismissable) {
-    e.stopPropagation()
+    // stopImmediatePropagation, not stopPropagation: the modal that
+    // consumes the Escape OWNS the keypress. Sibling listeners on the
+    // same window target (CookingView's session handler, RecipeDetail's)
+    // must not also react to the same press — stopPropagation does not
+    // stop those, and a view handler registered after this modal's would
+    // re-process an Escape whose prompt was just settled (kody).
+    e.stopImmediatePropagation()
     emit('close')
     return
   }
@@ -117,12 +154,15 @@ function onScrim() {
 }
 
 onMounted(() => {
+  openModals.push(modalToken)
   restoreFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
   window.addEventListener('keydown', onKey)
   void nextTick(() => panel.value?.focus())
 })
 
 onUnmounted(() => {
+  const token = openModals.indexOf(modalToken)
+  if (token >= 0) openModals.splice(token, 1)
   window.removeEventListener('keydown', onKey)
   const target = restoreFocusTo
   restoreFocusTo = null
