@@ -9,12 +9,14 @@ import {
   formatDay,
   formatRelative,
   groupHistoryByPlan,
+  replanEntries,
   summarizeHistory,
 } from '../lib/history'
 import { imageSrc, onImgError } from '../lib/images'
 import type { VariantMeta } from '../lib/types'
-import { usePlanStore } from '../stores/plan'
+import { usePlanStore, type CookedEntry } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
+import AppModal from './AppModal.vue'
 import RatingStars from './RatingStars.vue'
 import FavouriteButton from './FavouriteButton.vue'
 import TooltipBubble from './TooltipBubble.vue'
@@ -46,6 +48,8 @@ interface Group {
   planCreatedAt: number | null
   lastAt: number
   count: number
+  /** The group's raw cook events (the re-plan reconstruction input, ADR-0085). */
+  events: CookedEntry[]
   rows: Row[]
 }
 
@@ -63,6 +67,7 @@ const groups = computed<Group[]>(() => {
   planCreatedAt: g.planCreatedAt,
   lastAt: g.lastAt,
   count: g.events.length,
+  events: g.events,
   // A group whose recipes all left the catalog renders nothing; drop
   // it rather than showing an empty heading.
   rows,
@@ -110,6 +115,81 @@ const filteredGroups = computed<Group[]>(() => {
 function addToPlan(row: Row) {
   plan.addToPlan(row.meta, ui.defaultServings)
   ui.showToast(`Added ${row.meta.name} to plan`)
+}
+
+/* ---------- "Cook that week again" (ADR-0085) ---------- */
+
+/**
+ * The group currently being previewed for re-plan, or null. ONE preview
+ * at a time: the pill is inert (disabled) while this is set.
+ */
+const replanGroup = ref<Group | null>(null)
+
+/**
+ * The previewed week's meal set (ADR-0085 §2/§3): one entry per distinct
+ * catalog-present dish, most-recent-cook-first, every meal at the
+ * remembered default (ADR-0037). Derived on demand from the group's cook
+ * events — nothing is stored.
+ */
+const replanPreview = computed(() => {
+  const c = catalog.value
+  const g = replanGroup.value
+  if (!c || !g) return []
+  return replanEntries(g.events, new Set(c.byId.keys()), ui.defaultServings).flatMap((e) => {
+    const meta = c.byId.get(e.variantId)
+    return meta ? [{ ...e, meta }] : []
+  })
+})
+
+/**
+ * Open the preview for a group. The pill lives in the SEARCH-FILTERED
+ * group list, but "that week" is the whole group even when the filter is
+ * active — resolve the full group by its unique planId.
+ */
+function openReplan(group: Group) {
+  replanGroup.value = groups.value.find((g) => g.planId === group.planId) ?? group
+}
+
+/**
+ * Accessible name for the group's pill: it names the plan week (the
+ * group's planned date), not just the generic action.
+ */
+function replanLabel(group: Group): string {
+  return group.planCreatedAt !== null
+    ? `Cook that week again — planned ${formatDay(group.planCreatedAt)}`
+    : `Cook that week again — ${groupTitle(group)}`
+}
+
+function confirmReplan() {
+  const preview = replanPreview.value
+  if (!replanGroup.value || preview.length === 0) {
+    replanGroup.value = null
+    return
+  }
+  // EXACT-STATE undo (ADR-0030 grammar, ADR-0085 §3): the snapshot is
+  // taken at CONFIRM time — a room peer may have planned a meal mid-
+  // preview — so the undo restores the state the user confirmed over,
+  // not the one the preview was built from.
+  const atConfirm = plan.plan.map((e) => ({ ...e }))
+  const customAtConfirm = [...plan.customItems]
+  const clearedAtConfirm = { ...plan.clearedIngredients }
+  // Fresh planning = fresh ingredients: re-planning a meal forgets any
+  // cleared-ingredient snapshot (same rule as addToPlan).
+  for (const meal of preview) plan.restoreIngredients(meal.variantId)
+  plan.replacePlan(
+    preview.map((m) => ({ variantId: m.variantId, servings: m.servings })),
+    customAtConfirm,
+  )
+  const undo = () => {
+    plan.replacePlan(atConfirm, customAtConfirm)
+    plan.setClearedIngredients(clearedAtConfirm)
+  }
+  const n = preview.length
+  ui.showToast(`Plan replaced: ${n} ${n === 1 ? 'meal' : 'meals'}`, {
+    actions: [{ label: 'Undo', run: undo, testId: 'replan-undo' }],
+    duration: 6000,
+  })
+  replanGroup.value = null
 }
 
 /* ---------- Period pills (EXPERIENCE.md §7; ADR-0069 pill geometry) ---------- */
@@ -344,9 +424,30 @@ const hasAnyCook = computed(() => plan.cookedHistory.length > 0)
   >{{ formatDay(group.planCreatedAt) }}</span
   >
   </div>
-  <span class="shrink-0 font-mono-data text-label-sm tabular-nums text-text-muted">
+  <!-- ADR-0085: the group's one compact secondary action, right aligned
+  beside the relative-date label. Outlined pill (the meal cards' "Add to
+  plan" grammar — warm border, espresso label, hover/sunken fill); the
+  tab's ONE filled intent stays the empty state's Browse recipes. Only
+  plan-backed groups carry it: "Earlier cooks" has no plan to
+  reconstruct, and a group whose recipes all left the catalog renders
+  nothing at all. Inert while a preview is open (ONE at a time). -->
+  <div class="flex shrink-0 items-center gap-2">
+  <button
+  v-if="group.planId !== null"
+  type="button"
+  class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border-strong bg-transparent px-3 py-2 text-xs font-semibold text-brand-text transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-50"
+  :aria-label="replanLabel(group)"
+  :data-test="`history-replan-${group.planId}`"
+  :disabled="replanGroup !== null"
+  @click="openReplan(group)"
+  >
+  <RefreshCw :size="15" aria-hidden="true" />
+  <span class="whitespace-nowrap">Cook that week again</span>
+  </button>
+  <span class="font-mono-data text-label-sm tabular-nums text-text-muted">
   {{ formatRelative(group.lastAt) }}
   </span>
+  </div>
   </div>
   <!-- The render's meal cards: a photo-card grid (3 across on desktop,
   one on a phone) instead of one compact ribbon row per dish. The card
@@ -443,5 +544,70 @@ const hasAnyCook = computed(() => plan.cookedHistory.length > 0)
   </section>
   </div>
   </template>
+
+  <!-- ADR-0085: the compact ADR-0030 confirm modal on the shared
+  AppModal machinery (the dialog owns the a11y machinery ONCE). One tile
+  per meal (image + title through the SAME helpers the cards and the
+  plan use, so preview, plan and grid cannot disagree about a picture),
+  the meals count + replace warning, then confirm + "Keep editing" —
+  confirm-before-destroy, never a silent replace. -->
+  <AppModal
+  v-if="replanGroup"
+  dialog-label="Cook that week again"
+  overlay-class="z-40 flex items-center justify-center modal-scrim px-6"
+  panel-class="max-h-[85vh] w-full max-w-sm overflow-y-auto space-y-4 rounded-2xl bg-surface-raised p-5"
+  overlay-test="replan-overlay"
+  panel-test="replan-preview"
+  @close="replanGroup = null"
+  >
+  <div>
+  <h2 class="text-lg font-bold tracking-tight text-text">Cook that week again</h2>
+  <p class="mt-0.5 text-xs text-text-muted">
+  {{ replanPreview.length }} {{ replanPreview.length === 1 ? 'meal' : 'meals' }} at
+  {{ ui.defaultServings }} servings each
+  </p>
+  </div>
+  <ul class="grid grid-cols-2 gap-2" aria-label="The meals from that week">
+  <li
+  v-for="meal in replanPreview"
+  :key="meal.variantId"
+  class="overflow-hidden rounded-lg bg-surface ring-1 ring-border"
+  :data-test="`replan-meal-${meal.variantId}`"
+  >
+  <img
+  :src="imageSrc(meal.meta.thumbnail_image_url)"
+  :alt="meal.meta.name"
+  loading="lazy"
+  class="aspect-[4/3] w-full object-cover"
+  @error="onImgError"
+  />
+  <span class="block line-clamp-2 px-2 py-1.5 text-[11px] font-medium leading-tight">
+  {{ meal.meta.name }}
+  </span>
+  </li>
+  </ul>
+  <p class="text-xs text-text" data-test="replan-warning">
+  Replaces your current plan
+  <template v-if="plan.plan.length > 0">({{ plan.plan.length }} meals)</template>.
+  </p>
+  <div class="flex gap-2">
+  <button
+  type="button"
+  class="h-11 flex-1 rounded-xl bg-brand text-sm font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong"
+  data-test="replan-confirm"
+  @click="confirmReplan"
+  >
+  Re-plan this week
+  </button>
+  <button
+  type="button"
+  class="h-11 flex-1 rounded-xl border border-border-strong bg-surface-raised text-sm font-medium text-text active:bg-surface-sunken"
+  data-test="replan-cancel"
+  @click="replanGroup = null"
+  >
+  Keep editing
+  </button>
+  </div>
+  </AppModal>
   </section>
 </template>
