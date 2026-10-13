@@ -332,16 +332,24 @@ mobile icon-only geometry is untouched. At `lg`+ the pill:
 
 - **Carries its FULL text label** — a `Cooked this?` span (the words the
   accessible name already carried become visible content), slotted
-  between the accent dot and the CookingPot glyph, `hidden lg:inline`
-  (the words remain in the aria-label on every layout either way).
-- **Re-anchors horizontally**: 1.5rem INSIDE the 1100px app container's
-  right edge (`--container-app`, DESIGN.md). The floating wrapper's
-  app-width column flips its gutter to `lg:px-6`, which yields exactly
-  `max(1.5rem, calc((100vw - 1100px) / 2 + 1.5rem))` — the same
-  right-alignment the desktop content edge already uses (1280px
-  viewport ⇒ 24px from the viewport edge).
-- **Floats ~110px above the bottom** (`lg:bottom-[110px]`), versus the
-  mobile `bottom-[calc(120px+env(safe-area-inset-bottom))]`.
+  between the accent dot and the CookingPot glyph, `hidden 2xl:inline`
+  (the margin is only wide enough for it from 2xl; the words remain in
+  the aria-label on every layout either way).
+- **Floats in the free page margin OUTSIDE the container** (owner
+  screenshot steering, same day — supersedes the "1.5rem inside the
+  edge" wording the ruling first used): at `xl`+ the pill translates
+  `calc(100% + 40px)` so its LEFT edge sits 1.5rem past the 1100px
+  `--container-app` right edge — beside the instructions column, never
+  over the step text — while `lg:bottom-[110px]` keeps it ~110px above
+  the bottom (mobile `bottom-[calc(120px+env(safe-area-inset-bottom))]`
+  untouched). The margin holds the ICON-ONLY pill below `2xl`; the FULL
+  text label appears from `2xl`, where the margin is wide enough.
+- **The palette NEVER changes per layout** (owner screenshot ruling,
+  same day): the terracotta `xl:bg-brand` fill + white text + white dot
+  that briefly accompanied the margin design were REJECTED and
+  reverted; the pill is the raised warm surface (`bg-surface-raised`,
+  subtle `border-border`, one popover shadow, brand accent dot,
+  brand-text glyph, `text-text` label) on EVERY layout.
 
 The wiggle stays ICON-ONLY on BOTH layouts: the scoped keyframes
 transform ONLY the CookingPot svg; the text label never animates (it is

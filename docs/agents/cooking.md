@@ -93,16 +93,19 @@ two cards, then the action deck.
   times we should see the pill all the time"). ICON-ONLY (kept from the
   icon-static ruling): the dot + one CookingPot glyph (ChefHat stays
   the Start-cooking CTA) — the accessible name `Cooked this?` carries
-  the words. DESKTOP (owner ruling 2026-10-14): at `lg`+ the pill
-  grows its FULL text label ("Cooked this?" — the words move from
-  aria-label only into the visible content), re-anchors to 1.5rem
-  INSIDE the 1100px app container's right edge (`--container-app`; the
-  wrapper's app-width column flips its gutter to `lg:px-6`, yielding
-  `max(1.5rem, calc((100vw - 1100px) / 2 + 1.5rem))`), and floats
-  ~110px above the bottom (`lg:bottom-[110px]` — the mobile 120px +
-  safe-area offset is untouched below `lg`); the label is plain
-  visible text at `lg`, so no e2e text assertions change meaning on
-  mobile. PROMPT = the pot WIGGLES, pulsing: 5 rounds of a 2 s
+  the words. DESKTOP (owner rulings 2026-10-14): at `xl`+ the pill
+  TRANSLATES OUTSIDE the 1100px app container into the free page
+  margin — `xl:translate-x-[calc(100%+40px)]` puts its left edge 1.5rem
+  past the container's right edge, so it floats BESIDE the instructions
+  column and can never overlay the step text — while
+  `lg:bottom-[110px]` floats it ~110px above the bottom (mobile keeps
+  120px + safe-area). The margin holds the ICON-ONLY pill below `2xl`;
+  the FULL text label ("Cooked this?") appears from `2xl`, where the
+  margin is wide enough for it. THE PALETTE NEVER CHANGES PER LAYOUT:
+  raised surface (`bg-surface-raised`), subtle `border-border`, the one
+  popover shadow, the brand accent dot, the brand-text pot glyph and
+  the `text-text` label — the brand-fill/white-text overrides tried the
+  same day were REJECTED by the owner and reverted. PROMPT = the pot WIGGLES, pulsing: 5 rounds of a 2 s
   wiggle (`WIGGLE_MS`), pauses between rounds growing 2/4/6/8 s
   (`WIGGLE_PAUSES_MS`), then it stops for that page load (~30 s); the
   scoped keyframes rotate ONLY the svg (±8°, 0.5 s cycles,
