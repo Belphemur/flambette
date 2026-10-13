@@ -51,6 +51,22 @@ async function gotoLastStep(cooking: import('@playwright/test').Locator) {
   return total
 }
 
+/** The session's recorded cook events, read off the plan store (ADR-0032). */
+async function cookedHistoryCount(page: import('@playwright/test').Page): Promise<number> {
+  return page.evaluate(() => {
+    const pinia = document.querySelector('#app')?.__vue_app__?.config?.globalProperties?.$pinia
+    return ((pinia?.state?.value?.plan?.cookedHistory ?? []) as unknown[]).length
+  })
+}
+
+/** The persisted household ratings (same contract as household-ratings.spec). */
+async function ratingsOf(page: import('@playwright/test').Page): Promise<Record<string, { rating: number; count: number; updatedAt: number }>> {
+  return page.evaluate(() => {
+    const pinia = document.querySelector('#app')?.__vue_app__?.config?.globalProperties?.$pinia
+    return (pinia?.state?.value?.ratings?.map ?? {}) as Record<string, { rating: number; count: number; updatedAt: number }>
+  })
+}
+
 test('cooking mode shows one step at a time with progress', async ({ page }) => {
   const { cooking } = await startCooking(page)
 
@@ -110,7 +126,7 @@ test('a deep link to an unplanned recipe opens cooking mode (ADR-0034)', async (
   await expectZeroMealimeRequests(page)
 })
 
-test('Finish on the last step records the cook and leaves cooking mode', async ({ page }) => {
+test('Finish raises the post-cook prompt; Done lands on History (ADR-0083)', async ({ page }) => {
   const { cooking, name } = await startCooking(page)
   await gotoLastStep(cooking)
 
@@ -120,12 +136,70 @@ test('Finish on the last step records the cook and leaves cooking mode', async (
   await expect(cooking.getByTestId('mark-cooked')).toHaveCount(0)
   await expect(finish).toContainText('Finish')
   await finish.click()
-  await expect(cooking).not.toBeVisible()
-  await expect(page.getByTestId('toast').getByText('Enjoy! Marked as cooked')).toBeVisible()
 
-  // The cook was recorded — the recipe knows it has been cooked once.
-  await gotoTab(page, 'History')
+  // The modal IS the acknowledgment (ADR-0083): prompt up over the
+  // still-mounted session, "Enjoy! Marked as cooked" toast NOT fired.
+  const prompt = page.getByTestId('post-cook-prompt')
+  await expect(prompt).toBeVisible()
+  await expect(prompt.getByRole('heading', { name: 'Enjoyed it?' })).toBeVisible()
+  await expect(prompt.getByTestId('rating-stars')).toBeVisible()
+  await expect(prompt.getByRole('button', { name: 'Add to favourites' })).toBeVisible()
+  await expect(prompt.getByTestId('post-cook-done')).toBeVisible()
+  await expect(prompt.getByTestId('post-cook-undo')).toBeVisible()
+  await expect(page.getByTestId('toast')).toHaveCount(0)
+  await expect(cooking).toBeVisible()
+
+  // A rating made in the prompt writes the SAME ratings store: the half
+  // grid is live here exactly as on the detail card, and it persists.
+  await prompt.getByRole('button', { name: 'Rate 4.5 of 5 stars' }).click()
+  await expect(prompt.getByTestId('rating-stars')).toHaveAttribute('data-rating', '4.5')
+  expect(Object.values(await ratingsOf(page))).toContainEqual(
+    expect.objectContaining({ rating: 4.5, count: 1 }),
+  )
+
+  // Done: one close, one destination — History, where the entry landed.
+  await prompt.getByTestId('post-cook-done').click()
+  await expect(page).toHaveURL(/\/history$/)
+  await expect(cooking).not.toBeVisible()
   await expect(page.getByTestId('history-row').first()).toContainText(name)
+  await expectZeroMealimeRequests(page)
+})
+
+test('the post-cook prompt closes to History on Escape too (ADR-0083)', async ({ page }) => {
+  const { cooking } = await startCooking(page)
+  await gotoLastStep(cooking)
+  await cooking.getByTestId('finish').click()
+  await expect(page.getByTestId('post-cook-prompt')).toBeVisible()
+
+  // Escape is a non-Undo close: the same destination as Done (ADR-0083).
+  await page.keyboard.press('Escape')
+  await expect(page).toHaveURL(/\/history$/)
+  await expect(page.getByTestId('post-cook-prompt')).toHaveCount(0)
+})
+
+test('the post-cook prompt Undo stays in the session with the record removed (ADR-0083)', async ({
+  page,
+}) => {
+  const { cooking } = await startCooking(page)
+  await gotoLastStep(cooking)
+  await cooking.getByTestId('finish').click()
+  const prompt = page.getByTestId('post-cook-prompt')
+  await expect(prompt).toBeVisible()
+  expect(await cookedHistoryCount(page)).toBe(1)
+
+  // Undo calls the SAME plan.undoMarkCooked the toast Undo called: the
+  // record is gone and the cook STAYS open — no /history navigation.
+  await prompt.getByTestId('post-cook-undo').click()
+  await expect(prompt).toHaveCount(0)
+  await expect(cooking).toBeVisible()
+  await expect(page).toHaveURL(/\/cooking\//)
+  expect(await cookedHistoryCount(page)).toBe(0)
+
+  // Leaving afterwards is a plain session close: History stays empty.
+  await page.keyboard.press('Escape')
+  await expect(cooking).not.toBeVisible()
+  await gotoTab(page, 'History')
+  await expect(page.getByTestId('history-empty')).toBeVisible()
   await expectZeroMealimeRequests(page)
 })
 
@@ -148,14 +222,30 @@ test('Finish takes a planned meal out of the plan, and Undo puts it back', async
   await expect(reopened).toBeVisible()
   await gotoLastStep(reopened)
   await reopened.getByTestId('finish').click()
+
+  // One action, acknowledged by the prompt (ADR-0083): the cook event is
+  // recorded AND the meal left the plan (read off the store — the plan
+  // tab is behind the full-screen cook session).
+  const prompt = page.getByTestId('post-cook-prompt')
+  await expect(prompt).toBeVisible()
+  await expect
+    .poll(async () => page.evaluate(() => {
+      const pinia = document.querySelector('#app')?.__vue_app__?.config?.globalProperties?.$pinia
+      return ((pinia?.state?.value?.plan?.plan ?? []) as unknown[]).length
+    }))
+    .toBe(0)
+
+  // Undo restores the exact prior state — the SAME plan.undoMarkCooked
+  // the old toast Undo called — and STAYS in the cooking session.
+  await prompt.getByTestId('post-cook-undo').click()
+  await expect(prompt).toHaveCount(0)
+  await expect(reopened).toBeVisible()
+  await expect(page).toHaveURL(/\/cooking\//)
+  await page.keyboard.press('Escape')
   await expect(reopened).not.toBeVisible()
 
-  // One action: the cook event is recorded AND the meal left the plan.
+  // …the meal is back in the plan…
   await gotoTab(page, 'Plan')
-  await expect(page.getByText('Your meal plan is empty')).toBeVisible()
-
-  // Undo restores the exact prior state: the meal is back in the plan…
-  await page.getByTestId('cook-undo').click()
   await expect(page.getByRole('button', { name: `Mark ${name} as cooked` })).toBeVisible()
   // …and the cook event is gone.
   await gotoTab(page, 'History')
@@ -163,7 +253,7 @@ test('Finish takes a planned meal out of the plan, and Undo puts it back', async
   await expectZeroMealimeRequests(page)
 })
 
-test('mark as cooked is available at EVERY step and keeps you cooking (ADR-0034)', async ({ page }) => {
+test('mark as cooked is available at EVERY step and converges on the prompt (ADR-0034, ADR-0083 addendum)', async ({ page }) => {
   const { cooking, name } = await startCooking(page)
 
   // Reachable on the first step, not only at the end.
@@ -171,30 +261,37 @@ test('mark as cooked is available at EVERY step and keeps you cooking (ADR-0034)
   await expect(mark).toBeVisible()
   await mark.click()
 
-  // Mid-cook marking records the cook and LEAVES YOU IN THE COOK.
-  await expect(page.getByTestId('toast').getByText('Marked as cooked')).toBeVisible()
+  // ADR-0083 addendum: the mid-cook mark raises the SAME post-cook
+  // prompt as Finish — the modal IS the acknowledgment, no toast.
+  const prompt = page.getByTestId('post-cook-prompt')
+  await expect(prompt).toBeVisible()
+  await expect(page.getByTestId('toast')).toHaveCount(0)
+  await expect(cooking).toBeVisible()
+  expect(await cookedHistoryCount(page)).toBe(1)
+
+  // Undo removes the record and the session RESUMES exactly where it
+  // was — the ADR-0034 keep-cooking contract, carried by the prompt's
+  // Undo now that the toast is retired.
+  await prompt.getByTestId('post-cook-undo').click()
+  await expect(prompt).toHaveCount(0)
   await expect(cooking).toBeVisible()
   await expect(cooking.getByText(/Step 1 \/ \d+/)).toBeVisible()
-  await expect(cooking.getByTestId('mark-cooked')).toBeDisabled()
+  await expect(cooking.getByTestId('mark-cooked')).toBeEnabled()
+  expect(await cookedHistoryCount(page)).toBe(0)
 
-  // A session records ONE cook: finishing after the mid-cook mark closes
-  // without writing a second event (ADR-0034).
+  // A session records ONE cook: finishing after the mid-cook mark
+  // raises the prompt WITHOUT writing a second event (ADR-0034/0083).
   await gotoLastStep(cooking)
   await cooking.getByTestId('finish').click()
-  await expect(cooking).not.toBeVisible()
+  await expect(page.getByTestId('post-cook-prompt')).toBeVisible()
+  expect(await cookedHistoryCount(page)).toBe(1)
+
+  // The acknowledged entry lands on History and reads back on the recipe.
+  await page.getByTestId('post-cook-done').click()
+  await expect(page).toHaveURL(/\/history$/)
   await gotoTab(page, 'Recipes')
   await openRecipeDetail(page, name)
   await expect(page.getByTestId('cook-history')).toContainText('Cooked 1 time')
-
-  // Undo takes the cook back.
-  await page.getByTestId('cook-undo').click()
-  await page.keyboard.press('Escape')
-  await expect(cooking).not.toBeVisible()
-  await gotoTab(page, 'History')
-  await expect(page.getByTestId('history-empty')).toBeVisible()
-  await gotoTab(page, 'Recipes')
-  await openRecipeDetail(page, name)
-  await expect(page.getByTestId('cook-history')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
 test('marking mid-cook does not rescale the cook (ADR-0034)', async ({ page }) => {
@@ -218,7 +315,10 @@ test('marking mid-cook does not rescale the cook (ADR-0034)', async ({ page }) =
   await expect(cooking.getByTestId('cook-serves')).toContainText('serves 2')
   await expect(cooking.getByTestId('mark-cooked')).toBeVisible()
   await cooking.getByTestId('mark-cooked').click()
-  await expect(page.getByTestId('toast')).toContainText('Marked as cooked')
+  // ADR-0083 addendum: the mid-cook mark raises the prompt (no toast);
+  // the session stays mounted behind it.
+  await expect(page.getByTestId('post-cook-prompt')).toBeVisible()
+  await expect(page.getByTestId('toast')).toHaveCount(0)
 
   // Same servings, same step, after the meal is off the plan.
   await expect(cooking.getByTestId('cook-serves')).toContainText('serves 2')

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   aggregateHistory,
   cookCount,
+  cookedToday,
   cookEventsFor,
   filterHistoryEvents,
   groupHistoryByPlan,
@@ -136,5 +137,22 @@ describe('summarizeHistory (the DATA numbers in the head)', () => {
 
   test('an empty log summarizes to zeroes, not nulls beyond lastAt', () => {
     expect(summarizeHistory([])).toEqual({ total: 0, dishes: 0, lastAt: null })
+  })
+})
+
+describe('cookedToday (the detail pill guard, ADR-0083 addendum)', () => {
+  // Local noon anchors both sides on the same local day regardless of the
+  // runner's timezone; yesterday is 24h back (crosses a midnight once).
+  const NOON = new Date(); NOON.setHours(12, 0, 0, 0)
+  const today = NOON.getTime()
+  const yesterday = today - 24 * 60 * 60 * 1000
+
+  test('a cook earlier TODAY counts; yesterday does not', () => {
+    expect(cookedToday([today - 3_600_000], today)).toBe(true)
+    expect(cookedToday([yesterday], today)).toBe(false)
+  })
+
+  test('an empty log never counts', () => {
+    expect(cookedToday([], today)).toBe(false)
   })
 })

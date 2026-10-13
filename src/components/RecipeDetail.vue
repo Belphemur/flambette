@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
 import TooltipBubble from './TooltipBubble.vue'
@@ -34,18 +34,20 @@ import {
 } from '../lib/stepTimer'
 import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { macroGrams } from '../lib/nutrition'
-import { usePlanStore } from '../stores/plan'
+import { usePlanStore, type CookedEntry, type PlanEntry } from '../stores/plan'
+import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
-import { displayRating, useRatingStore } from '../stores/rating'
+import { displayRating, ratingNoScoreCorner, useRatingStore } from '../stores/rating'
 import { planServingsFor } from '../composables/usePlanServings'
 import RatingStars from './RatingStars.vue'
+import PostCookPrompt from './PostCookPrompt.vue'
 import NutritionModal from './NutritionModal.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
+import { useIntersectionObserver } from '@vueuse/core'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
 import { recipeSeoHead } from '../lib/seo'
 import HueIcon from './HueIcon.vue'
 import FavouriteButton from './FavouriteButton.vue'
-import { onMounted, onUnmounted } from 'vue'
 import { useHead } from '@unhead/vue'
 import {
   ArrowLeft,
@@ -53,6 +55,7 @@ import {
   ChefHat,
   ChevronDown,
   Clock,
+  CookingPot,
   Donut,
   Minus,
   NotebookPen,
@@ -63,9 +66,14 @@ import {
 import { isUserRecipeId } from '../lib/userRecipes'
 
 const plan = usePlanStore()
-// The strip's rating NUMBER reads the same store the stars control
-// (ADR-0031): one precedence, so the digits and the glyphs cannot drift.
+// The rate card's rating NUMBER reads the same store the stars control
+// (ADR-0031/0082): one precedence, so the digits and the glyphs cannot
+// drift. The strip's Rating cell retired — the card owns it now.
 const ratingStore = useRatingStore()
+// "Synced to household" shows ONLY while a room is live (ADR-0082):
+// ratings are room-synced, and a standalone install must not be told
+// it syncs.
+const room = useRoomStore()
 const router = useRouter()
 
 /** Recipe variant id, passed as a route prop from /recipe/:id. */
@@ -250,17 +258,44 @@ const macroSegments = computed(() => {
 })
 
 /**
- * The number beside the strip's stars (the render's "4.9 ★★★★"): the
- * household's own rating when one exists, the catalog Bayesian mean
- * otherwise — the SAME precedence RatingStars displays, so the number and
- * the stars can never disagree (ADR-0074's addendum). Null when neither
- * exists: an unrated recipe with no catalog score prints nothing.
+ * The number beside the rate card's stars (ADR-0082; the render's
+ * "4.5 / 5.0"): the household's own rating when one exists, the catalog
+ * Bayesian mean otherwise — the SAME precedence RatingStars displays, so
+ * the number and the stars can never disagree (ADR-0074's addendum; ONE
+ * computed, shared by nothing else — the strip cell that used to print
+ * it retired with ADR-0082). Null when neither exists: an unrated
+ * recipe with no catalog score prints nothing.
  */
 const ratingDisplay = computed(() => {
   if (!meta.value) return null
   const value = displayRating(ratingStore.ratingFor(meta.value.id), meta.value.rating)
   return value > 0 ? value.toFixed(1) : null
 })
+
+/**
+ * The Clear control (ADR-0082) shows only when the household has rated
+ * this recipe — an unrated recipe has nothing to clear.
+ */
+const ratingCount = computed(() =>
+  meta.value ? ratingStore.countFor(meta.value.id) : 0,
+)
+
+/**
+ * The no-score corner (ADR-0082 addendum): neither the household nor the
+ * catalog has a score, so the helper line invites the first rating. One
+ * predicate (ratingNoScoreCorner), unit-pinned beside the store helpers.
+ */
+const noScoreCorner = computed(() =>
+  meta.value ? ratingNoScoreCorner(ratingCount.value, meta.value.rating) : false,
+)
+
+/** Clear the household's rating (ADR-0082): immediate, one plain toast —
+ * no confirm, clearing is reversible by re-rating with one tap. */
+function clearRating() {
+  if (!meta.value) return
+  ratingStore.clearRating(meta.value.id)
+  useUiStore().showToast('Rating cleared', { duration: 2000 })
+}
 
 /** The bar's accessible reading: one image role, one sentence. */
 const macroAria = computed(() => {
@@ -492,6 +527,277 @@ const cookLastTitle = computed(() => {
   return last ? `Last cooked ${formatAbsolute(last)}` : undefined
 })
 
+/**
+ * The "Cooked this?" pill (ADR-0083 addendum): a compact floating
+ * affordance for marking the cook from the detail page — for the person
+ * who never enters cooking mode. OWNER FINAL ruling (2026-10-13,
+ * supersedes the slide-final, icon-static and slide-in-tail notes): the
+ * pill is FLOATING again, exactly as Stitch designed — one fixed pill
+ * that is NOT hooked to anything (content scrolls under it), with the
+ * icon-only content kept from the icon-static ruling (the brand accent
+ * dot + one CookingPot glyph; ChefHat stays the Start-cooking CTA — the
+ * accessible name carries the words). OWNER desktop rulings
+ * (2026-10-14): the pill moves to the RIGHT SIDE OF THE INSTRUCTIONS
+ * column — fully OUTSIDE the app container in the free page margin
+ * (its left edge on the container's outer right edge + the 1.5rem
+ * gutter), so it can never overlay the step text ("On desktop we have
+ * space, we shouldn't overlay the pill with the instruction text").
+ * The full text label appears only from `2xl`, where the margin is
+ * wide enough to hold it without clipping; between `xl` and `2xl` the
+ * margin holds the icon-only pill. Mobile keeps the icon-only
+ * in-container geometry untouched; the wiggle animates ONLY the pot
+ * svg on ALL layouts (the label never transforms). Its trigger is a
+ * SENTINEL riding
+ * the THIRD-FROM-LAST step (index length-3, 0-based): the pill appears
+ * only once that step reaches the viewport, stays visible while the
+ * tail scrolls under it, and hides again when the scroll moves back
+ * above the zone. ALWAYS VISIBLE otherwise (owner ruling 2026-10-13:
+ * "since a recipe can be cooked multiple times we should see the pill
+ * all the time" — the cooked-today suppression is RETIRED); only a
+ * persistent flick-away dismisses it, per recipe, device-local. Design
+ * authority: Stitch "Flambette — Recipe Detail End (Mobile Dark)"
+ * (Warm Culinary Paper).
+ */
+const pillTailIndex = computed(() => Math.max(0, scaledSteps.value.length - 3))
+const tailStepEl = ref<HTMLElement | null>(null)
+/** Sentinel ref: assigned ONLY at the tail index (ADR-0083 addendum). */
+function setTailRef(el: HTMLElement | null, i: number) {
+  if (i === pillTailIndex.value) tailStepEl.value = el
+}
+// A recipe (or servings) change re-renders the step list — drop the stale
+// sentinel BEFORE the re-render (watch flush 'pre') so the next setTailRef
+// assigns the NEW tail element, never a detached one.
+watch(scaledSteps, () => {
+  tailStepEl.value = null
+})
+const tailInView = ref(false)
+useIntersectionObserver(
+  tailStepEl,
+  (entries) => {
+    tailInView.value = entries.some((e) => e.isIntersecting)
+  },
+  { threshold: 0 },
+)
+/**
+ * Firefox fallback for the sentinel (owner-reported 2026-10-13): the
+ * IntersectionObserver's callbacks never fire while the tab is hidden or
+ * occluded (proven on this branch), so a detail page opened in a
+ * background tab and read after switching to it would never light the
+ * pill. A passive, rAF-throttled scroll/resize evaluator rides alongside
+ * the observer: it reads the sentinel's live viewport rect
+ * (getBoundingClientRect — the same geometry the observer sees) and
+ * flips `tailInView` when the viewport passes it. The observer stays the
+ * FAST path: both writers compute the same "is the sentinel inside the
+ * viewport" truth, so whichever fires first — or only — lands the same
+ * verdict. No polling: events only, plus one evaluation whenever the
+ * sentinel element changes (a page restored scrolled into the tail never
+ * sees an observer callback for the fresh element).
+ */
+function evaluateTailInView() {
+  const el = tailStepEl.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  tailInView.value = rect.top < window.innerHeight && rect.bottom > 0
+}
+let tailEvalQueued = false
+function queueTailEval() {
+  if (tailEvalQueued) return
+  tailEvalQueued = true
+  requestAnimationFrame(() => {
+    tailEvalQueued = false
+    evaluateTailInView()
+  })
+}
+function onTailVisibility() {
+  // A hidden/occluded tab gets no scroll events and no observer
+  // callbacks; the moment the page becomes visible again, evaluate once.
+  if (document.visibilityState === 'visible') evaluateTailInView()
+}
+watch(tailStepEl, (el) => {
+  if (el) evaluateTailInView()
+})
+const cookedPillVisible = computed(
+  () =>
+    !!meta.value &&
+    tailInView.value &&
+    !ui.isPillDismissed(meta.value.id) &&
+    !pillPromptOpen.value,
+)
+/**
+ * The PROMPT is the pot WIGGLING (owner ruling 2026-10-13, superseding
+ * the tooltip-bubble renders before any implementation: "instead of a
+ * tooltip just make the pill slightly wiggle. Make the pot wiggle, only
+ * the icon") with a PULSING cadence, not a one-shot: wiggle 2 s, pause,
+ * wiggle 2 s, pause — each pause LONGER than the previous (2 s, 4 s,
+ * 6 s, 8 s) — and after the FIFTH wiggle round the prompt stops
+ * permanently for this page load (≈30 s window; the earlier "visible
+ * for a couple of seconds" ruling grew into this pattern the same hour).
+ * It runs ONCE per page load, on the pill's FIRST appearance; a fresh
+ * load wiggles again unless the pill was dismissed persistently. The
+ * animation is decorative: the pill's aria-label never changes.
+ */
+const WIGGLE_MS = 2000
+const WIGGLE_ROUNDS = 5
+/** Pauses BETWEEN wiggle rounds, growing each round (owner ruling). */
+const WIGGLE_PAUSES_MS = [2000, 4000, 6000, 8000]
+const pillWiggle = ref(false)
+let pillWiggleTimer: ReturnType<typeof setTimeout> | undefined
+function stopPillWiggle() {
+  pillWiggle.value = false
+  clearTimeout(pillWiggleTimer)
+  pillWiggleTimer = undefined
+}
+/** Round is 0-based: rounds 0..3 are each followed by PAUSES[round]. */
+function startPillWiggleRound(round: number) {
+  if (round >= WIGGLE_ROUNDS) {
+    stopPillWiggle()
+    return
+  }
+  pillWiggle.value = true
+  pillWiggleTimer = setTimeout(() => {
+    pillWiggle.value = false
+    if (round + 1 >= WIGGLE_ROUNDS) return // 5th round ended: stop
+    pillWiggleTimer = setTimeout(() => startPillWiggleRound(round + 1), WIGGLE_PAUSES_MS[round])
+  }, WIGGLE_MS)
+}
+const pillAppeared = ref(false)
+watch(
+  cookedPillVisible,
+  (visible) => {
+    if (visible && !pillAppeared.value) {
+      pillAppeared.value = true
+      startPillWiggleRound(0)
+    }
+  },
+  { immediate: true },
+)
+/** The whole timer chain dies with the component — no leaks. */
+onUnmounted(stopPillWiggle)
+onMounted(() => {
+  window.addEventListener('scroll', queueTailEval, { passive: true })
+  window.addEventListener('resize', queueTailEval)
+  document.addEventListener('visibilitychange', onTailVisibility)
+})
+onUnmounted(() => {
+  window.removeEventListener('scroll', queueTailEval)
+  window.removeEventListener('resize', queueTailEval)
+  document.removeEventListener('visibilitychange', onTailVisibility)
+})
+
+/**
+ * The pill's trigger context (ADR-0083 addendum): the detail page owns
+ * what Undo restores — the exact prior state the pill's tap displaced,
+ * captured at press time (the same snapshot discipline the cooking
+ * session runs: plan entry + cleared-ingredient row, taken BEFORE
+ * markCooked drops the meal from the plan). The prompt component is
+ * reused AS-IS — triggers own only their context, the prompt owns the
+ * experience.
+ */
+const pillPromptOpen = ref(false)
+const pillEvent = ref<CookedEntry | null>(null)
+const pillPrior = ref<{ entry: PlanEntry | null; cleared: string[] | null } | null>(null)
+
+/**
+ * FLICK-ANY-DIRECTION DISMISS (owner ruling 2026-10-13: "going left
+ * right up or down on it should discard it"): a pointer gesture that
+ * moves ~24px or more in ANY direction dismisses the pill FOR THIS
+ * RECIPE persistently — a device-local record in the ui store
+ * (`ui.dismissPill`), deliberately never the room payload (household
+ * sync is out of scope this round). Movement under the threshold is a
+ * plain TAP and falls through to the ONE markCooked path below.
+ *
+ * Pointer capture keeps the gesture on the button when the finger
+ * slides off its edge; `touch-action: none` on the button stops the
+ * browser claiming a touch flick as a page scroll before the move
+ * threshold is reached. The `pillSwiped` latch eats the synthetic
+ * click the gesture ends with — a dismiss must never record a cook.
+ */
+const PILL_DISMISS_PX = 24
+let pillPointer: { id: number; x: number; y: number } | null = null
+const pillSwiped = ref(false)
+// The latch is scoped to ONE gesture on ONE recipe: the watch below
+// resets it when the recipe id changes (kody, PR #84) — a dismiss that
+// removed the pill from the DOM before pointerup can leave the latch
+// armed with no click to eat it, and this component instance is reused
+// across navigations, so without the reset the NEXT recipe's first pill
+// press would be swallowed. onPillPointerEnd cannot do this alone: the
+// dismiss already detached the button when it fires.
+watch(
+  () => meta.value?.id,
+  () => {
+    pillSwiped.value = false
+  },
+)
+
+function onPillPointerDown(event: PointerEvent) {
+  pillSwiped.value = false
+  pillPointer = { id: event.pointerId, x: event.clientX, y: event.clientY }
+  ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
+}
+function onPillPointerMove(event: PointerEvent) {
+  const start = pillPointer
+  if (!start || event.pointerId !== start.id) return
+  const dx = event.clientX - start.x
+  const dy = event.clientY - start.y
+  if (Math.hypot(dx, dy) >= PILL_DISMISS_PX && meta.value) {
+    pillPointer = null
+    pillSwiped.value = true
+    ui.dismissPill(meta.value.id)
+  }
+}
+function onPillPointerEnd(event: PointerEvent) {
+  if (pillPointer && event.pointerId === pillPointer.id) pillPointer = null
+}
+
+/**
+ * Pill tap = record + the SAME prompt, no separate flow: the ONE
+ * plan.markCooked path the cooking session uses (plan-aware — a planned
+ * meal leaves the plan, an unplanned cook still records, ADR-0032).
+ */
+function cookFromPill() {
+  // A flick that ends on the pill still fires a synthetic click AFTER
+  // the dismiss consumed the gesture: swallow it — and only it — here.
+  if (pillSwiped.value) {
+    pillSwiped.value = false
+    return
+  }
+  if (!meta.value || pillEvent.value) return
+  const id = meta.value.id
+  const entry = plan.plan.find((e) => e.variantId === id)
+  const cleared = plan.clearedIngredients[id]
+  const prior = {
+    entry: entry ? { ...entry } : null,
+    cleared: cleared ? [...cleared] : null,
+  }
+  pillEvent.value = plan.markCooked(id)
+  pillPrior.value = prior
+  pillPromptOpen.value = true
+}
+
+/**
+ * Done (or scrim/Escape): History, where the cooked entry just landed
+ * (ADR-0083) — same close semantics the cooking session runs.
+ */
+function onPillPromptDone() {
+  pillPromptOpen.value = false
+  void router.push('/history')
+}
+
+/**
+ * Undo: the record is removed and the user STAYS on the detail page
+ * (there is no session to resume). The pill — always offered, ADR-0083
+ * pill round — reappears the moment the prompt closes.
+ */
+function onPillPromptUndo() {
+  pillPromptOpen.value = false
+  const event = pillEvent.value
+  const prior = pillPrior.value
+  if (!event || !prior) return
+  plan.undoMarkCooked(event, prior)
+  pillEvent.value = null
+  pillPrior.value = null
+}
+
 async function loadDoc() {
   const m = meta.value
   if (!m) return
@@ -551,6 +857,10 @@ function onKey(e: KeyboardEvent) {
   // The facts modal owns Escape while it is open (ADR-0039): this view
   // must not navigate away underneath it.
   if (nutritionOpen.value) return
+  // The post-cook prompt owns Escape while IT is open (ADR-0083) — the
+  // same registration-order rule the cooking session honours: this
+  // window handler fires BEFORE AppModal's, so it must yield.
+  if (pillPromptOpen.value) return
   if (e.key === 'Escape') close()
 }
 onMounted(() => {
@@ -559,7 +869,9 @@ onMounted(() => {
   // ingredient list is ready; no-op when no restriction is active.
   void restrictionPrefs.ensureLoaded()
 })
-onUnmounted(() => window.removeEventListener('keydown', onKey))
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKey)
+})
 
 function addToPlan() {
   if (!meta.value) return
@@ -708,7 +1020,7 @@ function startCooking() {
   cluttered boxes, the owner's "looks bad"). Macro splits,
   difficulty, test counts and SKUs stay rejected fictions. -->
   <dl
-  class="grid grid-cols-2 gap-3 rounded-lg bg-surface px-4 py-3 sm:grid-cols-4"
+  class="grid grid-cols-2 gap-3 rounded-lg bg-surface px-4 py-3 sm:grid-cols-3"
   data-test="detail-metadata-strip"
   >
   <div class="flex flex-col gap-1">
@@ -724,25 +1036,6 @@ function startCooking() {
   <dd class="flex items-baseline gap-1 whitespace-nowrap" data-test="detail-metadata-calories">
   <span class="text-headline-sm font-bold text-text">{{ Math.round(meta.calories) }}</span>
   <span class="font-mono-data text-label-sm text-text-muted">kcal/srv</span>
-  </dd>
-  </div>
-  <!-- The household's verdict rides the strip beside the facts it
-       modifies (ADR-0031): the same RatingStars control, with the NUMBER
-  the render prints beside it — household rating when one exists, the
-  catalog Bayesian mean otherwise, the same precedence the stars show. -->
-  <div class="flex flex-col gap-1" data-test="recipe-detail-rating">
-  <dt class="font-mono-data text-[11px] uppercase tracking-wider text-text-muted">Rating</dt>
-  <dd class="flex items-center gap-1">
-  <span v-if="ratingDisplay" class="text-headline-sm font-bold text-text">{{ ratingDisplay }}</span>
-  <!-- Owner sizing: the mock's stars ride `text-xs` beside the number —
-  size 12 so the strip never reads star-dominant. -->
-  <RatingStars
-  :variant-id="meta.id"
-  :catalog-rating="meta.rating"
-  :fallback-rating="meta.rating"
-  :size="12"
-  compact
-  />
   </dd>
   </div>
   <!-- Servings: the stepper is the control it has always been — same ref,
@@ -887,6 +1180,59 @@ function startCooking() {
   </button>
   </div>
   </div>
+
+  <!-- Rate card (ADR-0082): a level-1 card headed "Rate this recipe" —
+  the ONE RatingStars control at 32px (phone) / 24px (desktop, via the
+  component's own lgSize), the SAME displayRating value in mono beside
+  the heading (the render's "4.5 / 5.0"), the helper line, and the
+  room-gated sync line. The strip's Rating cell retired: the card owns
+  the rating now (no SKUs, no Material Symbols, no new hex — render
+  fictions rejected per the ADR). -->
+  <section
+  v-if="meta"
+  class="rounded-xl border border-border bg-surface p-4"
+  data-test="recipe-detail-rating"
+  aria-labelledby="rate-card-heading"
+  >
+  <div class="flex items-baseline justify-between gap-2">
+  <h3
+  id="rate-card-heading"
+  class="text-label-md font-semibold uppercase tracking-wide text-text"
+  data-test="rate-card-heading"
+  >
+  Rate this recipe
+  </h3>
+  <span v-if="ratingDisplay" class="flex items-baseline gap-1">
+  <span class="font-mono-data text-label-md font-semibold text-text">{{ ratingDisplay }}</span>
+  <span class="font-mono-data text-label-sm text-text-muted">/ 5.0</span>
+  <!-- Clear (ADR-0082): small text control, only when the household
+  has rated. Immediate, no confirm — reversible in one tap. -->
+  <button
+  v-if="ratingCount > 0"
+  type="button"
+  aria-label="Clear your rating"
+  class="ml-1 text-label-sm font-medium text-text-muted underline-offset-2 hover:text-text hover:underline focus-visible:underline"
+  data-test="rating-clear"
+  @click="clearRating"
+  >
+  Clear
+  </button>
+  </span>
+  </div>
+  <RatingStars
+  class="mt-2"
+  :variant-id="meta.id"
+  :catalog-rating="meta.rating"
+  :fallback-rating="meta.rating"
+  :size="32"
+  :lg-size="24"
+  />
+  <p class="mt-2 text-body-sm text-text-muted">
+  <span v-if="noScoreCorner" data-test="rating-first-rate">Be the first to rate this recipe</span>
+  <span v-else>Tap a star — halves supported</span>
+  <span v-if="room.inRoom" data-test="rating-synced"> · Synced to household</span>
+  </p>
+  </section>
 
   <!-- Nutrition: at the bottom of the SAME card, after the actions
   (DESIGN.md Recipe detail). ADR-0077 fix pass: the render's ONE
@@ -1126,6 +1472,10 @@ function startCooking() {
   </section>
   </section>
 
+  <!-- Instructions. The "Cooked this?" pill does NOT watch this section
+  (on desktop the column is in view on load — that lit the pill before
+  any scroll): its sentinel rides the THIRD-FROM-LAST step below
+  (ADR-0083 addendum refinement, 2026-10-13). -->
   <section>
   <!-- ADR-0077: the render's step-column head carries a mono total beside
        the H — the count is real (`scaledSteps.length`); the render's
@@ -1141,6 +1491,7 @@ function startCooking() {
   <li
   v-for="(step, i) in scaledSteps"
   :key="i"
+  :ref="(el) => setTailRef(el as HTMLElement | null, i)"
   class="rounded-xl bg-surface-raised p-4 ring-1 ring-border"
   data-test="detail-step"
   >
@@ -1231,6 +1582,108 @@ function startCooking() {
   </section>
   </div>
   </template>
+
+  <!-- The "Cooked this?" pill (ADR-0083 addendum): a compact floating
+  affordance for marking the cook from the detail page — for the person
+  who never enters cooking mode. Owner FINAL ruling (2026-10-13): the
+  pill is FLOATING again, exactly as Stitch designed — NOT hooked to
+  anything; content scrolls under it while it stays put. Design
+  authority: Stitch "Flambette — Recipe Detail End (Mobile Dark)"
+  (Warm Culinary Paper): right edge, ~120px above the bottom
+  navigation, surface-raised fill, subtle border, the ONE popover
+  shadow (ADR-0068), warm accent dot. The pointer-events-none wrapper
+  keeps the fixed overlay from intercepting taps outside the pill (the
+  ADR-0049 hit-testing lesson). OWNER desktop rulings (2026-10-14): the
+  pill sits on the RIGHT SIDE of the instructions column — from `xl` its
+  left edge anchors 1.5rem OUTSIDE the 1100px --container-app edge
+  (right: calc((100vw - 1100px) / 2 - 24px)), fully in the free page
+  margin so it NEVER overlays the step text; from `2xl` that margin is
+  wide enough for the FULL text label ("Cooked this?" — at 1536px the
+  margin is 218px vs the pill's ~130px with label). Below `xl` the pill
+  stays in-container at the content's right edge (mobile px-4 gutter,
+  unchanged); the wiggle animates ONLY the CookingPot svg on ALL
+  layouts — the text label never animates. The desktop pill floats
+  ~110px above the bottom (mobile keeps its bottom-nav offset).
+  Hidden until the LAST THREE steps come into view (the sentinel on
+  the third-from-last step); ALWAYS offered otherwise — the
+  cooked-today suppression is retired (owner ruling 2026-10-13). The
+  wrapper carries
+  `will-change-transform`: Firefox repaints a fixed element on the main
+  thread while the page scrolls unless it owns a compositor layer —
+  exactly the "the pill is moving" drift the owner reported (Chromium
+  probes show zero delta, headless Firefox too; the drift is the
+  repaint-lag class, addressed by layer promotion). -->
+  <div
+    v-if="doc && cookedPillVisible"
+    class="pointer-events-none fixed inset-x-0 bottom-[calc(120px+env(safe-area-inset-bottom))] lg:bottom-[110px] z-40 flex justify-end will-change-transform"
+  >
+    <div class="mx-auto flex w-full max-w-app justify-end px-4">
+      <button
+        type="button"
+        class="pointer-events-auto touch-none relative flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface-raised py-2 pl-3 pr-4 shadow-popover transition-colors hover:bg-surface xl:translate-x-[calc(100%+40px)]"
+        aria-label="Cooked this?"
+        data-test="cooked-pill"
+        @click="cookFromPill"
+        @pointerdown="onPillPointerDown"
+        @pointermove="onPillPointerMove"
+        @pointerup="onPillPointerEnd"
+        @pointercancel="onPillPointerEnd"
+      >
+        <span class="size-2 shrink-0 rounded-full bg-brand" aria-hidden="true" />
+        <span
+          class="cooked-pill-label hidden text-sm font-medium text-text 2xl:inline"
+        >Cooked this?</span>
+        <CookingPot
+          :size="16"
+          aria-hidden="true"
+          class="text-brand-text"
+          :class="pillWiggle ? 'pill-wiggle' : undefined"
+        />
+      </button>
+    </div>
+  </div>
+
+  <!-- The SAME post-cook prompt, raised over the detail page (ADR-0083
+  addendum): Done/scrim/Escape -> /history via onPillPromptDone; Undo
+  removes the record and the user STAYS on the detail page. -->
+  <PostCookPrompt
+    v-if="pillPromptOpen && pillEvent"
+    :variant-id="meta.id"
+    @done="onPillPromptDone"
+    @undo="onPillPromptUndo"
+  />
   </div>
   </div>
 </template>
+
+<style scoped>
+/*
+ * The wiggle prompt (ADR-0083 pill round): MOTION applied ONLY to the
+ * CookingPot svg inside the pill — the pill button, the accent dot and
+ * the layout never transform (owner ruling: "make the pot wiggle, only
+ * the icon"). Reduced-motion users get no animation at all.
+ */
+.pill-wiggle {
+  animation: pill-wiggle 0.5s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill-wiggle {
+    animation: none;
+  }
+}
+
+@keyframes pill-wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(8deg);
+  }
+  75% {
+    transform: rotate(-8deg);
+  }
+}
+</style>

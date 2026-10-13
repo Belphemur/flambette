@@ -118,13 +118,18 @@ test('an ad-hoc cook is its own one-recipe plan (ADR-0034)', async ({ page }) =>
   await page.getByRole('dialog').getByRole('button', { name: 'Start cooking' }).click()
   const cooking = page.getByRole('dialog', { name: /Cooking / })
   await expect(cooking).toBeVisible()
+  // ADR-0083 addendum: the mid-cook mark raises the SAME post-cook
+  // prompt as Finish — the modal IS the acknowledgment, no toast.
   await cooking.getByTestId('mark-cooked').click()
-  await expect(page.getByTestId('toast')).toContainText('Marked as cooked')
+  await expect(page.getByTestId('post-cook-prompt')).toBeVisible()
+  await expect(page.getByTestId('toast')).toHaveCount(0)
   await expect(cooking).toBeVisible()
 
   // It is grouped as a plan of its own, and nothing was added to the real
-  // plan behind it.
-  await page.keyboard.press('Escape')
+  // plan behind it. Done ends the session for History, where the entry
+  // just landed.
+  await page.getByTestId('post-cook-done').click()
+  await expect(page).toHaveURL(/\/history$/)
   await expect(cooking).not.toBeVisible()
   await gotoTab(page, 'History')
   await expect(page.getByTestId('history-group-title')).toContainText(/Planned|just now|ago/)

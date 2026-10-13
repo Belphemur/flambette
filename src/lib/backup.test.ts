@@ -527,6 +527,98 @@ describe('ratings slice (ADR-0031 registry)', () => {
 })
 
 /**
+ * ADR-0082 — the rating-tombstone slice (dedicated file, same store key).
+ * Round-trip + validation; the deletion story must survive a backup.
+ */
+describe('rating tombstones slice (ADR-0082 registry)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    ;(globalThis as Record<string, unknown>).localStorage = memoryStorage()
+  })
+
+  const tombstoneSlice = () => {
+    const slice = STORE_SLICES.find((s) => s.file === 'rating_tombstones.json')
+    if (!slice) throw new Error('rating_tombstones.json slice missing from STORE_SLICES')
+    return slice
+  }
+
+  test('is registered in STORE_SLICES, sharing the ratings store key', () => {
+    expect(tombstoneSlice().persistKeys).toEqual(['mealime-planner:v1:ratings'])
+    // Registry order: tombstones apply AFTER ratings so a backup that
+    // carries both a stale row and its tombstone still ends deleted.
+    const files = STORE_SLICES.map((s) => s.file)
+    expect(files.indexOf('rating_tombstones.json')).toBeGreaterThan(
+      files.indexOf('ratings.json'),
+    )
+  })
+
+  test('round-trips tombstones through read() → write()', () => {
+    const store = useRatingStore()
+    store.setRating(17452, 4, 1_000)
+    store.clearRating(17452, 5_000)
+    const exported = tombstoneSlice().read()
+    expect(exported).toEqual({ '17452': 5_000 })
+
+    // A different device restores it.
+    setActivePinia(createPinia())
+    tombstoneSlice().write(exported)
+    expect(useRatingStore().tombstones).toEqual({ '17452': 5_000 })
+    // The restored tombstone still deletes a record the restore also
+    // carried (deletion wins ties — registry order).
+    useRatingStore().mergeRemote({ '17452': { rating: 4, count: 1, updatedAt: 1_000 } })
+    useRatingStore().mergeTombstones({ '17452': 5_000 })
+    expect(useRatingStore().ratingFor(17452)).toBe(0)
+  })
+
+  test('restoring an OLDER backup keeps clears made since (merge, never replace)', () => {
+    // The archive is authoritative for the clears it RECORDED, not for
+    // the ones this device made after the backup was taken — a wholesale
+    // replace would drop those newer markers and a peer snapshot could
+    // then resurrect their records (review).
+    const store = useRatingStore()
+    store.clearRating(88, 9_000)
+    setActivePinia(createPinia())
+    const restored = useRatingStore()
+    restored.mergeTombstones({ '88': 9_000 }) // this device cleared 88 since the backup
+    tombstoneSlice().write({ '7': 1_000 }) // the older archive knows only the '7' clear
+    expect(restored.tombstones).toEqual({ '7': 1_000, '88': 9_000 })
+  })
+
+  test('a restored marker deletes a local record it covers (registry order)', () => {
+    // A backup that carries BOTH a stale rating row and its later clear:
+    // ratings.json is applied first (per-record merge adopts the stale
+    // row), then the tombstone slice must end it deleted HERE too — not
+    // just on peers (review).
+    const ratingsSlice = STORE_SLICES.find((s) => s.file === 'ratings.json')
+    if (!ratingsSlice) throw new Error('ratings.json slice missing from STORE_SLICES')
+    setActivePinia(createPinia())
+    ratingsSlice.write([{ id: 42, rating: 3, count: 1, updatedAt: 2_000 }])
+    expect(useRatingStore().ratingFor(42)).toBe(3)
+    tombstoneSlice().write({ '42': 5_000 })
+    expect(useRatingStore().ratingFor(42)).toBe(0)
+    expect(useRatingStore().tombstones['42']).toBe(5_000)
+  })
+
+  test('an older backup simply lacks the file (absence = keep current)', () => {
+    // applyBackup tolerates a missing slice file by reading CURRENT state;
+    // the tombstone slice is no exception.
+    expect(tombstoneSlice().validate({})).toBeNull()
+  })
+
+  test('rejects malformed payloads (import is validation-first)', () => {
+    const v = tombstoneSlice().validate
+    expect(v({})).toBeNull()
+    expect(v({ '7': 1_000 })).toBeNull()
+    expect(v([])).toContain('must be an object')
+    expect(v({ nope: 1_000 })).toContain('variant ids')
+    expect(v({ '7': 'later' })).toContain('timestamps')
+    expect(v({ '7': 0 })).toContain('timestamps')
+    expect(v({ '7': -1 })).toContain('timestamps')
+    expect(v({ '7': 1_000, 'x': 2_000 })).toContain('variant ids')
+  })
+})
+
+/**
  * The identity slice (ADR-0063). Import is replace-on-apply (device-scoped),
  * but the PRE-JOIN shape ({id:'', name} — a name typed in Settings before
  * the first join) must validate and restore without refusing the whole

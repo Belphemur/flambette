@@ -1,6 +1,11 @@
-import { beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, setSystemTime, test } from 'bun:test'
 import { createPinia, setActivePinia } from 'pinia'
-import { ratingsToRows, useRatingStore } from './rating'
+import { MAX_FUTURE_SKEW_MS } from '../lib/stamps'
+import {
+  ratingsToRows,
+  sanitizeTombstones,
+  useRatingStore,
+} from './rating'
 
 /**
  * Household rating reconciliation (ADR-0031).
@@ -131,5 +136,181 @@ describe('useRatingStore (ADR-0031)', () => {
       { id: 3, rating: 1, count: 1, updatedAt: 1_000 },
       { id: 20, rating: 4, count: 1, updatedAt: 3_000 },
     ])
+  })
+
+  /** ADR-0082 — the clear + tombstone story. */
+  describe('clearRating + tombstones (ADR-0082)', () => {
+    test('the re-rate stamp stays inside the future bound (skew-ceiling collapse)', () => {
+      // Freeze the clock: setRating clamps against its OWN Date.now(),
+      // a tick after the ceiling below was captured — without freezing,
+      // a +1 ms tick widens the bound by one ms and the collapse pin
+      // `toBe(ceiling)` flakes (it failed exactly that way in CI).
+      setSystemTime(1_700_000_000_000)
+      try {
+      const store = useRatingStore()
+      const ceiling = Date.now() + MAX_FUTURE_SKEW_MS
+      // A tombstone AT the ceiling (a skewed peer's record was cleared
+      // against it): tomb+1 would sit one ms OUTSIDE the bound, and a
+      // peer re-clamping the record down to its own ceiling would then
+      // compare a different stamp than this device stored.
+      store.tombstones = { '7': ceiling }
+      store.setRating(7, 4, 1_000)
+      // Clamped, never out of bounds — which collapses the advance to
+      // the marker itself: no strictly newer stamp exists inside the
+      // bound, so deletion wins ties (ADR-0082) and the fresh opinion
+      // converges to the deletion on the next inbound reconcile instead
+      // of surviving with an out-of-bound stamp.
+      expect(store.map['7'].updatedAt).toBe(ceiling)
+      // Below the ceiling the tomb+1 advance survives intact.
+      store.tombstones = { '8': ceiling - 50 }
+      store.setRating(8, 4, 1_000)
+      expect(store.map['8'].updatedAt).toBe(ceiling - 49)
+      } finally {
+        setSystemTime()
+      }
+    })
+
+    test('clear deletes the record and stamps a tombstone', () => {
+      const store = useRatingStore()
+      store.setRating(7, 4, 1_000)
+      store.clearRating(7, 5_000)
+      expect(store.ratingFor(7)).toBe(0)
+      expect(store.countFor(7)).toBe(0)
+      expect(store.tombstones).toEqual({ '7': 5_000 })
+    })
+
+    test('a tombstone is stamped even when this device holds no record', () => {
+      // A peer may still hold the record we once had; the deletion must
+      // be publishable regardless.
+      const store = useRatingStore()
+      store.clearRating(7, 5_000)
+      expect(store.tombstones).toEqual({ '7': 5_000 })
+    })
+
+    test('a clear beats a future-clamped record stamp (slower-clock device)', () => {
+      // A record adopted from a peer whose clock ran ahead carries an
+      // `updatedAt` up to now+MAX_FUTURE_SKEW_MS. A tombstone of bare
+      // `now` would sit UNDER it: the clearing device deletes locally but
+      // every peer keeps the record (and re-arrival resurrects it here).
+      const store = useRatingStore()
+      const futureStamp = Date.now() + 30 * 60_000 // within the skew window
+      store.mergeRemote({ '7': { rating: 4, count: 1, updatedAt: futureStamp } })
+      store.clearRating(7)
+      expect(store.ratingFor(7)).toBe(0)
+      expect(store.tombstones['7']!).toBeGreaterThanOrEqual(futureStamp)
+    })
+
+    test('a clear never lowers an existing newer tombstone', () => {
+      const store = useRatingStore()
+      store.mergeTombstones({ '7': 9_000 })
+      store.clearRating(7, 5_000)
+      expect(store.tombstones['7']).toBe(9_000)
+    })
+
+    test('a re-rating on a slower clock advances past the tombstone', () => {
+      // The device re-rates at t=6_000 while the clear it adopted was
+      // stamped t=9_000 (the clearing peer's clock ran ahead). A record
+      // stamped 6_000 would show stars here and be REJECTED by every
+      // other device's mergeRemote — one household, two opinions.
+      const store = useRatingStore()
+      store.mergeTombstones({ '7': 9_000 })
+      store.setRating(7, 3, 6_000)
+      expect(store.ratingFor(7)).toBe(3)
+      expect(store.map['7']!.updatedAt).toBe(9_001)
+    })
+
+    test('an older tombstone echo still deletes a record the RETAINED marker covers', () => {
+      // The store holds tombstone t=9_000 (kept from an earlier clear)
+      // and a record at t=8_000 that predates its arrival; an older echo
+      // t=2_000 must not soften the retained deletion.
+      const store = useRatingStore()
+      store.setRating(7, 4, 8_000)
+      store.tombstones = { '7': 9_000 }
+      store.mergeTombstones({ '7': 2_000 })
+      expect(store.tombstones['7']).toBe(9_000)
+      expect(store.ratingFor(7)).toBe(0)
+    })
+
+    test('a clear survives a reload (the tombstone ref persists with the map)', () => {
+      // The persist config is the contract; assert the refs it names.
+      const store = useRatingStore()
+      store.setRating(7, 4, 1_000)
+      store.clearRating(7, 5_000)
+      expect(Object.keys(store.$state)).toEqual(
+        expect.arrayContaining(['map', 'tombstones']),
+      )
+    })
+
+    test('an inbound tombstone deletes the record it covers (tie goes to deletion)', () => {
+      const a = useRatingStore()
+      a.setRating(100, 4, 1_000)
+      // Peer B cleared it at exactly the record's stamp.
+      a.mergeTombstones({ '100': 1_000 })
+      expect(a.ratingFor(100)).toBe(0)
+      expect(a.tombstones).toEqual({ '100': 1_000 })
+    })
+
+    test('a record written AFTER the tombstone survives', () => {
+      const store = useRatingStore()
+      store.setRating(100, 4, 1_000)
+      store.mergeTombstones({ '100': 5_000 }) // a clear we adopt
+      expect(store.ratingFor(100)).toBe(0)
+      // The household changes its mind: a NEW write beats the old clear.
+      store.setRating(100, 3, 9_000)
+      expect(store.ratingFor(100)).toBe(3)
+    })
+
+    test('the NEWEST tombstone wins when two clears race', () => {
+      const store = useRatingStore()
+      store.mergeTombstones({ '7': 1_000 })
+      store.mergeTombstones({ '7': 9_000 })
+      expect(store.tombstones['7']).toBe(9_000)
+      store.mergeTombstones({ '7': 2_000 }) // an older echo never rolls back
+      expect(store.tombstones['7']).toBe(9_000)
+    })
+
+    test('mergeRemote refuses to resurrect a tombstoned record', () => {
+      // A clears at t=5000 while B (offline) still holds the t=1000
+      // record; B then pushes its stale snapshot. The record must not
+      // come back — A blocks it with its local tombstone.
+      const a = useRatingStore()
+      a.setRating(7, 4, 1_000)
+      a.clearRating(7, 5_000)
+      a.mergeRemote({ '7': { rating: 4, count: 1, updatedAt: 1_000 } })
+      expect(a.ratingFor(7)).toBe(0)
+      // A NEWER record (a re-rate after the clear) still lands.
+      a.mergeRemote({ '7': { rating: 2, count: 1, updatedAt: 6_000 } })
+      expect(a.ratingFor(7)).toBe(2)
+    })
+
+    test('mergeTombstones applies AFTER a ratings merge in one snapshot', () => {
+      // The room's applyRemote order: a snapshot that carries BOTH an
+      // old record and its tombstone still ends deleted.
+      const store = useRatingStore()
+      store.mergeRemote({ '7': { rating: 4, count: 1, updatedAt: 1_000 } })
+      store.mergeTombstones({ '7': 5_000 })
+      expect(store.ratingFor(7)).toBe(0)
+    })
+
+    test('sanitizeTombstones drops garbage keys/stamps and clamps the future', () => {
+      const now = Date.now()
+      expect(
+        sanitizeTombstones({
+          '7': 1_000,
+          nope: 2_000,
+          '8': 'later',
+          '11': '1000' as unknown as number, // numeric string = malformed, not leniency
+          '9': 0,
+          '10': -5,
+        }),
+      ).toEqual({ '7': 1_000 })
+      // A far-future stamp is clamped into the plausible window — it
+      // must not delete honest future writes forever.
+      const clamped = sanitizeTombstones({ '7': now + 10 * 365 * 86_400_000 })
+      expect(clamped['7']).toBeGreaterThan(now)
+      expect(clamped['7']).toBeLessThan(now + 10 * 365 * 86_400_000)
+      expect(sanitizeTombstones('nope')).toEqual({})
+      expect(sanitizeTombstones(null)).toEqual({})
+    })
   })
 })

@@ -250,8 +250,10 @@ test('cooking view completion records the cook and takes the meal off the plan',
   for (let i = 1; i < total; i++) await next.click()
 
   await cooking.locator('[data-test=finish]').click()
-  await expect(cooking).not.toBeVisible()
-  await expect(page.getByText('Marked as cooked')).toBeVisible()
+  // ADR-0083: Finish raises the post-cook prompt; Done closes to History.
+  await expect(page.getByTestId('post-cook-prompt')).toBeVisible()
+  await page.getByTestId('post-cook-done').click()
+  await expect(page).toHaveURL(/\/history$/)
 
   // The meal left the plan.
   await gotoTab(page, 'Plan')

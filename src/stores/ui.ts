@@ -204,6 +204,21 @@ export const useUiStore = defineStore(
      */
     const dietaryRestrictionIds = ref<number[]>([])
     /**
+     * Recipes whose "Cooked this?" pill the user FLICKED away (ADR-0083
+     * pill round, 2026-10-13): recipe id -> the dismissal stamp. Once a
+     * recipe is here its pill never renders again on this device — the
+     * ruling is "a recipe can be cooked multiple times, so the pill is
+     * always offered", but an explicit swipe-away is the user opting out
+     * FOR THAT RECIPE, and it must survive reloads.
+     *
+     * Device-local on purpose, same persisted slice as the timer-alert
+     * toggles (ADR-0081): the dismissal is one person's gesture on one
+     * device — it must NOT flow through the room payload (household sync
+     * deliberately out of scope this round) and it is not a settings.json
+     * preference either, so it never enters the backup registry.
+     */
+    const pillDismissedRecipes = ref<Record<number, number>>({})
+    /**
      * Cooking-view step timers (ADR-0020): variant id -> step-VIEW leader
      * index -> timer. Keyed by view (not raw step) because a "Meanwhile"
      * pair is one view and shares one timer. Persisted so a reload
@@ -546,6 +561,36 @@ export const useUiStore = defineStore(
     }
 
     /**
+     * Repair hydrated pill dismissals: hydration is a raw `$patch`, so a
+     * hand-edited blob lands verbatim; anything that is not a
+     * numeric-id -> finite-number map would silently wedge the pill's
+     * visibility read (or worse, type-confuse the store). Honest values
+     * survive unchanged.
+     */
+    function repairPillDismissedRecipes(): void {
+      const raw = pillDismissedRecipes.value
+      const out: Record<number, number> = {}
+      if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+        for (const [key, stamp] of Object.entries(raw)) {
+          if (/^\d+$/.test(key) && typeof stamp === 'number' && Number.isFinite(stamp)) {
+            out[Number(key)] = stamp
+          }
+        }
+      }
+      pillDismissedRecipes.value = out
+    }
+
+    /** Record the user's flick-away for one recipe (device-local). */
+    function dismissPill(variantId: number): void {
+      pillDismissedRecipes.value[variantId] = Date.now()
+    }
+
+    /** True when the user flicked this recipe's pill away on this device. */
+    function isPillDismissed(variantId: number): boolean {
+      return pillDismissedRecipes.value[variantId] !== undefined
+    }
+
+    /**
      * Keep only well-formed timers out of an imported/loaded map
      * (validation-first import: unknown shapes are dropped, not trusted).
      *
@@ -677,6 +722,9 @@ export const useUiStore = defineStore(
       unitSystem,
       dietaryRestrictionIds,
       setDietaryRestrictionIds,
+      pillDismissedRecipes,
+      dismissPill,
+      isPillDismissed,
       setUnitSystem,
       nextAutoPlanGeneration,
       advanceAutoPlanGeneration,
@@ -698,6 +746,7 @@ export const useUiStore = defineStore(
       repairDefaultServings,
       repairUnitSystem,
       repairDietaryRestrictionIds,
+      repairPillDismissedRecipes,
       setHouseholdRoom,
       showToast,
       dismissToast,
@@ -739,6 +788,10 @@ export const useUiStore = defineStore(
         // settings.json backup through the registered slice.
         'timerAlertSound',
         'timerAlertVibrate',
+        // The per-recipe pill dismissals (ADR-0083 pill round): device-local,
+        // restored on the next launch — never the room payload, never a
+        // backup slice (the dismissal is a gesture, not a preference).
+        'pillDismissedRecipes',
       ],
       // Hydration has already run when this fires, so a v0.12 blob (which
       // has no `quickFilters` and therefore patched nothing) can still be
@@ -751,12 +804,14 @@ export const useUiStore = defineStore(
           repairDefaultServings: () => void
           repairUnitSystem: () => void
           repairDietaryRestrictionIds: () => void
+          repairPillDismissedRecipes: () => void
         }
         store.migrateLegacyFilters()
         store.adoptHistoryShareDefault()
         store.repairDefaultServings()
         store.repairUnitSystem()
         store.repairDietaryRestrictionIds()
+        store.repairPillDismissedRecipes()
       },
     },
   },

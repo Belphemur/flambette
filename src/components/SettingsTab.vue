@@ -633,7 +633,10 @@ async function importMealimeFavourites(): Promise<void> {
   <!-- ADR-0077: the render's 12-column CARD GRID, with EVERY existing
        section as a card in it — none dropped, none invented. Widths follow
        the render's arrangement: identity 5 / household 7, preferences 6 /
-       restrictions 6, backup 6 / mealime 6, about 12. -->
+       restrictions 6, backup 6 / mealime 6, about 12. Owner refinement
+       (2026-10-13): Timer alerts takes the FULL row (12) — kitchen
+       identity and household room now sit ADJACENT (5+7), and the timer
+       card fills the desktop space its old 6-wide slot left empty. -->
   <div class="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-6">
 
   <!-- Units & servings (ADR-0047 + ADR-0037) — the render's Preferences
@@ -792,7 +795,7 @@ async function importMealimeFavourites(): Promise<void> {
   so nobody "fixes" it into the room payload): sound and vibration are
   per-device capabilities, and one household member must not configure
   another phone's alerts. Both default ON — the owner's ruling. -->
-  <div :class="CARD" class="space-y-2.5 lg:col-span-6" data-test="timer-alerts-card">
+  <div :class="CARD" class="space-y-2.5 lg:col-span-12" data-test="timer-alerts-card">
   <div class="flex items-start justify-between gap-3">
   <div class="min-w-0">
   <h2 class="text-headline-sm">Timer alerts</h2>

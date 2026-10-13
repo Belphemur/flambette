@@ -78,6 +78,19 @@ interface SharedState {
    */
   ratings?: Record<string, { rating: number; count: number; updatedAt: number }>
   /**
+   * ADR-0082 — stamps of CLEARED ratings (variantId → clear stamp). The
+   * other half of the rating deletion story: `ratings` is only published
+   * when non-empty and its per-record merge never removes keys, so a
+   * clear rides the wire as a tombstone and the receiver deletes any
+   * record whose `updatedAt <= tombstone` (deletion wins ties). OPTIONAL
+   * and additive: a v-ADR-0082 peer sends no key and ignores this one.
+   * Emitted only when non-empty (a peer with no tombstones says nothing),
+   * but a sender that HAS them keeps publishing on EVERY snapshot — never
+   * debounced away — so a peer that joins late still loses the cleared
+   * record.
+   */
+  ratingTombstones?: Record<string, number>
+  /**
    * ADR-0034 — the identity of the household's CURRENT plan (the id it was
    * minted with and when it was started). Plain whole-state state, not a
    * reconciled record: both phones that plan the same week mean the same
@@ -357,6 +370,13 @@ export const useRoomStore = defineStore('room', () => {
     if (Object.keys(ratings.map).length > 0) {
       state.ratings = { ...ratings.map }
     }
+    // ADR-0082: tombstones ride EVERY snapshot the device sends while it
+    // holds any — they are the deletion's only carrier, so they are never
+    // dropped for being "stale news" (a late joiner must still lose the
+    // cleared record).
+    if (Object.keys(ratings.tombstones).length > 0) {
+      state.ratingTombstones = { ...ratings.tombstones }
+    }
     // History crosses the wire unless the SENDER has opted out
     // (ADR-0032: on by default, opt-out is permanent).
     if (ui.shareCookedHistory) {
@@ -442,6 +462,11 @@ export const useRoomStore = defineStore('room', () => {
       // house. ABSENCE means "don't touch" (an older peer, or a peer that
       // holds no ratings).
       if (state.ratings != null) ratings.mergeRemote(state.ratings)
+      // Rating tombstones (ADR-0082): adopt the stamps, then drop any
+      // local record they cover. Applied AFTER the ratings merge so a
+      // snapshot that carries BOTH an old record and its tombstone still
+      // ends deleted — deletion wins ties, never the stale record.
+      if (state.ratingTombstones != null) ratings.mergeTombstones(state.ratingTombstones)
     } finally {
       applyingRemote = false
       // Finding #2 (qodo) + CodeRabbit mirror case: an inbound merge can
@@ -544,6 +569,15 @@ export const useRoomStore = defineStore('room', () => {
       // PERMANENTLY: our push is built from the local list, and nothing
       // would ever resend what we just refused (ADR-0032).
       if (Array.isArray(incoming.cookedHistory)) plan.mergeCookedHistory(incoming.cookedHistory)
+      // ADR-0082 (review): inbound rating TOMBSTONES are also applied —
+      // they are monotonic deletions (newest stamp per key wins, covered
+      // records drop), so they cannot clobber the queued edit the way an
+      // LWW merge could: our pending rating write is stamped later and
+      // survives (and setRating advances past any marker). Withholding
+      // them would let the queued push replace the relay's stored state
+      // with a snapshot that still holds the cleared rating and lacks its
+      // tombstone — resurrecting it for a late joiner.
+      if (incoming.ratingTombstones != null) ratings.mergeTombstones(incoming.ratingTombstones)
       return
     }
     applyRemote(incoming)
@@ -595,9 +629,13 @@ export const useRoomStore = defineStore('room', () => {
   )
 
   // ADR-0031: household stars publish IMMEDIATELY — same push path, same
-  // echo guard, no debounce (see schedulePush).
+  // echo guard, no debounce (see schedulePush). ADR-0082: tombstones
+  // publish immediately too — a clear that deletes a record changes both
+  // refs in one tick (one push), and a tombstone adopted from a PEER
+  // (which may delete our record without touching tombstones-first)
+  // must also reach the room rather than wait for the next edit.
   watch(
-    () => ratings.map,
+    () => [ratings.map, ratings.tombstones],
     () => schedulePush(true),
     { deep: true, flush: 'sync' },
   )

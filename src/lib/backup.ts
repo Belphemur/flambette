@@ -507,6 +507,47 @@ export const STORE_SLICES: SliceDef<any>[] = [
       )
     },
   },
+  /* ADR-0082 — stamps of cleared ratings (ratings store, dedicated slice).
+     A clear records a tombstone so the deletion reaches peers; the
+     tombstones are tiny and never pruned, and they must outlive the
+     backup/restore cycle like the ratings they deleted — otherwise a
+     restored device would republish a cleared record as live again (or
+     fail to adopt a peer's later tombstone). `ratings.json` keeps its
+     shape: an older backup simply lacks this file, and the import treats
+     absence as "keep current" like every other slice. Same store, second
+     slice — the registry allows that (persistKeys share the key). */
+  {
+    file: 'rating_tombstones.json',
+    label: 'cleared-rating tombstones',
+    persistKeys: ['mealime-planner:v1:ratings'],
+    read: () => ({ ...useRatingStore().tombstones }),
+    validate(value) {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return 'rating_tombstones.json must be an object'
+      }
+      for (const [key, stamp] of Object.entries(value)) {
+        if (!/^\d+$/.test(key)) return 'rating_tombstones.json keys must be variant ids'
+        // Positive, matching sanitizeTombstones (a 0/negative stamp can
+        // never be a real clear, and writing it would be dropped silently).
+        if (typeof stamp !== 'number' || !Number.isFinite(stamp) || stamp <= 0) {
+          return 'rating_tombstones.json stamps must be finite, positive timestamps'
+        }
+      }
+      return null
+    },
+    write(value) {
+      // MERGE, never replace (review): the archive is authoritative for
+      // the clears it RECORDED, but this device may have cleared more
+      // since the backup was taken — a wholesale replace would drop those
+      // newer markers and the next peer snapshot could resurrect their
+      // records. mergeTombstones keeps the newest stamp per key AND drops
+      // any local record a restored marker covers (so a backup carrying a
+      // stale rating + its clear ends deleted here too, matching the
+      // ratings.json slice's per-record merge). Applied AFTER ratings.json
+      // (registry order).
+      useRatingStore().mergeTombstones(value)
+    },
+  },
   /* This device's room identity (ADR-0063). Identity is DEVICE-scoped,
      deliberately NOT household state — it never merges and never rides a
      room snapshot — so import is REPLACE-on-apply: a backup restores
