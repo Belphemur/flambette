@@ -21,7 +21,7 @@ import AutoPlanDialog from './AutoPlanDialog.vue'
 import AppModal from './AppModal.vue'
 import TooltipBubble from './TooltipBubble.vue'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
-import { confirmToast } from '../composables/useConfirm'
+import { confirmModal } from '../composables/useConfirm'
 
 const plan = usePlanStore()
 const room = useRoomStore()
@@ -55,23 +55,23 @@ function closeShareSheet() {
 
 /**
  * Leaving the shared room from the share sheet is the same destructive act
- * the Settings card confirms: an inline toast question, and the Leave action
- * runs the store's own `leave()` (which detaches the socket without touching
- * the saved default-join code, so the household rejoins on next launch).
+ * the Settings card confirms: the ONE confirm modal (ADR-0084) names the
+ * room, and the Leave action runs the store's own `leave()` (which detaches
+ * the socket without touching the saved default-join code, so the household
+ * rejoins on next launch).
  */
 function confirmLeaveRoom() {
-  // The toast lives 10s — long enough for the user to leave, join ANOTHER
-  // room (Settings, a share link) and press this still-visible Leave, which
-  // must never detach the room the toast did NOT name. Capture the target;
-  // the action leaves only if the CURRENT room is still that one.
+  // A modal waits, but time still passes: the reader can leave, join
+  // ANOTHER room (Settings, a share link) and only then press Leave, which
+  // must never detach the room the question did NOT name. Capture the
+  // target; the action leaves only if the CURRENT room is still that one.
   const target = room.code
   if (!target) return
-  confirmToast(`Leave room ${target}? Your plan stops syncing with the household.`, {
+  confirmModal(`Leave room ${target}? Your plan stops syncing with the household.`, {
     confirmLabel: 'Leave',
     onConfirm: () => {
-      ui.dismissToast()
       // The action leaves only if the CURRENT room is still the one the
-      // toast named (the reader may have joined another in the 10s).
+      // modal named.
       if (room.code === target) room.leave()
     },
   })
