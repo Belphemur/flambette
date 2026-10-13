@@ -5,7 +5,7 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**89 records.** One file per decision (`ADR-NNNN-slug.md`),
+**90 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
@@ -35,7 +35,6 @@ architecture is shaped the way it is.
 | [0016](ADR-0016-settings-tab.md) | Backup & restore moves to a fifth Settings tab | 2026-09-28 |
 | [0017](ADR-0017-waste-aware-quantities.md) | Container units are purchased, not divided (waste-aware grocery lines) | 2026-09-28 |
 | [0018](ADR-0018-diet-rules.md) | Diet rules are a keyword classifier over ingredient names | 2026-09-28 |
-| [0019](ADR-0019-household-room.md) | A persistent household room replaces share-links as the default flow | 2026-09-28 |
 | [0020](ADR-0020-per-step-timers.md) | Per-step timers in the cooking view | 2026-09-28 |
 | [0021](ADR-0021-three-word-room-codes.md) | Room codes are three words, and legacy codes still join | 2026-09-28 |
 | [0023](ADR-0023-share-room-link.md) | One-tap "Share room" copies the join link | 2026-09-28 |
@@ -91,6 +90,7 @@ architecture is shaped the way it is.
 | [0081](ADR-0081-cooking-mode-composition.md) | Cooking mode adopts the card composition and honest timer suggestions _(supersedes ADR-0022)_ | 2026-10-11 |
 | [0082](ADR-0082-rating-star-ux.md) | The rating control — a labeled, touch-sized star card on detail and history | 2026-10-12 |
 | [0083](ADR-0083-post-cook-prompt.md) | The post-cook prompt — rate and favourite when the meal is done | 2026-10-12 |
+| [0084](ADR-0084-confirm-modal.md) | Confirmations are modals — one slim ConfirmModal, the toast demoted to status | 2026-10-13 |
 
 ## Not in force
 
@@ -100,6 +100,7 @@ understand why the current shape is the shape.
 | ADR | Decision | Status | Date |
 | --- | --- | --- | --- |
 | [0004](ADR-0004-share-url-and-rooms.md) | Share via URL deep-link (`?p=`), rooms for interactive sync | accepted (superseded in part) | 2026-09-23 |
+| [0019](ADR-0019-household-room.md) | A persistent household room replaces share-links as the default flow | accepted (superseded in part) | 2026-09-28 |
 | [0022](ADR-0022-measured-amounts.md) | Measured amounts under the cooking step text | accepted (superseded in part) | 2026-09-28 |
 | [0033](ADR-0033-auto-plan-regenerate-seed.md) | An Auto-Plan "Regenerate" press rolls the seed | accepted (superseded in part) | 2026-10-01 |
 | [0035](ADR-0035-design-tokens-and-categorical-hues.md) | A design-token layer (DESIGN.md), categorical food hues, and a wider desktop | superseded | 2026-10-01 |
@@ -131,8 +132,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0084**). Do not count the files -- that is how the
-   collisions above happened (89 files share 83 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0085**). Do not count the files -- that is how the
+   collisions above happened (90 files share 84 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.

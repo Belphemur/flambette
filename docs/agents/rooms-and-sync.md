@@ -6,7 +6,9 @@
   never block the UI (retry next launch) — never `await` a room
   operation on a render path. The auto-join is a JOIN, and a join
   creates the room when the relay doesn't know the code (ADR-0026), so a
-  relay restart no longer strands the household.
+  relay restart no longer strands the household. The join itself is
+  SILENT (ADR-0084): no success toast — the room chip is the standing
+  indicator; share lives on the roster sheet (`roster-share`).
 - **Room lifecycle (ADR-0026)**: `join` is join-or-create (first peer
   ESTABLISHES the room, answered `created`; a known room answers
   `joined`); `create` is unchanged and still the host path. A room whose
