@@ -715,6 +715,20 @@ const pillPrior = ref<{ entry: PlanEntry | null; cleared: string[] | null } | nu
 const PILL_DISMISS_PX = 24
 let pillPointer: { id: number; x: number; y: number } | null = null
 const pillSwiped = ref(false)
+// The latch is scoped to ONE gesture on ONE recipe: the watch below
+// resets it when the recipe id changes (kody, PR #84) — a dismiss that
+// removed the pill from the DOM before pointerup can leave the latch
+// armed with no click to eat it, and this component instance is reused
+// across navigations, so without the reset the NEXT recipe's first pill
+// press would be swallowed. onPillPointerEnd cannot do this alone: the
+// dismiss already detached the button when it fires.
+watch(
+  () => meta.value?.id,
+  () => {
+    pillSwiped.value = false
+  },
+)
+
 function onPillPointerDown(event: PointerEvent) {
   pillSwiped.value = false
   pillPointer = { id: event.pointerId, x: event.clientX, y: event.clientY }
