@@ -324,3 +324,33 @@ fixed wrapper. The e2e spec pins bounding-box stability across scroll
 positions on Desktop Chrome and Pixel 7, and the pill spec runs on a
 real Firefox project (`playwright.pill-firefox.ts`; CI installs
 chromium only, so the Firefox project lives in that auxiliary runner).
+
+## Change note — 2026-10-14, owner ruling: desktop pill placement + full-text label
+
+The icon-only ruling above is superseded for DESKTOP (`lg`+) ONLY; the
+mobile icon-only geometry is untouched. At `lg`+ the pill:
+
+- **Carries its FULL text label** — a `Cooked this?` span (the words the
+  accessible name already carried become visible content), slotted
+  between the accent dot and the CookingPot glyph, `hidden lg:inline`
+  (the words remain in the aria-label on every layout either way).
+- **Re-anchors horizontally**: 1.5rem INSIDE the 1100px app container's
+  right edge (`--container-app`, DESIGN.md). The floating wrapper's
+  app-width column flips its gutter to `lg:px-6`, which yields exactly
+  `max(1.5rem, calc((100vw - 1100px) / 2 + 1.5rem))` — the same
+  right-alignment the desktop content edge already uses (1280px
+  viewport ⇒ 24px from the viewport edge).
+- **Floats ~110px above the bottom** (`lg:bottom-[110px]`), versus the
+  mobile `bottom-[calc(120px+env(safe-area-inset-bottom))]`.
+
+The wiggle stays ICON-ONLY on BOTH layouts: the scoped keyframes
+transform ONLY the CookingPot svg; the text label never animates (it is
+deliberately excluded from the `.pill-wiggle` contract recorded in the
+ruling above). The tail-sentinel trigger, always-visible policy, flick
+dismiss, single `plan.markCooked` path and prompt semantics are
+unchanged. Pinned by `e2e/cooked-pill.spec.ts` (Desktop Chrome asserts
+the container-edge right offset, ~110px bottom and the visible label;
+Pixel 7 asserts the unchanged icon-only mobile geometry; the wiggle
+test pins animation-name on the svg and its absence on the label on
+both layouts). The icon-only note above is kept for the decision
+trail.

@@ -93,11 +93,22 @@ two cards, then the action deck.
   times we should see the pill all the time"). ICON-ONLY (kept from the
   icon-static ruling): the dot + one CookingPot glyph (ChefHat stays
   the Start-cooking CTA) — the accessible name `Cooked this?` carries
-  the words. PROMPT = the pot WIGGLES, pulsing: 5 rounds of a 2 s
+  the words. DESKTOP (owner ruling 2026-10-14): at `lg`+ the pill
+  grows its FULL text label ("Cooked this?" — the words move from
+  aria-label only into the visible content), re-anchors to 1.5rem
+  INSIDE the 1100px app container's right edge (`--container-app`; the
+  wrapper's app-width column flips its gutter to `lg:px-6`, yielding
+  `max(1.5rem, calc((100vw - 1100px) / 2 + 1.5rem))`), and floats
+  ~110px above the bottom (`lg:bottom-[110px]` — the mobile 120px +
+  safe-area offset is untouched below `lg`); the label is plain
+  visible text at `lg`, so no e2e text assertions change meaning on
+  mobile. PROMPT = the pot WIGGLES, pulsing: 5 rounds of a 2 s
   wiggle (`WIGGLE_MS`), pauses between rounds growing 2/4/6/8 s
   (`WIGGLE_PAUSES_MS`), then it stops for that page load (~30 s); the
   scoped keyframes rotate ONLY the svg (±8°, 0.5 s cycles,
-  `transform-origin: center`; button/dot/layout never transform) and
+  `transform-origin: center`; button/dot/LABEL/layout never transform
+  — the desktop text label is deliberately excluded from the
+  animation) and
   are disabled under `prefers-reduced-motion: reduce`; the wiggle is
   decorative, the aria-label unchanged. DISMISS = a flick beyond ~24px
   (`PILL_DISMISS_PX`) in ANY direction dismisses the pill FOR THAT

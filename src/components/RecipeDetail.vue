@@ -536,7 +536,12 @@ const cookLastTitle = computed(() => {
  * that is NOT hooked to anything (content scrolls under it), with the
  * icon-only content kept from the icon-static ruling (the brand accent
  * dot + one CookingPot glyph; ChefHat stays the Start-cooking CTA — the
- * accessible name carries the words). Its trigger is a SENTINEL riding
+ * accessible name carries the words). OWNER desktop ruling
+ * (2026-10-14): at `lg`+ the pill grows its full text label ("Cooked
+ * this?") and re-anchors — 1.5rem inside the 1100px `--container-app`
+ * edge, ~110px above the bottom — while the mobile icon-only geometry
+ * is untouched; the wiggle animates ONLY the pot svg on BOTH layouts
+ * (the label never transforms). Its trigger is a SENTINEL riding
  * the THIRD-FROM-LAST step (index length-3, 0-based): the pill appears
  * only once that step reaches the viewport, stays visible while the
  * tail scrolls under it, and hides again when the scroll moves back
@@ -1570,8 +1575,15 @@ function startCooking() {
   keeps the fixed overlay from intercepting taps outside the pill (the
   ADR-0049 hit-testing lesson), while the app-width column keeps the
   pill on the right edge of the CONTENT on desktop, not the viewport
-  edge. ICON-ONLY (the icon-static ruling, kept): the accent dot + one
-  CookingPot glyph — the accessible name carries the words. Hidden
+  edge. OWNER desktop ruling (2026-10-14): at `lg`+ the pill carries
+  its FULL text label ("Cooked this?", the words the accessible name
+  already carried), sits 1.5rem inside the 1100px app container's edge
+  (`--container-app` — the `lg:px-6` column gutter yields exactly
+  `max(1.5rem, calc((100vw - 1100px) / 2 + 1.5rem))`), and floats
+  ~110px above the bottom; the MOBILE geometry and ICON-ONLY content
+  are untouched (accent dot + one CookingPot glyph below `lg`). The
+  wiggle stays icon-only on BOTH layouts: the animation transforms
+  ONLY the CookingPot svg — the text label never animates. Hidden
   until the LAST THREE steps come into view (the sentinel on the
   third-from-last step); ALWAYS offered otherwise — the cooked-today
   suppression is retired (owner ruling 2026-10-13). The wrapper carries
@@ -1582,9 +1594,9 @@ function startCooking() {
   repaint-lag class, addressed by layer promotion). -->
   <div
     v-if="doc && cookedPillVisible"
-    class="pointer-events-none fixed inset-x-0 bottom-[calc(120px+env(safe-area-inset-bottom))] z-40 flex justify-end will-change-transform"
+    class="pointer-events-none fixed inset-x-0 bottom-[calc(120px+env(safe-area-inset-bottom))] lg:bottom-[110px] z-40 flex justify-end will-change-transform"
   >
-    <div class="mx-auto flex w-full max-w-app justify-end px-4">
+    <div class="mx-auto flex w-full max-w-app justify-end px-4 lg:px-6">
       <button
         type="button"
         class="pointer-events-auto touch-none flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface-raised py-2 pl-3 pr-4 shadow-popover transition-colors hover:bg-surface"
@@ -1597,6 +1609,9 @@ function startCooking() {
         @pointercancel="onPillPointerEnd"
       >
         <span class="size-2 shrink-0 rounded-full bg-brand" aria-hidden="true" />
+        <span
+          class="cooked-pill-label hidden text-sm font-medium text-text lg:inline"
+        >Cooked this?</span>
         <CookingPot
           :size="16"
           aria-hidden="true"
