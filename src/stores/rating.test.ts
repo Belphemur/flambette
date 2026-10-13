@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, setSystemTime, test } from 'bun:test'
 import { createPinia, setActivePinia } from 'pinia'
 import { MAX_FUTURE_SKEW_MS } from '../lib/stamps'
 import {
@@ -141,6 +141,12 @@ describe('useRatingStore (ADR-0031)', () => {
   /** ADR-0082 — the clear + tombstone story. */
   describe('clearRating + tombstones (ADR-0082)', () => {
     test('the re-rate stamp stays inside the future bound (skew-ceiling collapse)', () => {
+      // Freeze the clock: setRating clamps against its OWN Date.now(),
+      // a tick after the ceiling below was captured — without freezing,
+      // a +1 ms tick widens the bound by one ms and the collapse pin
+      // `toBe(ceiling)` flakes (it failed exactly that way in CI).
+      setSystemTime(1_700_000_000_000)
+      try {
       const store = useRatingStore()
       const ceiling = Date.now() + MAX_FUTURE_SKEW_MS
       // A tombstone AT the ceiling (a skewed peer's record was cleared
@@ -159,6 +165,9 @@ describe('useRatingStore (ADR-0031)', () => {
       store.tombstones = { '8': ceiling - 50 }
       store.setRating(8, 4, 1_000)
       expect(store.map['8'].updatedAt).toBe(ceiling - 49)
+      } finally {
+        setSystemTime()
+      }
     })
 
     test('clear deletes the record and stamps a tombstone', () => {
