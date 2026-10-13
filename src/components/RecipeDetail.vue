@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
 import TooltipBubble from './TooltipBubble.vue'
@@ -43,6 +43,7 @@ import RatingStars from './RatingStars.vue'
 import PostCookPrompt from './PostCookPrompt.vue'
 import NutritionModal from './NutritionModal.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
+import { useIntersectionObserver } from '@vueuse/core'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
 import { recipeSeoHead } from '../lib/seo'
 import HueIcon from './HueIcon.vue'
@@ -527,61 +528,47 @@ const cookLastTitle = computed(() => {
 })
 
 /**
- * The "Cooked this?" pill (ADR-0083 addendum): marks the cook from the
- * detail page — for the person who never enters cooking mode. The owner's
- * FINAL ruling (2026-10-13, supersedes BOTH the slide-final and the
- * icon-static notes — see ADR-0083's fourth change note): the pill SLIDES
- * again, but ONLY WITHIN the LAST-THREE zone. There is NO pill anywhere
- * until the scroll reaches the step that is 3 steps before the last
- * (index length-3, 0-based); from there on the single pill rides the
- * TITLE ROW of the LATEST VISIBLE step, handing off as steps enter/leave
- * the viewport, and vanishing again when the scroll moves above the
- * zone. The icon-only treatment from the icon-static ruling is KEPT:
- * the brand accent dot + one CookingPot glyph (the "cooked meal" icon;
- * ChefHat stays the Start-cooking CTA) — the accessible name carries
- * the words. The pill sits INLINE in the title row (in document flow —
- * never over the step text). Hidden once the cook is recorded TODAY
- * (the same local-day rule the history prints). Design authority:
- * Stitch "Flambette — Recipe Detail End (Mobile Dark)" (Warm Culinary
- * Paper).
+ * The "Cooked this?" pill (ADR-0083 addendum): a compact floating
+ * affordance for marking the cook from the detail page — for the person
+ * who never enters cooking mode. OWNER FINAL ruling (2026-10-13,
+ * supersedes the slide-final, icon-static and slide-in-tail notes): the
+ * pill is FLOATING again, exactly as Stitch designed — one fixed pill
+ * that is NOT hooked to anything (content scrolls under it), with the
+ * icon-only content kept from the icon-static ruling (the brand accent
+ * dot + one CookingPot glyph; ChefHat stays the Start-cooking CTA — the
+ * accessible name carries the words). Its trigger is a SENTINEL riding
+ * the THIRD-FROM-LAST step (index length-3, 0-based): the pill appears
+ * only once that step reaches the viewport, stays visible while the
+ * tail scrolls under it, and hides again when the scroll moves back
+ * above the zone. Hidden once the cook is recorded TODAY (the same
+ * local-day rule the history prints). Design authority: Stitch
+ * "Flambette — Recipe Detail End (Mobile Dark)" (Warm Culinary Paper).
  */
-const pillStep = ref<number | null>(null)
-/** Step index → its card element, collected via function refs (read-only
- * map: never reactive — the scroll handler measures, it does not render). */
-const stepEls = new Map<number, HTMLElement>()
-function setStepRef(el: unknown, i: number): void {
-  if (el) stepEls.set(i, el as HTMLElement)
-  else stepEls.delete(i)
+const pillTailIndex = computed(() => Math.max(0, scaledSteps.value.length - 3))
+const tailStepEl = ref<HTMLElement | null>(null)
+/** Sentinel ref: assigned ONLY at the tail index (ADR-0083 addendum). */
+function setTailRef(el: HTMLElement | null, i: number) {
+  if (i === pillTailIndex.value) tailStepEl.value = el
 }
-/** The latest step whose top edge has crossed into the viewport — null
- * while no step is visible. OWNER RULING GATE (2026-10-13, do NOT
- * simplify away): the pill exists only inside the LAST-THREE zone —
- * when the latest visible step is earlier than `length - 3` the pill is
- * removed entirely, so nothing ever shows above the tail and scrolling
- * back out of the zone takes the pill with it. */
-function updatePillStep(): void {
-  const vh = window.innerHeight
-  let latest: number | null = null
-  for (const [i, el] of stepEls) {
-    if (el.getBoundingClientRect().top < vh) latest = latest === null ? i : Math.max(latest, i)
-  }
-  if (latest === null || latest < scaledSteps.value.length - 3) latest = null
-  pillStep.value = latest
-}
-let pillRaf = 0
-function schedulePillUpdate(): void {
-  if (pillRaf) return
-  pillRaf = requestAnimationFrame(() => {
-    pillRaf = 0
-    updatePillStep()
-  })
-}
-watch(scaledSteps, () => nextTick(updatePillStep))
+// A recipe (or servings) change re-renders the step list — drop the stale
+// sentinel BEFORE the re-render (watch flush 'pre') so the next setTailRef
+// assigns the NEW tail element, never a detached one.
+watch(scaledSteps, () => {
+  tailStepEl.value = null
+})
+const tailInView = ref(false)
+useIntersectionObserver(
+  tailStepEl,
+  (entries) => {
+    tailInView.value = entries.some((e) => e.isIntersecting)
+  },
+  { threshold: 0 },
+)
 const cookedAlreadyToday = computed(() =>
   meta.value ? cooked.cookedToday(meta.value.id) : false,
 )
 const cookedPillVisible = computed(
-  () => !cookedAlreadyToday.value && !pillPromptOpen.value,
+  () => tailInView.value && !cookedAlreadyToday.value && !pillPromptOpen.value,
 )
 
 /**
@@ -707,24 +694,12 @@ function onKey(e: KeyboardEvent) {
 }
 onMounted(() => {
   window.addEventListener('keydown', onKey)
-  // The pill's scroll tracking (owner "slide" ruling): a PASSIVE read of
-  // the viewport — rAF-throttled — never an IntersectionObserver, whose
-  // callbacks never fire in hidden/occluded tabs (the Firefox
-  // no-pill report). A window listener also sidesteps the sticky-ingredient
-  // column's scroll containers: window scroll is the one motion every
-  // layout shares.
-  window.addEventListener('scroll', schedulePillUpdate, { passive: true })
-  window.addEventListener('resize', schedulePillUpdate, { passive: true })
   // Warm the restriction artifacts (control plane + overlay) so a swapped
   // ingredient list is ready; no-op when no restriction is active.
   void restrictionPrefs.ensureLoaded()
-  updatePillStep()
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onKey)
-  window.removeEventListener('scroll', schedulePillUpdate)
-  window.removeEventListener('resize', schedulePillUpdate)
-  if (pillRaf) cancelAnimationFrame(pillRaf)
 })
 
 function addToPlan() {
@@ -1326,10 +1301,10 @@ function startCooking() {
   </section>
   </section>
 
-  <!-- Instructions. The "Cooked this?" pill rides the TITLE ROW of the
-  latest visible step WITHIN the LAST-THREE zone only — icon-only,
-  passive rAF-throttled scroll tracking (ADR-0083 addendum, owner
-  slide-in-tail ruling 2026-10-13). -->
+  <!-- Instructions. The "Cooked this?" pill does NOT watch this section
+  (on desktop the column is in view on load — that lit the pill before
+  any scroll): its sentinel rides the THIRD-FROM-LAST step below
+  (ADR-0083 addendum refinement, 2026-10-13). -->
   <section>
   <!-- ADR-0077: the render's step-column head carries a mono total beside
        the H — the count is real (`scaledSteps.length`); the render's
@@ -1344,8 +1319,8 @@ function startCooking() {
   <ol class="space-y-3">
   <li
   v-for="(step, i) in scaledSteps"
-  :ref="(el) => setStepRef(el, i)"
   :key="i"
+  :ref="(el) => setTailRef(el as HTMLElement | null, i)"
   class="rounded-xl bg-surface-raised p-4 ring-1 ring-border"
   data-test="detail-step"
   >
@@ -1362,36 +1337,12 @@ function startCooking() {
   >
   {{ i + 1 }}
   </span>
-  <!-- The "Cooked this?" pill (ADR-0083 addendum) rides the TITLE ROW of
-  the LATEST visible step — inline, at the number-badge's level, never
-  over the step text. Owner FINAL ruling (2026-10-13, supersedes both
-  the slide-final and icon-static notes): the pill SLIDES WITHIN the
-  LAST-THREE zone only — no pill above step length-3, exactly ONE at a
-  time, handing off title → title as the scroll advances (a passive
-  rAF-throttled read — no IntersectionObserver and none of its Firefox
-  quirks). ICON-ONLY retained from the icon-static ruling: the brand
-  accent dot + one CookingPot glyph (the "cooked meal" icon; ChefHat
-  stays the Start-cooking CTA) — the accessible name carries the
-  words. -->
-  <div class="flex shrink-0 items-center gap-2">
-  <button
-  v-if="pillStep === i && cookedPillVisible"
-  type="button"
-  class="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-raised px-3 text-label-md font-semibold text-text transition-colors hover:bg-surface active:scale-[0.98]"
-  :aria-label="`Cooked this? (reached step ${i + 1})`"
-  data-test="cooked-pill"
-  @click="cookFromPill"
-  >
-  <span class="size-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true" />
-  <CookingPot :size="16" aria-hidden="true" class="text-brand-text" />
-  </button>
   <span
   v-if="hintAt(i)"
   class="font-mono-data text-label-md tabular-nums text-text-muted"
   data-test="detail-step-duration"
   >~{{ suggestionFromHint(hintAt(i)!).minutes }} min</span
   >
-  </div>
   </div>
   <p class="mt-2 text-body-md lg:text-body-lg">{{ step.primary }}</p>
   <!-- Measured amounts under the step text (ADR-0022, on the detail per
@@ -1460,6 +1411,40 @@ function startCooking() {
   </section>
   </div>
   </template>
+
+  <!-- The "Cooked this?" pill (ADR-0083 addendum): a compact floating
+  affordance for marking the cook from the detail page — for the person
+  who never enters cooking mode. Owner FINAL ruling (2026-10-13): the
+  pill is FLOATING again, exactly as Stitch designed — NOT hooked to
+  anything; content scrolls under it while it stays put. Design
+  authority: Stitch "Flambette — Recipe Detail End (Mobile Dark)"
+  (Warm Culinary Paper): right edge, ~120px above the bottom
+  navigation, surface-raised fill, subtle border, the ONE popover
+  shadow (ADR-0068), warm accent dot. The pointer-events-none wrapper
+  keeps the fixed overlay from intercepting taps outside the pill (the
+  ADR-0049 hit-testing lesson), while the app-width column keeps the
+  pill on the right edge of the CONTENT on desktop, not the viewport
+  edge. ICON-ONLY (the icon-static ruling, kept): the accent dot + one
+  CookingPot glyph — the accessible name carries the words. Hidden
+  until the LAST THREE steps come into view (the sentinel on the
+  third-from-last step) and once the cook is recorded today. -->
+  <div
+    v-if="doc && cookedPillVisible"
+    class="pointer-events-none fixed inset-x-0 bottom-[calc(120px+env(safe-area-inset-bottom))] z-40 flex justify-end"
+  >
+    <div class="mx-auto flex w-full max-w-app justify-end px-4">
+      <button
+        type="button"
+        class="pointer-events-auto flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface-raised py-2 pl-3 pr-4 shadow-popover transition-colors hover:bg-surface"
+        aria-label="Cooked this?"
+        data-test="cooked-pill"
+        @click="cookFromPill"
+      >
+        <span class="size-2 shrink-0 rounded-full bg-brand" aria-hidden="true" />
+        <CookingPot :size="16" aria-hidden="true" class="text-brand-text" />
+      </button>
+    </div>
+  </div>
 
   <!-- The SAME post-cook prompt, raised over the detail page (ADR-0083
   addendum): Done/scrim/Escape -> /history via onPillPromptDone; Undo

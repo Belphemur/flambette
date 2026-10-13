@@ -65,25 +65,27 @@ two cards, then the action deck.
   where it was. The window Escape handler yields while the prompt is
   open (registration order — it fires before AppModal's).
 - **The detail "Cooked this?" pill (ADR-0083 addendum, owner FINAL
-  slide-in-tail ruling 2026-10-13, superseding BOTH the slide-final and
-  icon-static notes)**: RecipeDetail renders the compact pill from the
-  Stitch render ("Recipe Detail End (Mobile Dark)",
-  Warm Culinary Paper) INLINE in the TITLE ROW of the LATEST VISIBLE
-  preparation step — beside the number badge, in document flow, never
-  over the step text (`bg-surface-raised`, subtle `border` token, warm
-  brand accent dot). SLIDE WITHIN THE LAST-THREE ZONE: no pill anywhere
-  until scrolling reaches the step that is 3 steps before the last
-  (index `length - 3`); from there exactly ONE pill exists at a time —
-  it hooks the title of the newest step that has entered the viewport
-  and hands off title → title as the scroll advances, returning to the
-  earlier step when scrolling back up and REMOVING itself when the
-  scroll leaves the zone (above `length - 3`). The tracking is a
-  passive rAF-throttled window-scroll read — never an
-  IntersectionObserver (its callbacks never fire in hidden/occluded
-  tabs). ICON-ONLY retained from the icon-static ruling: the dot + one
-  CookingPot glyph (the "cooked meal" icon; ChefHat stays the
-  Start-cooking CTA) — the accessible name
-  `Cooked this? (reached step N)` carries the words. Hidden once the
+  floating-restored ruling 2026-10-13, superseding the slide-final,
+  icon-static AND slide-in-tail notes)**: RecipeDetail renders the
+  compact pill from the Stitch render ("Recipe Detail End (Mobile
+  Dark)", Warm Culinary Paper) FLOATING, exactly as Stitch designed —
+  ONE pill `fixed` to the viewport at the content's right edge
+  (~120px above the bottom nav via
+  `bottom-[calc(120px+env(safe-area-inset-bottom))]`, `z-40`,
+  `bg-surface-raised`, subtle `border`, the one popover shadow,
+  warm brand accent dot) behind a `pointer-events-none` wrapper with an
+  app-width column (the ADR-0049 hit-testing lesson; on desktop the
+  pill sits on the content's right edge, not the viewport's). NOT
+  HOOKED TO ANYTHING: no title-row button, no handoff — content scrolls
+  under the pill while it stays put. TRIGGER = the TAIL SENTINEL: a
+  function-ref sentinel riding the THIRD-FROM-LAST step (index
+  `length - 3`) observed with `useIntersectionObserver` at threshold 0
+  (the b62b95e trigger, restored); the pill appears only once that step
+  reaches the viewport, stays visible while the tail scrolls under it,
+  and hides again when the scroll moves back above the zone. ICON-ONLY
+  (kept from the icon-static ruling): the dot + one CookingPot glyph
+  (the "cooked meal" icon; ChefHat stays the Start-cooking CTA) — the
+  accessible name `Cooked this?` carries the words. Hidden once the
   recipe is already cooked TODAY (`cookedToday()` in
   `src/lib/history.ts`, local-day rule). A tap records through the ONE `plan.markCooked` path (captures
   the prior exactly like the session does) and raises the SAME

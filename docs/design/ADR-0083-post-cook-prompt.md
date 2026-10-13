@@ -239,3 +239,32 @@ suppression, the single `plan.markCooked` path, and the prompt's Done →
 exact one-pill handoff + back-hop inside it, icon-only content). This
 note supersedes the two 2026-10-13 notes above; both are kept for the
 decision trail.
+
+## Change note — 2026-10-13, owner FINAL ruling: the pill FLOATS again (Stitch design, icon-only)
+
+The slide-in-tail note above is superseded: reviewing the title-riding
+version, the owner wrote "I want what stitch had designed, just with the
+icon instead of the text and have it floating like stitch. It need to
+appear only when reaching the 3rd before last", clarifying "Not hooking
+to anything, still floating." The FLOATING pill is restored as the final
+design — one pill `fixed` to the viewport at the content's right edge
+(~120px above the bottom nav), `bg-surface-raised`, subtle border, the
+popover shadow, accent dot, behind a `pointer-events-none` app-width
+wrapper — NOT hooked to anything: no title-row button, no handoff, no
+step map; content scrolls under it while it stays put. The trigger is
+the original TAIL SENTINEL restored from the pre-inline implementation
+(function-ref sentinel on the THIRD-FROM-LAST step, `length - 3`,
+`useIntersectionObserver` at threshold 0): the pill appears only once
+that step reaches the viewport, stays visible while the tail scrolls
+under it, and hides again when the scroll moves back above the zone.
+The ICON-ONLY content is kept (confirmed "good icon"): accent dot + one
+CookingPot glyph, no text spans; the accessible name "Cooked this?"
+carries the words. The cooked-today suppression, the single
+`plan.markCooked` path, and the prompt's Done → `/history` / Undo →
+stay semantics are unchanged. NOTE: this restores the
+IntersectionObserver trigger, so the Firefox hidden-tab caveat recorded
+in the inline note applies again (accepted as part of the owner's
+explicit ruling). Pinned by `e2e/cooked-pill.spec.ts` (floating
+geometry: no pill above the zone, exactly one fixed pill inside it that
+does not travel with the content, icon-only content, tap/undo/today
+flows). The four earlier notes are kept for the decision trail.
