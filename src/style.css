@@ -651,3 +651,37 @@ input[type='checkbox'].check-box:disabled {
     transform: none;
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * Status toast motion (ADR-0084 addendum, 2026-10-13).
+ *
+ * The pill's `<Transition name="toast">` shipped with no .toast-*
+ * CSS — toasts popped in place with no motion at all. This is a
+ * subtle fade + 12px rise (180ms ease). The vertical motion rides
+ * the CSS `transform` property, which applies AFTER the Tailwind
+ * `translate` property that centres the pill, so the rise composes
+ * with the horizontal centring instead of displacing it.
+
+   Reduced motion keeps the fade and drops the rise, matching the
+   buttons' colour-only contract above. */
+.toast-enter-active,
+.toast-leave-active {
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(12px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-enter-active,
+  .toast-leave-active {
+    transition: opacity 180ms ease;
+  }
+  .toast-enter-from,
+  .toast-leave-to {
+    transform: none;
+  }
+}

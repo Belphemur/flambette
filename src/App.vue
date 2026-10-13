@@ -612,11 +612,18 @@ onBeforeUnmount(() => {
   </RouterView>
   </main>
 
+  <!-- ADR-0084 addendum (2026-10-13): the status pill gets room —
+       px-5 py-3, a max-width cap (28rem desktop, viewport minus
+       gutters on a phone), rounded-3xl so a wrapped message reads as
+       a rounded card instead of a tall narrow capsule, and flex-wrap
+       so actions drop to a centred line below long messages instead
+       of squeezing beside them. Hooks, position and the level-2
+       tokens are untouched. -->
   <Transition name="toast">
   <div
   v-if="ui.toast"
   role="status"
-  class="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-popover px-4 py-2 text-sm font-medium text-text shadow-popover"
+  class="fixed bottom-24 left-1/2 z-50 flex max-w-[min(28rem,calc(100vw-2.5rem))] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-3xl border border-border bg-popover px-5 py-3 text-sm font-medium leading-snug text-text shadow-popover"
   :data-test="ui.toast.kind ? `${ui.toast.kind}-toast` : 'toast'"
   >
   <span>{{ ui.toast.message }}</span>

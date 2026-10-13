@@ -173,3 +173,51 @@ Implementation goes to a supervised pi run against the committed ADR.
   CookingView and rejected — `onBeforeRouteLeave` guards are
   synchronous in Vue Router's contract with this app's leave flow;
   intercept-and-resume keeps the guard pure and the modal declarative.
+
+## Addendum (2026-10-13, toast ergonomics): the status pill gets room and time
+
+Owner ruling on the shipped pill: "the toast can be longer instead of
+being so squished and stay a little longer on the screen." Two
+behaviour changes against decision 4's "no behaviour change" —
+recorded here so the decision and the shipped app agree.
+
+- **The pill gets room.** `px-4 py-2` → `px-5 py-3`, and the fixed
+  pill gains `max-w-[min(28rem,calc(100vw-2.5rem))]`: a 28rem (448px)
+  cap on desktop, full width minus gutters on a phone. `rounded-full`
+  becomes `rounded-3xl` — at a single line the 24px radius still
+  reads as the same capsule, but a wrapped message becomes a rounded
+  card instead of a tall narrow capsule. The row turns
+  `flex-wrap justify-center` with `leading-snug` on the message: short
+  toasts render exactly as before (one line, actions beside the
+  message), while long ones let the text wrap and drop the actions to
+  a centred line below instead of squeezing them beside the text.
+  Position (`bottom-24`, centred), the level-2 tokens and the
+  `data-test` hooks are untouched.
+- **The default dwell is 2500 → 4000 ms.** Four seconds is a
+  comfortable read for a status line and matches the platform norm
+  (Material snackbar). It deliberately stays UNDER Playwright's 5 s
+  default expect timeout so every spec that awaits a toast's absence
+  still resolves inside its timeout; call sites with an explicit
+  `duration` (2000 quick acks, 6000–8000 failure messages) keep their
+  value — only the default moves.
+- **The empty `<Transition name="toast">` gets its motion.** The
+  transition classes shipped with no `.toast-*` CSS, so toasts popped
+  in place with no motion at all. `src/style.css` adds a subtle
+  fade + 12px rise (180ms ease):
+
+  ```css
+  .toast-enter-active, .toast-leave-active {
+    transition: opacity 180ms ease, transform 180ms ease;
+  }
+  .toast-enter-from, .toast-leave-to {
+    opacity: 0; transform: translateY(12px);
+  }
+  ```
+
+  The motion composes with the pill's Tailwind centering because
+  Tailwind v4 emits `-translate-x-1/2` as the CSS `translate`
+  property, and the CSS `transform` applies AFTER `translate` — the
+  rise rides on top of the horizontal centring and never displaces
+  it. Under `prefers-reduced-motion: reduce` the rise is dropped and
+  the fade remains, matching the buttons' reduced-motion contract in
+  `style.css`.

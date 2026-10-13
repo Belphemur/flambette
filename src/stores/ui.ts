@@ -80,7 +80,7 @@ export interface ConfirmPrompt {
 export interface ToastOptions {
   /** Inline buttons rendered next to the message. */
   actions?: ToastAction[]
-  /** Auto-dismiss delay in ms (default 2500). */
+  /** Auto-dismiss delay in ms (default 4000). */
   duration?: number
   /** Confirmation kind — emits data-test="added-toast" when set. */
   kind?: string
@@ -773,7 +773,11 @@ export const useUiStore = defineStore(
       endToast()
       onDismiss = options.onDismiss
       toast.value = { message, actions: options.actions, kind: options.kind }
-      toastTimer = setTimeout(endToast, options.duration ?? 2500)
+      // ADR-0084 addendum: the default dwell is a COMFORTABLE read
+      // (4s) — a status line people actually finish. Call sites with
+      // an explicit duration (quick acks, failure messages) keep
+      // their value; only the default moved.
+      toastTimer = setTimeout(endToast, options.duration ?? 4000)
     }
 
     /** Dismiss the current toast immediately (e.g. the Cancel button). */
