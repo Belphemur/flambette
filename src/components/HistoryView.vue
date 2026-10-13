@@ -199,13 +199,12 @@ function confirmReplan() {
     customAtConfirm,
   )
   const undo = () => {
-    plan.replacePlan(
-      atConfirm,
-      customAtConfirm,
-      // An empty confirmed-over plan carries no identity (planId '') —
-      // nothing to restore; `replacePlan` mints as usual.
-      identityAtConfirm.planId ? identityAtConfirm : undefined,
-    )
+    // The identity is passed VERBATIM, empty one included: a plan
+    // hydrated from a pre-ADR-0034 blob is non-empty with planId '' —
+    // "restoring exact state" then means restoring NO identity, and
+    // minting one (plan.ts would, if the parameter were dropped) would
+    // silently change that plan's provenance.
+    plan.replacePlan(atConfirm, customAtConfirm, identityAtConfirm)
     plan.setClearedIngredients(clearedAtConfirm)
   }
   const n = preview.length

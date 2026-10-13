@@ -433,9 +433,13 @@ export const usePlanStore = defineStore(
      * `identity` is the rare caller that RE-INSTALLS a displaced plan
      * verbatim — the re-plan undo (ADR-0085 §3) — and wants that plan's
      * own identity back, so its next cooks stay in ONE history group
-     * (ADR-0034) instead of forking under a minted third id. Every other
-     * caller (Auto-Plan replace, an inbound room snapshot) omits it and
-     * gets a fresh identity, exactly as before.
+     * (ADR-0034) instead of forking under a minted third id. PRESENCE of
+     * the parameter means "restore this state": an id installs it, an
+     * empty id restores the confirmed-over NO-identity state (a plan
+     * hydrated from a pre-ADR-0034 blob can be non-empty with none —
+     * minting there would be the fork the undo exists to prevent).
+     * Every other caller (Auto-Plan replace, an inbound room snapshot)
+     * omits it and gets a fresh identity, exactly as before.
      */
     function replacePlan(
       entries: PlanEntry[],
@@ -452,12 +456,19 @@ export const usePlanStore = defineStore(
       // previous identity would file the next cook under a plan this
       // device no longer has — and would publish that stale id to every
       // peer. Mint (or clear) exactly like the empty -> non-empty rule —
-      // unless the caller restores an explicit identity (the undo).
-      if (identity && identity.planId) {
-        planId.value = identity.planId
-        planCreatedAt.value = Number.isFinite(identity.planCreatedAt)
-          ? identity.planCreatedAt
-          : Date.now()
+      // unless the caller restores an explicit state (the undo).
+      if (identity) {
+        if (identity.planId) {
+          planId.value = identity.planId
+          planCreatedAt.value = Number.isFinite(identity.planCreatedAt)
+            ? identity.planCreatedAt
+            : Date.now()
+        } else {
+          // An explicit EMPTY identity: restore the no-identity state
+          // verbatim — never mint over it.
+          planId.value = ''
+          planCreatedAt.value = 0
+        }
       } else {
         planId.value = ''
         planCreatedAt.value = 0

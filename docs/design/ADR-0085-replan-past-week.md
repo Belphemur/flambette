@@ -147,4 +147,8 @@ architecture:
   splitting its history group. `replacePlan` gained an optional
   `identity` parameter that only the undo passes; every other caller
   (Auto-Plan replace, inbound room snapshots) still mints, per the
-  standing "a wholesale replacement IS a new plan" rule.
+  standing "a wholesale replacement IS a new plan" rule. PRESENCE of
+  the parameter means "restore this state": an id installs it, an EMPTY
+  id restores the confirmed-over no-identity state verbatim (a plan
+  hydrated from a pre-ADR-0034 blob is non-empty with planId '' —
+  minting over it would change its provenance).

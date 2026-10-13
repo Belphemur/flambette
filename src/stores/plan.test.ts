@@ -90,6 +90,21 @@ describe('plan identity (ADR-0034)', () => {
     plan.replacePlan([{ variantId: 3, servings: 2 }])
     expect(plan.planId).not.toBe(original.planId)
   })
+
+  test('an explicit EMPTY identity restores the no-identity state, never mints', () => {
+    // A plan hydrated from a pre-ADR-0034 blob can be non-empty with
+    // planId '' — the undo must reinstall THAT state verbatim: minting
+    // an identity over it would change its provenance (History heading
+    // + the id its next cooks file under) out from under exact state.
+    const plan = usePlanStore()
+    plan.replacePlan([{ variantId: 1, servings: 4 }])
+    expect(plan.planId).not.toBe('')
+
+    plan.replacePlan([{ variantId: 2, servings: 3 }], [], { planId: '', planCreatedAt: 0 })
+    expect(plan.plan.map((e) => e.variantId)).toEqual([2])
+    expect(plan.planId).toBe('')
+    expect(plan.planCreatedAt).toBe(0)
+  })
 })
 
 describe('a persisted legacy plan normalizes at hydrate', () => {
