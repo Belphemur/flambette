@@ -564,9 +564,42 @@ useIntersectionObserver(
   },
   { threshold: 0 },
 )
-const cookedAlreadyToday = computed(() =>
-  meta.value ? cooked.cookedToday(meta.value.id) : false,
-)
+/**
+ * The cooked-today guard must observe the LOCAL DAY: a detail page left
+ * open across midnight (or resumed from device sleep) would otherwise
+ * read a stale guard until an unrelated state change. `dayTick` is a
+ * deliberate dependency of the computed — bumped once by a timer armed
+ * for the next local midnight and again whenever the page becomes
+ * visible after being hidden (CodeRabbit, PR #84). No polling: one
+ * timer, one event.
+ */
+const dayTick = ref(0)
+let midnightTimer: ReturnType<typeof setTimeout> | undefined
+function armMidnightTick() {
+  const now = new Date()
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+  clearTimeout(midnightTimer)
+  midnightTimer = setTimeout(bumpDayTick, next.getTime() - now.getTime() + 1_000)
+}
+function bumpDayTick() {
+  dayTick.value++
+  armMidnightTick()
+}
+function onDayVisibility() {
+  if (document.visibilityState === 'visible') dayTick.value++
+}
+onMounted(() => {
+  armMidnightTick()
+  document.addEventListener('visibilitychange', onDayVisibility)
+})
+onUnmounted(() => {
+  clearTimeout(midnightTimer)
+  document.removeEventListener('visibilitychange', onDayVisibility)
+})
+const cookedAlreadyToday = computed(() => {
+  void dayTick.value
+  return meta.value ? cooked.cookedToday(meta.value.id) : false
+})
 const cookedPillVisible = computed(
   () => tailInView.value && !cookedAlreadyToday.value && !pillPromptOpen.value,
 )

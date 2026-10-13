@@ -100,7 +100,11 @@ test('the pill stays down until the LAST steps scroll into view, then floats (bo
   // the tail arrives.
   await page.goto('/recipe/6123')
   await expect(page.getByTestId('detail-title')).toBeVisible()
+  // `detail-title` renders from meta BEFORE the async getRecipe fetch
+  // renders the step list — wait for the list before counting, or the
+  // count races to 0 (kody, PR #84).
   const steps = page.getByTestId('detail-step')
+  await expect(steps.first()).toBeVisible()
   const stepCount = await steps.count()
   expect(stepCount).toBeGreaterThan(3)
 
@@ -124,6 +128,9 @@ test('the floating pill STAYS PUT while the tail scrolls under it, and hides abo
   await blockExternalRequests(page)
   await page.goto('/recipe/6123')
   await expect(page.getByTestId('detail-title')).toBeVisible()
+  // Same meta-before-doc race as above: the list must exist before the
+  // count is read (kody, PR #84).
+  await expect(page.getByTestId('detail-step').first()).toBeVisible()
   const stepCount = await page.getByTestId('detail-step').count()
 
   // Enter the tail zone and read the pill's viewport position.
