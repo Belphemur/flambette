@@ -588,7 +588,8 @@ const hasAnyCook = computed(() => plan.cookedHistory.length > 0)
   </ul>
   <p class="text-xs text-text" data-test="replan-warning">
   Replaces your current plan
-  <template v-if="plan.plan.length > 0">({{ plan.plan.length }} meals)</template>.
+  <template v-if="plan.plan.length > 0">({{ plan.plan.length }}
+  {{ plan.plan.length === 1 ? 'meal' : 'meals' }})</template>.
   </p>
   <div class="flex gap-2">
   <button
