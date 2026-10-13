@@ -9,12 +9,13 @@ import {
   formatDay,
   formatRelative,
   groupHistoryByPlan,
+  planGroupById,
   replanEntries,
   summarizeHistory,
 } from '../lib/history'
 import { imageSrc, onImgError } from '../lib/images'
 import type { VariantMeta } from '../lib/types'
-import { usePlanStore, type CookedEntry } from '../stores/plan'
+import { usePlanStore, type CookedEntry, type PlanIdentity } from '../stores/plan'
 import { useUiStore } from '../stores/ui'
 import AppModal from './AppModal.vue'
 import RatingStars from './RatingStars.vue'
@@ -120,10 +121,15 @@ function addToPlan(row: Row) {
 /* ---------- "Cook that week again" (ADR-0085) ---------- */
 
 /**
- * The group currently being previewed for re-plan, or null. ONE preview
- * at a time: the pill is inert (disabled) while this is set.
+ * The plan id currently being previewed for re-plan, or null. ONE preview
+ * at a time: the pill is inert (disabled) while this is set. Stored as the
+ * plan's ID — never as a group object: the preview re-resolves the group
+ * from the FULL cooked history at read time, so (a) "that week" is the
+ * whole week even under a 30/90-day period pill (the pills window the
+ * DISPLAY, never the reconstruction) and (b) a dish a household peer
+ * cooks while the modal is open still lands in the confirm.
  */
-const replanGroup = ref<Group | null>(null)
+const replanPlanId = ref<string | null>(null)
 
 /**
  * The previewed week's meal set (ADR-0085 §2/§3): one entry per distinct
@@ -133,8 +139,10 @@ const replanGroup = ref<Group | null>(null)
  */
 const replanPreview = computed(() => {
   const c = catalog.value
-  const g = replanGroup.value
-  if (!c || !g) return []
+  const pid = replanPlanId.value
+  if (!c || pid === null) return []
+  const g = planGroupById(plan.cookedHistory, pid)
+  if (!g) return []
   return replanEntries(g.events, new Set(c.byId.keys()), ui.defaultServings).flatMap((e) => {
     const meta = c.byId.get(e.variantId)
     return meta ? [{ ...e, meta }] : []
@@ -144,10 +152,12 @@ const replanPreview = computed(() => {
 /**
  * Open the preview for a group. The pill lives in the SEARCH-FILTERED
  * group list, but "that week" is the whole group even when the filter is
- * active — resolve the full group by its unique planId.
+ * active — only the plan's id is captured here; the preview above
+ * re-derives the events from the full history.
  */
 function openReplan(group: Group) {
-  replanGroup.value = groups.value.find((g) => g.planId === group.planId) ?? group
+  // The pill renders only on plan-backed groups.
+  replanPlanId.value = group.planId
 }
 
 /**
@@ -162,17 +172,25 @@ function replanLabel(group: Group): string {
 
 function confirmReplan() {
   const preview = replanPreview.value
-  if (!replanGroup.value || preview.length === 0) {
-    replanGroup.value = null
+  if (replanPlanId.value === null || preview.length === 0) {
+    replanPlanId.value = null
     return
   }
   // EXACT-STATE undo (ADR-0030 grammar, ADR-0085 §3): the snapshot is
   // taken at CONFIRM time — a room peer may have planned a meal mid-
   // preview — so the undo restores the state the user confirmed over,
-  // not the one the preview was built from.
+  // not the one the preview was built from. The plan IDENTITY is part of
+  // that state: `replacePlan` minted a new id for the re-plan, and a
+  // minted-again undo would file the displaced plan's NEXT cooks under a
+  // third id, splitting its history group (ADR-0034). The undo restores
+  // the confirm-time id, so the plan's cooks stay one group.
   const atConfirm = plan.plan.map((e) => ({ ...e }))
   const customAtConfirm = [...plan.customItems]
   const clearedAtConfirm = { ...plan.clearedIngredients }
+  const identityAtConfirm: PlanIdentity = {
+    planId: plan.planId,
+    planCreatedAt: plan.planCreatedAt,
+  }
   // Fresh planning = fresh ingredients: re-planning a meal forgets any
   // cleared-ingredient snapshot (same rule as addToPlan).
   for (const meal of preview) plan.restoreIngredients(meal.variantId)
@@ -181,7 +199,13 @@ function confirmReplan() {
     customAtConfirm,
   )
   const undo = () => {
-    plan.replacePlan(atConfirm, customAtConfirm)
+    plan.replacePlan(
+      atConfirm,
+      customAtConfirm,
+      // An empty confirmed-over plan carries no identity (planId '') —
+      // nothing to restore; `replacePlan` mints as usual.
+      identityAtConfirm.planId ? identityAtConfirm : undefined,
+    )
     plan.setClearedIngredients(clearedAtConfirm)
   }
   const n = preview.length
@@ -189,7 +213,7 @@ function confirmReplan() {
     actions: [{ label: 'Undo', run: undo, testId: 'replan-undo' }],
     duration: 6000,
   })
-  replanGroup.value = null
+  replanPlanId.value = null
 }
 
 /* ---------- Period pills (EXPERIENCE.md §7; ADR-0069 pill geometry) ---------- */
@@ -438,7 +462,7 @@ const hasAnyCook = computed(() => plan.cookedHistory.length > 0)
   class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border-strong bg-transparent px-3 py-2 text-xs font-semibold text-brand-text transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-50"
   :aria-label="replanLabel(group)"
   :data-test="`history-replan-${group.planId}`"
-  :disabled="replanGroup !== null"
+  :disabled="replanPlanId !== null"
   @click="openReplan(group)"
   >
   <RefreshCw :size="15" aria-hidden="true" />
@@ -552,13 +576,13 @@ const hasAnyCook = computed(() => plan.cookedHistory.length > 0)
   the meals count + replace warning, then confirm + "Keep editing" —
   confirm-before-destroy, never a silent replace. -->
   <AppModal
-  v-if="replanGroup"
+  v-if="replanPlanId !== null"
   dialog-label="Cook that week again"
   overlay-class="z-40 flex items-center justify-center modal-scrim px-6"
   panel-class="max-h-[85vh] w-full max-w-sm overflow-y-auto space-y-4 rounded-2xl bg-surface-raised p-5"
   overlay-test="replan-overlay"
   panel-test="replan-preview"
-  @close="replanGroup = null"
+  @close="replanPlanId = null"
   >
   <div>
   <h2 class="text-lg font-bold tracking-tight text-text">Cook that week again</h2>
@@ -604,7 +628,7 @@ const hasAnyCook = computed(() => plan.cookedHistory.length > 0)
   type="button"
   class="h-11 flex-1 rounded-xl border border-border-strong bg-surface-raised text-sm font-medium text-text active:bg-surface-sunken"
   data-test="replan-cancel"
-  @click="replanGroup = null"
+  @click="replanPlanId = null"
   >
   Keep editing
   </button>

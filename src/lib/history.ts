@@ -142,6 +142,22 @@ export function groupHistoryByPlan(events: CookedEntry[]): PlanHistoryGroup[] {
 /* ---------- Re-plan reconstruction (ADR-0085) ---------- */
 
 /**
+ * One plan's FULL group, resolved from the events given. The re-plan
+ * preview must always call this with the UNWINDOWED `plan.cookedHistory`:
+ * the History tab's period pills only window the DISPLAY, never the
+ * reconstruction — a plan whose cooks straddle a 30/90-day cutoff still
+ * re-plans as its whole week (ADR-0085 §2). Resolving by planId at read
+ * time (rather than holding the group object) also keeps the preview
+ * current with cooks that arrive from household peers while it is open.
+ */
+export function planGroupById(
+  events: CookedEntry[],
+  planId: string,
+): PlanHistoryGroup | undefined {
+  return groupHistoryByPlan(events).find((g) => g.planId === planId)
+}
+
+/**
  * "Cook that week again" (ADR-0085): reconstruct one history group's meal
  * set as the entries a `plan.replacePlan` confirm would write.
  *

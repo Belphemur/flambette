@@ -126,3 +126,25 @@ demand from `cookedHistory` + `groupHistoryByPlan`; nothing is stored.
 - **Reusing `AutoPlanDialog` itself.** Rejected: it is coupled to the
   proposal chooser (ADR-0080 — generation, plan letters, mode toggles);
   re-planning a known meal set needs only the ADR-0030 confirm grammar.
+
+## Change note (2026-10-14, PR #87 review round)
+
+Three review findings hardened the implementation without changing the
+architecture:
+
+1. **The preview always resolves the FULL group.** §2's "the group's meal
+  set is derived on demand" now explicitly reads the group from the
+  UNWINDOWED `plan.cookedHistory` (`planGroupById`), not from the
+  tab's currently selected period slice: the period pills (All time /
+  30 / 90 days) window only what is DISPLAYED, so a plan whose cooks
+  straddle a cutoff still re-plans as its whole week. Resolving by
+  planId at read time also keeps the preview current with dishes a
+  household peer cooks while the modal is open.
+2. **The undo restores the confirm-time plan IDENTITY too.** "Exact
+  state" (§3) includes the displaced plan's ADR-0034 identity:
+  `replacePlan` mints a fresh id on every call, and a minted-again undo
+  used to file the displaced plan's NEXT cooks under a third id,
+  splitting its history group. `replacePlan` gained an optional
+  `identity` parameter that only the undo passes; every other caller
+  (Auto-Plan replace, inbound room snapshots) still mints, per the
+  standing "a wholesale replacement IS a new plan" rule.

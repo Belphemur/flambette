@@ -6,6 +6,7 @@ import {
   cookEventsFor,
   filterHistoryEvents,
   groupHistoryByPlan,
+  planGroupById,
   replanEntries,
   summarizeHistory,
 } from './history'
@@ -195,5 +196,24 @@ describe('replanEntries ("cook that week again", ADR-0085)', () => {
     const forward = replanEntries([a, b], known, 4)
     const backward = replanEntries([b, a], known, 4)
     expect(forward).toEqual(backward)
+  })
+})
+
+describe('planGroupById (ADR-0085: the preview resolves the FULL group)', () => {
+  test('returns every event of the plan, regardless of any display window', () => {
+    // The History tab's period pills window only what is DISPLAYED; the
+    // re-plan reconstruction must always see the whole week — a plan
+    // whose cooks straddle a 30/90-day cutoff is still re-planned whole.
+    const events = [
+      event(1, 100, 'p1', 1),
+      event(2, 50, 'p1', 1),
+      event(3, 10, 'p2', 2), // another plan — not this group
+      event(4, 5), // legacy row — no plan id
+    ]
+    const g = planGroupById(events, 'p1')
+    expect(g?.planId).toBe('p1')
+    expect(g?.events.map((e) => e.variantId)).toEqual([1, 2])
+    // Unknown plan ids resolve to nothing (group left the log).
+    expect(planGroupById(events, 'missing')).toBeUndefined()
   })
 })

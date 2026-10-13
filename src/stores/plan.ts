@@ -428,8 +428,20 @@ export const usePlanStore = defineStore(
       if (changed) plan.value = next
     }
 
-    /** Replace the whole plan (used when importing a shared plan). */
-    function replacePlan(entries: PlanEntry[], custom: string[] = []): void {
+    /** Replace the whole plan (used when importing a shared plan).
+     *
+     * `identity` is the rare caller that RE-INSTALLS a displaced plan
+     * verbatim — the re-plan undo (ADR-0085 §3) — and wants that plan's
+     * own identity back, so its next cooks stay in ONE history group
+     * (ADR-0034) instead of forking under a minted third id. Every other
+     * caller (Auto-Plan replace, an inbound room snapshot) omits it and
+     * gets a fresh identity, exactly as before.
+     */
+    function replacePlan(
+      entries: PlanEntry[],
+      custom: string[] = [],
+      identity?: PlanIdentity,
+    ): void {
       plan.value = entries.map((e) => ({
         variantId: e.variantId,
         servings: normalizePlanServings(e.servings),
@@ -439,10 +451,18 @@ export const usePlanStore = defineStore(
       // an inbound room snapshot). Keeping the
       // previous identity would file the next cook under a plan this
       // device no longer has — and would publish that stale id to every
-      // peer. Mint (or clear) exactly like the empty -> non-empty rule.
-      planId.value = ''
-      planCreatedAt.value = 0
-      if (plan.value.length > 0) ensurePlanIdentity()
+      // peer. Mint (or clear) exactly like the empty -> non-empty rule —
+      // unless the caller restores an explicit identity (the undo).
+      if (identity && identity.planId) {
+        planId.value = identity.planId
+        planCreatedAt.value = Number.isFinite(identity.planCreatedAt)
+          ? identity.planCreatedAt
+          : Date.now()
+      } else {
+        planId.value = ''
+        planCreatedAt.value = 0
+        if (plan.value.length > 0) ensurePlanIdentity()
+      }
     }
 
     return {
