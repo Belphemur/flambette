@@ -532,19 +532,34 @@ const cookLastTitle = computed(() => {
  * The "Cooked this?" pill (ADR-0083 addendum): a compact floating
  * affordance for marking the cook from the detail page — for the person
  * who never enters cooking mode. It belongs to the END of the recipe
- * ("I cooked this" becomes true at the steps), so it is visible while the
- * instructions region is in view — an IntersectionObserver on the steps
- * section, via @vueuse's useIntersectionObserver — and hidden once the
- * cook is recorded TODAY (the same local-day rule the history prints).
- * Design authority: Stitch "Flambette — Recipe Detail End (Mobile Dark)"
- * (Warm Culinary Paper).
+ * ("I cooked this" becomes true at the steps), so its trigger is a
+ * SENTINEL riding the THIRD-FROM-LAST step (owner refinement, 2026-10-13:
+ * on desktop the instructions COLUMN is in view on load, so a
+ * section-level trigger lit the pill before any scroll) — an
+ * IntersectionObserver on that element, via @vueuse's
+ * useIntersectionObserver, kept at threshold 0: any part of the sentinel
+ * on screen lights the pill (a higher ratio risks never firing on a tall
+ * step). Hidden once the cook is recorded TODAY (the same local-day rule
+ * the history prints). Design authority: Stitch "Flambette — Recipe
+ * Detail End (Mobile Dark)" (Warm Culinary Paper).
  */
-const instructionsSection = ref<HTMLElement | null>(null)
-const stepsInView = ref(false)
+const pillTailIndex = computed(() => Math.max(0, scaledSteps.value.length - 3))
+const tailStepEl = ref<HTMLElement | null>(null)
+/** Sentinel ref: assigned ONLY at the tail index (ADR-0083 addendum). */
+function setTailRef(el: HTMLElement | null, i: number) {
+  if (i === pillTailIndex.value) tailStepEl.value = el
+}
+// A recipe (or servings) change re-renders the step list — drop the stale
+// sentinel BEFORE the re-render (watch flush 'pre') so the next setTailRef
+// assigns the NEW tail element, never a detached one.
+watch(scaledSteps, () => {
+  tailStepEl.value = null
+})
+const tailInView = ref(false)
 useIntersectionObserver(
-  instructionsSection,
+  tailStepEl,
   (entries) => {
-    stepsInView.value = entries.some((e) => e.isIntersecting)
+    tailInView.value = entries.some((e) => e.isIntersecting)
   },
   { threshold: 0 },
 )
@@ -552,7 +567,7 @@ const cookedAlreadyToday = computed(() =>
   meta.value ? cooked.cookedToday(meta.value.id) : false,
 )
 const cookedPillVisible = computed(
-  () => stepsInView.value && !cookedAlreadyToday.value && !pillPromptOpen.value,
+  () => tailInView.value && !cookedAlreadyToday.value && !pillPromptOpen.value,
 )
 
 /**
@@ -1283,9 +1298,11 @@ function startCooking() {
   </section>
   </section>
 
-  <!-- The section the "Cooked this?" pill watches (ADR-0083 addendum):
-  the pill is visible while THIS region intersects the viewport. -->
-  <section ref="instructionsSection">
+  <!-- Instructions. The "Cooked this?" pill does NOT watch this section
+  (on desktop the column is in view on load — that lit the pill before
+  any scroll): its sentinel rides the THIRD-FROM-LAST step below
+  (ADR-0083 addendum refinement, 2026-10-13). -->
+  <section>
   <!-- ADR-0077: the render's step-column head carries a mono total beside
        the H — the count is real (`scaledSteps.length`); the render's
        "Preparation Steps" wording is NOT adopted, because "Instructions"
@@ -1300,6 +1317,7 @@ function startCooking() {
   <li
   v-for="(step, i) in scaledSteps"
   :key="i"
+  :ref="(el) => setTailRef(el as HTMLElement | null, i)"
   class="rounded-xl bg-surface-raised p-4 ring-1 ring-border"
   data-test="detail-step"
   >
@@ -1400,8 +1418,10 @@ function startCooking() {
   pointer-events-none wrapper keeps the fixed overlay from
   intercepting taps outside the pill (the ADR-0049 hit-testing
   lesson), while the app-width column keeps the pill on the right edge
-  of the CONTENT on desktop, not the viewport edge. Hidden while the
-  steps are out of view and once the cook is recorded today. -->
+  of the CONTENT on desktop, not the viewport edge. Hidden until the
+  LAST THREE steps come into view (the sentinel on the third-from-last
+  step — ADR-0083 addendum refinement) and once the cook is recorded
+today. -->
   <div
     v-if="doc && cookedPillVisible"
     class="pointer-events-none fixed inset-x-0 bottom-[calc(120px+env(safe-area-inset-bottom))] z-40 flex justify-end"
