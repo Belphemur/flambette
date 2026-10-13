@@ -175,5 +175,23 @@ The floating/observer wording above is therefore superseded WITHIN this PR
 (ADR-0083 has not landed on main separately from this fix, so no new record
 is opened); the bullet is kept for the decision trail. `docs/agents/cooking.md`
 and the PRD cooking surface carry the shipped inline contract in the same
-change (PRD rule). The e2e tail contract is pinned by `e2e/cooked-pill.spec.ts`
-("exactly the LAST three steps carry the pill, in their title rows").
+change (PRD rule).
+
+## Change note — 2026-10-13, owner ruling: the pill SLIDES (one at a time)
+
+The static-inline draft above ("each of the LAST THREE steps carries the
+pill") was refined the same day by the owner: the pill must "continue to
+slide, but hook every time on the title until the next step becomes visible
+and then show only on the next step — only visible on the visible
+instruction, always the latest one". The shipped contract: exactly ONE pill
+at a time, hooked INLINE on the title row of the LATEST step that has
+entered the viewport, handing off to the next step's title as the scroll
+advances (and hopping back when scrolling up). The trigger is a passive,
+rAF-throttled window-scroll read of the steps' `getBoundingClientRect` —
+deliberately NOT an IntersectionObserver, whose callbacks never fire in
+hidden/occluded tabs (the Firefox no-pill report); a window listener also
+covers every scroll container (the sticky ingredient column's). The
+cooked-today suppression, the single `plan.markCooked` path, and the
+prompt's Done → `/history` / Undo → stay semantics are unchanged. Pinned by
+`e2e/cooked-pill.spec.ts` ("exactly ONE pill, on the latest step whose
+title entered the viewport").

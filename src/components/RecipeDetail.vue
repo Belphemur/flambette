@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { catalog, getRecipe } from '../lib/catalog'
 import TooltipBubble from './TooltipBubble.vue'
@@ -47,7 +47,6 @@ import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
 import { recipeSeoHead } from '../lib/seo'
 import HueIcon from './HueIcon.vue'
 import FavouriteButton from './FavouriteButton.vue'
-import { onMounted, onUnmounted } from 'vue'
 import { useHead } from '@unhead/vue'
 import {
   ArrowLeft,
@@ -529,18 +528,48 @@ const cookLastTitle = computed(() => {
 
 /**
  * The "Cooked this?" pill (ADR-0083 addendum): marks the cook from the
- * detail page — for the person who never enters cooking mode. It belongs
- * to the END of the recipe ("I cooked this" becomes true at the steps),
- * so the LAST THREE steps carry it INLINE in their title rows — at the
- * number-badge's level, riding title → title (owner refinement,
- * 2026-10-13: the previous fixed overlay blocked the step text on both
- * layouts; and a structural trigger needs no IntersectionObserver, whose
- * callbacks never fire in hidden/occluded tabs — the Firefox no-pill
- * report). Hidden once the cook is recorded TODAY (the same local-day
- * rule the history prints). Design authority: Stitch "Flambette — Recipe
- * Detail End (Mobile Dark)" (Warm Culinary Paper).
+ * detail page — for the person who never enters cooking mode. The owner's
+ * ruling (2026-10-13, "slide" refinement): exactly ONE pill, hooked on
+ * the title row of the LATEST step that has become visible, handing off
+ * to the next step's title the moment that step enters the viewport —
+ * "only visible on the visible instruction, always the latest one". The
+ * pill sits INLINE in that title row (beside the number badge, in
+ * document flow — never over the step text; the fixed overlay it
+ * replaced blocked the prose on both layouts). The tracking is a passive
+ * scroll read of `getBoundingClientRect` — NO IntersectionObserver,
+ * whose callbacks never fire in hidden/occluded tabs (the Firefox
+ * no-pill report). Hidden once the cook is recorded TODAY (the same
+ * local-day rule the history prints). Design authority: Stitch
+ * "Flambette — Recipe Detail End (Mobile Dark)" (Warm Culinary Paper).
  */
-const pillTailIndex = computed(() => Math.max(0, scaledSteps.value.length - 3))
+const pillStep = ref<number | null>(null)
+/** Step index → its card element, collected via function refs (read-only
+ * map: never reactive — the scroll handler measures, it does not render). */
+const stepEls = new Map<number, HTMLElement>()
+function setStepRef(el: unknown, i: number): void {
+  if (el) stepEls.set(i, el as HTMLElement)
+  else stepEls.delete(i)
+}
+/** The latest step whose top edge has crossed into the viewport — null
+ * while the instructions are still below the fold (no visible step, no
+ * pill). Scrolling back up hops the pill back, symmetrically. */
+function updatePillStep(): void {
+  const vh = window.innerHeight
+  let latest: number | null = null
+  for (const [i, el] of stepEls) {
+    if (el.getBoundingClientRect().top < vh) latest = latest === null ? i : Math.max(latest, i)
+  }
+  pillStep.value = latest
+}
+let pillRaf = 0
+function schedulePillUpdate(): void {
+  if (pillRaf) return
+  pillRaf = requestAnimationFrame(() => {
+    pillRaf = 0
+    updatePillStep()
+  })
+}
+watch(scaledSteps, () => nextTick(updatePillStep))
 const cookedAlreadyToday = computed(() =>
   meta.value ? cooked.cookedToday(meta.value.id) : false,
 )
@@ -671,11 +700,25 @@ function onKey(e: KeyboardEvent) {
 }
 onMounted(() => {
   window.addEventListener('keydown', onKey)
+  // The pill's scroll tracking (owner "slide" ruling): a PASSIVE read of
+  // the viewport — rAF-throttled — never an IntersectionObserver, whose
+  // callbacks never fire in hidden/occluded tabs (the Firefox no-pill
+  // report). A window listener also sidesteps the sticky-ingredient
+  // column's scroll containers: window scroll is the one motion every
+  // layout shares.
+  window.addEventListener('scroll', schedulePillUpdate, { passive: true })
+  window.addEventListener('resize', schedulePillUpdate, { passive: true })
   // Warm the restriction artifacts (control plane + overlay) so a swapped
   // ingredient list is ready; no-op when no restriction is active.
   void restrictionPrefs.ensureLoaded()
+  updatePillStep()
 })
-onUnmounted(() => window.removeEventListener('keydown', onKey))
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKey)
+  window.removeEventListener('scroll', schedulePillUpdate)
+  window.removeEventListener('resize', schedulePillUpdate)
+  if (pillRaf) cancelAnimationFrame(pillRaf)
+})
 
 function addToPlan() {
   if (!meta.value) return
@@ -1277,8 +1320,9 @@ function startCooking() {
   </section>
 
   <!-- Instructions. The "Cooked this?" pill rides the TITLE ROW of the
-  last three steps below — inline, never a fixed overlay over this prose
-  (ADR-0083 addendum refinement, 2026-10-13). -->
+  latest VISIBLE step below — one pill, sliding title → title with the
+  scroll, never a fixed overlay over this prose (ADR-0083 addendum,
+  owner "slide" ruling 2026-10-13). -->
   <section>
   <!-- ADR-0077: the render's step-column head carries a mono total beside
        the H — the count is real (`scaledSteps.length`); the render's
@@ -1293,6 +1337,7 @@ function startCooking() {
   <ol class="space-y-3">
   <li
   v-for="(step, i) in scaledSteps"
+  :ref="(el) => setStepRef(el, i)"
   :key="i"
   class="rounded-xl bg-surface-raised p-4 ring-1 ring-border"
   data-test="detail-step"
@@ -1311,15 +1356,17 @@ function startCooking() {
   {{ i + 1 }}
   </span>
   <!-- The "Cooked this?" pill (ADR-0083 addendum) rides the TITLE ROW of
-  each tail step — inline, at the number-badge's level, never over the
-  step text (owner refinement, 2026-10-13: the fixed overlay blocked the
-  prose on both layouts; "going from title to title"). Reading down the
-  list walks from one title's pill to the next, and the trigger is
-  STRUCTURAL — the last three steps simply carry it — so no observer
-  (and none of its Firefox quirks) is involved. -->
+  the LATEST visible step — inline, at the number-badge's level, never
+  over the step text (owner "slide" ruling, 2026-10-13: the fixed overlay
+  blocked the prose on both layouts, and the pill must "only be visible
+  on the visible instruction, always the latest one"). Exactly ONE pill
+  exists at a time: it hooks the title of the newest step that has
+  entered the viewport and hands off title → title as the scroll
+  advances (a passive rAF-throttled read — no IntersectionObserver and
+  none of its Firefox quirks). -->
   <div class="flex shrink-0 items-center gap-2">
   <button
-  v-if="i >= pillTailIndex && cookedPillVisible"
+  v-if="pillStep === i && cookedPillVisible"
   type="button"
   class="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-raised px-3 text-label-md font-semibold text-text transition-colors hover:bg-surface active:scale-[0.98]"
   :aria-label="`Cooked this? (reached step ${i + 1})`"
