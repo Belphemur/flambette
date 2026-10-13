@@ -34,6 +34,7 @@ import {
 import CookTimerChip from './CookTimerChip.vue'
 import PostCookPrompt from './PostCookPrompt.vue'
 import { hintForStep, suggestionFromHint, type TimerSuggestion } from '../lib/timerSuggest'
+import { confirmModal } from '../composables/useConfirm'
 import { useTimerHints } from '../composables/useTimerHints'
 import {
   ensureTimerAlertPolling,
@@ -538,25 +539,35 @@ function replaceWith(id: number) {
 
 /**
  * Leaving the cook session must not silently kill a running timer: the
- * user is asked once (Cancel keeps the timer running). EVERY timer of this
- * recipe is checked, not just the ones whose step is on screen, and a
- * timer is "running" only while its derived countdown is above zero (qodo
- * 4128519620 / 4128519641) — expired chips leave silently. The question
- * names the labels: with several countdowns running, "a timer" is
- * ambiguous, and the user has to know WHICH work they are abandoning.
+ * user is asked once (Cancel/Escape stays in the cook). EVERY timer of
+ * this recipe is checked, not just the ones whose step is on screen, and
+ * a timer is "running" only while its derived countdown is above zero
+ * (qodo 4128519620 / 4128519641) — expired chips leave silently. The
+ * question names the labels: with several countdowns running, "a timer"
+ * is ambiguous, and the user has to know WHICH work they are abandoning.
+ *
+ * ADR-0084: the question is the ONE confirm modal (the native
+ * `window.confirm` is deleted). Intercept-and-resume, not an awaited
+ * guard: the intent to leave is captured as the `complete` continuation —
+ * with no live timer it runs immediately, otherwise the modal opens and
+ * Confirm completes it (Cancel/Escape/simply staying keeps the timers
+ * running and the session open). The countdown in the message is the
+ * remaining time at ask time, exactly as the native dialog's message was.
  */
-function confirmTimerBeforeLeaving(): boolean {
+function leaveOrConfirm(complete: () => void): void {
   const live = timers.value.filter((t) => isRunning(t))
-  if (live.length === 0) return true
-  if (live.length === 1) {
-    const only = live[0]
-    return window.confirm(
-      `The ${only.label} timer is still running (${formatCountdown(remainingOf(only))} left). Leave anyway?`,
-    )
+  if (live.length === 0) {
+    complete()
+    return
   }
-  return window.confirm(
-    `${live.length} timers are still running (${live.map((t) => t.label).join(', ')}). Leave anyway?`,
-  )
+  const message =
+    live.length === 1
+      ? `The ${live[0].label} timer is still running (${formatCountdown(remainingOf(live[0]))} left). Leave anyway?`
+      : `${live.length} timers are still running (${live.map((t) => t.label).join(', ')}). Leave anyway?`
+  confirmModal(message, {
+    confirmLabel: 'Leave',
+    onConfirm: complete,
+  })
 }
 
 /**
@@ -609,12 +620,17 @@ const postCookOpen = ref(false)
  * for /history; Undo restores the prior and the cook resumes exactly as
  * before.
  */
-function recordCook(): boolean {
+function recordCook(): void {
   if (sessionCooked.value) {
   openPostCook()
-  return true
+  return
   }
-  if (!confirmTimerBeforeLeaving()) return false
+  // The timer gate is the leave-or-confirm interception: with running
+  // timers the mark completes only when the modal's Leave is pressed.
+  leaveOrConfirm(doRecordCook)
+}
+
+function doRecordCook(): void {
   const id = props.id
   const entry = plan.plan.find((e) => e.variantId === id)
   const cleared = plan.clearedIngredients[id]
@@ -629,7 +645,6 @@ function recordCook(): boolean {
   // modal IS the acknowledgment. Done (or scrim/Escape) ends the session
   // for /history; Undo restores the prior and keeps the session open.
   openPostCook()
-  return true
 }
 
 /**
@@ -693,6 +708,11 @@ function onKey(e: KeyboardEvent) {
   // handler (it emits the close), so CookingView yields everything,
   // exactly as the manage sheet below owns Escape in its own layer.
   if (postCookOpen.value) return
+  // The confirm modal (ADR-0084) owns the keys while its question is up —
+  // same layering as the post-cook prompt: this handler is registered
+  // FIRST, so it must yield or one Escape would close both the modal AND
+  // the cook session behind it.
+  if (ui.confirm) return
   if (e.key === 'ArrowRight') {
   e.preventDefault()
   next()
@@ -712,7 +732,7 @@ function onKey(e: KeyboardEvent) {
   e.preventDefault()
   // A stray Escape while nothing else is up closes the session — but
   // only after the timer gate above had its say.
-  if (confirmTimerBeforeLeaving()) close()
+  leaveOrConfirm(close)
   }
 }
 
@@ -830,7 +850,7 @@ function onTouchEnd(e: TouchEvent) {
   class="flex size-11 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-surface-raised hover:text-text"
   data-test="cook-close"
   aria-label="Close cooking mode"
-  @click="confirmTimerBeforeLeaving() && close()"
+  @click="leaveOrConfirm(close)"
   >
   <X :size="20" aria-hidden="true" />
   </button>
