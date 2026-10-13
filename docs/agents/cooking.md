@@ -64,34 +64,56 @@ two cards, then the action deck.
   is what keeps you cooking now: record removed, session resumes exactly
   where it was. The window Escape handler yields while the prompt is
   open (registration order — it fires before AppModal's).
-- **The detail "Cooked this?" pill (ADR-0083 addendum, owner FINAL
-  floating-restored ruling 2026-10-13, superseding the slide-final,
-  icon-static AND slide-in-tail notes)**: RecipeDetail renders the
-  compact pill from the Stitch render ("Recipe Detail End (Mobile
-  Dark)", Warm Culinary Paper) FLOATING, exactly as Stitch designed —
-  ONE pill `fixed` to the viewport at the content's right edge
-  (~120px above the bottom nav via
+- **The detail "Cooked this?" pill (ADR-0083 addendum, owner pill-round
+  rulings 2026-10-13, superseding the float note's suppression)**:
+  RecipeDetail renders the compact pill from the Stitch render ("Recipe
+  Detail End (Mobile Dark)", Warm Culinary Paper) FLOATING, exactly as
+  Stitch designed — ONE pill `fixed` to the viewport at the content's
+  right edge (~120px above the bottom nav via
   `bottom-[calc(120px+env(safe-area-inset-bottom))]`, `z-40`,
-  `bg-surface-raised`, subtle `border`, the one popover shadow,
-  warm brand accent dot) behind a `pointer-events-none` wrapper with an
+  `bg-surface-raised`, subtle `border`, the one popover shadow, warm
+  brand accent dot) behind a `pointer-events-none` wrapper with an
   app-width column (the ADR-0049 hit-testing lesson; on desktop the
   pill sits on the content's right edge, not the viewport's). NOT
   HOOKED TO ANYTHING: no title-row button, no handoff — content scrolls
-  under the pill while it stays put. TRIGGER = the TAIL SENTINEL: a
-  function-ref sentinel riding the THIRD-FROM-LAST step (index
-  `length - 3`) observed with `useIntersectionObserver` at threshold 0
-  (the b62b95e trigger, restored); the pill appears only once that step
-  reaches the viewport, stays visible while the tail scrolls under it,
-  and hides again when the scroll moves back above the zone. ICON-ONLY
-  (kept from the icon-static ruling): the dot + one CookingPot glyph
-  (the "cooked meal" icon; ChefHat stays the Start-cooking CTA) — the
-  accessible name `Cooked this?` carries the words. Hidden once the
-  recipe is already cooked TODAY (`cookedToday()` in
-  `src/lib/history.ts`, local-day rule). A tap records through the ONE `plan.markCooked` path (captures
-  the prior exactly like the session does) and raises the SAME
-  `PostCookPrompt` over the detail page: Done → `/history`; Undo →
-  record removed and the user STAYS on detail. `data-test`:
-  `cooked-pill`; the prompt keeps the prompt's own hooks.
+  under the pill while it stays put; the wrapper carries
+  `will-change-transform` because Firefox repaints a fixed element on
+  the main thread during scroll unless it owns a compositor layer (the
+  owner-reported "pill is moving" drift; Chromium layout probes show
+  zero delta). TRIGGER = the TAIL SENTINEL: a function-ref sentinel
+  riding the THIRD-FROM-LAST step (index `length - 3`) observed with
+  `useIntersectionObserver` at threshold 0, PLUS a passive,
+  rAF-throttled scroll/resize/visibility evaluator — the observer never
+  fires in hidden or occluded tabs (proven on this branch), so the
+  fallback computes the same "sentinel inside the viewport" truth from
+  scroll events; both writers converge, the observer stays the fast
+  path. ALWAYS OFFERED: the pill renders on every visit once the
+  sentinel is met — recipes cook repeatedly, so the cooked-today
+  suppression is RETIRED (owner: "since a recipe can be cooked multiple
+  times we should see the pill all the time"). ICON-ONLY (kept from the
+  icon-static ruling): the dot + one CookingPot glyph (ChefHat stays
+  the Start-cooking CTA) — the accessible name `Cooked this?` carries
+  the words. PROMPT = the pot WIGGLES, pulsing: 5 rounds of a 2 s
+  wiggle (`WIGGLE_MS`), pauses between rounds growing 2/4/6/8 s
+  (`WIGGLE_PAUSES_MS`), then it stops for that page load (~30 s); the
+  scoped keyframes rotate ONLY the svg (±8°, 0.5 s cycles,
+  `transform-origin: center`; button/dot/layout never transform) and
+  are disabled under `prefers-reduced-motion: reduce`; the wiggle is
+  decorative, the aria-label unchanged. DISMISS = a flick beyond ~24px
+  (`PILL_DISMISS_PX`) in ANY direction dismisses the pill FOR THAT
+  RECIPE persistently — a device-local record in the ui store's
+  persisted slice (`pillDismissedRecipes`, the ADR-0081 device-local
+  family; never the room payload, never a backup slice); pointer
+  capture + `touch-action: none` keep the gesture, and a latch eats
+  the synthetic click so a dismiss never records a cook. Movement under
+  the threshold is a TAP: it records through the ONE `plan.markCooked`
+  path (captures the prior exactly like the session does) and raises
+  the SAME `PostCookPrompt` over the detail page: Done → `/history`;
+  Undo → record removed and the user STAYS on detail. `data-test`:
+  `cooked-pill`; the prompt keeps the prompt's own hooks. Pinned by
+  `e2e/cooked-pill.spec.ts` on Desktop Chrome + Pixel 7 and by the
+  auxiliary Firefox runner `playwright.pill-firefox.ts` (CI installs
+  chromium only).
 - Rejected render fictions: the "ACTION STEP" badge, difficulty labels,
   est-times beyond the recipe's own minutes.
 

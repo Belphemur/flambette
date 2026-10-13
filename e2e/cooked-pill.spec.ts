@@ -9,19 +9,19 @@ import {
 } from './helpers'
 
 /**
- * The detail "Cooked this?" pill (ADR-0083 addendum): marking a cook from
- * the recipe detail page — for the person who never enters cooking mode —
- * converges on the SAME post-cook prompt. Owner FINAL ruling (2026-10-13,
- * floating restored): the pill FLOATS, exactly as Stitch designed — ONE
- * pill fixed to the viewport at the content's right edge (~120px above
- * the bottom nav), NOT hooked to anything: content scrolls under it while
- * it stays put. Its trigger is the tail sentinel riding the
- * THIRD-FROM-LAST step: the pill appears only once scrolling reaches that
- * step, stays visible while the tail scrolls under it, and hides again
- * when the scroll moves back above the zone. ICON-ONLY: accent dot +
- * CookingPot glyph — the accessible name carries the words. Hides once
- * the recipe is already cooked today; a tap records through the ONE
- * plan.markCooked path.
+ * The detail "Cooked this?" pill (ADR-0083 addendum, pill-round rulings
+ * 2026-10-13): marking a cook from the recipe detail page — for the
+ * person who never enters cooking mode — converges on the SAME post-cook
+ * prompt. OWNER FINAL contract: the pill FLOATS (ONE pill fixed to the
+ * viewport at the content's right edge, ~120px above the bottom nav,
+ * content scrolls under it) and is ALWAYS offered — recipes cook
+ * repeatedly, so the cooked-today suppression is RETIRED; the pill shows
+ * on every visit once the tail sentinel (the THIRD-FROM-LAST step) is
+ * met. The prompt is a PULSING WIGGLE of the pot icon only: 5 rounds of
+ * 2 s wiggles with pauses growing 2/4/6/8 s, then it stops for the page
+ * load. A flick beyond ~24px in ANY direction dismisses the pill FOR
+ * THAT RECIPE persistently (device-local); a shorter movement is a tap
+ * recording through the ONE plan.markCooked path.
  */
 
 /**
@@ -89,6 +89,28 @@ async function expectFloatingPill(page: Page) {
   return box
 }
 
+/** The wiggle lives (and dies) on the CookingPot svg: read its computed
+ * animation-name — the scoped build suffixes the keyframes' name
+ * (`pill-wiggle-<hash>`), so callers match the PREFIX and treat 'none'
+ * as the idle/stop verdict. */
+async function svgAnimationName(page: Page) {
+  return page
+    .getByTestId('cooked-pill')
+    .locator('svg')
+    .evaluate((el) => getComputedStyle(el).animationName)
+}
+
+const WIGGLE_ANIM = /^pill-wiggle/
+
+/** The household plan store's cookedHistory length, read through pinia. */
+async function cookedHistoryLength(page: Page) {
+  return page.evaluate(() => {
+    const pinia = document.querySelector('#app')?.__vue_app__?.config?.globalProperties
+      ?.$pinia
+    return ((pinia?.state?.value?.plan?.cookedHistory ?? []) as unknown[]).length
+  })
+}
+
 test('the pill stays down until the LAST steps scroll into view, then floats (both layouts)', async ({
   page,
 }) => {
@@ -138,7 +160,9 @@ test('the floating pill STAYS PUT while the tail scrolls under it, and hides abo
   const first = await expectFloatingPill(page)
 
   // Scroll DEEPER into the tail: the content moves, the pill does not —
-  // same viewport position, still exactly one.
+  // same viewport position, still exactly one. (The Firefox "pill is
+  // moving" drift pin: the fixed wrapper must hold across scroll on
+  // EVERY project, Firefox included via playwright.pill-firefox.ts.)
   await scrollStepToViewportEdge(page, stepCount - 1)
   const second = await expectFloatingPill(page)
   expect(second.x).toBe(first.x)
@@ -147,6 +171,48 @@ test('the floating pill STAYS PUT while the tail scrolls under it, and hides abo
   // Scrolling back ABOVE the zone takes the pill away again.
   await scrollStepToViewportEdge(page, 1)
   await expect(page.getByTestId('cooked-pill')).toHaveCount(0)
+  await expectZeroMealimeRequests(page)
+})
+
+test('the pot WIGGLES when the pill first appears — icon only, pulsing, then stops for the page load', async ({
+  page,
+}) => {
+  test.setTimeout(60_000)
+  await blockExternalRequests(page)
+  await page.goto('/recipes')
+  await waitForCatalog(page)
+  const name = await openFirstRecipeDetail(page)
+  await expect(page.getByTestId('detail-step').first()).toBeVisible()
+  await revealSteps(page)
+  await expectFloatingPill(page)
+
+  // The WIGGLE is on the CookingPot svg ONLY: the icon animates, the
+  // pill button never does (owner: "make the pot wiggle, only the
+  // icon"). First appearance starts round 1 immediately — the class (and
+  // its animation-name) is present right away.
+  const svg = page.getByTestId('cooked-pill').locator('svg')
+  await expect.poll(() => svgAnimationName(page)).toMatch(WIGGLE_ANIM)
+  await expect(page.getByTestId('cooked-pill')).toHaveText('')
+  const buttonAnim = await page
+    .getByTestId('cooked-pill')
+    .evaluate((el) => getComputedStyle(el).animationName)
+  expect(buttonAnim).not.toMatch(WIGGLE_ANIM)
+
+  // PULSING cadence (owner ruling): wiggle 2 s, pause, wiggle 2 s, pause
+  // — pauses grow 2/4/6/8 s; five rounds, ~30 s window. Mid-pattern
+  // (~10 s in): a later round is running.
+  await page.waitForTimeout(9_000)
+  await expect.poll(() => svgAnimationName(page)).toMatch(WIGGLE_ANIM)
+
+  // After the 5TH round the wiggle stops permanently for this page load
+  // (~32 s since appearance) — the pill itself REMAINS.
+  await page.waitForTimeout(22_000)
+  expect(await svgAnimationName(page)).toBe('none')
+  await expect(page.getByTestId('cooked-pill')).toBeVisible()
+  await expect(page.getByTestId('cooked-pill')).toHaveCount(1)
+  // The prompt is decorative: nothing was recorded by wiggling.
+  expect(await cookedHistoryLength(page)).toBe(0)
+  await expect(page.getByTestId('detail-title')).toContainText(name)
   await expectZeroMealimeRequests(page)
 })
 
@@ -177,13 +243,7 @@ test('pill tap records the cook and raises the prompt; Done lands on History', a
   await expect(page.getByTestId('toast')).toHaveCount(0)
   // The record exists the moment the prompt is up.
   await expect
-    .poll(async () =>
-      page.evaluate(() => {
-        const pinia = document.querySelector('#app')?.__vue_app__?.config?.globalProperties
-          ?.$pinia
-        return ((pinia?.state?.value?.plan?.cookedHistory ?? []) as unknown[]).length
-      }),
-    )
+    .poll(async () => cookedHistoryLength(page))
     .toBe(1)
 
   // Done: History, where the entry just landed — and the planned meal
@@ -220,27 +280,47 @@ test('pill Undo removes the record and STAYS on the detail page', async ({ page 
   await expectZeroMealimeRequests(page)
 })
 
-test('the pill is absent when the recipe is already cooked today', async ({ page }) => {
+test('a flick in ANY direction dismisses the pill persistently for that recipe', async ({
+  page,
+}) => {
   await blockExternalRequests(page)
-  await page.goto('/recipes')
-  await waitForCatalog(page)
-  const [id] = await visibleVariantIds(page)
-  await page.evaluate((variantId) => {
-    localStorage.setItem(
-      'mealime-planner:v1:plan',
-      JSON.stringify({
-        plan: [],
-        customItems: [],
-        clearedIngredients: {},
-        cookedHistory: [{ variantId, cookedAt: Date.now(), id: 'seed-today' }],
-      }),
-    )
-  }, id)
-  await page.goto(`/recipe/${id}`)
+  await page.goto('/recipe/6123')
   await expect(page.getByTestId('detail-title')).toBeVisible()
-  // Even with the TAIL in view — the pill's trigger fully satisfied —
-  // today's cook suppresses the pill.
+  await expect(page.getByTestId('detail-step').first()).toBeVisible()
+  await revealSteps(page)
+  await expectFloatingPill(page)
+
+  // Flick DOWN-RIGHT past the ~24px threshold — ANY direction dismisses
+  // (owner: "going left right up or down on it should discard it").
+  const pill = page.getByTestId('cooked-pill')
+  const box = await pill.boundingBox()
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+  await page.mouse.move(cx, cy)
+  await page.mouse.down()
+  await page.mouse.move(cx + 60, cy + 40, { steps: 5 })
+  await page.mouse.up()
+  await expect(page.getByTestId('cooked-pill')).toHaveCount(0)
+  // The gesture must never record a cook — only a TAP does.
+  expect(await cookedHistoryLength(page)).toBe(0)
+
+  // Reload: the dismissal PERSISTS for this recipe (device-local) — the
+  // pill never comes back on 6123, however far you scroll.
+  await page.reload()
+  await expect(page.getByTestId('detail-step').first()).toBeVisible()
   await page.getByTestId('detail-step').last().scrollIntoViewIfNeeded()
   await expect(page.getByTestId('cooked-pill')).toHaveCount(0)
+
+  // A DIFFERENT recipe still offers its pill — the dismissal is per
+  // recipe, not global.
+  await page.goto('/recipes')
+  await waitForCatalog(page)
+  const ids = await visibleVariantIds(page)
+  const other = ids.find((id) => id !== 6123) ?? ids[0]
+  await page.goto(`/recipe/${other}`)
+  await expect(page.getByTestId('detail-title')).toBeVisible()
+  await expect(page.getByTestId('detail-step').first()).toBeVisible()
+  await page.getByTestId('detail-step').last().scrollIntoViewIfNeeded()
+  await expect(page.getByTestId('cooked-pill')).toBeVisible()
   await expectZeroMealimeRequests(page)
 })

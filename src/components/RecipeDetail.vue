@@ -540,9 +540,12 @@ const cookLastTitle = computed(() => {
  * the THIRD-FROM-LAST step (index length-3, 0-based): the pill appears
  * only once that step reaches the viewport, stays visible while the
  * tail scrolls under it, and hides again when the scroll moves back
- * above the zone. Hidden once the cook is recorded TODAY (the same
- * local-day rule the history prints). Design authority: Stitch
- * "Flambette — Recipe Detail End (Mobile Dark)" (Warm Culinary Paper).
+ * above the zone. ALWAYS VISIBLE otherwise (owner ruling 2026-10-13:
+ * "since a recipe can be cooked multiple times we should see the pill
+ * all the time" — the cooked-today suppression is RETIRED); only a
+ * persistent flick-away dismisses it, per recipe, device-local. Design
+ * authority: Stitch "Flambette — Recipe Detail End (Mobile Dark)"
+ * (Warm Culinary Paper).
  */
 const pillTailIndex = computed(() => Math.max(0, scaledSteps.value.length - 3))
 const tailStepEl = ref<HTMLElement | null>(null)
@@ -565,44 +568,110 @@ useIntersectionObserver(
   { threshold: 0 },
 )
 /**
- * The cooked-today guard must observe the LOCAL DAY: a detail page left
- * open across midnight (or resumed from device sleep) would otherwise
- * read a stale guard until an unrelated state change. `dayTick` is a
- * deliberate dependency of the computed — bumped once by a timer armed
- * for the next local midnight and again whenever the page becomes
- * visible after being hidden (CodeRabbit, PR #84). No polling: one
- * timer, one event.
+ * Firefox fallback for the sentinel (owner-reported 2026-10-13): the
+ * IntersectionObserver's callbacks never fire while the tab is hidden or
+ * occluded (proven on this branch), so a detail page opened in a
+ * background tab and read after switching to it would never light the
+ * pill. A passive, rAF-throttled scroll/resize evaluator rides alongside
+ * the observer: it reads the sentinel's live viewport rect
+ * (getBoundingClientRect — the same geometry the observer sees) and
+ * flips `tailInView` when the viewport passes it. The observer stays the
+ * FAST path: both writers compute the same "is the sentinel inside the
+ * viewport" truth, so whichever fires first — or only — lands the same
+ * verdict. No polling: events only, plus one evaluation whenever the
+ * sentinel element changes (a page restored scrolled into the tail never
+ * sees an observer callback for the fresh element).
  */
-const dayTick = ref(0)
-let midnightTimer: ReturnType<typeof setTimeout> | undefined
-function armMidnightTick() {
-  const now = new Date()
-  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
-  clearTimeout(midnightTimer)
-  midnightTimer = setTimeout(bumpDayTick, next.getTime() - now.getTime() + 1_000)
+function evaluateTailInView() {
+  const el = tailStepEl.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  tailInView.value = rect.top < window.innerHeight && rect.bottom > 0
 }
-function bumpDayTick() {
-  dayTick.value++
-  armMidnightTick()
+let tailEvalQueued = false
+function queueTailEval() {
+  if (tailEvalQueued) return
+  tailEvalQueued = true
+  requestAnimationFrame(() => {
+    tailEvalQueued = false
+    evaluateTailInView()
+  })
 }
-function onDayVisibility() {
-  if (document.visibilityState === 'visible') dayTick.value++
+function onTailVisibility() {
+  // A hidden/occluded tab gets no scroll events and no observer
+  // callbacks; the moment the page becomes visible again, evaluate once.
+  if (document.visibilityState === 'visible') evaluateTailInView()
 }
-onMounted(() => {
-  armMidnightTick()
-  document.addEventListener('visibilitychange', onDayVisibility)
-})
-onUnmounted(() => {
-  clearTimeout(midnightTimer)
-  document.removeEventListener('visibilitychange', onDayVisibility)
-})
-const cookedAlreadyToday = computed(() => {
-  void dayTick.value
-  return meta.value ? cooked.cookedToday(meta.value.id) : false
+watch(tailStepEl, (el) => {
+  if (el) evaluateTailInView()
 })
 const cookedPillVisible = computed(
-  () => tailInView.value && !cookedAlreadyToday.value && !pillPromptOpen.value,
+  () =>
+    !!meta.value &&
+    tailInView.value &&
+    !ui.isPillDismissed(meta.value.id) &&
+    !pillPromptOpen.value,
 )
+/**
+ * The PROMPT is the pot WIGGLING (owner ruling 2026-10-13, superseding
+ * the tooltip-bubble renders before any implementation: "instead of a
+ * tooltip just make the pill slightly wiggle. Make the pot wiggle, only
+ * the icon") with a PULSING cadence, not a one-shot: wiggle 2 s, pause,
+ * wiggle 2 s, pause — each pause LONGER than the previous (2 s, 4 s,
+ * 6 s, 8 s) — and after the FIFTH wiggle round the prompt stops
+ * permanently for this page load (≈30 s window; the earlier "visible
+ * for a couple of seconds" ruling grew into this pattern the same hour).
+ * It runs ONCE per page load, on the pill's FIRST appearance; a fresh
+ * load wiggles again unless the pill was dismissed persistently. The
+ * animation is decorative: the pill's aria-label never changes.
+ */
+const WIGGLE_MS = 2000
+const WIGGLE_ROUNDS = 5
+/** Pauses BETWEEN wiggle rounds, growing each round (owner ruling). */
+const WIGGLE_PAUSES_MS = [2000, 4000, 6000, 8000]
+const pillWiggle = ref(false)
+let pillWiggleTimer: ReturnType<typeof setTimeout> | undefined
+function stopPillWiggle() {
+  pillWiggle.value = false
+  clearTimeout(pillWiggleTimer)
+  pillWiggleTimer = undefined
+}
+/** Round is 0-based: rounds 0..3 are each followed by PAUSES[round]. */
+function startPillWiggleRound(round: number) {
+  if (round >= WIGGLE_ROUNDS) {
+    stopPillWiggle()
+    return
+  }
+  pillWiggle.value = true
+  pillWiggleTimer = setTimeout(() => {
+    pillWiggle.value = false
+    if (round + 1 >= WIGGLE_ROUNDS) return // 5th round ended: stop
+    pillWiggleTimer = setTimeout(() => startPillWiggleRound(round + 1), WIGGLE_PAUSES_MS[round])
+  }, WIGGLE_MS)
+}
+const pillAppeared = ref(false)
+watch(
+  cookedPillVisible,
+  (visible) => {
+    if (visible && !pillAppeared.value) {
+      pillAppeared.value = true
+      startPillWiggleRound(0)
+    }
+  },
+  { immediate: true },
+)
+/** The whole timer chain dies with the component — no leaks. */
+onUnmounted(stopPillWiggle)
+onMounted(() => {
+  window.addEventListener('scroll', queueTailEval, { passive: true })
+  window.addEventListener('resize', queueTailEval)
+  document.addEventListener('visibilitychange', onTailVisibility)
+})
+onUnmounted(() => {
+  window.removeEventListener('scroll', queueTailEval)
+  window.removeEventListener('resize', queueTailEval)
+  document.removeEventListener('visibilitychange', onTailVisibility)
+})
 
 /**
  * The pill's trigger context (ADR-0083 addendum): the detail page owns
@@ -618,11 +687,55 @@ const pillEvent = ref<CookedEntry | null>(null)
 const pillPrior = ref<{ entry: PlanEntry | null; cleared: string[] | null } | null>(null)
 
 /**
+ * FLICK-ANY-DIRECTION DISMISS (owner ruling 2026-10-13: "going left
+ * right up or down on it should discard it"): a pointer gesture that
+ * moves ~24px or more in ANY direction dismisses the pill FOR THIS
+ * RECIPE persistently — a device-local record in the ui store
+ * (`ui.dismissPill`), deliberately never the room payload (household
+ * sync is out of scope this round). Movement under the threshold is a
+ * plain TAP and falls through to the ONE markCooked path below.
+ *
+ * Pointer capture keeps the gesture on the button when the finger
+ * slides off its edge; `touch-action: none` on the button stops the
+ * browser claiming a touch flick as a page scroll before the move
+ * threshold is reached. The `pillSwiped` latch eats the synthetic
+ * click the gesture ends with — a dismiss must never record a cook.
+ */
+const PILL_DISMISS_PX = 24
+let pillPointer: { id: number; x: number; y: number } | null = null
+const pillSwiped = ref(false)
+function onPillPointerDown(event: PointerEvent) {
+  pillSwiped.value = false
+  pillPointer = { id: event.pointerId, x: event.clientX, y: event.clientY }
+  ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
+}
+function onPillPointerMove(event: PointerEvent) {
+  const start = pillPointer
+  if (!start || event.pointerId !== start.id) return
+  const dx = event.clientX - start.x
+  const dy = event.clientY - start.y
+  if (Math.hypot(dx, dy) >= PILL_DISMISS_PX && meta.value) {
+    pillPointer = null
+    pillSwiped.value = true
+    ui.dismissPill(meta.value.id)
+  }
+}
+function onPillPointerEnd(event: PointerEvent) {
+  if (pillPointer && event.pointerId === pillPointer.id) pillPointer = null
+}
+
+/**
  * Pill tap = record + the SAME prompt, no separate flow: the ONE
  * plan.markCooked path the cooking session uses (plan-aware — a planned
  * meal leaves the plan, an unplanned cook still records, ADR-0032).
  */
 function cookFromPill() {
+  // A flick that ends on the pill still fires a synthetic click AFTER
+  // the dismiss consumed the gesture: swallow it — and only it — here.
+  if (pillSwiped.value) {
+    pillSwiped.value = false
+    return
+  }
   if (!meta.value || pillEvent.value) return
   const id = meta.value.id
   const entry = plan.plan.find((e) => e.variantId === id)
@@ -647,8 +760,8 @@ function onPillPromptDone() {
 
 /**
  * Undo: the record is removed and the user STAYS on the detail page
- * (there is no session to resume). cookedAlreadyToday recomputes, so the
- * pill offers itself again.
+ * (there is no session to resume). The pill — always offered, ADR-0083
+ * pill round — reappears the moment the prompt closes.
  */
 function onPillPromptUndo() {
   pillPromptOpen.value = false
@@ -1460,21 +1573,36 @@ function startCooking() {
   edge. ICON-ONLY (the icon-static ruling, kept): the accent dot + one
   CookingPot glyph — the accessible name carries the words. Hidden
   until the LAST THREE steps come into view (the sentinel on the
-  third-from-last step) and once the cook is recorded today. -->
+  third-from-last step); ALWAYS offered otherwise — the cooked-today
+  suppression is retired (owner ruling 2026-10-13). The wrapper carries
+  `will-change-transform`: Firefox repaints a fixed element on the main
+  thread while the page scrolls unless it owns a compositor layer —
+  exactly the "the pill is moving" drift the owner reported (Chromium
+  probes show zero delta, headless Firefox too; the drift is the
+  repaint-lag class, addressed by layer promotion). -->
   <div
     v-if="doc && cookedPillVisible"
-    class="pointer-events-none fixed inset-x-0 bottom-[calc(120px+env(safe-area-inset-bottom))] z-40 flex justify-end"
+    class="pointer-events-none fixed inset-x-0 bottom-[calc(120px+env(safe-area-inset-bottom))] z-40 flex justify-end will-change-transform"
   >
     <div class="mx-auto flex w-full max-w-app justify-end px-4">
       <button
         type="button"
-        class="pointer-events-auto flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface-raised py-2 pl-3 pr-4 shadow-popover transition-colors hover:bg-surface"
+        class="pointer-events-auto touch-none flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface-raised py-2 pl-3 pr-4 shadow-popover transition-colors hover:bg-surface"
         aria-label="Cooked this?"
         data-test="cooked-pill"
         @click="cookFromPill"
+        @pointerdown="onPillPointerDown"
+        @pointermove="onPillPointerMove"
+        @pointerup="onPillPointerEnd"
+        @pointercancel="onPillPointerEnd"
       >
         <span class="size-2 shrink-0 rounded-full bg-brand" aria-hidden="true" />
-        <CookingPot :size="16" aria-hidden="true" class="text-brand-text" />
+        <CookingPot
+          :size="16"
+          aria-hidden="true"
+          class="text-brand-text"
+          :class="pillWiggle ? 'pill-wiggle' : undefined"
+        />
       </button>
     </div>
   </div>
@@ -1491,3 +1619,35 @@ function startCooking() {
   </div>
   </div>
 </template>
+
+<style scoped>
+/*
+ * The wiggle prompt (ADR-0083 pill round): MOTION applied ONLY to the
+ * CookingPot svg inside the pill — the pill button, the accent dot and
+ * the layout never transform (owner ruling: "make the pot wiggle, only
+ * the icon"). Reduced-motion users get no animation at all.
+ */
+.pill-wiggle {
+  animation: pill-wiggle 0.5s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill-wiggle {
+    animation: none;
+  }
+}
+
+@keyframes pill-wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(8deg);
+  }
+  75% {
+    transform: rotate(-8deg);
+  }
+}
+</style>

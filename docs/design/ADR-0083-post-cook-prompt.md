@@ -268,3 +268,59 @@ explicit ruling). Pinned by `e2e/cooked-pill.spec.ts` (floating
 geometry: no pill above the zone, exactly one fixed pill inside it that
 does not travel with the content, icon-only content, tap/undo/today
 flows). The four earlier notes are kept for the decision trail.
+
+## Change note — 2026-10-13, owner rulings (pill round): ALWAYS visible, wiggle prompt, flick dismiss, Firefox parity
+
+Three owner messages the same day supersede parts of the float note
+above (kept for the trail):
+
+- **The pill is ALWAYS visible on recipe detail** ("since a recipe can
+  be cooked multiple times we should see the pill all the time"): the
+  cooked-today suppression — and the midnight/visibility re-arm guard
+  built for it — is RETIRED. The pill renders whenever the tail
+  sentinel is met, on every visit, cooked or not; only the flick
+  dismissal below retires it for a recipe.
+- **The prompt is a WIGGLE, not a tooltip** ("I don't see any tooltip…
+  actually instead of a tooltip just make the pill slightly wiggle.
+  Make the pot wiggle, only the icon"): the tooltip bubbles in the
+  Stitch renders (project 2725470430841257407, screens 90053f416c9f4a…
+  and f3255ec75b3044…) are superseded BEFORE any implementation — the
+  renders remain the geometry authority for the pill itself only. The
+  wiggle is a PULSING pattern, not a one-shot: 5 rounds of a 2 s wiggle
+  (`WIGGLE_MS = 2000`) with pauses between rounds growing 2 s, 4 s,
+  6 s, 8 s (`WIGGLE_PAUSES_MS = [2000, 4000, 6000, 8000]`), then the
+  prompt stops permanently for that page load (≈30 s window; it grew
+  out of the same-hour "visible for a couple of seconds" ruling). The
+  keyframe animation transforms ONLY the CookingPot svg inside the pill
+  (rotate ±8°, 0.5 s cycles, `transform-origin: center`; scoped CSS,
+  no new deps); the pill button, accent dot and layout never move; it
+  is disabled under `prefers-reduced-motion: reduce`; the pill's
+  aria-label is unchanged (the animation is decorative). It runs ONCE
+  per page load on the pill's first appearance; a fresh load wiggles
+  again unless the pill was dismissed.
+- **Flick ANY direction to dismiss** ("going left right up or down on
+  it should discard it"): a pointer gesture moving ≥ ~24px
+  (`PILL_DISMISS_PX`) in any direction dismisses the pill FOR THAT
+  RECIPE persistently — a device-local `recipeId -> stamp` record in
+  the ui store's persisted slice (`pillDismissedRecipes`, the same
+  device-local family as the ADR-0081 timer-alert toggles; deliberately
+  NOT the room payload and NOT a backup slice — household sync is out
+  of scope this round). Movement under the threshold is a plain tap
+  and takes the unchanged single `plan.markCooked` path. Pointer
+  capture + `touch-action: none` keep the gesture on the button; a
+  latch eats the synthetic click so a dismiss never records a cook.
+
+Firefox parity, two fixes: (1) the tail sentinel gains a passive,
+rAF-throttled scroll/resize/visibility fallback beside the
+IntersectionObserver (which never fires in hidden or occluded tabs —
+proven on this branch): both writers compute the same
+"sentinel inside the viewport" truth, the observer stays the fast path.
+(2) The pill-drift the owner saw in Firefox ("the pill is moving"):
+layout probes show the fixed wrapper holds with ZERO delta in Chromium
+AND headless Firefox — the drift is the repaint-lag class (Firefox
+repaints a fixed element on the main thread during scroll unless it
+owns a compositor layer), addressed by `will-change-transform` on the
+fixed wrapper. The e2e spec pins bounding-box stability across scroll
+positions on Desktop Chrome and Pixel 7, and the pill spec runs on a
+real Firefox project (`playwright.pill-firefox.ts`; CI installs
+chromium only, so the Firefox project lives in that auxiliary runner).
