@@ -64,15 +64,25 @@ two cards, then the action deck.
   is what keeps you cooking now: record removed, session resumes exactly
   where it was. The window Escape handler yields while the prompt is
   open (registration order — it fires before AppModal's).
-- **The detail "Cooked this?" pill (ADR-0083 addendum, icon-static ruling
-  2026-10-13, superseding the slide contract)**: RecipeDetail renders the
-  compact pill from the Stitch render ("Recipe Detail End (Mobile Dark)",
-  Warm Culinary Paper) INLINE in the TITLE ROW of each of the LAST THREE
-  preparation steps — beside the number badge, in document flow, never
+- **The detail "Cooked this?" pill (ADR-0083 addendum, owner FINAL
+  slide-in-tail ruling 2026-10-13, superseding BOTH the slide-final and
+  icon-static notes)**: RecipeDetail renders the compact pill from the
+  Stitch render ("Recipe Detail End (Mobile Dark)",
+  Warm Culinary Paper) INLINE in the TITLE ROW of the LATEST VISIBLE
+  preparation step — beside the number badge, in document flow, never
   over the step text (`bg-surface-raised`, subtle `border` token, warm
-  brand accent dot). STATIC structural rendering: no scroll tracking, no
-  observer. ICON-ONLY: the dot + one CookingPot glyph (the "cooked meal"
-  icon; ChefHat stays the Start-cooking CTA) — the accessible name
+  brand accent dot). SLIDE WITHIN THE LAST-THREE ZONE: no pill anywhere
+  until scrolling reaches the step that is 3 steps before the last
+  (index `length - 3`); from there exactly ONE pill exists at a time —
+  it hooks the title of the newest step that has entered the viewport
+  and hands off title → title as the scroll advances, returning to the
+  earlier step when scrolling back up and REMOVING itself when the
+  scroll leaves the zone (above `length - 3`). The tracking is a
+  passive rAF-throttled window-scroll read — never an
+  IntersectionObserver (its callbacks never fire in hidden/occluded
+  tabs). ICON-ONLY retained from the icon-static ruling: the dot + one
+  CookingPot glyph (the "cooked meal" icon; ChefHat stays the
+  Start-cooking CTA) — the accessible name
   `Cooked this? (reached step N)` carries the words. Hidden once the
   recipe is already cooked TODAY (`cookedToday()` in
   `src/lib/history.ts`, local-day rule). A tap records through the ONE `plan.markCooked` path (captures

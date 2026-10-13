@@ -214,3 +214,28 @@ cooked-today suppression, the single `plan.markCooked` path, and the
 prompt's Done → `/history` / Undo → stay semantics are unchanged. Pinned
 by `e2e/cooked-pill.spec.ts` (tail counts with no scroll precondition,
 icon-only content).
+
+## Change note — 2026-10-13, owner FINAL ruling: the pill SLIDES WITHIN the last-3 zone, icon-only retained
+
+The static-tail note above was superseded the same day: reviewing the
+icon-only version, the owner wrote "Good icon not the right revert. I
+wanted to get the pill back that is sliding with the scroll when reached
+the last step -3 so 3 steps before the last" — the ICON-ONLY content is
+confirmed ("good icon"), the STATIC rendering is not. The contract is
+now BOTH at once: the slide machinery is restored (passive
+rAF-throttled window-scroll read via `getBoundingClientRect`,
+function-ref step map, one-at-a-time handoff, NO IntersectionObserver),
+with a NEW ENTRY GATE — the pill exists only when the latest visible
+step index is >= `length - 3`; above the zone there is NO pill anywhere,
+and scrolling out of the zone (back up) removes it. Inside the zone the
+single pill rides the title row of the latest visible step, handing off
+as steps enter/leave the viewport in both directions. The icon-only
+treatment is kept verbatim from the icon-static ruling: brand accent
+dot + one CookingPot glyph, no text spans, the accessible name
+`Cooked this? (reached step N)` carries the words. The cooked-today
+suppression, the single `plan.markCooked` path, and the prompt's Done →
+`/history` / Undo → stay semantics are unchanged. Pinned by
+`e2e/cooked-pill.spec.ts` (geometry-driven: no pill above the zone,
+exact one-pill handoff + back-hop inside it, icon-only content). This
+note supersedes the two 2026-10-13 notes above; both are kept for the
+decision trail.
