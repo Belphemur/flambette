@@ -12,32 +12,34 @@ import {
  * The detail "Cooked this?" pill (ADR-0083 addendum): marking a cook from
  * the recipe detail page — for the person who never enters cooking mode —
  * converges on the SAME post-cook prompt. The pill belongs to the END of
- * the recipe (it shows while the instructions section is in view), hides
+ * the recipe — its trigger is a sentinel riding the THIRD-FROM-LAST step
+ * (the LAST THREE steps; the owner refinement that replaced the old
+ * section-level trigger, which on desktop was in view on load) — it hides
  * once the recipe is already cooked today, and its tap records through
  * the ONE plan.markCooked path.
  */
 
-/** Scroll the preparation steps into view — where the pill lives. */
+/**
+ * Scroll the LAST step into view — where the pill's tail sentinel rides
+ * (third-from-last, ADR-0083 addendum): the tail's arrival is what lights
+ * the pill, on BOTH layouts.
+ */
 async function revealSteps(page: Page) {
-  await page.getByTestId('detail-step').first().scrollIntoViewIfNeeded()
+  await page.getByTestId('detail-step').last().scrollIntoViewIfNeeded()
   await expect(page.getByTestId('cooked-pill')).toBeVisible()
 }
 
-test('the pill appears when the steps scroll into view and is absent before (mobile)', async ({
+test('the pill stays down until the LAST steps scroll into view (both layouts)', async ({
   page,
 }) => {
-  // On the phone layout the steps sit below the hero and ingredients, so
-  // the pill must NOT be up at page top. On desktop the ingredient list
-  // and steps compose side by side — in view immediately — so this
-  // "absent before scroll" leg is phone-only.
-  test.skip(
-    (page.viewportSize()?.width ?? 0) >= 1024,
-    'desktop composes steps beside the ingredients — in view on load',
-  )
   await blockExternalRequests(page)
-  await page.goto('/recipes')
-  await waitForCatalog(page)
-  await openFirstRecipeDetail(page)
+  // Variant 6123 (Mexican Chicken Soup…) has 21 steps, so the tail
+  // sentinel — the 19th — sits far below the fold on BOTH layouts. That
+  // pins the owner-reported case directly: on desktop the instructions
+  // COLUMN is in view on load, and the pill must still stay down until
+  // the tail arrives.
+  await page.goto('/recipe/6123')
+  await expect(page.getByTestId('detail-title')).toBeVisible()
   await expect(page.getByTestId('cooked-pill')).toHaveCount(0)
   await revealSteps(page)
   await expectZeroMealimeRequests(page)
@@ -129,8 +131,9 @@ test('the pill is absent when the recipe is already cooked today', async ({ page
   }, id)
   await page.goto(`/recipe/${id}`)
   await expect(page.getByTestId('detail-title')).toBeVisible()
-  // Even with the steps fully in view, today's cook suppresses the pill.
-  await page.getByTestId('detail-step').first().scrollIntoViewIfNeeded()
+  // Even with the TAIL in view — the pill's trigger fully satisfied —
+  // today's cook suppresses the pill.
+  await page.getByTestId('detail-step').last().scrollIntoViewIfNeeded()
   await expect(page.getByTestId('cooked-pill')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
