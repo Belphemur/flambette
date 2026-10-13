@@ -2,7 +2,7 @@
 import AppModal from './AppModal.vue'
 import PersonAvatar from './PersonAvatar.vue'
 import { computed } from 'vue'
-import { Share2, Users, X } from 'lucide-vue-next'
+import { Share2, Users, X } from '@lucide/vue'
 import type { RosterMember } from '../stores/room'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
 

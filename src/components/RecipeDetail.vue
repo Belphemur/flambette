@@ -59,7 +59,7 @@ import {
   Plus,
   Timer,
   X,
-} from 'lucide-vue-next'
+} from '@lucide/vue'
 import { isUserRecipeId } from '../lib/userRecipes'
 
 const plan = usePlanStore()

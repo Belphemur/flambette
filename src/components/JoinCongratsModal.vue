@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AppModal from './AppModal.vue'
-import { Users } from 'lucide-vue-next'
+import { Users } from '@lucide/vue'
 
 /**
  * The full-page celebration for arriving in a household through a shared

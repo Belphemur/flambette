@@ -9,7 +9,7 @@ import {
   watch,
 } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CircleHelp, Search, X } from 'lucide-vue-next'
+import { CircleHelp, Search, X } from '@lucide/vue'
 import { suggest } from '../lib/search'
 import { useRecipeSearch } from '../composables/useRecipeSearch'
 import { useSearchTips } from '../composables/useSearchTips'

@@ -35,7 +35,7 @@
  * variant — the `.dark` block in `src/style.css` re-points each
  * `--color-aisle-*` at its `-soft` counterpart.
  *
- * The glyphs are all `lucide-vue-next` icons, bundled per ADR-0029;
+ * The glyphs are all `@lucide/vue` icons, bundled per ADR-0029;
  * each was verified against the package's shipped icon set. Lucide has
  * no honey jar, no cheese wheel and no plain bottle, so the nearest
  * honest shapes are used: `Nut` for nut butters (the name's own word),
@@ -76,7 +76,7 @@ import {
   Wheat,
   Wine,
   type LucideIcon,
-} from 'lucide-vue-next'
+} from '@lucide/vue'
 import { STORE_SECTIONS, type StoreSection } from './sections'
 
 /** One department's icon: the glyph plus the literal colour utility. */

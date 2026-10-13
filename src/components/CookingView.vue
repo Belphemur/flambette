@@ -14,7 +14,7 @@ import {
   Play,
   Plus,
   X,
-} from 'lucide-vue-next'
+} from '@lucide/vue'
 import { catalog, getRecipe } from '../lib/catalog'
 import { eventsDocView, restrictedDocView } from '../lib/restrictions'
 import { useRestrictions } from '../composables/useRestrictions'

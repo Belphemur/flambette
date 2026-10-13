@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { Minus, Plus, Sparkles, X } from 'lucide-vue-next'
+import { Minus, Plus, Sparkles, X } from '@lucide/vue'
 import { catalog } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
 import { MAX_MEALS, MIN_MEALS, type PackProposal } from '../lib/packPlanner'

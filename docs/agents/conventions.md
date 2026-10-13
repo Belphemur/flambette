@@ -35,7 +35,8 @@ Cross-cutting rules for any change in this repo. Each rule names its ADR;
   (a search is a question, not a household preference). The control row
   is a 2-column grid on phones so no control can be orphaned on its own
   line (WS1) — keep it a grid, don't reintroduce `ml-auto`.
-- **Icons (ADR-0029)**: the icon stack is `lucide-vue-next`, imported
+- **Icons (ADR-0029)**: the icon stack is `@lucide/vue` (the renamed
+  `lucide-vue-next`), imported
   per component and BUNDLED (no CDN, no icon font — a runtime icon
   fetch fails e2e by design). No glyph characters (`✕ ★ − ✓ ▸ 🛒 …`) and
   no hand-rolled `<svg>` in `src/`; the one exception is the 1×1 recipe

@@ -2,7 +2,7 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDark, useMediaQuery, useToggle } from '@vueuse/core'
-import { CircleAlert, Moon, Sun, X } from 'lucide-vue-next'
+import { CircleAlert, Moon, Sun, X } from '@lucide/vue'
 import ChangelogModal from './components/ChangelogModal.vue'
 import { checkVersion, type VersionState } from './lib/versionCheck'
 import { TABS, useUiStore } from './stores/ui'

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { CalendarSearch, ChefHat, Clock, RefreshCw, Search } from 'lucide-vue-next'
+import { CalendarSearch, ChefHat, Clock, RefreshCw, Search } from '@lucide/vue'
 import { catalog } from '../lib/catalog'
 import {
   filterHistoryEvents,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Pause, Play, X } from 'lucide-vue-next'
+import { Pause, Play, X } from '@lucide/vue'
 import { formatCountdown } from '../lib/stepTimer'
 
 /**

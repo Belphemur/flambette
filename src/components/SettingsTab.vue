@@ -32,7 +32,7 @@ import {
   Wheat,
   Cherry,
   type LucideIcon,
-} from 'lucide-vue-next'
+} from '@lucide/vue'
 import {
   applyBackup,
   backupFileName,
@@ -147,7 +147,7 @@ function bumpDefaultServings(delta: number) {
 
 /* ---------- Dietary restrictions (the restriction ADR) ---------- */
 
-/** One decorative glyph per restriction (ADR-0029: lucide-vue-next, bundled).
+/** One decorative glyph per restriction (ADR-0029: @lucide/vue, bundled).
  *  The label carries the meaning, so the icons are neutral — no new hue
  *  tokens (ADR-0036: a food-type role that does not exist in the registry
  *  is not invented for a control); selected chips tint through the chip's

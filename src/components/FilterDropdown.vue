@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, type Component } from 'vue'
-import { Check, ChevronDown } from 'lucide-vue-next'
+import { Check, ChevronDown } from '@lucide/vue'
 import { useListboxMenu } from '../composables/useListboxMenu'
 import HueIcon from './HueIcon.vue'
 import type { IconRole } from '../lib/palette'

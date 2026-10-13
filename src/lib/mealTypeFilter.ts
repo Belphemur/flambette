@@ -27,7 +27,7 @@ export type MealTypeId = -1 | -2 | -3 | -4 | -5 | -6
 export interface MealTypeOption {
   id: MealTypeId
   label: string
-  /** lucide-vue-next component name (bundled, ADR-0029). */
+  /** @lucide/vue component name (bundled, ADR-0029). */
   icon: string
   /** The catalog's own `ruleset` value this option selects. */
   ruleset: string

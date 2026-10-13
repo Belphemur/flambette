@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Heart } from 'lucide-vue-next'
+import { Heart } from '@lucide/vue'
 import { useFavouritesStore } from '../stores/favourites'
 
 /**

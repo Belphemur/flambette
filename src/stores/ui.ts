@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Component } from 'vue'
-import { BookOpen, CalendarDays, History, Settings, ShoppingCart } from 'lucide-vue-next'
+import { BookOpen, CalendarDays, History, Settings, ShoppingCart } from '@lucide/vue'
 import {
   defaultQuickFilters,
   legacyProOnlySource,

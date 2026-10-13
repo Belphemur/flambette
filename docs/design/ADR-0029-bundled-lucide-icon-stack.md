@@ -64,3 +64,12 @@ nav. That is a real defect, not a style preference:
   the specs needed.
 - **Hand-rolled SVGs, tidied.** Rejected: every icon becomes a bespoke
   path to review, and there were already a dozen.
+
+## Addendum (2026-10-13) — package rename
+
+Lucide renamed `lucide-vue-next` to `@lucide/vue` (the old name is
+deprecated on npm with a pointer to the new one). The decision stands
+unchanged — same components, same named-import tree-shaking, same
+bundling — only the module specifier moves
+(`import { Star, X } from '@lucide/vue'`). The Decision section above
+keeps the original spelling as a historical record.

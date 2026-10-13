@@ -9,7 +9,7 @@ import {
   Salad,
   UtensilsCrossed,
   X,
-} from 'lucide-vue-next'
+} from '@lucide/vue'
 import { catalog } from '../lib/catalog'
 import { imageSrc, onImgError } from '../lib/images'
 import { MAX_SERVINGS } from '../lib/servings'

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ChevronDown, ChevronRight, X } from 'lucide-vue-next'
+import { ChevronDown, ChevronRight, X } from '@lucide/vue'
 import AppModal from './AppModal.vue'
 import {
   ENERGY_ROW,

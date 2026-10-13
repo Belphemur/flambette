@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { CheckCircle2, X } from 'lucide-vue-next'
+import { CheckCircle2, X } from '@lucide/vue'
 import AppModal from './AppModal.vue'
 import { imageSrc, onImgError } from '../lib/images'
 import {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Star } from 'lucide-vue-next'
+import { Star } from '@lucide/vue'
 import { displayRating, useRatingStore } from '../stores/rating'
 import { useUiStore } from '../stores/ui'
 

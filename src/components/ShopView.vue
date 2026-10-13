@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Check, ChevronDown, ChevronRight, Eraser, ShoppingCart, X } from 'lucide-vue-next'
+import { Check, ChevronDown, ChevronRight, Eraser, ShoppingCart, X } from '@lucide/vue'
 import { useGroceryList } from '../lib/useGroceryList'
 import { extraCollapseKey, groupExtras, storeCollapseKey, type ExtraGroup } from '../lib/extraSections'
 import { sinkChecked } from '../lib/sink'

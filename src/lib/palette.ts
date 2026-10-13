@@ -39,7 +39,7 @@ import {
   Sunrise,
   type LucideIcon,
   UtensilsCrossed,
-} from 'lucide-vue-next'
+} from '@lucide/vue'
 
 /**
  * The roles that own a glyph and a colour: four categorical for ingredient

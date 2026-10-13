@@ -12,7 +12,7 @@ import {
   Users,
   UtensilsCrossed,
   X,
-} from 'lucide-vue-next'
+} from '@lucide/vue'
 import { useGroceryList } from '../lib/useGroceryList'
 import { extraCollapseKey, groupExtras, storeCollapseKey } from '../lib/extraSections'
 import { extraCheckedKey } from '../lib/extraCheckedKeys'

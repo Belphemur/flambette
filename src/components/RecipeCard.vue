@@ -9,7 +9,7 @@ import { catalog } from '../lib/catalog'
 import { isUserRecipeId, showNewBadge } from '../lib/userRecipes'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
 import { displayRating, useRatingStore } from '../stores/rating'
-import { Clock, Star } from 'lucide-vue-next'
+import { Clock, Star } from '@lucide/vue'
 
 const props = defineProps<{ meta: VariantMeta }>()
 

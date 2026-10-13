@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { Beef, Croissant, Salad, Snowflake } from 'lucide-vue-next'
+import { Beef, Croissant, Salad, Snowflake } from '@lucide/vue'
 import { aisleIcon } from './aisleRole'
 import { STORE_SECTIONS } from './sections'
 import { ICON_ROLES } from './palette'

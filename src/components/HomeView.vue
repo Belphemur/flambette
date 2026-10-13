@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { BookOpen, Lock, UserX, Users } from 'lucide-vue-next'
+import { BookOpen, Lock, UserX, Users } from '@lucide/vue'
 import AppModal from './AppModal.vue'
 import { generateRoomCode } from '../lib/roomWords'
 import { useShareRoomLink } from '../composables/useShareRoomLink'

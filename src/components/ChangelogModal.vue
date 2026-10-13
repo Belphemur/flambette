@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { X } from 'lucide-vue-next'
+import { X } from '@lucide/vue'
 import AppModal from './AppModal.vue'
 import { parseChangelog } from '../lib/changelog'
 import type { ChangelogDoc, NormalizedVersion } from '../lib/changelog'
