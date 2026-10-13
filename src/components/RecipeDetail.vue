@@ -43,7 +43,6 @@ import RatingStars from './RatingStars.vue'
 import PostCookPrompt from './PostCookPrompt.vue'
 import NutritionModal from './NutritionModal.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
-import { useIntersectionObserver } from '@vueuse/core'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
 import { recipeSeoHead } from '../lib/seo'
 import HueIcon from './HueIcon.vue'
@@ -529,45 +528,24 @@ const cookLastTitle = computed(() => {
 })
 
 /**
- * The "Cooked this?" pill (ADR-0083 addendum): a compact floating
- * affordance for marking the cook from the detail page — for the person
- * who never enters cooking mode. It belongs to the END of the recipe
- * ("I cooked this" becomes true at the steps), so its trigger is a
- * SENTINEL riding the THIRD-FROM-LAST step (owner refinement, 2026-10-13:
- * on desktop the instructions COLUMN is in view on load, so a
- * section-level trigger lit the pill before any scroll) — an
- * IntersectionObserver on that element, via @vueuse's
- * useIntersectionObserver, kept at threshold 0: any part of the sentinel
- * on screen lights the pill (a higher ratio risks never firing on a tall
- * step). Hidden once the cook is recorded TODAY (the same local-day rule
- * the history prints). Design authority: Stitch "Flambette — Recipe
+ * The "Cooked this?" pill (ADR-0083 addendum): marks the cook from the
+ * detail page — for the person who never enters cooking mode. It belongs
+ * to the END of the recipe ("I cooked this" becomes true at the steps),
+ * so the LAST THREE steps carry it INLINE in their title rows — at the
+ * number-badge's level, riding title → title (owner refinement,
+ * 2026-10-13: the previous fixed overlay blocked the step text on both
+ * layouts; and a structural trigger needs no IntersectionObserver, whose
+ * callbacks never fire in hidden/occluded tabs — the Firefox no-pill
+ * report). Hidden once the cook is recorded TODAY (the same local-day
+ * rule the history prints). Design authority: Stitch "Flambette — Recipe
  * Detail End (Mobile Dark)" (Warm Culinary Paper).
  */
 const pillTailIndex = computed(() => Math.max(0, scaledSteps.value.length - 3))
-const tailStepEl = ref<HTMLElement | null>(null)
-/** Sentinel ref: assigned ONLY at the tail index (ADR-0083 addendum). */
-function setTailRef(el: HTMLElement | null, i: number) {
-  if (i === pillTailIndex.value) tailStepEl.value = el
-}
-// A recipe (or servings) change re-renders the step list — drop the stale
-// sentinel BEFORE the re-render (watch flush 'pre') so the next setTailRef
-// assigns the NEW tail element, never a detached one.
-watch(scaledSteps, () => {
-  tailStepEl.value = null
-})
-const tailInView = ref(false)
-useIntersectionObserver(
-  tailStepEl,
-  (entries) => {
-    tailInView.value = entries.some((e) => e.isIntersecting)
-  },
-  { threshold: 0 },
-)
 const cookedAlreadyToday = computed(() =>
   meta.value ? cooked.cookedToday(meta.value.id) : false,
 )
 const cookedPillVisible = computed(
-  () => tailInView.value && !cookedAlreadyToday.value && !pillPromptOpen.value,
+  () => !cookedAlreadyToday.value && !pillPromptOpen.value,
 )
 
 /**
@@ -1298,9 +1276,8 @@ function startCooking() {
   </section>
   </section>
 
-  <!-- Instructions. The "Cooked this?" pill does NOT watch this section
-  (on desktop the column is in view on load — that lit the pill before
-  any scroll): its sentinel rides the THIRD-FROM-LAST step below
+  <!-- Instructions. The "Cooked this?" pill rides the TITLE ROW of the
+  last three steps below — inline, never a fixed overlay over this prose
   (ADR-0083 addendum refinement, 2026-10-13). -->
   <section>
   <!-- ADR-0077: the render's step-column head carries a mono total beside
@@ -1317,7 +1294,6 @@ function startCooking() {
   <li
   v-for="(step, i) in scaledSteps"
   :key="i"
-  :ref="(el) => setTailRef(el as HTMLElement | null, i)"
   class="rounded-xl bg-surface-raised p-4 ring-1 ring-border"
   data-test="detail-step"
   >
@@ -1334,12 +1310,34 @@ function startCooking() {
   >
   {{ i + 1 }}
   </span>
+  <!-- The "Cooked this?" pill (ADR-0083 addendum) rides the TITLE ROW of
+  each tail step — inline, at the number-badge's level, never over the
+  step text (owner refinement, 2026-10-13: the fixed overlay blocked the
+  prose on both layouts; "going from title to title"). Reading down the
+  list walks from one title's pill to the next, and the trigger is
+  STRUCTURAL — the last three steps simply carry it — so no observer
+  (and none of its Firefox quirks) is involved. -->
+  <div class="flex shrink-0 items-center gap-2">
+  <button
+  v-if="i >= pillTailIndex && cookedPillVisible"
+  type="button"
+  class="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface-raised px-3 text-label-md font-semibold text-text transition-colors hover:bg-surface active:scale-[0.98]"
+  :aria-label="`Cooked this? (reached step ${i + 1})`"
+  data-test="cooked-pill"
+  @click="cookFromPill"
+  >
+  <span class="size-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true" />
+  <Check :size="14" aria-hidden="true" class="text-brand-text" />
+  <span class="hidden sm:inline">Cooked this?</span>
+  <span class="sm:hidden">Cooked?</span>
+  </button>
   <span
   v-if="hintAt(i)"
   class="font-mono-data text-label-md tabular-nums text-text-muted"
   data-test="detail-step-duration"
   >~{{ suggestionFromHint(hintAt(i)!).minutes }} min</span
   >
+  </div>
   </div>
   <p class="mt-2 text-body-md lg:text-body-lg">{{ step.primary }}</p>
   <!-- Measured amounts under the step text (ADR-0022, on the detail per
@@ -1408,37 +1406,6 @@ function startCooking() {
   </section>
   </div>
   </template>
-
-  <!-- The "Cooked this?" pill (ADR-0083 addendum): a compact floating
-  affordance for marking the cook from the detail page — for the person
-  who never enters cooking mode. Design authority: Stitch "Flambette —
-  Recipe Detail End (Mobile Dark)" (Warm Culinary Paper): right edge,
-  ~120px above the bottom navigation, surface-raised fill, subtle
-  border, the ONE popover shadow (ADR-0068), warm accent dot. The
-  pointer-events-none wrapper keeps the fixed overlay from
-  intercepting taps outside the pill (the ADR-0049 hit-testing
-  lesson), while the app-width column keeps the pill on the right edge
-  of the CONTENT on desktop, not the viewport edge. Hidden until the
-  LAST THREE steps come into view (the sentinel on the third-from-last
-  step — ADR-0083 addendum refinement) and once the cook is recorded
-today. -->
-  <div
-    v-if="doc && cookedPillVisible"
-    class="pointer-events-none fixed inset-x-0 bottom-[calc(120px+env(safe-area-inset-bottom))] z-40 flex justify-end"
-  >
-    <div class="mx-auto flex w-full max-w-app justify-end px-4">
-      <button
-        type="button"
-        class="pointer-events-auto flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface-raised py-2 pl-3 pr-4 shadow-popover transition-colors hover:bg-surface"
-        data-test="cooked-pill"
-        @click="cookFromPill"
-      >
-        <span class="size-2 shrink-0 rounded-full bg-brand" aria-hidden="true" />
-        <Check :size="16" aria-hidden="true" class="text-brand-text" />
-        <span class="text-label-md font-semibold text-text">Cooked this?</span>
-      </button>
-    </div>
-  </div>
 
   <!-- The SAME post-cook prompt, raised over the detail page (ADR-0083
   addendum): Done/scrim/Escape -> /history via onPillPromptDone; Undo
