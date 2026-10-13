@@ -179,7 +179,7 @@ test('room sync: A clears the grocery list and B sees it empty', async ({ browse
   await expect(a.locator('main label').first()).toBeVisible({ timeout: 10_000 })
   await a.locator('main input[type=checkbox]').first().click()
   await a.locator('[data-test=clear-list]').click()
-  await a.getByTestId('toast').getByTestId('toast-action-primary').click()
+  await a.getByTestId('confirm-action').click()
   await expect(a.getByTestId('cleared-empty')).toBeVisible()
 
   // …and B's list empties live (cleared ingredients are household state).
@@ -337,4 +337,27 @@ test('joining a code the relay does not know yet CREATES the room (ADR-0026)', a
   await b.goto('/plan?room=ember-willow-quartz')
   await expect(b.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 10_000 })
   await ctxB.close()
+})
+
+test('Escape over the leave-room confirm ends only the confirm (stacked modals)', async ({ page }) => {
+  await blockExternalRequests(page)
+  await planARecipe(page)
+  await gotoTab(page, 'Plan')
+  await page.getByRole('button', { name: 'Share', exact: true }).click()
+  await page.getByTestId('start-room').click()
+  await expect(page.getByTestId('leave-room')).toBeVisible({ timeout: 10_000 })
+
+  // The confirm opens OVER the still-open share sheet: two AppModals at
+  // once. Escape belongs to the TOP-MOST one only — one press ends one
+  // dialog, and the sheet (and the join) survive the confirm's Escape.
+  await page.getByTestId('leave-room').click()
+  const modal = page.getByTestId('confirm-modal')
+  await expect(modal).toContainText(/Leave room .+\? Your plan stops syncing/)
+  await page.keyboard.press('Escape')
+  await expect(modal).toHaveCount(0)
+  await expect(page.getByTestId('leave-room')).toBeVisible()
+
+  // The NEXT Escape reaches the sheet itself.
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('leave-room')).toHaveCount(0)
 })

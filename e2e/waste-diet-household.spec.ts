@@ -235,19 +235,18 @@ test.describe('household room', () => {
     await page.goto('/settings')
     await page.getByTestId('household-room-input').fill(code)
     await page.getByTestId('household-room-join').click()
-    await expect(page.getByTestId('household-toast')).toContainText(
-      `Household sync active — ${code}`,
-      { timeout: 20_000 },
-    )
+    // ADR-0084 decision 5: the join is SILENT — no success toast.
+    await expect(page.getByTestId('household-toast')).toHaveCount(0)
     await expect(page.getByTestId('household-room-status')).toContainText(code)
     await page.reload()
     await expect(page.getByTestId('household-room-status')).toContainText(code, {
       timeout: 20_000,
     })
 
-    // Fresh start → the app re-joins by itself, no share link involved.
+    // Fresh start → the app re-joins by itself, silently (ADR-0084),
+    // no share link involved.
     await restartFresh(page)
-    await expect(page.getByTestId('household-toast')).toContainText(code, { timeout: 20_000 })
+    await expect(page.getByTestId('household-toast')).toHaveCount(0)
     await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
 
     // The second phone joins the same code and receives the plan.
@@ -298,7 +297,8 @@ test.describe('household room', () => {
     })
 
     await restartFresh(page)
-    await expect(page.getByTestId('household-toast')).toContainText(code, { timeout: 20_000 })
+    // Silent auto-join (ADR-0084 decision 5): the chip carries the news.
+    await expect(page.getByTestId('household-toast')).toHaveCount(0)
     await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
     await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', new RegExp(`^Live room ${code}`))
     await expectZeroMealimeRequests(page)

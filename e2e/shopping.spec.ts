@@ -44,6 +44,15 @@ test('shopping mode: enter, toggle, progress, exit', async ({ page }) => {
   }
   await expect(progress).toHaveText(new RegExp(`^${total} \\/ ${total}$`))
 
+  // The last check arms the all-checked auto-trigger — the ONE confirm
+  // modal now (ADR-0084), and it WAITS (no auto-dismiss), so it is
+  // answered here: Cancel keeps the list (this spec is about shopping
+  // progress, not the clear flow) and lets the exit click through.
+  const confirm = page.getByTestId('confirm-modal')
+  await expect(confirm).toContainText('All items checked — clear the grocery list?')
+  await confirm.getByTestId('confirm-cancel').click()
+  await expect(confirm).toHaveCount(0)
+
   // Exit returns to the grocery tab.
   await page.locator('[data-test=exit-shopping]').click()
   await expect(page).toHaveURL(/\/grocery$/)

@@ -59,10 +59,28 @@ export interface Toast {
   kind?: string
 }
 
+/**
+ * The tone of a confirm modal's CONFIRM action (ADR-0084): 'danger' is the
+ * destructive outline (every current call site), 'brand' the non-destructive
+ * fill a future confirm may use.
+ */
+export type ConfirmTone = 'danger' | 'brand'
+
+/**
+ * The open confirm-modal question (ADR-0084): the message IS the question
+ * (and the dialog's accessible name), the label names the confirm action.
+ * Non-persisted, like `toast` — a question never survives a reload.
+ */
+export interface ConfirmPrompt {
+  message: string
+  confirmLabel: string
+  tone: ConfirmTone
+}
+
 export interface ToastOptions {
   /** Inline buttons rendered next to the message. */
   actions?: ToastAction[]
-  /** Auto-dismiss delay in ms (default 2500). */
+  /** Auto-dismiss delay in ms (default 4000). */
   duration?: number
   /** Confirmation kind — emits data-test="added-toast" when set. */
   kind?: string
@@ -235,6 +253,64 @@ export const useUiStore = defineStore(
     let toastTimer: ReturnType<typeof setTimeout> | undefined
     /** Dismissal callback of the toast currently on screen. */
     let onDismiss: (() => void) | undefined
+
+    /**
+     * THE confirm-modal slot (ADR-0084): the ONE open question, hosted by
+     * App.vue's single `<ConfirmModal v-if="ui.confirm">`. Non-persisted
+     * (a question never survives a reload) and deliberately a DIFFERENT
+     * slot from `toast`, so a status toast never displaces an open
+     * question and vice versa.
+     */
+    const confirm = ref<ConfirmPrompt | null>(null)
+    /** End-path callbacks of the prompt currently on screen. */
+    let confirmOnConfirm: (() => void) | undefined
+    let confirmOnDismiss: (() => void) | undefined
+
+    /**
+     * Open the ONE confirm modal. A SECOND call while a question is up is
+     * a REPLACEMENT (same as a toast): the previous prompt ends through
+     * its own settle path (its onDismiss fires) before the new question
+     * lands — the one-at-a-time rule lives in the callers' `prompting`
+     * guard (useConfirm), this is just the honest end of a displaced
+     * question.
+     */
+    function showConfirm(
+      prompt: { message: string; confirmLabel: string; tone?: ConfirmTone },
+      callbacks: { onConfirm?: () => void; onDismiss?: () => void } = {},
+    ) {
+      settleConfirm(false)
+      // Explicit field build, not `{ tone: 'danger', ...prompt }`: a
+      // spread carries an explicit `tone: undefined` that would overwrite
+      // the default.
+      confirm.value = {
+        message: prompt.message,
+        confirmLabel: prompt.confirmLabel,
+        tone: prompt.tone ?? 'danger',
+      }
+      confirmOnConfirm = callbacks.onConfirm
+      confirmOnDismiss = callbacks.onDismiss
+    }
+
+    /**
+     * End the open confirm modal — THE settle path every end goes through:
+     * Confirm, Cancel, Escape and scrim all funnel to it (ConfirmModal's
+     * single `close` emit carries the answer).
+     *
+     * `onDismiss` fires EXACTLY once on EVERY end path, after `onConfirm`
+     * on the confirm path (callers replace-then-settle with the same
+     * ordering guarantee the toast gave them). No-op when nothing is open,
+     * so a late double-settle can never fire the callbacks twice.
+     */
+    function settleConfirm(confirmed: boolean) {
+      if (!confirm.value) return
+      confirm.value = null
+      const onConfirm = confirmOnConfirm
+      const onDismissCb = confirmOnDismiss
+      confirmOnConfirm = undefined
+      confirmOnDismiss = undefined
+      if (confirmed) onConfirm?.()
+      onDismissCb?.()
+    }
 
     function setCookingStep(variantId: number, step: number) {
       cookingStepIndex.value[variantId] = step
@@ -697,7 +773,11 @@ export const useUiStore = defineStore(
       endToast()
       onDismiss = options.onDismiss
       toast.value = { message, actions: options.actions, kind: options.kind }
-      toastTimer = setTimeout(endToast, options.duration ?? 2500)
+      // ADR-0084 addendum: the default dwell is a COMFORTABLE read
+      // (4s) — a status line people actually finish. Call sites with
+      // an explicit duration (quick acks, failure messages) keep
+      // their value; only the default moved.
+      toastTimer = setTimeout(endToast, options.duration ?? 4000)
     }
 
     /** Dismiss the current toast immediately (e.g. the Cancel button). */
@@ -715,6 +795,9 @@ export const useUiStore = defineStore(
       householdRoom,
       stepTimers,
       toast,
+      confirm,
+      showConfirm,
+      settleConfirm,
       autoPlanRuleset,
       autoPlanMode,
       autoPlanGeneration,

@@ -177,10 +177,10 @@ test('the household card shows the count only while connected (ADR-0049)', async
 
   // Leave is a full opt-out, so the status line disappears with the
   // connection rather than claiming a live household. Destructive is
-  // danger-outlined AND confirmed (DESIGN.md): the press arms the
-  // shared toast confirm, the action completes it.
+  // danger-outlined AND confirmed (DESIGN.md): the press arms the ONE
+  // confirm modal (ADR-0084), the action completes it.
   await page.getByTestId('household-room-clear').click()
-  await page.getByTestId('toast-action-primary').click()
+  await page.getByTestId('confirm-action').click()
   await expect(page.getByTestId('household-room-status')).toHaveCount(0)
 
   await ctxB.close()

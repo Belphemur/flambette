@@ -1,6 +1,10 @@
 # ADR-0019: A persistent household room replaces share-links as the default flow
 
-**Status:** Accepted (2026-09-28)
+**Status:** Accepted (2026-09-28) (superseded in part by ADR-0084) —
+the auto-join behaviour stands; the success toast
+(`Household sync active — CODE`) was removed there (the room chip is
+the standing indicator; share lives on the roster sheet, ADR-0079).
+The failure toast remains, restyled.
 **Extends:** ADR-0006 (live rooms over the relay), ADR-0013/ADR-0016
 (`STORE_SLICES` registry, Settings tab). The room protocol, the shared
 state and the relay are unchanged — only how a device *gets into* a room

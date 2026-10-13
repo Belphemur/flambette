@@ -521,16 +521,21 @@ test('Finish asks before discarding a running timer', async ({ page }) => {
   await armPreset(cooking, 5)
   await expect(countdown(cooking)).toContainText('5:00')
 
-  // Declining the confirm keeps the cook session AND the timer.
-  page.once('dialog', (d) => void d.dismiss())
+  // Declining the confirm keeps the cook session AND the timer: the ONE
+  // confirm modal (ADR-0084) opens, Cancel leaves you in the cook.
   await cooking.getByRole('button', { name: /Finish/ }).click()
+  const modal = page.getByTestId('confirm-modal')
+  await expect(modal).toContainText('The Step timer is still running')
+  await modal.getByTestId('confirm-cancel').click()
+  await expect(modal).toHaveCount(0)
   await expect(cooking).toBeVisible()
   await expect(chips(cooking)).toHaveCount(1)
 
-  // Accepting leaves — the post-cook prompt (ADR-0083) is the finish
-  // acknowledgment, not a timer nag and not a toast.
-  page.once('dialog', (d) => void d.accept())
+  // Accepting completes the leave — the post-cook prompt (ADR-0083) is the
+  // finish acknowledgment, not a timer nag and not a toast.
   await cooking.getByRole('button', { name: /Finish/ }).click()
+  await expect(modal).toBeVisible()
+  await modal.getByTestId('confirm-action').click()
   await expect(page.getByTestId('post-cook-prompt')).toBeVisible()
   await expect(cooking).toBeVisible()
   await expect(page.getByTestId('toast')).toHaveCount(0)
@@ -547,16 +552,19 @@ test('Finish names EVERY timer that is still running', async ({ page }) => {
   // The strip is global: both chips are on screen at the last step.
   await expect(chips(cooking)).toHaveCount(2)
 
-  page.once('dialog', (d) => {
-    expect(d.message()).toContain('Oven')
-    expect(d.message()).toContain('Rice')
-    void d.dismiss()
-  })
+  // The confirm modal (ADR-0084) NAMES every running timer.
   await cooking.getByRole('button', { name: /Finish/ }).click()
+  const modal = page.getByTestId('confirm-modal')
+  await expect(modal).toContainText('Oven')
+  await expect(modal).toContainText('Rice')
+  await expect(modal).toContainText('2 timers are still running')
+  await modal.getByTestId('confirm-cancel').click()
+  await expect(modal).toHaveCount(0)
   await expect(cooking).toBeVisible()
 
-  page.once('dialog', (d) => void d.accept())
   await cooking.getByRole('button', { name: /Finish/ }).click()
+  await expect(modal).toBeVisible()
+  await modal.getByTestId('confirm-action').click()
   await expect(page.getByTestId('post-cook-prompt')).toBeVisible()
   await expect(cooking).toBeVisible()
   await expect(page.getByTestId('toast')).toHaveCount(0)
@@ -594,13 +602,42 @@ test('the header close button routes through the timer confirmation (qodo 412851
   await armNamed(cooking, 'Oven', 20)
   await expect(countdown(cooking)).toContainText('20:00')
 
-  page.once('dialog', (d) => void d.dismiss())
+  // The confirm modal (ADR-0084) intercepts: Cancel keeps the cook open.
   await cooking.getByRole('button', { name: 'Close cooking mode' }).click()
+  const modal = page.getByTestId('confirm-modal')
+  await expect(modal).toContainText('The Oven timer is still running')
+  await modal.getByTestId('confirm-cancel').click()
+  await expect(modal).toHaveCount(0)
   await expect(cooking).toBeVisible()
 
-  page.once('dialog', (d) => void d.accept())
   await cooking.getByRole('button', { name: 'Close cooking mode' }).click()
+  await expect(modal).toBeVisible()
+  await modal.getByTestId('confirm-action').click()
   await expect(cooking).not.toBeVisible()
+  await expectZeroMealimeRequests(page)
+})
+
+test('browser Back with the leave confirm open ends the question with the session', async ({ page }) => {
+  const cooking = await startCooking(page)
+  await goToLastStep(cooking)
+  await armPreset(cooking, 5)
+  await expect(countdown(cooking)).toContainText('5:00')
+
+  // The confirm modal is APP-level (App.vue hosts the ONE question). If
+  // the user leaves with the browser/system Back while it is up, the
+  // session unmounts — and the question must end WITH the session, never
+  // strand over the next page holding this session's complete closure
+  // (a later Confirm there would router.back() from the wrong page or
+  // mark an abandoned recipe cooked).
+  await cooking.getByRole('button', { name: /Finish/ }).click()
+  const modal = page.getByTestId('confirm-modal')
+  await expect(modal).toContainText('The Step timer is still running')
+  await page.goBack()
+  await expect(cooking).not.toBeVisible()
+  await expect(modal).toHaveCount(0)
+  // Nothing was confirmed on the way out: no cook was recorded, no
+  // post-cook prompt exists to answer, and the plan entry survives.
+  await expect(page.getByTestId('post-cook-prompt')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
 
@@ -611,8 +648,11 @@ test('mark as cooked also asks before discarding a running timer', async ({ page
   await expect(cooking.getByTestId('mark-cooked')).toBeVisible()
 
   await armNamed(cooking, 'Oven', 20)
-  page.once('dialog', (d) => void d.dismiss())
   await cooking.getByTestId('mark-cooked').click()
+  const modal = page.getByTestId('confirm-modal')
+  await expect(modal).toContainText('The Oven timer is still running')
+  await modal.getByTestId('confirm-cancel').click()
+  await expect(modal).toHaveCount(0)
   await expect(cooking).toBeVisible()
   // The prompt is the assertion surface: the button ALSO reads "Marked
   // as cooked" once recorded, so a bare getByText would match both. A
@@ -621,8 +661,9 @@ test('mark as cooked also asks before discarding a running timer', async ({ page
   await expect(page.getByTestId('toast')).toHaveCount(0)
   await expect(cooking.getByTestId('mark-cooked')).toBeEnabled()
 
-  page.once('dialog', (d) => void d.accept())
   await cooking.getByTestId('mark-cooked').click()
+  await expect(modal).toBeVisible()
+  await modal.getByTestId('confirm-action').click()
   // ADR-0083 addendum: the mid-cook mark raises the SAME prompt as
   // Finish — the modal IS the acknowledgment, no toast.
   const prompt = page.getByTestId('post-cook-prompt')

@@ -46,7 +46,7 @@ import { UNIT_SYSTEMS, UNIT_SYSTEM_LABEL, type UnitSystem } from '../lib/units'
 import { RESTRICTIONS } from '../lib/restrictions'
 import { useRestrictions } from '../composables/useRestrictions'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
-import { confirmToast } from '../composables/useConfirm'
+import { confirmModal } from '../composables/useConfirm'
 import { getCatalog } from '../lib/catalog'
 import { USER_RECIPE_ID_BASE } from '../lib/userRecipes'
 import {
@@ -307,30 +307,29 @@ function joinHouseholdRoom() {
   ui.setHouseholdRoom(code)
 
   // Already LIVE in THIS room: reconnecting would drop a healthy socket
-  // just to re-establish it, so the setting is saved and the state
-  // confirmed without touching the connection. `live` and not merely
-  // `inRoom`: the store keeps the code through `error`, the reconnect
-  // backoff and a latched `roomGone`, and in those states the old
-  // condition short-circuited to a success toast that never retried —
-  // the user had to press Leave and join again to get out of a dead room.
+  // just to re-establish it, so the setting is saved without touching
+  // the connection. `live` and not merely `inRoom`: the store keeps the
+  // code through `error`, the reconnect backoff and a latched `roomGone`.
+  // ADR-0084 decision 5: NO success toast on this path either — a join
+  // that succeeded is visible in the room chip (and the status line
+  // below), and the app does not announce a state the header shows.
   if (room.status === 'live' && room.inRoom && room.code === code) {
-    ui.showToast(`Household sync active — ${code}`, { kind: 'household' })
     return
   }
 
   // From here the card OWNS the outcome: a `code_taken` re-roll moves
   // this device into a different room than the one just saved, and the
   // watcher below adopts whatever code we actually ended up in.
+  // ADR-0084 decision 5: the join itself is SILENT — no "Joining…"
+  // toast (the chip's Connecting state is that feedback) and no share
+  // action on a toast (share is the roster sheet's `roster-share`,
+  // ADR-0079, and the card's own Share button below, ADR-0023). The
+  // card still announces the OUTCOMES the chip cannot show: the
+  // code_taken re-roll notice in the watcher, and App.vue's
+  // "Household sync unavailable" failure toast.
   pendingHouseholdJoin = true
   if (isNewCode) room.create(code)
   else room.join(code)
-  // The toast carries the share action: joining and sharing are the
-  // same two-phone moment (ADR-0023).
-  ui.showToast(`Joining household ${code}…`, {
-    kind: 'household',
-    actions: [{ label: 'Share link', run: () => void shareRoomLink(code) }],
-    duration: 6000,
-  })
 }
 
 /**
@@ -387,16 +386,14 @@ function newRoomCodeAndJoin() {
  */
 /**
  * The danger CONFIRM (DESIGN.md: destructive is danger-outlined AND
- * confirmed). The app's confirm pattern is the non-blocking toast with
- * inline actions (the grocery-clear workflow) — a native `confirm()`
- * would freeze the tab and never match the toast surface.
+ * confirmed). The app's confirm pattern is the ONE confirm modal
+ * (ADR-0084) — a native `confirm()` would freeze the tab and never match
+ * the app's surface.
  *
  * The prompt NAMES the room it will leave and the action leaves THAT one:
  * the code is captured when the prompt opens, so re-rolling or joining a
- * different code while the toast sits on screen cannot make the confirm
- * act against a room the question never mentioned. No `kind`: a kind names
- * a confirmation RESULT (data-test="<kind>-toast"), while this prompt is a
- * question whose actions carry their own hooks.
+ * different code while the modal is up cannot make the confirm act
+ * against a room the question never mentioned.
  */
 function confirmLeaveHousehold() {
   const code = ui.householdRoom
@@ -404,7 +401,7 @@ function confirmLeaveHousehold() {
   const question = target
     ? `Leave room ${target}? This device will not rejoin on future launches.`
     : 'Leave the household room? This device will not rejoin on future launches.'
-  confirmToast(question, {
+  confirmModal(question, {
     confirmLabel: 'Leave',
     onConfirm: () => leaveHouseholdCode(target),
   })

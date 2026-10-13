@@ -7,7 +7,6 @@ import ChangelogModal from './components/ChangelogModal.vue'
 import { checkVersion, type VersionState } from './lib/versionCheck'
 import { TABS, useUiStore } from './stores/ui'
 import { getCatalog } from './lib/catalog'
-import { useShareRoomLink } from './composables/useShareRoomLink'
 import { ensureTimerAlertPolling } from './lib/timerAlertHost'
 import { usePlanStore } from './stores/plan'
 import { useRoomStore, type RoomStatus } from './stores/room'
@@ -17,6 +16,7 @@ import { homeSeoHead, recipesSeoHead } from './lib/seo'
 import { normalizeRoomCode } from './lib/roomWords'
 import { useHead } from '@unhead/vue'
 import JoinCongratsModal from './components/JoinCongratsModal.vue'
+import ConfirmModal from './components/ConfirmModal.vue'
 import RosterSheet from './components/RosterSheet.vue'
 import TooltipBubble from './components/TooltipBubble.vue'
 import { useIdentityStore } from './stores/identity'
@@ -49,7 +49,6 @@ const room = useRoomStore()
 // ADR-0063: instantiating here runs the identity store's hydration-time
 // migration (generate when absent while a household room is saved).
 const identity = useIdentityStore()
-const { shareAction } = useShareRoomLink()
 
 /** The app-level head (ADR-0048): see the block comment above — ONE
  *  owner, the hero and the recipes list, homepage head everywhere else. */
@@ -320,13 +319,11 @@ function autoJoinHousehold() {
   const code = ui.householdRoom
   if (!code || room.inRoom || room.status !== 'idle') return
   room.join(code, false)
-  // The toast doubles as the share affordance: the second phone gets the
-  // link straight from this confirmation (ADR-0023).
-  ui.showToast(`Household sync active — ${code}`, {
-  kind: 'household',
-  actions: [shareAction(code)],
-  duration: 6000,
-  })
+  // ADR-0084 decision 5: the SUCCESS toast is REMOVED — a join that
+  // succeeded is visible in the room chip (and share lives on the roster
+  // sheet's `roster-share`, ADR-0079, and the Plan tab, ADR-0023); the
+  // app does not announce a state the header already shows. The FAILURE
+  // toast below STAYS: it reports something the chip does not show.
 }
 
 // A room we can't reach (relay down, code expired after a relay restart)
@@ -615,11 +612,18 @@ onBeforeUnmount(() => {
   </RouterView>
   </main>
 
+  <!-- ADR-0084 addendum (2026-10-13): the status pill gets room —
+       px-5 py-3, a max-width cap (28rem desktop, viewport minus
+       gutters on a phone), rounded-3xl so a wrapped message reads as
+       a rounded card instead of a tall narrow capsule, and flex-wrap
+       so actions drop to a centred line below long messages instead
+       of squeezing beside them. Hooks, position and the level-2
+       tokens are untouched. -->
   <Transition name="toast">
   <div
   v-if="ui.toast"
   role="status"
-  class="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-surface-dark px-4 py-2 text-sm font-medium text-on-brand shadow-popover"
+  class="fixed bottom-24 left-1/2 z-50 flex max-w-[min(28rem,calc(100vw-2.5rem))] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-3xl border border-border bg-popover px-5 py-3 text-sm font-medium leading-snug text-text shadow-popover"
   :data-test="ui.toast.kind ? `${ui.toast.kind}-toast` : 'toast'"
   >
   <span>{{ ui.toast.message }}</span>
@@ -627,7 +631,7 @@ onBeforeUnmount(() => {
   v-for="(action, i) in ui.toast.actions ?? []"
   :key="action.label"
   class="rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide"
-  :class="i === 0 ? 'bg-brand text-on-brand' : 'text-text-dark-muted hover:text-on-brand'"
+  :class="i === 0 ? 'bg-brand text-on-brand' : 'text-text-muted hover:text-text'"
   :data-test="action.testId ?? (i === 0 ? 'toast-action-primary' : 'toast-action-secondary')"
   @click="action.run()"
   >
@@ -704,4 +708,8 @@ onBeforeUnmount(() => {
   :code="room.code"
   @close="rosterOpen = false"
   />
+  <!-- ADR-0084: THE confirm surface, hosted ONCE. The single reactive
+       slot in the ui store keeps one-mount == one-open (AppModal's
+       assumption); every end path funnels back into settleConfirm. -->
+  <ConfirmModal v-if="ui.confirm" :prompt="ui.confirm" @close="ui.settleConfirm" />
 </template>

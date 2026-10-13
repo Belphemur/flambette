@@ -99,9 +99,15 @@ Cross-cutting rules for any change in this repo. Each rule names its ADR;
   arm's length wants a measure, not a page.
 - **Nutrition**: `meta.calories`/`sodium_mg` are PER-SERVING — never scale
   them by servings; only totals scale.
-- **Toasts**: `ui.showToast(message, { actions, duration, onDismiss })`.
-  `onDismiss` fires exactly once on every end path (timeout, replacement,
-  dismiss) — anything guarded around a toast must reset via `onDismiss`.
+- **Toasts are STATUS-only** (ADR-0084): `ui.showToast(message, {
+  actions, duration, onDismiss })`. `onDismiss` fires exactly once on
+  every end path (timeout, replacement, dismiss) — anything guarded
+  around a toast must reset via `onDismiss`. CONFIRMATIONS are modals:
+  they go through the ONE `confirmModal` funnel (`useConfirm.ts`,
+  rendered by the single `ConfirmModal` host in App.vue on AppModal
+  machinery, hooks `confirm-modal`/`confirm-action`/`confirm-cancel`)
+  — never `window.confirm()`, never a bespoke dialog, never a toast.
+  A modal waits for an answer: no auto-dismiss.
 - **Accessibility**: every interactive element gets an `aria-label`; every
   view must work in dark mode.
 - **Clickable affordance**: every clickable surface gets a pointer cursor,

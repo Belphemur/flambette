@@ -34,6 +34,7 @@ import {
 import CookTimerChip from './CookTimerChip.vue'
 import PostCookPrompt from './PostCookPrompt.vue'
 import { hintForStep, suggestionFromHint, type TimerSuggestion } from '../lib/timerSuggest'
+import { confirmModal } from '../composables/useConfirm'
 import { useTimerHints } from '../composables/useTimerHints'
 import {
   ensureTimerAlertPolling,
@@ -538,25 +539,53 @@ function replaceWith(id: number) {
 
 /**
  * Leaving the cook session must not silently kill a running timer: the
- * user is asked once (Cancel keeps the timer running). EVERY timer of this
- * recipe is checked, not just the ones whose step is on screen, and a
- * timer is "running" only while its derived countdown is above zero (qodo
- * 4128519620 / 4128519641) — expired chips leave silently. The question
- * names the labels: with several countdowns running, "a timer" is
- * ambiguous, and the user has to know WHICH work they are abandoning.
+ * user is asked once (Cancel/Escape stays in the cook). EVERY timer of
+ * this recipe is checked, not just the ones whose step is on screen, and
+ * a timer is "running" only while its derived countdown is above zero
+ * (qodo 4128519620 / 4128519641) — expired chips leave silently. The
+ * question names the labels: with several countdowns running, "a timer"
+ * is ambiguous, and the user has to know WHICH work they are abandoning.
+ *
+ * ADR-0084: the question is the ONE confirm modal (the native
+ * `window.confirm` is deleted). Intercept-and-resume, not an awaited
+ * guard: the intent to leave is captured as the `complete` continuation —
+ * with no live timer it runs immediately, otherwise the modal opens and
+ * Confirm completes it (Cancel/Escape/simply staying keeps the timers
+ * running and the session open). The countdown in the message is the
+ * remaining time at ask time, exactly as the native dialog's message was.
+ *
+ * Whether THIS session has a confirm-modal question outstanding (`confirmLease`).
+ * The confirm slot is APP-level (App.vue's single host), so the question would
+ * otherwise outlive the session: a browser/system Back while the modal is
+ * up unmounts CookingView but strands the prompt over the next page with
+ * this session's `complete` closure still attached — a later Confirm would
+ * router.back() from the wrong page or mark an abandoned recipe cooked.
+ * The lease is dropped on EVERY end path (Confirm and the ui store's
+ * settle-once onDismiss), and onUnmounted settles a still-leased prompt.
  */
-function confirmTimerBeforeLeaving(): boolean {
+let confirmLease = false
+
+function leaveOrConfirm(complete: () => void): void {
   const live = timers.value.filter((t) => isRunning(t))
-  if (live.length === 0) return true
-  if (live.length === 1) {
-    const only = live[0]
-    return window.confirm(
-      `The ${only.label} timer is still running (${formatCountdown(remainingOf(only))} left). Leave anyway?`,
-    )
+  if (live.length === 0) {
+    complete()
+    return
   }
-  return window.confirm(
-    `${live.length} timers are still running (${live.map((t) => t.label).join(', ')}). Leave anyway?`,
-  )
+  const message =
+    live.length === 1
+      ? `The ${live[0].label} timer is still running (${formatCountdown(remainingOf(live[0]))} left). Leave anyway?`
+      : `${live.length} timers are still running (${live.map((t) => t.label).join(', ')}). Leave anyway?`
+  confirmLease = true
+  confirmModal(message, {
+    confirmLabel: 'Leave',
+    onConfirm: () => {
+      confirmLease = false
+      complete()
+    },
+    onDismiss: () => {
+      confirmLease = false
+    },
+  })
 }
 
 /**
@@ -609,12 +638,17 @@ const postCookOpen = ref(false)
  * for /history; Undo restores the prior and the cook resumes exactly as
  * before.
  */
-function recordCook(): boolean {
+function recordCook(): void {
   if (sessionCooked.value) {
   openPostCook()
-  return true
+  return
   }
-  if (!confirmTimerBeforeLeaving()) return false
+  // The timer gate is the leave-or-confirm interception: with running
+  // timers the mark completes only when the modal's Leave is pressed.
+  leaveOrConfirm(doRecordCook)
+}
+
+function doRecordCook(): void {
   const id = props.id
   const entry = plan.plan.find((e) => e.variantId === id)
   const cleared = plan.clearedIngredients[id]
@@ -629,7 +663,6 @@ function recordCook(): boolean {
   // modal IS the acknowledgment. Done (or scrim/Escape) ends the session
   // for /history; Undo restores the prior and keeps the session open.
   openPostCook()
-  return true
 }
 
 /**
@@ -693,6 +726,13 @@ function onKey(e: KeyboardEvent) {
   // handler (it emits the close), so CookingView yields everything,
   // exactly as the manage sheet below owns Escape in its own layer.
   if (postCookOpen.value) return
+  // The confirm modal (ADR-0084) owns the keys while its question is up —
+  // The confirm modal (ADR-0084) owns the keys while its question is up —
+  // same layering as the post-cook prompt. Registration order is NOT
+  // assumed in either direction: AppModal's Escape handler stops sibling
+  // listeners outright (it consumes the key), and when THIS handler runs
+  // first the prompt is still open and it yields here.
+  if (ui.confirm) return
   if (e.key === 'ArrowRight') {
   e.preventDefault()
   next()
@@ -712,7 +752,7 @@ function onKey(e: KeyboardEvent) {
   e.preventDefault()
   // A stray Escape while nothing else is up closes the session — but
   // only after the timer gate above had its say.
-  if (confirmTimerBeforeLeaving()) close()
+  leaveOrConfirm(close)
   }
 }
 
@@ -786,6 +826,13 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKey)
   document.removeEventListener('visibilitychange', onVisibility)
   void releaseWakeLock()
+  // End the session's own confirm question with the session (see
+  // confirmLease): settleConfirm is a no-op when nothing is open, so a
+  // prompt that already ended can never be dismissed twice.
+  if (confirmLease) {
+    confirmLease = false
+    ui.settleConfirm(false)
+  }
 })
 
 /* ---------- Swipe left/right on the step body (bonus) ---------- */
@@ -830,7 +877,7 @@ function onTouchEnd(e: TouchEvent) {
   class="flex size-11 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-surface-raised hover:text-text"
   data-test="cook-close"
   aria-label="Close cooking mode"
-  @click="confirmTimerBeforeLeaving() && close()"
+  @click="leaveOrConfirm(close)"
   >
   <X :size="20" aria-hidden="true" />
   </button>

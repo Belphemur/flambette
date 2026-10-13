@@ -126,11 +126,12 @@ test('Settings generates a code and a saved one auto-joins after a fresh start',
   await expect(page.getByTestId('household-room-status')).toContainText(code, { timeout: 20_000 })
   await expect(page.getByTestId('household-room-input')).toHaveValue(code)
 
-  // Fresh start (new session, no stored room code) → the app re-joins it.
+  // Fresh start (new session, no stored room code) → the app re-joins it,
+  // silently (ADR-0084 decision 5).
   await page.evaluate(() => sessionStorage.clear())
   await page.reload()
   await waitForApp(page)
-  await expect(page.getByTestId('household-toast')).toContainText(code, { timeout: 20_000 })
+  await expect(page.getByTestId('household-toast')).toHaveCount(0)
   await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
   await expectZeroMealimeRequests(page)
 })
@@ -208,8 +209,9 @@ test('Join now on an EMPTY field rolls a code and CREATES its room (ADR-0049)', 
 
   // Join now: the code is fresh — the relay must CREATE the room, not
   // answer not_found (the old join-first path). "Room not found" would
-  // also poison every later auto-join.
-  await expect(page.getByTestId('household-toast')).toContainText(rolled, { timeout: 20_000 })
+  // also poison every later auto-join. The join is SILENT now (ADR-0084
+  // decision 5: no success toast — the room chip is the indicator).
+  await expect(page.getByTestId('household-toast')).toHaveCount(0)
   await expect(page.getByTestId('room-chip')).toHaveAttribute('aria-label', /^Live room /, { timeout: 20_000 })
   await expect(page.getByTestId('household-room-status')).toContainText(rolled, { timeout: 20_000 })
   await expectZeroMealimeRequests(page)
@@ -249,9 +251,9 @@ test('Leave drops the saved code, so the household does not rejoin next launch (
 
   await page.getByTestId('household-room-clear').click()
   // Destructive is danger-outlined AND confirmed (DESIGN.md): the press
-  // arms the shared toast confirm; the action performs the opt-out.
-  await expect(page.getByTestId('toast')).toContainText('Leave room')
-  await page.getByTestId('toast-action-primary').click()
+  // arms the ONE confirm modal (ADR-0084); the action performs the opt-out.
+  await expect(page.getByTestId('confirm-modal')).toContainText('Leave room')
+  await page.getByTestId('confirm-action').click()
   // The socket is gone…
   await expect(page.getByTestId('room-chip')).toHaveCount(0)
   // …the SETTING is gone, which is the half that used to survive: leaving

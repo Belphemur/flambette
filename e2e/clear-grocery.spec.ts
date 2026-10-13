@@ -35,9 +35,9 @@ async function addCustomItem(page: Page, text: string): Promise<void> {
   await page.getByRole('button', { name: 'Add', exact: true }).click()
 }
 
-/** The confirmation toast with its inline Clear / Cancel buttons. */
-function confirmToast(page: Page) {
-  return page.locator('[data-test=toast]')
+/** The ONE confirm modal (ADR-0084) with its Clear / Cancel buttons. */
+function confirmModal(page: Page) {
+  return page.locator('[data-test=confirm-modal]')
 }
 
 /**
@@ -69,13 +69,13 @@ test('checking the last item prompts to clear; Cancel aborts, then Clear works',
   await expect(page.getByText(/(\d+) \/ (\d+) items/)).toHaveText(`${total} / ${total} items`)
 
   // Non-blocking confirmation with Clear / Cancel — not window.confirm.
-  const toast = confirmToast(page)
-  await expect(toast).toContainText('All items checked — clear the grocery list? Ingredients stay hidden until you cook the meals.')
-  await expect(toast.locator('[data-test=toast-action-secondary]')).toContainText('Cancel')
+  const modal = confirmModal(page)
+  await expect(modal).toContainText('All items checked — clear the grocery list? Ingredients stay hidden until you cook the meals.')
+  await expect(modal.locator('[data-test=confirm-cancel]')).toContainText('Cancel')
 
-  // Cancel aborts: toast gone, state untouched.
-  await toast.locator('[data-test=toast-action-secondary]').click()
-  await expect(toast).toHaveCount(0)
+  // Cancel aborts: modal gone, state untouched.
+  await modal.locator('[data-test=confirm-cancel]').click()
+  await expect(modal).toHaveCount(0)
   await expect(page.getByText(/(\d+) \/ (\d+) items/)).toHaveText(`${total} / ${total} items`)
   // State untouched — and since the ONLY extra is now checked off, its
   // sub-section auto-collapsed like any other category (ADR-0050 §5): the
@@ -94,11 +94,12 @@ test('checking the last item prompts to clear; Cancel aborts, then Clear works',
   await page.locator('[data-test=grocery-section-toggle]').first().click()
   await page.locator('main input[type=checkbox]:checked').first().click()
   await page.locator('main input[type=checkbox]:not(:checked)').first().click()
-  await expect(toast).toContainText('All items checked — clear the grocery list? Ingredients stay hidden until you cook the meals.')
-  await toast.locator('[data-test=toast-action-primary]').click()
+  await expect(modal).toContainText('All items checked — clear the grocery list? Ingredients stay hidden until you cook the meals.')
+  await modal.locator('[data-test=confirm-action]').click()
 
   // Ingredients REMOVED: the list is empty even though the meal stays
-  // planned. Custom items emptied; feedback toast shows.
+  // planned. Custom items emptied; feedback toast shows (toasts are
+  // status-only now — the QUESTION was the modal above, ADR-0084).
   await expect(page.getByTestId('cleared-empty')).toBeVisible()
   await expect(page.locator('[data-test=extra-section]')).toHaveCount(0)
   await expect(
@@ -119,11 +120,11 @@ test('the Clear-list button works from the Grocery tab', async ({ page }) => {
   await expect(page.locator('[data-test=clear-list]')).toBeVisible()
 
   await page.locator('[data-test=clear-list]').click()
-  const toast = confirmToast(page)
-  await expect(toast).toContainText(
+  const modal = confirmModal(page)
+  await expect(modal).toContainText(
     'Clear the grocery list? Ingredients stay hidden until you cook the meals.',
   )
-  await toast.locator('[data-test=toast-action-primary]').click()
+  await modal.locator('[data-test=confirm-action]').click()
   // Ingredients removed: the list empties (cleared state), meals stay planned.
   await expect(page.getByTestId('cleared-empty')).toBeVisible()
   await expect(page.locator('[data-test=clear-list]')).toHaveCount(0)
@@ -148,9 +149,9 @@ test('the Clear-list button works from shopping mode', async ({ page }) => {
   await expect(page.locator('[data-test=clear-list]')).toBeVisible()
 
   await page.locator('[data-test=clear-list]').click()
-  const toast = confirmToast(page)
-  await expect(toast).toContainText('Clear the grocery list?')
-  await toast.locator('[data-test=toast-action-primary]').click()
+  const modal = confirmModal(page)
+  await expect(modal).toContainText('Clear the grocery list?')
+  await modal.locator('[data-test=confirm-action]').click()
   // Ingredients removed: the cleared empty-state replaces the rows even
   // though the meals are still planned.
   await expect(page.getByTestId('cleared-empty')).toBeVisible()
@@ -165,9 +166,9 @@ test('clearing removes custom items but keeps the planned meals', async ({ page 
   await gotoTab(page, 'Grocery')
   await addCustomItem(page, 'Olive oil')
   await checkAllGroceryItems(page)
-  const toast = confirmToast(page)
-  await expect(toast).toContainText('All items checked — clear the grocery list? Ingredients stay hidden until you cook the meals.')
-  await toast.locator('[data-test=toast-action-primary]').click()
+  const modal = confirmModal(page)
+  await expect(modal).toContainText('All items checked — clear the grocery list? Ingredients stay hidden until you cook the meals.')
+  await modal.locator('[data-test=confirm-action]').click()
 
   // Grocery side: checkbox map + custom items gone, and the planned
   // meals' ingredients are REMOVED — the list is empty (cleared state).
@@ -186,9 +187,9 @@ test('the full empty state reappears after clearing a custom-only list', async (
   await addCustomItem(page, 'Paper towels')
 
   await checkAllGroceryItems(page)
-  const toast = confirmToast(page)
-  await expect(toast).toContainText('All items checked — clear the grocery list? Ingredients stay hidden until you cook the meals.')
-  await toast.locator('[data-test=toast-action-primary]').click()
+  const modal = confirmModal(page)
+  await expect(modal).toContainText('All items checked — clear the grocery list? Ingredients stay hidden until you cook the meals.')
+  await modal.locator('[data-test=confirm-action]').click()
 
   // Nothing planned + nothing custom → the "Nothing to buy yet" empty state.
   await expect(page.getByText('Nothing to buy yet')).toBeVisible()
@@ -290,7 +291,7 @@ test('clear removes planned ingredients: list empties, plan keeps the meals', as
   // Check one item so the Clear-list button appears, then clear.
   await page.locator('main input[type=checkbox]').first().click()
   await page.locator('[data-test=clear-list]').click()
-  await confirmToast(page).locator('[data-test=toast-action-primary]').click()
+  await confirmModal(page).locator('[data-test=confirm-action]').click()
 
   // 0 lines despite the meal still being planned.
   await expect(page.getByTestId('cleared-empty')).toBeVisible()
@@ -317,7 +318,7 @@ test('re-adding the same recipe returns its ingredients', async ({ page }) => {
 
   await page.locator('main input[type=checkbox]').first().click()
   await page.locator('[data-test=clear-list]').click()
-  await confirmToast(page).locator('[data-test=toast-action-primary]').click()
+  await confirmModal(page).locator('[data-test=confirm-action]').click()
   await expect(page.getByTestId('cleared-empty')).toBeVisible()
 
   // Remove + re-add the SAME recipe: fresh planning = fresh ingredients.
@@ -344,7 +345,7 @@ test('shared ingredient cleared by one meal still appears from the other after r
   await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
   await page.locator('main input[type=checkbox]').first().click()
   await page.locator('[data-test=clear-list]').click()
-  await confirmToast(page).locator('[data-test=toast-action-primary]').click()
+  await confirmModal(page).locator('[data-test=confirm-action]').click()
   await expect(page.getByTestId('cleared-empty')).toBeVisible()
 
   // Re-add ONLY meal B (Carrot Ginger-Turmeric Soup): its garlic returns,
@@ -366,7 +367,7 @@ test('marking a cleared meal cooked forgets its cleared snapshot', async ({ page
 
   await page.locator('main input[type=checkbox]').first().click()
   await page.locator('[data-test=clear-list]').click()
-  await confirmToast(page).locator('[data-test=toast-action-primary]').click()
+  await confirmModal(page).locator('[data-test=confirm-action]').click()
   await expect(page.getByTestId('cleared-empty')).toBeVisible()
 
   // Cooking the meal removes it AND its cleared entry…
