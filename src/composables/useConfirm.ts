@@ -1,6 +1,6 @@
 import { useGroceryStore } from '../stores/grocery'
 import { usePlanStore } from '../stores/plan'
-import { useUiStore } from '../stores/ui'
+import { useUiStore, type ConfirmTone } from '../stores/ui'
 
 /**
  * Clear-grocery confirmation workflow, shared by the Grocery tab and
@@ -33,37 +33,38 @@ export function registerClearSnapshotProvider(fn: () => Record<number, string[]>
 }
 
 /**
- * THE confirm toast (DRY): a question toast with a confirm action and a
- * Cancel — three call sites (the grocery clear, PlanTab's leave-room,
+ * THE confirm funnel (DRY, ADR-0084): the ONE question modal, hosted once
+ * in App.vue — three call sites (the grocery clear, PlanTab's leave-room,
  * SettingsTab's leave-household) kept hand-rolling the same shape.
  *
- * `onConfirm` is the WHOLE confirm action, deliberately: a site that
- * REPLACES the toast with a result (the grocery clear) must not have the
- * helper dismiss on top of the replacement, and a site that dismisses
- * first (leave-room, so the room is not left under a toast that already
- * answered) does it itself. `onDismiss` passes straight through — the ui
- * store fires it exactly once on every end path (AGENTS.md), and
- * confirmAndClearGrocery's settled guard depends on that.
+ * Same call shape the old `confirmToast` had, minus `duration`: a modal
+ * WAITS for an answer, there is no auto-dismiss to time out on.
  *
- * Cancel is always `dismissToast()`: its meaning never varies.
+ * `onConfirm` is the WHOLE confirm action, deliberately: a site that
+ * REPLACES the prompt with a result (the grocery clear) must not have the
+ * helper dismiss on top of the replacement, and a site that completes
+ * navigation itself (the cooking timer-leave) does it itself.
+ * `onDismiss` passes straight through — the ui store fires it exactly once
+ * on every end path (Confirm, Cancel, Escape, scrim — the modal's single
+ * close event funnels to `settleConfirm`), and confirmAndClearGrocery's
+ * settled guard depends on that.
+ *
+ * Tone defaults to 'danger': every current call site is a destructive
+ * confirmation, so the confirm action wears ADR-0072's danger outline.
  */
-export function confirmToast(
+export function confirmModal(
   message: string,
   options: {
     confirmLabel: string
     onConfirm: () => void
     onDismiss?: () => void
-    duration?: number
+    tone?: ConfirmTone
   },
 ): void {
-  useUiStore().showToast(message, {
-    duration: options.duration ?? 10_000,
-    onDismiss: options.onDismiss,
-    actions: [
-      { label: options.confirmLabel, run: options.onConfirm },
-      { label: 'Cancel', run: () => useUiStore().dismissToast() },
-    ],
-  })
+  useUiStore().showConfirm(
+    { message, confirmLabel: options.confirmLabel, tone: options.tone },
+    { onConfirm: options.onConfirm, onDismiss: options.onDismiss },
+  )
 }
 
 /** True when at least one grocery line is checked. */
@@ -85,13 +86,13 @@ function performClear(): void {
 }
 
 /**
- * Show a non-blocking confirmation toast ("Clear the grocery list?" with
- * Clear / Cancel, 10 s auto-dismiss) and clear on confirmation.
+ * Ask "Clear the grocery list?" with Clear / Cancel in the confirm modal
+ * (no auto-dismiss — a modal waits) and clear on confirmation.
  * No-op (no prompt) when nothing is checked. Resolves once settled.
  *
- * The prompting guard is reset by the toast's onDismiss, which the ui
- * store fires on EVERY end path — timeout, replacement by another toast,
- * or dismissToast() — so a timed-out prompt can never wedge the guard
+ * The prompting guard is reset by the prompt's onDismiss, which the ui
+ * store fires on EVERY end path — Confirm, Cancel, Escape, scrim, or
+ * replacement by another question — so no end can ever wedge the guard
  * (qodo finding 1).
  */
 export function confirmAndClearGrocery(
@@ -115,16 +116,17 @@ export function confirmAndClearGrocery(
       resolve()
     }
 
-    confirmToast(message, {
+    confirmModal(message, {
       confirmLabel: 'Clear',
-      // REPLACE (not dismiss): the result toast takes over, and its
-      // replacement fires the question toast's onDismiss — settled=true
-      // makes that a no-op (qodo finding 1).
+      // The status toast and the modal are SEPARATE store slots now, so a
+      // result toast can never displace an open question — the old
+      // replace-ordering dance (qodo finding 1) is retired with the toast
+      // surface; the settled guard stays as belt-and-braces.
       onConfirm: () => {
-        settle(true)
         ui.showToast(
           'Grocery list cleared — ingredients return when you plan again',
         )
+        settle(true)
       },
       onDismiss: () => settle(false),
     })

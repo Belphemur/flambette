@@ -17,6 +17,7 @@ import { homeSeoHead, recipesSeoHead } from './lib/seo'
 import { normalizeRoomCode } from './lib/roomWords'
 import { useHead } from '@unhead/vue'
 import JoinCongratsModal from './components/JoinCongratsModal.vue'
+import ConfirmModal from './components/ConfirmModal.vue'
 import RosterSheet from './components/RosterSheet.vue'
 import TooltipBubble from './components/TooltipBubble.vue'
 import { useIdentityStore } from './stores/identity'
@@ -704,4 +705,8 @@ onBeforeUnmount(() => {
   :code="room.code"
   @close="rosterOpen = false"
   />
+  <!-- ADR-0084: THE confirm surface, hosted ONCE. The single reactive
+       slot in the ui store keeps one-mount == one-open (AppModal's
+       assumption); every end path funnels back into settleConfirm. -->
+  <ConfirmModal v-if="ui.confirm" :prompt="ui.confirm" @close="ui.settleConfirm" />
 </template>
