@@ -21,8 +21,16 @@ import {
  * 2 s wiggles with pauses growing 2/4/6/8 s, then it stops for the page
  * load. A flick beyond ~24px in ANY direction dismisses the pill FOR
  * THAT RECIPE persistently (device-local); a shorter movement is a tap
- * recording through the ONE plan.markCooked path.
+ * recording through the ONE plan.markCooked path. OWNER desktop ruling
+ * (2026-10-14): at `lg`+ the pill grows its FULL text label ("Cooked
+ * this?") and re-anchors 1.5rem inside the 1100px --container-app edge,
+ * ~110px above the bottom — mobile keeps the icon-only geometry, and
+ * the wiggle animates ONLY the pot svg on BOTH layouts.
  */
+
+/** Tailwind's `lg` breakpoint — the desktop threshold of the owner's
+ * 2026-10-14 ruling (full text label + container-edge anchor at lg+). */
+const isDesktop = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1024
 
 /**
  * Scroll the LAST step into view — past the pill's tail sentinel (the
@@ -63,6 +71,7 @@ async function pillFloatBox(page: Page) {
       bottom: Math.round(window.innerHeight - r.bottom),
       x: Math.round(r.x),
       y: Math.round(r.y),
+      width: Math.round(r.width),
     }
   })
 }
@@ -79,11 +88,41 @@ async function expectFloatingPill(page: Page) {
   // ~120px above the bottom nav (safe-area 0 in tests), on the content's
   // right edge with the wrapper's px-4 gutter — never negative, never
   // pressed against the viewport edge.
-  expect(box.bottom).toBeGreaterThanOrEqual(100)
-  expect(box.bottom).toBeLessThanOrEqual(140)
-  expect(box.right).toBeGreaterThanOrEqual(12)
-  // Icon-only: no words in the pill — the accessible name carries them.
-  await expect(pill).toHaveText('')
+  if (isDesktop(page)) {
+    // Desktop (xl+): the pill lives OUTSIDE the 1100px app container —
+    // its LEFT edge anchors 1.5rem past the container's right edge, in
+    // the free page margin, so it can never overlay the step text
+    // (owner ruling 2026-10-14). `box.x` is the pill's left edge.
+    const vw = page.viewportSize()?.width ?? 0
+    const containerRight = (vw + 1100) / 2
+    expect(box.x).toBeGreaterThanOrEqual(containerRight + 22)
+    expect(box.x).toBeLessThanOrEqual(containerRight + 26)
+    // Entirely inside the viewport still (translate must never clip).
+    expect(box.x + box.width).toBeLessThanOrEqual(vw - 4)
+    expect(box.bottom).toBeGreaterThanOrEqual(96)
+    expect(box.bottom).toBeLessThanOrEqual(124)
+    if (vw >= 1536) {
+      // From 2xl the margin is wide enough for the FULL text label.
+      await expect(pill.locator('.cooked-pill-label')).toBeVisible()
+      await expect(pill.locator('.cooked-pill-label')).toHaveText('Cooked this?')
+    } else {
+      // xl-only widths: margin holds the ICON-ONLY pill (the ~130px
+      // labelled pill would not fit between the container edge and the
+      // viewport at 1280).
+      await expect(pill.locator('.cooked-pill-label')).toBeHidden()
+    }
+  } else {
+    // Mobile: ~120px above the bottom nav (safe-area 0 in tests), on the
+    // content's right edge with the wrapper's px-4 gutter — and ICON-ONLY
+    // (no words; the accessible name carries them).
+    expect(box.bottom).toBeGreaterThanOrEqual(100)
+    expect(box.bottom).toBeLessThanOrEqual(140)
+    expect(box.right).toBeGreaterThanOrEqual(12)
+    // The label span exists in the DOM at every width but is hidden
+    // below lg — assert VISIBILITY (textContent would still see a
+    // hidden span, so icon-only here means the label never shows).
+    await expect(pill.locator('.cooked-pill-label')).toBeHidden()
+  }
   await expect(pill.locator('svg')).toHaveCount(1)
   await expect(pill).toHaveAttribute('aria-label', 'Cooked this?')
   return box
@@ -192,7 +231,12 @@ test('the pot WIGGLES when the pill first appears — icon only, pulsing, then s
   // its animation-name) is present right away.
   const svg = page.getByTestId('cooked-pill').locator('svg')
   await expect.poll(() => svgAnimationName(page)).toMatch(WIGGLE_ANIM)
-  await expect(page.getByTestId('cooked-pill')).toHaveText('')
+  // Icon-only is per-layout now: mobile hides the label entirely, desktop
+  // shows it — the WIGGLE is what must never touch text, and that is
+  // pinned below by the button/svg animation split.
+  if (!isDesktop(page)) {
+    await expect(page.getByTestId('cooked-pill').locator('.cooked-pill-label')).toBeHidden()
+  }
   const buttonAnim = await page
     .getByTestId('cooked-pill')
     .evaluate((el) => getComputedStyle(el).animationName)
@@ -322,5 +366,53 @@ test('a flick in ANY direction dismisses the pill persistently for that recipe',
   await expect(page.getByTestId('detail-step').first()).toBeVisible()
   await page.getByTestId('detail-step').last().scrollIntoViewIfNeeded()
   await expect(page.getByTestId('cooked-pill')).toBeVisible()
+  await expectZeroMealimeRequests(page)
+})
+
+test('DESKTOP: the pill sits in the RIGHT MARGIN of the instructions column, never over the text; full label only where the margin fits it', async ({
+  page,
+}) => {
+  test.skip(!isDesktop(page), 'desktop-only contract (xl+)')
+
+  await blockExternalRequests(page)
+  await page.goto('/recipe/6123')
+  await expect(page.getByTestId('detail-title')).toBeVisible()
+  await expect(page.getByTestId('detail-step').first()).toBeVisible()
+  const stepCount = await page.getByTestId('detail-step').count()
+
+  await scrollStepToViewportEdge(page, stepCount - 3)
+  const box = await expectFloatingPill(page)
+
+  // The step cards must stay CLEAR of the pill: the pill's left edge is
+  // 1.5rem OUTSIDE the 1100px container edge (asserted by the helper) —
+  // pin the step column's right edge too, so the no-overlap claim is
+  // about the real layout, not just offsets.
+  const stepRight = await page
+    .getByTestId('detail-step')
+    .last()
+    .evaluate((el) => el.getBoundingClientRect().right)
+  expect(box.x).toBeGreaterThanOrEqual(stepRight + 4)
+
+  // At THIS project's width (1280) the label is hidden (icon-only — the
+  // ~130px labelled pill would not fit the 90px margin). Widen to 2xl
+  // (1536): the same page shows the FULL label, still outside the
+  // container, never clipped — the wiggle stays svg-only throughout.
+  await page.setViewportSize({ width: 1536, height: 800 })
+  await page.waitForTimeout(300)
+  const wide = await expectFloatingPill(page)
+  const label = page.getByTestId('cooked-pill').locator('.cooked-pill-label')
+  await expect(label).toBeVisible()
+  await expect(label).toHaveText('Cooked this?')
+  // Container is centered: its right edge tracks the viewport — at 1536
+  // it is (1536+1100)/2 = 1318, and the pill's left edge is 1.5rem past it.
+  expect(wide.x).toBeGreaterThanOrEqual((1536 + 1100) / 2 + 22)
+  expect(wide.x).toBeLessThanOrEqual((1536 + 1100) / 2 + 26)
+
+  // The label NEVER wiggles: only the svg carries the animation.
+  await expect.poll(() => svgAnimationName(page)).toMatch(WIGGLE_ANIM)
+  const labelAnim = await label.evaluate((el) => getComputedStyle(el).animationName)
+  expect(labelAnim).toBe('none')
+  const buttonAnim = await page.getByTestId('cooked-pill').evaluate((el) => getComputedStyle(el).animationName)
+  expect(buttonAnim).not.toMatch(WIGGLE_ANIM)
   await expectZeroMealimeRequests(page)
 })

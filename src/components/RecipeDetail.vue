@@ -536,12 +536,18 @@ const cookLastTitle = computed(() => {
  * that is NOT hooked to anything (content scrolls under it), with the
  * icon-only content kept from the icon-static ruling (the brand accent
  * dot + one CookingPot glyph; ChefHat stays the Start-cooking CTA — the
- * accessible name carries the words). OWNER desktop ruling
- * (2026-10-14): at `lg`+ the pill grows its full text label ("Cooked
- * this?") and re-anchors — 1.5rem inside the 1100px `--container-app`
- * edge, ~110px above the bottom — while the mobile icon-only geometry
- * is untouched; the wiggle animates ONLY the pot svg on BOTH layouts
- * (the label never transforms). Its trigger is a SENTINEL riding
+ * accessible name carries the words). OWNER desktop rulings
+ * (2026-10-14): the pill moves to the RIGHT SIDE OF THE INSTRUCTIONS
+ * column — fully OUTSIDE the app container in the free page margin
+ * (its left edge on the container's outer right edge + the 1.5rem
+ * gutter), so it can never overlay the step text ("On desktop we have
+ * space, we shouldn't overlay the pill with the instruction text").
+ * The full text label appears only from `2xl`, where the margin is
+ * wide enough to hold it without clipping; between `xl` and `2xl` the
+ * margin holds the icon-only pill. Mobile keeps the icon-only
+ * in-container geometry untouched; the wiggle animates ONLY the pot
+ * svg on ALL layouts (the label never transforms). Its trigger is a
+ * SENTINEL riding
  * the THIRD-FROM-LAST step (index length-3, 0-based): the pill appears
  * only once that step reaches the viewport, stays visible while the
  * tail scrolls under it, and hides again when the scroll moves back
@@ -1573,20 +1579,21 @@ function startCooking() {
   navigation, surface-raised fill, subtle border, the ONE popover
   shadow (ADR-0068), warm accent dot. The pointer-events-none wrapper
   keeps the fixed overlay from intercepting taps outside the pill (the
-  ADR-0049 hit-testing lesson), while the app-width column keeps the
-  pill on the right edge of the CONTENT on desktop, not the viewport
-  edge. OWNER desktop ruling (2026-10-14): at `lg`+ the pill carries
-  its FULL text label ("Cooked this?", the words the accessible name
-  already carried), sits 1.5rem inside the 1100px app container's edge
-  (`--container-app` — the `lg:px-6` column gutter yields exactly
-  `max(1.5rem, calc((100vw - 1100px) / 2 + 1.5rem))`), and floats
-  ~110px above the bottom; the MOBILE geometry and ICON-ONLY content
-  are untouched (accent dot + one CookingPot glyph below `lg`). The
-  wiggle stays icon-only on BOTH layouts: the animation transforms
-  ONLY the CookingPot svg — the text label never animates. Hidden
-  until the LAST THREE steps come into view (the sentinel on the
-  third-from-last step); ALWAYS offered otherwise — the cooked-today
-  suppression is retired (owner ruling 2026-10-13). The wrapper carries
+  ADR-0049 hit-testing lesson). OWNER desktop rulings (2026-10-14): the
+  pill sits on the RIGHT SIDE of the instructions column — from `xl` its
+  left edge anchors 1.5rem OUTSIDE the 1100px --container-app edge
+  (right: calc((100vw - 1100px) / 2 - 24px)), fully in the free page
+  margin so it NEVER overlays the step text; from `2xl` that margin is
+  wide enough for the FULL text label ("Cooked this?" — at 1536px the
+  margin is 218px vs the pill's ~130px with label). Below `xl` the pill
+  stays in-container at the content's right edge (mobile px-4 gutter,
+  unchanged); the wiggle animates ONLY the CookingPot svg on ALL
+  layouts — the text label never animates. The desktop pill floats
+  ~110px above the bottom (mobile keeps its bottom-nav offset).
+  Hidden until the LAST THREE steps come into view (the sentinel on
+  the third-from-last step); ALWAYS offered otherwise — the
+  cooked-today suppression is retired (owner ruling 2026-10-13). The
+  wrapper carries
   `will-change-transform`: Firefox repaints a fixed element on the main
   thread while the page scrolls unless it owns a compositor layer —
   exactly the "the pill is moving" drift the owner reported (Chromium
@@ -1596,10 +1603,10 @@ function startCooking() {
     v-if="doc && cookedPillVisible"
     class="pointer-events-none fixed inset-x-0 bottom-[calc(120px+env(safe-area-inset-bottom))] lg:bottom-[110px] z-40 flex justify-end will-change-transform"
   >
-    <div class="mx-auto flex w-full max-w-app justify-end px-4 lg:px-6">
+    <div class="mx-auto flex w-full max-w-app justify-end px-4">
       <button
         type="button"
-        class="pointer-events-auto touch-none flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface-raised py-2 pl-3 pr-4 shadow-popover transition-colors hover:bg-surface"
+        class="pointer-events-auto touch-none relative flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface-raised py-2 pl-3 pr-4 shadow-popover transition-colors hover:bg-surface xl:translate-x-[calc(100%+40px)] xl:bg-brand xl:text-white xl:hover:bg-brand"
         aria-label="Cooked this?"
         data-test="cooked-pill"
         @click="cookFromPill"
@@ -1608,14 +1615,14 @@ function startCooking() {
         @pointerup="onPillPointerEnd"
         @pointercancel="onPillPointerEnd"
       >
-        <span class="size-2 shrink-0 rounded-full bg-brand" aria-hidden="true" />
+        <span class="size-2 shrink-0 rounded-full bg-brand xl:bg-white" aria-hidden="true" />
         <span
-          class="cooked-pill-label hidden text-sm font-medium text-text lg:inline"
+          class="cooked-pill-label hidden text-sm font-medium 2xl:inline xl:text-white 2xl:text-text"
         >Cooked this?</span>
         <CookingPot
           :size="16"
           aria-hidden="true"
-          class="text-brand-text"
+          class="text-brand-text xl:text-white"
           :class="pillWiggle ? 'pill-wiggle' : undefined"
         />
       </button>
