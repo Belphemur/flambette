@@ -130,9 +130,11 @@ test('the preview shows the week deduped, most-recent-first, and warns before re
 }) => {
   await blockExternalRequests(page)
   const { a, b, nameC } = await seedWeek(page)
-  const nameA = (await historyRowName(page, a).textContent())?.trim() ?? ''
 
   await openPreview(page)
+  // The names come off the history rows (now rendered behind the modal —
+  // textContent needs no visibility).
+  const nameA = (await historyRowName(page, a).textContent())?.trim() ?? ''
 
   // TWO tiles for THREE cooks: the twice-cooked dish is planned once,
   // most-recent cook first.
@@ -171,10 +173,10 @@ test('confirming replaces the plan with the week at the remembered default', asy
 }) => {
   await blockExternalRequests(page)
   const { a, b, nameC } = await seedWeek(page)
-  const nameA = (await historyRowName(page, a).textContent())?.trim() ?? ''
-  const nameB = (await historyRowName(page, b).textContent())?.trim() ?? ''
 
   await openPreview(page)
+  const nameA = (await historyRowName(page, a).textContent())?.trim() ?? ''
+  const nameB = (await historyRowName(page, b).textContent())?.trim() ?? ''
   await page.getByTestId('replan-confirm').click()
   await expect(page.getByTestId('replan-preview')).toHaveCount(0)
 
