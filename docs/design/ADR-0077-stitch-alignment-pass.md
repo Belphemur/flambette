@@ -148,7 +148,10 @@ actions, checklist card, numbered steps). What still differs:
   no section dropped, none invented. Widths follow the render's arrangement:
   Kitchen Identity (5), Household room (7), Units & servings (6), Dietary
   restrictions (6), Backup & restore (6), Import from Mealime (6), About
-  (12).
+  (12). **Refinement (owner, 2026-10-13)**: Timer alerts takes the full
+  row (12) — kitchen identity and household room sit ADJACENT (5+7), so
+  the identity/room pair reads as one group and the timer card fills the
+  desktop space its old half-width slot left empty.
 - **The card grammar is shared**: header row (H2 + one-line subtitle, with a
   keylined icon tile at the right), body, and a footer row separated by a
   warm rule where the card ends in actions. Cards keep the existing index-card
