@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Plus } from '@lucide/vue'
+import { CircleCheck, Plus } from '@lucide/vue'
 import { aisleIcon } from '../lib/aisleRole'
 import {
   isSuggestionListVisible,
   suggestIngredients,
   type IngredientSuggestion,
 } from '../lib/ingredientSuggestions'
+import { pantryKeyOf } from '../lib/pantry'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
 import { usePantryStore } from '../stores/pantry'
 
@@ -29,6 +30,20 @@ const emit = defineEmits<{
   added: [name: string]
 }>()
 
+/** Render the suggestion listbox IN FLOW instead of absolutely under
+ *  the input (ADR-0089: inside the Kitchen dropdown panel the list is
+ *  panel content — an absolute list inside the clamped/scrolling popup
+ *  would clip). Positioning only: the engine, keyboard model and race
+ *  guards are untouched. */
+const props = withDefaults(defineProps<{ inline?: boolean }>(), { inline: false })
+
+/** A suggestion row carrying its pantry verdict (ADR-0089 Decision 3):
+ *  an ingredient already in the kitchen renders with the check glyph
+ *  and the "Active in kitchen" meta instead of an add affordance. */
+interface PantrySuggestionRow extends IngredientSuggestion {
+  active: boolean
+}
+
 const pantry = usePantryStore()
 const customIngredients = useCustomIngredientsStore()
 
@@ -44,19 +59,29 @@ const listboxId = `pantry-listbox-${Math.random().toString(36).slice(2, 8)}`
 const ariaLabel = 'Add an ingredient you have'
 const canSubmit = computed(() => query.value.trim().length > 0)
 
-/** Suggestion rows, minus ingredients already in the pantry. */
-const rows = computed<IngredientSuggestion[]>(() => {
+/** Suggestion rows. ADR-0089 Decision 3 replaces the old filter-out
+ *  rule: rows already in the pantry STAY in the list, marked `active`
+ *  (check glyph + "Active in kitchen", click is a no-op) so the panel
+ *  shows state instead of hiding it. The typed raw-text row is still
+ *  omitted when what is typed is already in the kitchen — keyed by the
+ *  store's canonical `pantryKeyOf`, not the `typed:` synthetic key. */
+const rows = computed<PantrySuggestionRow[]>(() => {
   const typed = query.value.trim()
-  const typedRow: IngredientSuggestion | null =
-    typed.length >= 2
+  const typedKey = typed.length >= 2 ? pantryKeyOf(typed) : ''
+  const typedRow: PantrySuggestionRow | null =
+    typed.length >= 2 && !(typedKey !== '' && pantry.keys.has(typedKey))
       ? {
           name: typed,
           nameKey: `typed:${typed.toLowerCase()}`,
           category: 'Other',
           mine: false,
+          active: false,
         }
       : null
-  const ranked = suggestions.value.filter((s) => !pantry.keys.has(s.nameKey))
+  const ranked = suggestions.value.map((s) => ({
+    ...s,
+    active: pantry.keys.has(s.nameKey),
+  }))
   if (!typedRow) return ranked
   return [typedRow, ...ranked.filter((s) => s.nameKey !== `typed:${typed.toLowerCase()}`)]
 })
@@ -104,8 +129,11 @@ function onInput(event: Event) {
 }
 
 /** Add NOW: the pantry store dedups by nameKey; the input clears and
- *  keeps focus so a run of adds is one tap per ingredient. */
-function addRow(row: IngredientSuggestion) {
+ *  keeps focus so a run of adds is one tap per ingredient. An
+ *  already-active row (ADR-0089 Decision 3) is a no-op — the row is
+ *  state display, not an action — and the typed text is kept. */
+function addRow(row: PantrySuggestionRow) {
+  if (row.active) return
   if (pantry.add(row.name)) emit('added', row.name)
   query.value = ''
   invalidateSuggestions()
@@ -148,7 +176,13 @@ function onKeydown(event: KeyboardEvent) {
     if (canSubmit.value) {
       // Nothing highlighted: Enter adds the raw typed text.
       event.preventDefault()
-      addRow({ name: query.value.trim(), nameKey: `typed:`, category: 'Other', mine: false })
+      addRow({
+        name: query.value.trim(),
+        nameKey: `typed:`,
+        category: 'Other',
+        mine: false,
+        active: false,
+      })
     }
     return
   }
@@ -156,9 +190,15 @@ function onKeydown(event: KeyboardEvent) {
     event.preventDefault()
     if (open.value) {
       // First Escape: collapse the dropdown, keep the typed text.
+      // stopPropagation: the enclosing dropdown panel's Escape
+      // (useListboxMenu's document listener, ADR-0089) must not ALSO
+      // close the panel on the same keystroke — the second Escape does
+      // that, via the else branch below which lets the event bubble.
+      event.stopPropagation()
       invalidateSuggestions()
     } else {
-      // The flow is an always-present affordance: closing = emptying it.
+      // The input is empty of suggestions: emptying it AND letting the
+      // Escape bubble closes the enclosing panel (ADR-0089).
       query.value = ''
       invalidateSuggestions()
     }
@@ -212,7 +252,8 @@ defineExpose({
       :id="listboxId"
       role="listbox"
       aria-label="Ingredient suggestions"
-      class="absolute z-30 left-0 right-0 mt-1 overflow-hidden rounded-xl bg-popover shadow-popover ring-1 ring-border"
+      class="overflow-hidden rounded-xl bg-popover shadow-popover ring-1 ring-border"
+      :class="inline ? 'mt-1' : 'absolute left-0 right-0 z-30 mt-1'"
       data-test="pantry-suggestions"
     >
       <li
@@ -221,18 +262,42 @@ defineExpose({
         :key="`${row.nameKey}-${i}`"
         role="option"
         :aria-selected="i === activeIndex"
-        :aria-label="`Add '${row.name}'${row.category ? ` — ${row.category}` : ''}`"
+        :aria-label="
+          row.active
+            ? `${row.name} — already in your kitchen`
+            : `Add '${row.name}'${row.category ? ` — ${row.category}` : ''}`
+        "
         class="flex hovercap:cursor-pointer items-center gap-2 px-4 py-2 text-sm"
         :class="i === activeIndex ? 'bg-brand/10' : ''"
         :data-test="i === 0 ? 'pantry-suggestion-first' : 'pantry-suggestion-row'"
         @mousedown.prevent
         @click="addRow(row)"
       >
+        <!-- ADR-0089 Decision 3: an already-in-pantry suggestion renders
+        the check glyph (the render's green `check_circle` → the repo's
+        vegetarian hue) and the "Active in kitchen" meta; others keep
+        the add affordance. The render's per-suggestion recipe counts
+        are a rejected fiction — the engine does not produce them. -->
         <span
+          v-if="row.active"
+          class="shrink-0 text-hue-vegetarian"
+          aria-hidden="true"
+        ><CircleCheck :size="18" /></span>
+        <span
+          v-else
           class="flex size-5 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand-text"
           aria-hidden="true"
         ><Plus :size="14" /></span>
-        <span class="min-w-0 flex-1 truncate font-medium">{{ row.name }}</span>
+        <span
+          class="min-w-0 flex-1 truncate"
+          :class="row.active ? 'font-semibold' : 'font-medium'"
+        >{{ row.name }}</span>
+        <span
+          v-if="row.active"
+          class="shrink-0 font-mono-data text-[11px] text-text-muted"
+          data-test="pantry-suggestion-active"
+        >Active in kitchen</span>
+        <template v-else>
         <span
           v-if="row.mine"
           class="shrink-0 rounded-full bg-brand/15 px-1.5 py-px text-[10px] font-semibold text-brand-text"
@@ -255,6 +320,7 @@ defineExpose({
           />
           {{ row.category }}
         </span>
+        </template>
       </li>
     </ul>
   </div>

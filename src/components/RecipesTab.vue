@@ -46,7 +46,7 @@ import { preparePantry, sharesPantryIngredient } from '../lib/pantry'
 import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
 import { usePantryStore } from '../stores/pantry'
-import PantryFilterRow from './PantryFilterRow.vue'
+import PantryFilterDropdown from './PantryFilterDropdown.vue'
 import { useUiStore } from '../stores/ui'
 import RecipeCard from './RecipeCard.vue'
 import RecipeSearchField from './RecipeSearchField.vue'
@@ -87,8 +87,9 @@ const ui = useUiStore()
 // applied here where the search pipeline runs — a recipe already in the plan
 // stays planned regardless.
 const restrictions = useRestrictions()
-// "In my kitchen" pantry (ADR-0087): device-local nameKeys; the row
-// below owns the editing, the pipeline below owns filtering + ranking.
+// "In my kitchen" pantry (ADR-0087, placement per ADR-0089): device-local
+// nameKeys; the Kitchen dropdown below owns the editing, the pipeline
+// below owns filtering + ranking.
 const pantry = usePantryStore()
 
 /** The ONE filter object (ADR-0027): persisted, and synced in the room. */
@@ -550,6 +551,13 @@ onUnmounted(() => observer?.disconnect())
   class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center"
   data-test="filter-bar"
   >
+  <!-- ADR-0089: the pantry IS a filter dropdown now — the "Kitchen"
+  chip leads the row and opens the In-My-Kitchen panel (chips + add
+  input + suggestions) through the ONE FilterDropdown shell. The
+  standalone "In my kitchen" row is retired (supersedes ADR-0087
+  Decision 1's placement). -->
+  <PantryFilterDropdown />
+
   <!-- ADR-0045: one FilterDropdown for all three — cook time, sort and
   meal type finally share one trigger + popup shell, and the native
   `<select>` (whose OS-drawn popup matched nothing) is deleted. -->
@@ -649,12 +657,6 @@ onUnmounted(() => observer?.disconnect())
   </template>
   </FilterDropdown>
   </div>
-
-  <!-- ADR-0087 Decision 1: the "In my kitchen" chip row — a sibling of
-  the quick-filter chip rows. With zero pantry ingredients it collapses
-  to just the add affordance (the component itself); with >=1 it also
-  filters + re-ranks the grid (the pipeline above). -->
-  <PantryFilterRow />
 
   <!-- WS2: ONE filter surface. The former "All diets" dropdown is gone;
   the protein slice it used to own is the first chip group here, and

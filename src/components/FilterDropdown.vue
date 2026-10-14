@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch, type Component } from 'vue'
+import { computed, nextTick, ref, useSlots, watch, type Component } from 'vue'
 import { Check, ChevronDown } from '@lucide/vue'
 import { useListboxMenu } from '../composables/useListboxMenu'
 import HueIcon from './HueIcon.vue'
@@ -77,13 +77,33 @@ const props = withDefaults(
      *  Auto-Plan sheet's `justify-between` rows pass `false` so the
      *  trigger stays compact beside its row label (ADR-0046 §2.2). */
     fullWidth?: boolean
+    /** Accessible name of the TRIGGER when it differs from the popup
+     *  label (the Kitchen dropdown's trigger reads "Kitchen" while its
+     *  popup is "In My Kitchen", ADR-0089). */
+    triggerAriaLabel?: string
+    /** Clamp for the popup's measured max-height (list rows fit well
+     *  under the 240px default; the Kitchen panel is taller — ADR-0089
+     *  passes a bigger budget). */
+    menuMaxHeight?: number
   }>(),
   {
     active: false,
     menuWidth: 'w-48',
     fullWidth: true,
+    menuMaxHeight: 240,
   },
 )
+
+/**
+ * Panel mode (ADR-0089): when the caller provides a `#panel` slot the
+ * popup is NOT a listbox — it is a rich panel (chips + an input + a
+ * footer) rendered inside the SAME shell (measure/clamp/flip, Escape,
+ * click-away). The Kitchen dropdown is the first panel-mode caller;
+ * the option-row machinery below stays for the listbox callers and is
+ * simply unused here.
+ */
+const slots = useSlots()
+const hasPanel = computed(() => !!slots.panel)
 
 const emit = defineEmits<{ select: [value: string]; open: [boolean] }>()
 
@@ -116,7 +136,9 @@ function openPopup() {
     const below = window.innerHeight - rect.bottom - 8
     const above = rect.top - 8
     menuUp.value = below < 132 && above > below
-    menuMaxH.value = Math.round(Math.min(240, menuUp.value ? above : below))
+    menuMaxH.value = Math.round(
+      Math.min(props.menuMaxHeight, menuUp.value ? above : below),
+    )
   })
 }
 
@@ -150,20 +172,39 @@ watch(menu.open, (v) => emit('open', v))
     type="button"
     class="flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-border-strong px-3 text-sm font-medium transition-colors"
     :class="active ? 'border-brand-text bg-brand-tint text-brand-text' : ''"
-    aria-haspopup="listbox"
+    :aria-haspopup="hasPanel ? 'dialog' : 'listbox'"
     :aria-expanded="menu.open.value"
-    :aria-label="label"
+    :aria-label="triggerAriaLabel ?? label"
     :data-test="triggerTest"
     @click="menu.open.value ? menu.closeMenu({ refocus: true }) : openPopup()"
     >
       <slot name="icon" />
       <span class="truncate">{{ selected?.label ?? label }}</span>
-      <ChevronDown :size="16" class="shrink-0 opacity-60" aria-hidden="true" />
+      <!-- Panel-mode extra (ADR-0089): the active count badge between
+      the label and the chevron. -->
+      <slot name="badge" />
+      <ChevronDown
+      :size="16"
+      class="shrink-0 opacity-60 transition-transform"
+      :class="hasPanel && menu.open.value ? 'rotate-180' : ''"
+      aria-hidden="true"
+      />
     </button>
     <!-- ADR-0068 level 2: popovers are popover-white + the ONE warm
     shadow. -->
+    <div
+    v-if="menu.open.value && hasPanel"
+    class="absolute left-0 z-30 overflow-y-auto overflow-x-clip rounded-xl bg-popover p-3 shadow-popover ring-1 ring-border"
+    :class="[menuWidth, menuUp ? 'bottom-full mb-1' : 'mt-1']"
+    :style="menuMaxH !== null ? { maxHeight: `${menuMaxH}px` } : undefined"
+    role="dialog"
+    :aria-label="label"
+    :data-test="menuTest"
+    >
+      <slot name="panel" />
+    </div>
     <ul
-    v-if="menu.open.value"
+    v-else-if="menu.open.value"
     class="absolute right-0 z-30 overflow-y-auto overflow-x-clip rounded-xl bg-popover py-1 shadow-popover ring-1 ring-border"
     :class="[menuWidth, menuUp ? 'bottom-full mb-1' : 'mt-1']"
     :style="menuMaxH !== null ? { maxHeight: `${menuMaxH}px` } : undefined"
