@@ -1,6 +1,6 @@
 # ADR-0086: Fuzzy ingredient suggestions — typos still find the item, custom names included
 
-Status: accepted (2026-10-13)
+Status: accepted (2026-10-13) — implemented in PR #88
 
 Numbering note: ADR-0085 is reserved in flight by `feat/replan-history`
 (ADR-0085-replan-past-week.md, committed on that branch but not yet
