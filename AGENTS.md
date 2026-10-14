@@ -93,6 +93,13 @@ docker compose up -d --build   # web (nginx, :8097) + relay behind /ws
 Task-level procedures live as SKILL.md files under `.agents/skills/` —
 read the one matching the task BEFORE improvising:
 
+- **`.agents/skills/mealime-add-sync-store/SKILL.md`** — adding a new
+  synchronized household store to the relay: the full touch surface
+  (client `SharedState` + backup `STORE_SLICES` + relay-core
+  `SYNCED_STORES` + the per-store `store_*` migration on BOTH runtimes),
+  the merge-semantics rules (tombstones, absence = don't-touch), and the
+  gate order. ADR-0088 (per-store SQLite persistence, shared migration
+  runner) is its design record.
 - **`.agents/skills/mealime-add-recipe/SKILL.md`** — adding a household
   (user) recipe: artifact entry, CIQUAL-derived nutrition, image norms,
   the gate order, the temperature rule (dual catalog-style pairs
