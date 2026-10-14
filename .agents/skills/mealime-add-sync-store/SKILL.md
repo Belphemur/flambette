@@ -1,14 +1,14 @@
 ---
 name: mealime-add-sync-store
-description: Add a synchronized household store to the relay, ADR-0088 — every surface that must move in the same change.
-version: 1.0.0
+description: Add a room-synced household store across all touch surfaces.
+version: 2.0.0
 author: Antoine Aflalo (Belphemur), Hermes Agent
 license: MIT
-platforms: [linux]
+platforms: [linux, macos, windows]
 metadata:
   hermes:
     tags: [Mealime, Relay, Rooms, SQLite, Store, flambette]
-    related_skills: [mealime-planner-dev, flambette-adr-records, mealime-add-recipe]
+    related_skills: [mealime-add-recipe]
 ---
 
 # Add a Synchronized Store to the Relay
@@ -27,109 +27,122 @@ crash) at the relay's storage boundary.
 - Adding a new synchronized store (a new `SharedState` key).
 - Changing an EXISTING store's semantics (e.g. whole-state LWW →
   per-key reconcile) — that re-scopes behaviour: run this PLUS a new
-  ADR or a dated Addendum on the governing record (see
-  `flambette-adr-records`).
+  ADR or a dated Addendum on the governing record (see the repo's ADR
+  records skill).
 - Don't use for: device-local stores that never ride the relay (they
-  only need a Pinia key + a `STORE_SLICES` entry — see backup.ts), or
+  only need a Pinia key + a `STORE_SLICES` entry — see `backup.ts`), or
   relay storage questions that don't change the payload.
 
-## The touch surface (all of it, one change)
+## Prerequisites
 
-### Client side
+- A checkout of the flambette repo with `bun` installed.
+- The governing design record read first (ADR-0088 for the storage
+  model; ADR-0090 for the newest precedent — the pantry, whole-state
+  LWW like `customs`).
+- For a semantics change beyond a plain new store: the ADR record
+  number reserved BEFORE coding (the repo's ADR workflow — `--next`,
+  never counted).
 
-1. **The store itself** — `src/stores/<name>.ts` (Pinia, persisted under
-   `mealime-planner:v1:*`).
-   Completion criterion: state, actions and the persist key exist.
-2. **`SharedState` in `src/stores/room.ts`** — the new key. The payload
-   evolves ADDITIVELY (ADR-0012 rule): the key is OPTIONAL, absence
-   means "don't touch" (never a wipe), and it is emitted only when
-   non-empty unless the store has its own tombstone semantics (see
-   `favorites`). Types are MIRRORED from the server, never imported
-   live (`server/` is outside the client's import graph).
-   Completion criterion: an old relay/client combination degrades
-   gracefully — an old peer ignores the unknown key, a new peer reading
-   an old peer's payload keeps its own data.
-   Note the always-sent exception: `planIdentity` (ADR-0034) is emitted on
-   EVERY snapshot and its `null` means "no current plan" — it is a real
-   value, never silence. The don't-touch rule applies to a MISSING key,
-   not to an explicit `null`; the split (`splitSnapshot`) must write
-   `planIdentity: null` through, and `joinSnapshot` must reconstruct it as
-   `null` (not omit it).
-3. **`snapshot()` / `applyRemote()` in the same file** — state the merge
-   semantics HERE, explicitly: whole-state LWW under the room `rev` (the
-   default), or per-key reconcile by record `updatedAt` with tombstones
-   (the `favorites`/`ratings` shape — mandatory for stores where two
-   peers editing DIFFERENT keys must not clobber each other, and where
-   an un-do must propagate as a delete marker, not silently resurrect).
-   Completion criterion: you can name which semantics you chose and why.
-4. **`STORE_SLICES` in `src/lib/backup.ts`** — the standing ADR-0013
-   rule, unchanged by ADR-0088: every persisted slice registers in the
-   SAME change. Export, import and validation all iterate the registry.
+## How to Run
+
+Work from the repo root via the `terminal` tool. Gates at the end run
+as `terminal(command="bun run test:unit", timeout=...)` and friends;
+file edits go through `patch` (small deltas) or `write_file` (new
+files); discovery through `search_files`.
+
+## Quick Reference
+
+- Vocabulary (server): `server/relay-core/stores.ts` → `SYNCED_STORES`
+- Vocabulary (client mirror): `src/lib/roomSyncStores.ts` →
+  `SHARED_STATE_KEYS`
+- Interface: `SharedState` in `src/stores/room.ts` (build-time
+  cross-checks both directions)
+- Snapshot plumbing: `snapshot()` / `applyRemote()` in the same file
+- Backup registry: `STORE_SLICES` in `src/lib/backup.ts`
+- Migration module: `server/relay-core/migrations/<NNN>_<name>.ts`
+- Gate order: `bun run test:unit` → `bun run build` →
+  `bun run test:worker` → backup e2e → full e2e once
+
+## Procedure
+
+1. **Server vocabulary.** Add the key to `SYNCED_STORES` in
+   `server/relay-core/stores.ts`, in the order the client declares it.
+   Split, merge and the write planner key off this list — no adapter
+   code changes for a plain new store.
+   Completion criterion: a diff that touches `server/relay.ts` or
+   `server/worker/room.ts` for a plain new store does NOT exist (a
+   smell — stop and ask why).
+2. **Migration module.** Create
+   `server/relay-core/migrations/<NNN>_<name>.ts` — ONE module per
+   migration, next version in sequence — exporting its
+   `{ version, name, expects?, up, down, migrate? }` step. `up` carries
+   the forward SQL as template literals:
+   `CREATE TABLE IF NOT EXISTS store_<snake_name> (code TEXT PRIMARY KEY,
+   value TEXT NOT NULL CHECK (json_valid(value)), created_at INTEGER NOT
+   NULL, updated_at INTEGER NOT NULL)` (build the table name with
+   `storeTableName`, never by hand). `down` drops exactly what `up`
+   created — the runner applies it ONLY via the explicit `rollbackTo`
+   ops entry point, never automatically. A data reshape that cannot be
+   a static SQL list registers the typed `migrate` hook (up) /
+   `migrateDown` hook (down) instead (see `002_split_state_blobs.ts`).
+   Register the module in the ordered `MIGRATIONS` list in
+   `server/relay-core/migrations.ts`. Never renumber or reorder a
+   shipped step; never hand-run DDL against a live database.
+   Completion criterion: `bun test server/relay-core/migrations.test.ts`
+   passes with the new version in the ledger, on a fresh database AND
+   on one that already had the previous schema version (partial-DB
+   pending detection covers the tail).
+3. **Client mirror.** Add the key to `SHARED_STATE_KEYS` in
+   `src/lib/roomSyncStores.ts`.
+   Completion criterion: `bun run build` passes — the compile-time
+   assertion in `src/stores/room.ts` fails the build on drift in EITHER
+   direction, so a one-sided addition cannot ship.
+4. **`SharedState` + plumbing in `src/stores/room.ts`.** Add the key
+   OPTIONAL (`key?: Row[]`) with a comment stating the never-a-wipe
+   rule: absence means "don't touch" (an older peer keeps its own).
+   Emit it from `snapshot()` (always, like `customs`, for plain
+   whole-state stores) and adopt it in `applyRemote()` behind
+   `if (state.key)` through the store's normalization funnel — a peer
+   payload can never bypass the store's invariants. Add the store's
+   state ref to the debounced push watcher.
+   Merge semantics are decided HERE, explicitly: whole-state LWW under
+   the room `rev` (the default — `customs`, `pantry`), or per-key
+   reconcile by record `updatedAt` with tombstones (the
+   `favorites`/`ratings` shape — mandatory when two peers editing
+   DIFFERENT keys must not clobber, and an un-do must propagate as a
+   delete marker).
+   Completion criterion: you can name which semantics you chose and
+   why, in one sentence.
+5. **Pinia store.** The store itself (`src/stores/<name>.ts`) already
+   exists or is created with its persist key
+   (`mealime-planner:v1:<name>`), normalization funnel and
+   `afterHydrate` repair.
+   Completion criterion: `bun test src/stores/<name>.test.ts` covers
+   the funnel (re-derived keys, dedupe, cap).
+6. **Backup registry.** Every persisted slice registers in
+   `STORE_SLICES` (`src/lib/backup.ts`) in the SAME change (ADR-0013).
    Completion criterion: the e2e registry-coverage case passes —
    `assertRegistryCoverage` fails loudly otherwise.
-
-### Relay side (ADR-0088's per-store storage)
-
-5. **`SYNCED_STORES` in `server/relay-core/`** — the canonical store
-   vocabulary the core owns. The client's `SharedState` keys and this
-   list must agree; the core carries the cross-check gate (ADR-0088 §6)
-   and it fails on drift.
-   Completion criterion: the cross-check passes on `bun run test:unit`.
-6. **A migration for BOTH runtimes** — a new versioned step in
-   `server/relay-core/migrations.ts` creating `store_<snake_name>`
-   (`code TEXT PRIMARY KEY, value TEXT NOT NULL CHECK (json_valid(value)),
-   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL`). Steps are
-   inline TypeScript, applied by ONE runner: Bun at startup, the DO
-   lazily on first event. Never hand-run DDL against a live database and
-   never renumber a shipped migration.
-   Completion criterion: the bun:sqlite spec AND the DO spec
-   (`bun run test:worker`) both prove the new table on a fresh database
-   AND on a database that already had the previous schema version.
-7. **The split/merge is automatic IF the store follows the rules** —
-   `splitSnapshot`/`joinSnapshot` in the core key off `SYNCED_STORES`,
-   so no adapter code changes. It is NOT automatic if the store carries
-   server-side reconcile logic — keep reconcile on the CLIENT; the relay
-   stores and fans out.
-   Completion criterion: no new adapter code (a diff that touches
-   `server/relay.ts` or `server/worker/room.ts` for a plain new store is
-   a smell — stop and ask why).
-
-### Docs
-
-8. **`docs/agents/rooms-and-sync.md`** — the shared-state key list and
-   the store's merge semantics, in the same change (standing rule: the
-   topic file and the code move together; stale docs are bugs).
-9. **ADR** — a plain new store that follows the standing rules does NOT
-   need a new ADR (this skill is the procedure, ADR-0088 is the design
-   record); one that re-scopes semantics (per-store rev, server-side
-   reconcile, a store that opts OUT of absence-means-don't-touch) does.
-   Then regenerate the index (`bun run data:adr-index`) and let
-   `--check` gate it.
+7. **Docs, same change.** `docs/agents/rooms-and-sync.md` (the shared
+   state key list + the store's merge semantics); the ADR record (a
+   plain store following the standing rules does NOT need a new one —
+   a semantics re-scope does); regenerate the index
+   (`python3 scripts/build_adr_index.py`). `AGENTS.md` is NOT touched
+   for the store itself.
    Completion criterion: `python3 scripts/build_adr_index.py --check`
    passes.
-10. **`AGENTS.md` is NOT touched** for the store itself (entry point
-    only); update its "Repo skills" row only if you added a skill.
-
-## Gates (in order, before "done")
-
-1. `bun run test:unit` (core decision table + the new cross-check).
-2. `bun run build` (type-check wires the mirrored types).
-3. `bunx playwright test e2e/backup.spec.ts` (or the registry-coverage
-   case) — the store must not disappear from backups.
-4. Full suite per the e2e gate discipline BEFORE the final push
-   (`docs/agents/e2e.md` — full suite ONCE, reconciled against `--list`).
 
 ## Pitfalls
 
 - **The two vocabularies drift.** Adding the key to `SharedState` but
   not `SYNCED_STORES` makes the relay drop it from storage on one
   runtime and keep it on the other — silent household data loss on
-  restart. The cross-check gate exists because this exact drift is the
-  failure; do not weaken the gate to make a partial change pass.
+  restart. The cross-check gates exist because this exact drift is the
+  failure; do not weaken a gate to make a partial change pass.
 - **A required store marked optional.** "Optional" in `SharedState`
-  means backward compatibility, not skippable backup. If the store must
-  ride every payload, say so in the type comment and still register the
-  slice.
+  means backward compatibility, not skippable backup. If the store
+  must ride every payload, say so in the type comment and still
+  register the slice.
 - **Tombstone-less per-key reconcile.** A per-key store without delete
   markers (`{…, updatedAt}` + an absent-key-is-keep rule) cannot
   propagate an un-<thing>: the next push resurrects it. Copy the
@@ -138,13 +151,32 @@ crash) at the relay's storage boundary.
   per-store tables are STORAGE rows, not reconcile participants — the
   relay never merges per-key on the server's behalf (ADR-0088 §3).
   Adding server-side merge is a protocol change; new ADR.
-- **`json_valid` is real on workerd.** The store-table `CHECK (json_valid(value))`
-  ships in the shared DDL with no probe; this is verified by
-  `bun run test:worker`, which creates a table with that CHECK against
-  workerd's real `ctx.storage.sql`. Do not soften the CHECK to a runtime
-  codec check unless a workerd vintage regresses — and then file an ADR,
-  not a workaround.
-- **Silencing an explicit `null`.** "Absence = don't touch" does NOT mean
-  "a present `null` is dropped" — `planIdentity: null` ("no current plan")
-  is a real answer that must round-trip through split/join. Encoding
-  absence and explicit-null the same way wipes a meaningful plan-reset.
+- **`json_valid` is real on workerd.** The store-table CHECK ships in
+  the shared DDL with no probe; `bun run test:worker` verifies it
+  against workerd's real `ctx.storage.sql`. Do not soften the CHECK to
+  a runtime codec check unless a workerd vintage regresses — and then
+  file an ADR, not a workaround.
+- **Silencing an explicit `null`.** "Absence = don't touch" does NOT
+  mean "a present `null` is dropped" — `planIdentity: null` ("no
+  current plan", ADR-0034) is a real answer that must round-trip
+  through split/join. Encoding absence and explicit-null the same way
+  wipes a meaningful plan-reset.
+- **A rollback down-list that outlives its era.** A migration's `down`
+  may only touch objects from its OWN version's world: 002's fold
+  skips stores whose tables a later migration created and an earlier
+  rollback step already dropped (see `migrateDown`). A static `down`
+  list generated from the LIVE vocabulary breaks the first time a
+  rollback crosses a later store's migration.
+
+## Verification
+
+- `terminal(command="bun run test:unit")` — core decision tables, the
+  new-store cross-check, migration pending/down specs. Expect 0 fail.
+- `terminal(command="bun run build")` — the mirrored-types build-time
+  cross-check. Expect clean.
+- `terminal(command="bun run test:worker")` — the DO applies the same
+  migration list against real workerd storage. Expect 0 fail.
+- `terminal(command="bunx playwright test e2e/backup.spec.ts")` — the
+  store must not disappear from backups.
+- Full suite per the e2e gate discipline BEFORE the final push (full
+  suite ONCE, reconciled against `--list` — see `docs/agents/e2e.md`).
