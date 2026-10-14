@@ -52,8 +52,12 @@ const PORT = parsePositiveNumber(process.env.PORT, 8081)
  * deprecated fallback so an existing deployment's override survives.
  */
 const ROOM_TTL_MS = parsePositiveNumber(
-  process.env.RELAY_ROOM_TTL_MS ?? process.env.RELAY_INACTIVITY_TTL_MS,
-  ROOM_TTL_DEFAULT_MS,
+  process.env.RELAY_ROOM_TTL_MS,
+  // The deprecated fallback goes through the parser too, not through `??`:
+  // a set-but-empty or nonsense RELAY_ROOM_TTL_MS must fall through to it
+  // (parsePositiveNumber treats both as absent), so an existing
+  // deployment's old override still wins over the default (kody review).
+  parsePositiveNumber(process.env.RELAY_INACTIVITY_TTL_MS, ROOM_TTL_DEFAULT_MS),
 )
 /**
  * The relay's room state persists here (ADR-0088 §1) — the Docker compose

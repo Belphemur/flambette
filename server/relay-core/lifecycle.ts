@@ -515,20 +515,29 @@ export function createRoomRegistry({
       // already happened by contract.
       console.error(`[relay] expire hook failed for ${code}: ${(err as Error)?.message ?? err}`)
     }
-    store.drop()
-    // The room is gone but its floor survives — and its AGE re-anchors
-    // HERE, at the expiry instant, not at its last push: the floor now
-    // outlives its room by one more full room-TTL window. Without the
-    // re-anchor, a floor sharing the room's TTL would die at or before the
-    // room did (its age runs from the last push, which is never later than
-    // the last touch) and ADR-0088 §5's promises — a re-created room
-    // continues the household's revision history, and a peer id is never
-    // handed out twice within a code (review F4) — would hold only during
-    // a zero-width race after expiry. Re-anchoring keeps the ONE-TTL story
-    // while keeping both promises true for any re-create within a full
-    // window of the room's death.
+    // The room is gone but its floor survives — and its AGE re-anchors at
+    // the expiry instant, not at its last push: the floor now outlives its
+    // room by one more full room-TTL window. Without the re-anchor, a floor
+    // sharing the room's TTL would die at or before the room did (its age
+    // runs from the last push, which is never later than the last touch)
+    // and ADR-0088 §5's promises — a re-created room continues the
+    // household's revision history, and a peer id is never handed out twice
+    // within a code (review F4) — would hold only during a zero-width race
+    // after expiry. Re-anchoring keeps the ONE-TTL story while keeping both
+    // promises true for any re-create within a full window of the room's
+    // death.
+    //
+    // The re-anchor is written BEFORE the drop on purpose: the adapters
+    // commit these as separate transactions, and anchor-then-drop makes
+    // every interruption safe — a crash after the write leaves the room
+    // alive with a re-anchored floor (the next tick re-derives the
+    // unchanged deadline and drops again), while drop-then-anchor could
+    // persist the deletion alone: the restart sweep would then arm the
+    // orphaned floor at its stale, already-past deadline and the next
+    // tick would prune it — the F4 rev-0 regression (kody review).
     const entry = store.readFloor()
     if (entry) store.writeFloor({ ...entry, at: t })
+    store.drop()
     armFloorPrune()
     return reason
   }
