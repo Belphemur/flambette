@@ -266,8 +266,12 @@ jobs:
             docker logs relay-smoke >&2
             exit 1
           }
-          test -s /tmp/ci-relay.sqlite3 || {
+          # The database lives INSIDE the container (no volume, by design
+          # above) — the existence check has to run there too, not on the
+          # runner, or it reads a path that was never mounted (PR #92 CI).
+          docker exec relay-smoke test -s /tmp/ci-relay.sqlite3 || {
             echo "relay did not create its SQLite database" >&2
+            docker logs relay-smoke >&2
             exit 1
           }
           docker exec relay-smoke bun -e 'const { Database } = require("bun:sqlite"); const db = new Database(process.env.RELAY_DB_PATH); const rows = db.query("SELECT value FROM store_plan").all(); if (rows.length < 1) { console.error("store_plan row missing after the push"); process.exit(1) } console.log("store_plan rows:", rows.length)'
