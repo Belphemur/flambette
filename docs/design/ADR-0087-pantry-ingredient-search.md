@@ -149,6 +149,41 @@ divergence is listed under Rejected elements.
   Recipes / Plan / Grocery / History / Settings (ADR-0016; the fit is
   e2e-pinned and a 6th tab needs a re-measure).
 
+## Addendum (2026-10-14): matching surface + active-state heading
+
+Two owner-reported refinements applied to an accepted record (not a new
+record — same effort, same issue #80).
+
+1. **Pantry matching is extended to the recipe NAME, not just
+   `variant_meta.ingredient_names`.** Verified against the baked catalog:
+   NO recipe variants list `cherry tomatoes` under `ingredient_names` (the
+   taxonomy uses `grape tomatoes`, `tomato`, `diced tomatoes`, …), yet 20
+   variants have `Cherry Tomatoes` in their `name` — which is exactly why
+   the app's normal search finds them but the pantry filter did not. A
+   pantry key `k` is said to be **used** by a recipe when `k` appears in
+   `ingredient_names` OR `k`'s word tokens appear as a contiguous,
+   case-insensitive, nameKey-normalized sequence in the recipe name. The
+   lib's `have`/`missing`/`ready` shape, the ≥1-overlap predicate and the
+   missing-ascending comparator all operate over this extended surface;
+   `total`/`M` stays the pantry size (a key absent from both surfaces is
+   a genuine "missing"). The badge "Needs 1 more" names the first such key.
+   Unit pins add the owner's exact regression case
+   (`cherry tomatoes` → the Tuscan-Cherry-Tomato variant).
+2. **Adopt the render's active-state heading.** While the pantry row is
+   active the results summary carries the heading
+   **"Cook With Your Pantry"** (render visual authority), followed by the
+   real matching count and the `aria-live="polite"` status text from
+   Decision 6b. The empty-state wording is aligned to say "match your
+   kitchen" when the row is the active cause (the render's mismatched
+   "match your filters" copy is a fiction, not adopted).
+
+### Addendum implementation notes (styling fidelity to the adopted render)
+
+- The "In my kitchen" label gains the kitchen glyph the render shows
+  (lucide `Kitchen`/token icon role), and the add input widens on desktop
+  so it is not the cramped third-width pill. These are token/canvas
+  alignments, not behavioural changes — no further ADR text.
+
 ## Consequences
 
 - The competitor-named feature lands entirely on existing substrate —
