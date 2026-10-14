@@ -5,14 +5,14 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**95 records.** One file per decision (`ADR-NNNN-slug.md`),
+**96 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
 
 ## In force
 
-The 77 accepted records below all still govern. Skim the ones
+The 78 accepted records below all still govern. Skim the ones
 near your change before proposing anything -- they encode *why* the
 architecture is shaped the way it is.
 
@@ -95,6 +95,7 @@ architecture is shaped the way it is.
 | [0086](ADR-0086-fuzzy-ingredient-suggestions.md) | Fuzzy ingredient suggestions — typos still find the item, custom names included | 2026-10-13 |
 | [0088](ADR-0088-relay-sqlite-persistence.md) | Relay persistence — SQLite room state, per-store tables, one migration runner for both runtimes | 2026-10-14 |
 | [0089](ADR-0089-kitchen-filter-dropdown.md) | Pantry becomes the Kitchen filter dropdown on the Recipes tab _(supersedes ADR-0087)_ | 2026-10-14 |
+| [0090](ADR-0090-pantry-room-sync.md) | the pantry becomes household state — room-synced like custom ingredients _(supersedes ADR-0087)_ | 2026-10-14 |
 
 ## Not in force
 
@@ -137,8 +138,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0090**). Do not count the files -- that is how the
-   collisions above happened (95 files share 89 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0091**). Do not count the files -- that is how the
+   collisions above happened (96 files share 90 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.

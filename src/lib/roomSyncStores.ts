@@ -24,6 +24,7 @@ export const SHARED_STATE_KEYS = [
   'checked',
   'cleared',
   'customs',
+  'pantry',
   'cookedHistory',
   'filters',
   'favorites',

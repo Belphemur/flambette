@@ -83,16 +83,22 @@
   copy, cooked-history toggle, leave); there is no size ceiling, because
   a room link is the same length for any plan.
 - **Room sync**: whole-state last-write-wins keyed by `rev`; shared
-  state = `{plan, customItems, checked, cleared, customs, cookedHistory,
-  filters, favorites, ratings, ratingTombstones, planIdentity}` — the
-  SAME ELEVEN keys the relay's per-store storage knows as `SYNCED_STORES`
+  state = `{plan, customItems, checked, cleared, customs, pantry,
+  cookedHistory, filters, favorites, ratings, ratingTombstones,
+  planIdentity}` — the SAME TWELVE keys the relay's per-store storage
+  knows as `SYNCED_STORES`
   (ADR-0088 §6 cross-checks the two vocabularies; adding a key without a
   migration and a `SYNCED_STORES` entry is exactly the drift the gate
   catches — follow `.agents/skills/mealime-add-sync-store/SKILL.md`) —
   `cleared` is `clearedIngredients` (household state:
-  clearing hides ingredients for everyone until re-planned/cooked) and
+  clearing hides ingredients for everyone until re-planned/cooked),
   `customs` is the remembered custom-ingredient memory (household since
-  2026-09-27, ADR-0012 change note). `favorites` + `ratings` are
+  2026-09-27, ADR-0012 change note), and `pantry` is the "In my
+  kitchen" list (household since ADR-0090, superseding ADR-0087
+  Decision 7's device-local ruling — whole-state LWW like `customs`,
+  the 500-row `PANTRY_CAP` doubles as the payload cap, and the receiver
+  re-derives every `nameKey` through `normalizePantryRows`).
+  `favorites` + `ratings` are
   household PREFERENCE (ADR-0031) and the one deliberate exception to
   whole-state LWW: both are RECORDS carrying `updatedAt` and reconcile
   PER KEY, last writer by timestamp wins. `favorites` records are

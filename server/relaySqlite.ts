@@ -160,7 +160,7 @@ export function createSqliteStores(
   function writeStoreRows(row: RoomRecord): void {
     // Change detection (kody review): the core's `touch()` re-writes the
     // whole record to move the expiry clocks — without the plan, every
-    // keepalive would re-upsert all eleven stores and drag each
+    // keepalive would re-upsert every synchronized store and drag each
     // `updated_at` along, contradicting "when THIS store was last
     // written" (ADR-0088 §2). Only genuinely changed rows are upserted.
     const plan = planner.plan(row.code, row.state)

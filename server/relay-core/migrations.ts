@@ -72,6 +72,13 @@ export interface MigrationStep {
    */
   readonly down: readonly string[]
   readonly migrate?: (db: MigrationDatabase) => void
+  /**
+   * Rollback's typed escape hatch, the down twin of `migrate`: for the
+   * data reshaping that cannot be a static SQL list (002's fold must
+   * skip stores whose tables a prior rollback step already dropped).
+   * Runs after `down`, only from `rollbackTo`.
+   */
+  readonly migrateDown?: (db: MigrationDatabase) => void
 }
 
 /* ------------------------------------------------------------- shared DDL */
@@ -224,9 +231,14 @@ export function storeRowSql(store: SyncedStore): string {
  * step, and never reorder: the ledger records versions, not positions. */
 import { MIGRATION_001 } from './migrations/001_rooms_and_stores'
 import { MIGRATION_002 } from './migrations/002_split_state_blobs'
+import { MIGRATION_003 } from './migrations/003_pantry'
 
 /** The ordered migration list — append-only; never renumber a shipped step. */
-export const MIGRATIONS: readonly MigrationStep[] = [MIGRATION_001, MIGRATION_002]
+export const MIGRATIONS: readonly MigrationStep[] = [
+  MIGRATION_001,
+  MIGRATION_002,
+  MIGRATION_003,
+]
 
 /** Apply every pending step, ascending, and verify what the ledger claims. */
 export function applyMigrations(db: MigrationDatabase, now: () => number): void {
@@ -281,6 +293,7 @@ export function rollbackTo(db: MigrationDatabase, targetVersion: number): void {
   for (const step of [...MIGRATIONS].reverse()) {
     if (step.version <= targetVersion || !applied.has(step.version)) continue
     for (const statement of step.down) db.exec(statement)
+    step.migrateDown?.(db)
     db.exec('DELETE FROM schema_migrations WHERE version = ?', step.version)
   }
 }

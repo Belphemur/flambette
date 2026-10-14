@@ -34,6 +34,7 @@ export const SYNCED_STORES = [
   'checked',
   'cleared',
   'customs',
+  'pantry',
   'cookedHistory',
   'filters',
   'favorites',
@@ -141,8 +142,8 @@ export interface StoreWritePlanner {
  * Per-store change detection (ADR-0088 §2): `updated_at` is "when THIS
  * store was last written" — and the core's `touch()` re-writes the whole
  * record to move the expiry clocks, carrying every store with it. Without
- * detection, every keepalive re-serializes and re-upserts all eleven
- * stores and drags each `updated_at` along, which lies about the metadata
+ * detection, every keepalive re-serializes and re-upserts every
+ * synchronized store and drags each `updated_at` along, which lies about the metadata
  * the per-store tables exist to expose.
  *
  * ONE decision here in the core (ADR-0040): both adapters consume the

@@ -38,6 +38,14 @@
  * keeps that key out of its blob entirely (the per-statement `EXISTS`
  * guard), so a rolled-back database is not littered with null-object
  * blobs for rooms that never had the store.
+ *
+ * The fold cannot be a static `down` string list: it must skip stores
+ * whose tables a LATER migration created and a prior rollback step has
+ * already dropped (rolling back to version 2 means the version-2 world —
+ * a store added at version 3 has no place in the blob it folds into),
+ * and SQLite has no pure-SQL way to reference a table conditionally. So
+ * the fold is a `migrateDown` hook over the live vocabulary, guarded per
+ * table by `sqlite_master`.
  */
 
 import { SYNCED_STORES, storeTableName, type SyncedStore } from '../stores'
@@ -57,7 +65,7 @@ export const MIGRATION_002: MigrationStep = {
   version: 2,
   name: 'split room state blobs into per-store rows',
   up: [],
-  down: SYNCED_STORES.map(foldStoreRowsSql),
+  down: [],
   migrate(db) {
     for (const store of SYNCED_STORES) {
       const path = `$.${store}`
@@ -78,5 +86,15 @@ export const MIGRATION_002: MigrationStep = {
       )
     }
     db.exec('UPDATE room SET state = NULL WHERE state IS NOT NULL')
+  },
+  migrateDown(db) {
+    for (const store of SYNCED_STORES) {
+      const table = storeTableName(store)
+      // Only fold stores whose table still exists — a later migration's
+      // table is not this step's world, and its down already dropped it.
+      if (db.all("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", table).length === 0)
+        continue
+      db.exec(foldStoreRowsSql(store))
+    }
   },
 }

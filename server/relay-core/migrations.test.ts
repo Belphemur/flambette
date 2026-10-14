@@ -12,6 +12,7 @@
 import { describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { applyMigrations, rollbackTo, storeUpsertSql, type MigrationDatabase } from './migrations'
+import { storeTableName } from './stores'
 
 /** The facade over `bun:sqlite` — the shape the Bun adapter actually runs. */
 function bunDb(path = ':memory:'): MigrationDatabase & { close: () => void } {
@@ -35,7 +36,7 @@ describe('pending detection from the recorded version (ADR-0088 §4)', () => {
   test('a fresh database runs every step and records each', () => {
     const db = bunDb()
     applyMigrations(db, () => 1_000)
-    expect(ledger(db).map((r) => Number(r.version))).toEqual([1, 2])
+    expect(ledger(db).map((r) => Number(r.version))).toEqual([1, 2, 3])
     db.close()
   })
 
@@ -50,9 +51,9 @@ describe('pending detection from the recorded version (ADR-0088 §4)', () => {
 
   test('a partial database runs only the tail: the recorded prefix stays put', () => {
     const db = bunDb()
-    // Simulate a database stopped mid-upgrade: 001 recorded, 002 not.
+    // Simulate a database stopped mid-upgrade: 001 recorded, 002/003 not.
     applyMigrations(db, () => 1_000)
-    db.exec('DELETE FROM schema_migrations WHERE version = 2')
+    db.exec('DELETE FROM schema_migrations WHERE version >= 2')
     // ...and drop one of 002's effects to prove the tail re-runs it.
     db.exec('UPDATE room SET state = NULL WHERE state IS NOT NULL')
     db.exec(
@@ -62,14 +63,47 @@ describe('pending detection from the recorded version (ADR-0088 §4)', () => {
     db.exec(`UPDATE room SET state = '{"plan":[9]}' WHERE code = 'C1'`)
 
     applyMigrations(db, () => 2_000)
-    // Only 002 was re-applied: the version-1 stamp is the ORIGINAL one.
+    // Only the tail was re-applied: the version-1 stamp is the ORIGINAL one.
     expect(ledger(db)).toEqual([
       { version: 1, applied_at: 1_000 },
       { version: 2, applied_at: 2_000 },
+      { version: 3, applied_at: 2_000 },
     ])
     // ...and the pending tail did its work: the blob was split into rows.
     const row = db.all('SELECT value FROM store_plan WHERE code = ? OR code = ?', 'c1', 'C1')
     expect(JSON.parse(String(row[0]?.value))).toEqual([9])
+    db.close()
+  })
+})
+
+describe('migration 003 — the pantry becomes a synchronized store (ADR-0090)', () => {
+  test('store_pantry carries the shared per-store shape, CHECK included', () => {
+    const db = bunDb()
+    applyMigrations(db, () => 1_000)
+    db.exec(
+      storeUpsertSql('pantry'),
+      'c1',
+      JSON.stringify([{ name: 'Butter', nameKey: 'butter' }]),
+      100,
+      100,
+    )
+    expect(() => db.exec(storeUpsertSql('pantry'), 'c1', 'not json', 1, 1)).toThrow(
+      /CHECK constraint failed/,
+    )
+    db.close()
+  })
+
+  test('rolling back to version 2 drops store_pantry — the version-2 world has no pantry', () => {
+    const db = bunDb()
+    applyMigrations(db, () => 1_000)
+    db.exec(storeUpsertSql('pantry'), 'c1', '[{"name":"Butter","nameKey":"butter"}]', 100, 100)
+
+    rollbackTo(db, 2)
+    expect(ledger(db).map((r) => Number(r.version))).toEqual([1, 2])
+    const objects = db
+      .all("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .map((row) => String(row.name))
+    expect(objects).not.toContain(storeTableName('pantry'))
     db.close()
   })
 })
@@ -124,7 +158,7 @@ describe('the explicit rollback entry point (down runs ONLY here)', () => {
     rollbackTo(db, 1)
 
     applyMigrations(db, () => 2_000)
-    expect(ledger(db).map((r) => Number(r.version))).toEqual([1, 2])
+    expect(ledger(db).map((r) => Number(r.version))).toEqual([1, 2, 3])
     // 002's INSERT OR IGNORE re-inserts nothing over the surviving rows;
     // the blob it re-nulled stays NULL — the split shape, again.
     expect(db.all('SELECT value FROM store_plan WHERE code = ?', 'c1')).toEqual([

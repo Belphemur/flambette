@@ -246,6 +246,12 @@ pardon and a weapon.
 
 ## Addendum (2026-10-14): eleven stores, not nine; `planIdentity` is always-sent
 
+**Store count update (2026-10-14, PR #92):** the pantry became the
+TWELFTH synchronized store (ADR-0090, superseding ADR-0087 Decision 7),
+adding `store_pantry` via migration 003 of the folder-shaped migration
+engine. The lists below read twelve keys / twelve tables as of that
+change; the reasoning text is kept as written.
+
 Implementation of ADR-0088 surfaced a contract error in §2/§3: the relay's
 `SYNCED_STORES` (the runtime mirror of the client `SharedState` in
 `src/stores/room.ts`) contains **eleven** keys, not nine. The two the ADR

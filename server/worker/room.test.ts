@@ -570,7 +570,7 @@ describe('per-store schema (ADR-0088 §2/§4)', () => {
     const ledger = await runInDurableObject(roomStub(room), (_i, state) =>
       state.storage.sql.exec('SELECT version, name FROM schema_migrations ORDER BY version').toArray(),
     )
-    expect(ledger).toHaveLength(2)
+    expect(ledger).toHaveLength(3)
   })
 
   it('the json_valid CHECK makes a corrupt store write fail AT WRITE TIME', async () => {
@@ -727,7 +727,7 @@ describe('per-store schema (ADR-0088 §2/§4)', () => {
     // 001's guarded ALTER backfilled updated_at from last_activity.
     expect(split.updated).toEqual([{ updated_at: 222 }])
     expect(split.planMeta).toEqual([{ created_at: 111, updated_at: 222 }])
-    expect(split.ledger).toEqual([{ version: 1 }, { version: 2 }])
+    expect(split.ledger).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }])
 
     // The split is a round-trip: the joiner adopts the blob's stores.
     const a = await dial(`/?op=join&room=${room}`)

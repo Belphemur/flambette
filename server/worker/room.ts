@@ -264,7 +264,7 @@ export class Room extends DurableObject<Env> {
     )
     // The room row moved (its clocks genuinely changed); the store rows
     // only move when their VALUE did (kody review): a keepalive must not
-    // re-upsert eleven unchanged stores and drag every `updated_at`
+    // re-upsert the unchanged stores and drag every `updated_at`
     // along. The core's plan says which rows changed; a `state: null`
     // write (a fresh establishment) clears every row. `created_at` is
     // "first write": the upsert preserves it. Same as the Bun adapter's
