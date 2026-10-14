@@ -25,8 +25,8 @@ import {
 } from './relay-core/stores'
 import {
   applyMigrations,
-  STORE_ROWS_SQL,
   storeClearSql,
+  storeRowSql,
   storeUpsertSql,
   type MigrationDatabase,
 } from './relay-core/migrations'
@@ -121,10 +121,12 @@ export function createSqliteStores(
       .all(code)[0] as unknown as RoomSqlRow | undefined
 
   function readStoreRows(code: string): StoredStoreRow[] {
-    // One binding per UNION branch — no numbered-parameter support assumed.
-    return db
-      .query(STORE_ROWS_SQL)
-      .all(...SYNCED_STORES.map(() => code)) as unknown as StoredStoreRow[]
+    // One statement per store — workerd's storage SQL rejects a compound
+    // SELECT with one branch per table, and the vocabulary is short.
+    return SYNCED_STORES.map((store) => ({
+      store,
+      text: (db.query(storeRowSql(store)).all(code)[0] as { text?: unknown } | undefined)?.text,
+    })) as unknown as StoredStoreRow[]
   }
 
   function writeRoomRow(row: RoomRecord): void {

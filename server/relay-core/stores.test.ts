@@ -17,10 +17,10 @@ import {
   type SyncedStore,
 } from './stores'
 import {
-  STORE_ROWS_SQL,
   MIGRATIONS,
   applyMigrations,
   storeClearSql,
+  storeRowSql,
   storeUpsertSql,
   type MigrationDatabase,
 } from './migrations'
@@ -199,15 +199,16 @@ describe('the migration runner (ADR-0088 §4) over a real in-memory SQLite', () 
     db.exec(storeUpsertSql('plan'), 'c1', '[1,2]', 100, 100)
     db.exec(storeUpsertSql('plan'), 'c1', '[3]', 200, 200)
     expect(storeRowCount(db, 'plan')).toBe(1)
-    const rows = db.all(STORE_ROWS_SQL, 'c1', 'c1', 'c1', 'c1', 'c1', 'c1', 'c1', 'c1', 'c1', 'c1', 'c1')
-    expect(rows).toEqual([{ store: 'plan', text: '[3]' }])
+    const rows = db.all(storeRowSql('plan'), 'c1')
+    expect(rows).toEqual([{ text: '[3]' }])
     db.exec(storeClearSql('plan'), 'c1')
     expect(storeRowCount(db, 'plan')).toBe(0)
     db.close()
   })
 
-  test('STORE_ROWS_SQL binds one ? per store branch, in vocabulary order', () => {
-    expect(STORE_ROWS_SQL.split('?')).toHaveLength(SYNCED_STORES.length + 1)
+  test('storeRowSql returns the raw JSON text of one store, aliased as text', () => {
+    expect(storeRowSql('plan')).toBe('SELECT value AS text FROM store_plan WHERE code = ?')
+    expect(storeRowSql('customItems')).toContain('store_custom_items')
   })
 })
 
@@ -268,8 +269,11 @@ describe('migration 002 splits the DO legacy blobs (ADR-0088 §4)', () => {
 
     // The split is the round-trip: joining the rows reads back the blob.
     const code = 'amber-falcon-lantern'
-    const binds = SYNCED_STORES.map(() => code)
-    expect(joinSnapshot(db.all(STORE_ROWS_SQL, ...binds) as never)).toEqual(JSON.parse(blob))
+    const rows = SYNCED_STORES.map((store) => ({
+      store,
+      text: (db.all(storeRowSql(store), code)[0] as { text?: unknown } | undefined)?.text,
+    }))
+    expect(joinSnapshot(rows as never)).toEqual(JSON.parse(blob))
     db.close()
   })
 

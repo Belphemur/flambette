@@ -55,6 +55,16 @@ import {
 import { IDLE_TTL_MS, INACTIVITY_TTL_MS } from '../relay-core/policy'
 import { parseClientFrame, RELAY_ERRORS, type RelayErrorCode, type RelayMessage } from '../relay-core/protocol'
 import { canonicalizeCode } from '../relay-core/codes'
+import {
+  applyMigrations,
+  ROOM_DELETE_SQL,
+  ROOM_UPSERT_SQL,
+  storeClearSql,
+  storeRowSql,
+  storeUpsertSql,
+  type MigrationDatabase,
+} from '../relay-core/migrations'
+import { joinSnapshot, splitSnapshot, SYNCED_STORES } from '../relay-core/stores'
 import { refuseSocket } from './refuseSocket'
 import type { ExpiryReason } from '../relay-core/lifecycle'
 
@@ -72,52 +82,18 @@ interface PeerAttachment {
   profile: PeerProfile | null
 }
 
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS room (
-  id INTEGER PRIMARY KEY,
-  code TEXT NOT NULL,
-  rev INTEGER NOT NULL,
-  state TEXT,
-  created_at INTEGER NOT NULL,
-  last_activity INTEGER NOT NULL,
-  inactivity_at INTEGER NOT NULL,
-  idle_at INTEGER NOT NULL,
-  serial INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS rev_floor (
-  code TEXT PRIMARY KEY,
-  rev INTEGER NOT NULL,
-  at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS peer_serial (
-  code TEXT PRIMARY KEY,
-  serial INTEGER NOT NULL
-);
-`
-
 /**
- * Why the peer serial lives in its own table rather than as a column on
- * `rev_floor`. It was added after the first Durable Object deploy, and
- * SQLite cannot widen an existing table except through `ALTER TABLE` —
- * which would need a migration probe to stay safe on a database that
- * already has the column. `CREATE TABLE IF NOT EXISTS` needs no probe and
- * cannot fail on an existing database, so the migration is purely
- * additive. A room that predates the table simply has no serial row and
- * falls back to the room row's own counter, which is exactly the
- * behaviour of the first deploy.
+ * The schema is no longer declared here: migration 001 in
+ * `../relay-core/migrations.ts` owns the DDL — the SAME statements the Bun
+ * relay runs (ADR-0088 §2/§4) — and this object applies the shared list
+ * lazily on its first event (workerd gives an object no `ctx.storage`
+ * before the first event, so "at startup" does not exist here). The old
+ * ad-hoc `CREATE TABLE IF NOT EXISTS` dance — which already produced the
+ * peer_serial workaround once — is gone; the peer serial's two-table
+ * shape is now part of the shared, versioned schema.
  */
 
-const ROOM_ID = 1
-
 export class Room extends DurableObject<Env> {
-  /**
-   * Guards the one-time DDL. `ctx.storage` is unavailable before the
-   * first event reaches the object, and the object can be evicted between
-   * any two events, so the schema is (re)checked lazily per instance
-   * rather than once in the constructor.
-   */
-  #schemaReady = false
-
   /**
    * This object's room code, i.e. the name the worker entry derived it
    * from. The name is a property of the id rather than something the
@@ -149,29 +125,37 @@ export class Room extends DurableObject<Env> {
 
   /* ---------------------------------------------------------------- schema */
 
+  /**
+   * Apply the SHARED migration list (ADR-0088 §4), lazily — workerd gives
+   * an object no `ctx.storage` before the first event, so "at startup"
+   * does not exist on this runtime. The runner verifies its steps against
+   * the actual database rather than trusting a ledger, which is what the
+   * old per-call `#ensureTables` probe insisted on and why there is no
+   * `#schemaReady` flag here: storage isolation (the vitest pool rolls
+   * each test's storage back) and any future storage reset can leave an
+   * object looking at a database without its tables. Cheap when
+   * converged: the runner is a few indexed reads over an in-process
+   * SQLite.
+   */
   #ensureSchema(): void {
-    if (this.#schemaReady) return
-    this.ctx.storage.sql.exec(SCHEMA)
-    this.#schemaReady = true
+    applyMigrations(this.#db, () => Date.now())
   }
 
   /**
-   * Re-verify the schema against the actual database. Storage isolation
-   * (@cloudflare/vitest-plugin rolls each test's storage back) and any future
-   * storage reset can leave an object that remembers `#schemaReady`
-   * looking at a database without its tables, so "did I run the DDL" is
-   * answered from SQLite, not from a flag. Cheap: one indexed lookup.
+   * The migration runner's facade over this object's storage SQL. Every
+   * adapter call funnels through here; the cursor is materialised because
+   * the runner may run further statements before reading it again.
    */
-  #ensureTables(): void {
-    const present = this.ctx.storage.sql
-      .exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'room'")
-      .next()
-    // `done` means the probe came back EMPTY, i.e. the table is missing.
-    if (present.done) {
-      this.#ensureSchema()
-      return
+  get #db(): MigrationDatabase {
+    return {
+      exec: (sql, ...bindings) => {
+        this.ctx.storage.sql.exec(sql, ...(bindings as unknown as SqlStorageValue[]))
+      },
+      all: (sql, ...bindings) =>
+        [
+          ...this.ctx.storage.sql.exec(sql, ...(bindings as unknown as SqlStorageValue[])),
+        ] as unknown as Record<string, unknown>[],
     }
-    this.#schemaReady = true
   }
 
   /**
@@ -180,7 +164,7 @@ export class Room extends DurableObject<Env> {
    * pulled through `next()` and its `done` flag is the emptiness check.
    */
   #one(query: string, ...bindings: SqlStorageValue[]): Record<string, SqlStorageValue> | undefined {
-    this.#ensureTables()
+    this.#ensureSchema()
     const step = this.ctx.storage.sql
       .exec<Record<string, SqlStorageValue>>(query, ...bindings)
       .next()
@@ -189,33 +173,28 @@ export class Room extends DurableObject<Env> {
 
   /* ----------------------------------------------------------------- store */
 
-  /** Stored state is our own JSON; a corrupt row must not kill the room. */
-  static #parseState(raw: string | null): Record<string, unknown> | null {
-    if (raw === null) return null
-    try {
-      return JSON.parse(raw) as Record<string, unknown>
-    } catch {
-      return null
-    }
-  }
-
   /**
-   * The core's storage INTENTS over this object's two tables — the whole
-   * "adapter owns state" half of ADR-0040, including the JSON codec the
-   * core knows nothing about.
+   * The core's storage INTENTS over this object's per-store tables — the
+   * whole "adapter owns state" half of ADR-0040. Since ADR-0088 §2 the
+   * state is split across one table per synchronized store, using the
+   * shared split/merge and the shared row SQL the core owns; this object
+   * only binds its code and stamps the rows.
    */
   get #store(): RoomStore {
     return {
       read: () => this.#readRoom(),
       write: (row) => this.#writeRoom(row),
       drop: () => {
-        this.#ensureTables()
-        this.ctx.storage.sql.exec('DELETE FROM room WHERE id = ?', ROOM_ID)
+        this.#ensureSchema()
+        this.ctx.storage.sql.exec(ROOM_DELETE_SQL, this.#code)
+        for (const store of SYNCED_STORES) {
+          this.ctx.storage.sql.exec(storeClearSql(store), this.#code)
+        }
       },
       readFloor: () => this.#readFloor(),
       writeFloor: (record) => this.#writeFloor(record),
       dropFloor: () => {
-        this.#ensureTables()
+        this.#ensureSchema()
         this.ctx.storage.sql.exec('DELETE FROM rev_floor WHERE code = ?', this.#code)
         this.ctx.storage.sql.exec('DELETE FROM peer_serial WHERE code = ?', this.#code)
       },
@@ -223,13 +202,27 @@ export class Room extends DurableObject<Env> {
   }
 
   #readRoom(): RoomRecord | null {
-    const row = this.#one('SELECT * FROM room WHERE id = ?', ROOM_ID)
+    const row = this.#one(
+      'SELECT code, rev, created_at, updated_at, last_activity, inactivity_at, idle_at, serial FROM room WHERE code = ?',
+      this.#code,
+    )
     if (!row) return null
-    const state = row.state === null || row.state === undefined ? null : String(row.state)
+    // The store rows ARE the snapshot now; the deprecated `room.state`
+    // column (always NULL past migration 002) is never read back. One
+    // statement per store — workerd's storage SQL rejects a compound
+    // SELECT with one branch per table.
+    const stores = SYNCED_STORES.map((store) => ({
+      store,
+      text: (
+        [
+          ...this.ctx.storage.sql.exec(storeRowSql(store), this.#code),
+        ] as { text?: unknown }[]
+      )[0]?.text,
+    })) as unknown as { store: string; text: string | null }[]
     return {
       code: String(row.code),
       rev: Number(row.rev),
-      state: Room.#parseState(state),
+      state: joinSnapshot(stores),
       createdAt: Number(row.created_at),
       lastActivityAt: Number(row.last_activity),
       inactivityAt: Number(row.inactivity_at),
@@ -239,21 +232,38 @@ export class Room extends DurableObject<Env> {
   }
 
   #writeRoom(row: RoomRecord): void {
-    this.#ensureTables()
+    this.#ensureSchema()
     this.ctx.storage.sql.exec(
-      `INSERT OR REPLACE INTO room
-        (id, code, rev, state, created_at, last_activity, inactivity_at, idle_at, serial)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ROOM_ID,
+      ROOM_UPSERT_SQL,
       row.code,
       row.rev,
-      row.state === null ? null : JSON.stringify(row.state),
       row.createdAt,
+      Date.now(),
       row.lastActivityAt,
       row.inactivityAt,
       row.idleAt,
       row.serial,
     )
+    // Absent keys are don't-touch at the shared split: only the stores the
+    // snapshot carries are upserted, and a `state: null` write (a fresh
+    // establishment) clears the rows — exactly what overwriting the blob
+    // did. `created_at` is "first write": the upsert preserves it.
+    const rows = splitSnapshot(row.state)
+    if (!rows) {
+      for (const store of SYNCED_STORES) {
+        this.ctx.storage.sql.exec(storeClearSql(store), this.#code)
+      }
+      return
+    }
+    for (const { store, value } of rows) {
+      this.ctx.storage.sql.exec(
+        storeUpsertSql(store),
+        row.code,
+        JSON.stringify(value),
+        row.createdAt,
+        Date.now(),
+      )
+    }
   }
 
   #readFloor(): FloorRecord | null {
@@ -268,7 +278,7 @@ export class Room extends DurableObject<Env> {
   }
 
   #writeFloor(record: FloorRecord): void {
-    this.#ensureTables()
+    this.#ensureSchema()
     this.ctx.storage.sql.exec(
       'INSERT OR REPLACE INTO rev_floor (code, rev, at) VALUES (?, ?, ?)',
       record.code,
@@ -387,7 +397,7 @@ export class Room extends DurableObject<Env> {
    * throttled and routed here. `?mode=create|join&room=<canonical code>`.
    */
   async fetch(request: Request): Promise<Response> {
-    this.#ensureTables()
+    this.#ensureSchema()
     const url = new URL(request.url)
     const mode = url.searchParams.get('mode') === 'create' ? 'create' : 'join'
     // The entry routed by name, so the code in the URL is already
@@ -430,7 +440,7 @@ export class Room extends DurableObject<Env> {
    * `fetch`, so this is where the room rules are applied — by the core.
    */
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
-    this.#ensureTables()
+    this.#ensureSchema()
     const attachment = ws.deserializeAttachment() as PeerAttachment | null
     const member = !!attachment && attachment.code === this.#code && attachment.id.startsWith('p')
 
@@ -585,7 +595,7 @@ export class Room extends DurableObject<Env> {
    * room until the idle TTL prunes it.
    */
   async alarm(): Promise<void> {
-    this.#ensureTables()
+    this.#ensureSchema()
     this.#room.tick()
   }
 

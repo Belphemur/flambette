@@ -164,16 +164,41 @@ export function storeClearSql(store: SyncedStore): string {
 }
 
 /**
- * Every store row of one code, as (`store`, raw JSON text) pairs — the
- * read side of the split, one statement instead of one per store. Each
- * branch binds the code again (`?`), so no runtime-specific numbered-
- * parameter support is assumed.
+ * Upsert the room row itself — shared for the same reason the store-row
+ * SQL is: the table is the shared schema's, and the core's records always
+ * arrive complete (the core spreads the row it read), so a plain upsert
+ * over the unique `code` index serves both runtimes. It is an UPSERT, not
+ * INSERT OR REPLACE, deliberately: REPLACE would delete the conflicting
+ * row and mint a new rowid, discarding the `id` the row already has (the
+ * Durable Object's single room keeps id 1 for its whole life). The
+ * deprecated `state` column is written NULL — always, from migration 002
+ * onward (ADR-0088 §2/§4).
  */
-export const STORE_ROWS_SQL = (() => {
-  const branch = (store: SyncedStore): string =>
-    `SELECT '${store}' AS store, value AS text FROM ${storeTableName(store)} WHERE code = ?`
-  return SYNCED_STORES.map(branch).join(' UNION ALL ')
-})()
+export const ROOM_UPSERT_SQL = `INSERT INTO room
+  (code, rev, state, created_at, updated_at, last_activity, inactivity_at, idle_at, serial)
+  VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT (code) DO UPDATE SET
+    rev = excluded.rev,
+    state = excluded.state,
+    created_at = excluded.created_at,
+    updated_at = excluded.updated_at,
+    last_activity = excluded.last_activity,
+    inactivity_at = excluded.inactivity_at,
+    idle_at = excluded.idle_at,
+    serial = excluded.serial`
+
+/** Forget one room row (its per-store rows go with it — see the adapters). */
+export const ROOM_DELETE_SQL = 'DELETE FROM room WHERE code = ?'
+
+/**
+ * Read one code's row from ONE store table, as raw JSON `text`. One
+ * statement per store, deliberately NOT a single UNION ALL across the
+ * tables: workerd's storage SQL rejects a compound SELECT with that many
+ * terms, and the adapters walk `SYNCED_STORES` anyway.
+ */
+export function storeRowSql(store: SyncedStore): string {
+  return `SELECT value AS text FROM ${storeTableName(store)} WHERE code = ?`
+}
 
 /* ---------------------------------------------------------------- steps */
 
