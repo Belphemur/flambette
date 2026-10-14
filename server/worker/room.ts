@@ -283,7 +283,8 @@ export class Room extends DurableObject<Env> {
     // write (a fresh establishment) clears every row. `created_at` is
     // "first write": the upsert preserves it. Same as the Bun adapter's
     // writeStoreRows. The store rows move FIRST, so the room upsert's
-    // grace mirror joins the POST-write rows (the merged snapshot) — the
+    // grace mirror joins the plan's post-write texts (the merged
+    // snapshot) — the
     // Bun half reorders the same way inside its transaction.
     const plan = this.#planner.plan(row.code, row.state)
     if (plan.clearAll) {
@@ -306,11 +307,17 @@ export class Room extends DurableObject<Env> {
     // pre-per-store relay binary reading this column must keep seeing real
     // rooms), after the window NULL. The record's own `state` is only the
     // last commit's projection (an absent key is don't-touch at the shared
-    // split), so the mirror joins the just-written store rows — the SAME
-    // joinSnapshot the read path serves, never a second merge to drift.
-    // Write-only: #readRoom never touches it.
+    // split), so the mirror joins the planner's last-known texts — the
+    // post-write on-disk texts this write's plan already consulted, in the
+    // SAME joinSnapshot the read path serves; no re-read, no second merge
+    // to drift. Write-only: #readRoom never touches it.
+    const known = this.#planner.knownTexts(this.#code)
     const merged =
-      Date.now() < this.#blobGraceUntil ? joinSnapshot(this.#readStoreRowTexts()) : null
+      Date.now() < this.#blobGraceUntil
+        ? joinSnapshot(
+            SYNCED_STORES.map((store, index) => ({ store, text: known[index] ?? null })),
+          )
+        : null
     this.ctx.storage.sql.exec(
       ROOM_UPSERT_SQL,
       row.code,

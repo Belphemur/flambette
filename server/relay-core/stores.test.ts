@@ -197,6 +197,24 @@ describe('createStoreWritePlanner — a touch must not rewrite unchanged stores'
     expect(planner.plan('c2', { plan: [1] }).changed).toEqual([{ store: 'plan', text: '[1]' }])
   })
 
+  test('knownTexts reports the post-write texts in SYNCED_STORES order — the grace mirror\'s join input', () => {
+    const planner = createStoreWritePlanner()
+    planner.seed('c1', [
+      { store: 'plan', text: '[1,2]' },
+      { store: 'customItems', text: null },
+    ])
+    // A push carrying only `plan`: the plan advances `plan`'s text and
+    // leaves `customItems` at its seeded (on-disk) value — exactly what
+    // the tables hold once the changed rows are written.
+    planner.plan('c1', { plan: [3] })
+    const texts = planner.knownTexts('c1')
+    expect(texts[SYNCED_STORES.indexOf('plan')]).toBe('[3]')
+    expect(texts[SYNCED_STORES.indexOf('customItems')]).toBeNull()
+    // An unseen code reads as all-null (the read-before-write invariant
+    // keeps this from ever reaching the mirror on a real write path).
+    expect(planner.knownTexts('c9').every((text) => text === null)).toBeTrue()
+  })
+
   test('forget reclaims a dropped room\'s entries — the memory is bounded by the live set', () => {
     const planner = createStoreWritePlanner()
     planner.plan('c1', { plan: [1] })

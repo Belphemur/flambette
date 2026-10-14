@@ -153,10 +153,15 @@ export function createSqliteStores(
     // pre-per-store relay binary reading this column must keep seeing real
     // rooms), after the window NULL. The record's own `state` is only the
     // last commit's projection (an absent key is don't-touch at the shared
-    // split), so the mirror joins the just-written store rows — the SAME
-    // joinSnapshot the read path serves, never a second merge to drift.
-    // Write-only: no read path touches this column.
-    const merged = now() < blobGraceUntil ? joinSnapshot(readStoreRows(row.code)) : null
+    // split), so the mirror joins the planner's last-known texts — the
+    // post-write on-disk texts this write's plan already consulted, in the
+    // SAME joinSnapshot the read path serves; no re-read, no second merge
+    // to drift. Write-only: no read path touches this column.
+    const known = planner.knownTexts(row.code)
+    const merged =
+      now() < blobGraceUntil
+        ? joinSnapshot(SYNCED_STORES.map((store, index) => ({ store, text: known[index] ?? null })))
+        : null
     db
       .query(ROOM_UPSERT_SQL)
       .run(
@@ -205,7 +210,8 @@ export function createSqliteStores(
    */
   const writeRoomAndStores = db.transaction((row: RoomRecord) => {
     // The store rows move FIRST, so the room upsert's grace mirror joins
-    // the POST-write rows — the merged snapshot, in the same transaction
+    // the plan's post-write texts — the merged snapshot, in the same
+    // transaction
     // (qodo review) so an interruption can never publish one room's
     // mirror over the next's stores.
     writeStoreRows(row)

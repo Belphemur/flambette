@@ -130,6 +130,16 @@ export interface StoreWritePlanner {
   /** The per-store statements a write of `state` must run. */
   plan: (code: string, state: SharedSnapshot | null | undefined) => StoreWritePlan
   /**
+   * The last-known serialized text per synchronized store, in
+   * `SYNCED_STORES` order — exactly what is on disk once the plan's rows
+   * are written (seeded from reads, advanced by `plan`). The grace mirror
+   * joins THESE instead of re-reading the tables (kody review): the plan
+   * already consulted every text this write touched, so the join costs no
+   * extra SELECTs on the write hot path. Warm-seed precondition is the
+   * same one `plan`'s "write it" default already relies on.
+   */
+  knownTexts: (code: string) => readonly (string | null)[]
+  /**
    * Forget a code's remembered texts: the room was dropped (expiry or
    * the last peer's leave). Call from the adapters' `drop` so the
    * planner's memory is bounded by the LIVE room set, never by every
@@ -194,6 +204,13 @@ export function createStoreWritePlanner(): StoreWritePlanner {
     },
     forget(code) {
       for (const store of SYNCED_STORES) known.delete(key(code, store))
+    },
+    knownTexts(code) {
+      // `SYNCED_STORES` order is the join order the read path uses, so a
+      // caller can zip index-for-index. An unseeded text is `null` — the
+      // same read-before-write invariant that keeps `plan` honest covers
+      // every core write path (touch, push, nextSerial, establish).
+      return SYNCED_STORES.map((store) => known.get(key(code, store)) ?? null)
     },
   }
 }

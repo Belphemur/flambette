@@ -281,8 +281,11 @@ mirror below; the §4 Decision text has been corrected to match.
    record's `RoomRecord.state` is only the last commit's projection (an
    absent key is don't-touch at the shared split); the whole-state shape
    an old binary expects is the join over the per-store rows. Both
-   adapters bind `joinSnapshot` over the just-written rows — the SAME
-   join the read path serves — so there is no second merge to drift. The
+   adapters bind `joinSnapshot` over the write planner's last-known
+   texts — the post-write on-disk texts that write's plan already
+   consulted, so the mirror costs no extra SELECTs on the write hot path
+   (kody review) — the SAME join the read path serves, never a second
+   merge to drift. The
    store rows move before the room upsert (inside the Bun transaction;
    per-statement-atomic on workerd) so the mirror never trails its rows.
    A `state: null` re-establishment mirrors NULL, so an old reader sees
