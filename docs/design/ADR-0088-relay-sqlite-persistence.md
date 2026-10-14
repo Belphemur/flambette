@@ -244,7 +244,7 @@ pardon and a weapon.
 - The DO carries one deprecated column (`room.state`, NULL-filled) until
   a future migration removes it.
 
-## Addendum (2026-10-14): eleven stores, not nine; `planIdentity` is always-sent
+## Addendum (2026-10-14): eleven stores, not nine — twelve as of ADR-0090; `planIdentity` is always-sent
 
 **Store count update (2026-10-14, PR #92):** the pantry became the
 TWELFTH synchronized store (ADR-0090, superseding ADR-0087 Decision 7),

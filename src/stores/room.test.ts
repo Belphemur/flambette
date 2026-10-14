@@ -967,9 +967,35 @@ describe('room store — the pantry is household state (ADR-0090)', () => {
     expect(socket.frames('state')).toHaveLength(before)
   })
 
-  test('a payload WITHOUT pantry (older peer) leaves the local list alone', async () => {
+  test('adopting a predating-peer room keeps our list AND publishes it once (CodeRabbit)', async () => {
     const pantry = usePantryStore()
+    // Added while no room exists: nothing is queued as an unsent edit.
     pantry.add('Butter')
+    const room = useRoomStore()
+    room.join('mauve-peacock-candle')
+    await sleep(5)
+    const socket = sockets[sockets.length - 1]
+    // A room whose snapshot predates the pantry store: NO pantry key.
+    socket.receive({
+      type: 'joined',
+      code: 'mauve-peacock-candle',
+      rev: 3,
+      state: { plan: [], customItems: [], checked: {} },
+    })
+    // Absence = don't-touch held: our list survived the adoption…
+    expect(pantry.list).toEqual([{ name: 'Butter', nameKey: 'butter' }])
+    // …and the room learned it with exactly ONE bounded reconcile push —
+    // the alternative (staying silent) leaves the household without our
+    // pantry until some unrelated edit pushes (CodeRabbit, major).
+    expect(socket.frames('state')).toHaveLength(1)
+    const pushed = socket.frames('state')[0]
+    expect(pushed.rev).toBe(4)
+    expect((pushed.state as { pantry?: unknown[] }).pantry).toEqual([
+      { name: 'Butter', nameKey: 'butter' },
+    ])
+  })
+
+  test('adoption of a pantry-less snapshot publishes NOTHING when we hold no pantry', async () => {
     const { socket } = await startRoom()
     const before = socket.frames('state').length
     socket.receive({
@@ -978,8 +1004,7 @@ describe('room store — the pantry is household state (ADR-0090)', () => {
       rev: 3,
       state: { plan: [], customItems: [], checked: {} },
     })
-    expect(pantry.list).toHaveLength(1)
-    // Absence = don't-touch: the adoption must not echo a wipe.
+    // An empty list adopting an old room has nothing to teach it.
     expect(socket.frames('state')).toHaveLength(before)
   })
 })

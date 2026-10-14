@@ -6,6 +6,7 @@ import {
   SELF,
 } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
+import { SYNCED_STORES, storeTableName } from '../relay-core/stores'
 
 /**
  * Room lifecycle (ADR-0026, as deployed per ADR-0038) at the WIRE level,
@@ -564,8 +565,10 @@ describe('per-store schema (ADR-0088 §2/§4)', () => {
     })
     expect(tables).toContain('room')
     expect(tables).toContain('schema_migrations')
-    for (const store of ['plan', 'custom_items', 'checked', 'cleared', 'customs', 'cooked_history', 'filters', 'favorites', 'ratings', 'rating_tombstones', 'plan_identity']) {
-      expect(tables).toContain(`store_${store}`)
+    // Derived from the vocabulary, not a hand-written list: a future
+    // synced store cannot be missed here (CodeRabbit).
+    for (const table of SYNCED_STORES.map(storeTableName)) {
+      expect(tables).toContain(table)
     }
     const ledger = await runInDurableObject(roomStub(room), (_i, state) =>
       state.storage.sql.exec('SELECT version, name FROM schema_migrations ORDER BY version').toArray(),

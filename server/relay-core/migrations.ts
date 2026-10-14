@@ -34,7 +34,7 @@
  * two runtimes' APIs. Idempotence is the recovery story instead.
  */
 
-import { SYNCED_STORES, storeTableName, type SyncedStore } from './stores'
+import { storeTableName, type SyncedStore } from './stores'
 
 /**
  * The slice of a SQL API the runner needs — implemented over `bun:sqlite`
@@ -81,8 +81,6 @@ export interface MigrationStep {
   readonly migrateDown?: (db: MigrationDatabase) => void
 }
 
-/* ------------------------------------------------------------- shared DDL */
-
 /** The ledger the runner itself keeps. Not a step: it exists before step 1. */
 const SCHEMA_MIGRATIONS_DDL = `
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -90,79 +88,6 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   name TEXT NOT NULL,
   applied_at INTEGER NOT NULL
 )`
-
-/**
- * The room row. The shape is IDENTICAL on both runtimes: one table serves
- * a Bun relay's many rooms (keyed by the unique `code`) and a Durable
- * Object's single room the same way, so every query — written once, in the
- * adapters — works on either. `id` stays the primary key for the same
- * reason the column set is additive: the DO's pre-ADR-0088 databases
- * already carry this exact shape, and a primary-key change is a table
- * rebuild, not a migration this runner should have to express. Uniqueness
- * of `code` — what the upserts actually need — is its own index, which a
- * legacy database gains additively.
- *
- * `state` is DEPRECATED (ADR-0088 §2/§4): the pre-per-store blob column,
- * kept — and only ever NULL from migration 002 onward — because an
- * additive step cannot fail on any workerd SQLite vintage. The Bun schema
- * carries the same column so both runtimes run the SAME steps: on a fresh
- * Bun database it simply never holds anything.
- */
-const ROOM_DDL = `
-CREATE TABLE IF NOT EXISTS room (
-  id INTEGER PRIMARY KEY,
-  code TEXT NOT NULL,
-  rev INTEGER NOT NULL,
-  state TEXT,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  last_activity INTEGER NOT NULL,
-  inactivity_at INTEGER NOT NULL,
-  idle_at INTEGER NOT NULL,
-  serial INTEGER NOT NULL
-)`
-
-/** Room lookups and upserts are by code — the one uniqueness the store needs. */
-const ROOM_CODE_INDEX_DDL = 'CREATE UNIQUE INDEX IF NOT EXISTS room_code_idx ON room (code)'
-
-/**
- * The per-code rev floor, which outlives its room (review F4). The peer
- * serial sits in its OWN table rather than as a column here: it was added
- * after the first Durable Object deploy, SQLite cannot widen a table
- * except through a probed `ALTER TABLE`, and `CREATE TABLE IF NOT EXISTS`
- * needs no probe (the recorded peer_serial precedent). Both runtimes keep
- * the two-table shape so one `writeFloor` serves both.
- */
-const FLOOR_DDL = `
-CREATE TABLE IF NOT EXISTS rev_floor (
-  code TEXT PRIMARY KEY,
-  rev INTEGER NOT NULL,
-  at INTEGER NOT NULL
-)`
-
-const PEER_SERIAL_DDL = `
-CREATE TABLE IF NOT EXISTS peer_serial (
-  code TEXT PRIMARY KEY,
-  serial INTEGER NOT NULL
-)`
-
-/**
- * One table per synchronized store (ADR-0088 §2): the value is a proper
- * JSON TEXT column with a `json_valid` CHECK — a corrupt write is a
- * constraint failure at write time, not a surprise at read time — plus
- * per-store metadata: when this store was first and last written for this
- * room. The metadata is distinct from the room row's activity clocks,
- * which answer liveness questions, not history questions.
- */
-function storeTableDdl(store: SyncedStore): string {
-  return `
-CREATE TABLE IF NOT EXISTS ${storeTableName(store)} (
-  code TEXT PRIMARY KEY,
-  value TEXT NOT NULL CHECK (json_valid(value)),
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-)`
-}
 
 /* ------------------------------------------------------- shared row SQL */
 

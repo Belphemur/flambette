@@ -750,6 +750,7 @@ export const useRoomStore = defineStore('room', () => {
         startKeepalive()
         absorbRevFloor(msg.rev)
         let adopted = false
+        let adoptedMissingPantry = false
         if (msg.state != null && !unsentLocalEdit) {
           const rev = typeof msg.rev === 'number' ? msg.rev : localRev + 1
           // Newer than what we hold AND at least as new as anything this
@@ -760,6 +761,23 @@ export const useRoomStore = defineStore('room', () => {
             maxSeenRev = localRev = rev
             applyRemote(msg.state as SharedState)
             adopted = true
+            // ADR-0090 (CodeRabbit): a snapshot from a peer that predates
+            // the pantry store carries NO pantry key, so adopting it
+            // leaves the room without our list until some unrelated local
+            // edit pushes. Reconcile exactly that gap — ONE bounded push
+            // per join, only when the local list has something to teach
+            // and no local edit is pending (a pending push carries the
+            // pantry anyway). Same convergent-republish shape as the
+            // cooked-history reconcile: our snapshot carries the adopted
+            // state PLUS the pantry, so the exchange stops after one
+            // round. Deliberately adoption-only — a mid-session `state`
+            // frame from an old peer never carries the key either, and
+            // reconciling on EVERY one would republish forever (the
+            // reason the history reconcile gates on the key's presence).
+            adoptedMissingPantry =
+              (msg.state as SharedState).pantry === undefined &&
+              pantry.list.length > 0 &&
+              !localEditPending
           }
         }
         // Converge by pushing unless we just adopted the room's state, and
@@ -773,7 +791,7 @@ export const useRoomStore = defineStore('room', () => {
         // pending push is older). Adopting a snapshot leaves our state
         // byte-identical to the room's, so that echo is never needed to
         // converge — it only creates a way to lose a peer's newer edit.
-        if (!adopted || unsentLocalEdit) {
+        if (!adopted || unsentLocalEdit || adoptedMissingPantry) {
           localRev = Math.max(localRev, maxSeenRev) + 1
           sendState()
         }
