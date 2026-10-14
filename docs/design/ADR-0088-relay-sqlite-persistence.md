@@ -191,7 +191,8 @@ same step so both runtimes agree on the version history.
 
 With durable state, the Bun relay stops deleting a room when its last
 peer leaves and adopts the DO's ADR-0038 §4 behaviour: the row survives
-until the 24h inactivity clock or the 7-day idle backstop fires, so a
+until the 30-day inactivity clock or the 30-day idle backstop fires
+(ADR-0038's 2026-10-14 addendum), so a
 phone that reconnects after a tunnel, a reload, or (new) a relay restart
 gets its plan back instead of re-seeding an empty room. This CLOSES the
 one deliberate behavioural difference between the adapters — after this

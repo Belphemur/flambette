@@ -87,8 +87,9 @@ room code:
   `{rev, at}` keeps the household's revision history for the idle TTL, then
   is pruned — the same promise the Bun relay's in-memory `revFloor` map makes.
 - **Expiry by DO alarms**, not timers: one alarm scheduled at the earlier of
-  the two clocks — 24h without `keepalive` AND without `state` activity, and
-  a 7-day idle backstop refreshed by the SAME signals. **This ADR widens
+  the two clocks — 30 days without `keepalive` AND without `state` activity,
+  and a 30-day idle backstop refreshed by the SAME signals (both clocks
+  widened to 30 days by the 2026-10-14 addendum below). **This ADR widens
   ADR-0026's clocks (1h / 12h) for BOTH relay backends**: durable storage
   removes the memory pressure the short clocks were sized for, and one
   lifecycle promise should not fork per platform. On fire: push
@@ -215,3 +216,25 @@ follow-up, not part of this ADR.
   protocol; `AGENTS.md` documents both configs and the new commands
   (`wrangler deploy -c server/wrangler.jsonc`, `wrangler dev -c
   server/wrangler.jsonc`, `wrangler types`).
+
+## Addendum (2026-10-14): both room expiry clocks widen to 30 days
+
+The owner widened the room-deletion window: a room is deleted after **30
+days** of silence, not 24 hours (`INACTIVITY_TTL_MS`) — and the idle
+backstop (`IDLE_TTL_MS`) moved from 7 days to the **same 30 days**,
+because the deletion deadline is the EARLIER of the two clocks
+(`expiryDeadlineOf` in `server/relay-core/lifecycle.ts`): a backstop left
+at 7 days would have cut the widened inactivity window back down to a
+week. With both clocks stamped together by every liveness signal, the two
+now coincide — `inactive` stays the reported `room_expired` reason, and
+the idle clock's remaining role is pruning the rev floor
+(`floor.at + IDLE_TTL_MS`) once the room is gone.
+
+Rationale: with ADR-0088 §5 persisting rooms across restarts and past
+their last peer, a household that does not open the app for a few weeks
+should come back to its plan rather than find it reaped. The
+half-open-socket concern that sized the 24h window stays covered by the
+transport-level heartbeat (a missed pong terminates the socket); the room
+clock is retention, not liveness detection. `RELAY_INACTIVITY_TTL_MS` /
+`RELAY_IDLE_TTL_MS` overrides are unchanged for operators who need
+shorter windows; the e2e suite keeps shrinking both via env.

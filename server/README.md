@@ -19,8 +19,9 @@ bun relay.ts      # listens on :8081 (override with PORT)
 Env knobs (defaults in brackets): `PORT` [8081], `RELAY_DB_PATH`
 [`/data/relay.sqlite3` — set it to `:memory:` to run without persistence,
 e.g. in tests], `RELAY_ATTEMPT_LIMIT` [30 per minute per socket/IP],
-`RELAY_INACTIVITY_TTL_MS` [24h], `RELAY_IDLE_TTL_MS` [7 days] — ADR-0038
-widened ADR-0026's clocks.
+`RELAY_INACTIVITY_TTL_MS` [30 days], `RELAY_IDLE_TTL_MS` [30 days] —
+ADR-0038 widened ADR-0026's clocks, and its 2026-10-14 addendum widened
+both to 30 days.
 
 Or via Docker / from the repo root:
 
@@ -40,7 +41,7 @@ JSON text frames, both directions.
 | `{"type":"create"}` | `{"type":"created","code":"…","rev":<int>}` — `rev` is the per-code floor (see Expiry) |
 | `{"type":"create","code":"<three words>"}` | `{"type":"created","code":"amber-falcon-lantern","rev":<int>}`, or `{"type":"error","code":"code_taken"}` when that code is live |
 | `{"type":"join","code":"ABC123"}` | `{"type":"joined","code":"ABC123","rev":<int\|0>,"state":<obj\|null>}` — for a code the relay does not know: `{"type":"created","code":"…","rev":<int>}` |
-| `{"type":"keepalive"}` | `{"type":"keepalive_ack"}` — refreshes the room's 24h inactivity clock. Not throttled. `{"type":"error","code":"not_in_room"}` when the socket is not in a room |
+| `{"type":"keepalive"}` | `{"type":"keepalive_ack"}` — refreshes the room's 30-day inactivity clock. Not throttled. `{"type":"error","code":"not_in_room"}` when the socket is not in a room |
 | `{"type":"state","rev":<int>,"state":<obj>}` | fan-out to every *other* peer in the room: `{"type":"state","rev":<int>,"state":<obj>,"from":"<peerId>"}` |
 | `{"type":"leave"}` (or socket close) | `{"type":"left"}` |
 
@@ -76,11 +77,14 @@ all find the same room.
 - **Expiry (ADR-0026)**: two clocks per room, BOTH refreshed by every
   liveness signal — `keepalive` included, because a connected peer that
   keepalives is not an idle room.
-  - *Inactivity*: 24h with no `keepalive` and no `state` traffic
+  - *Inactivity*: 30 days with no `keepalive` and no `state` traffic
     (`RELAY_INACTIVITY_TTL_MS`).
-  - *Idle backstop*: 7 days since the last interaction of any kind
-    (`RELAY_IDLE_TTL_MS`) — redundant defence in depth for peers that
-    vanished without a `leave`.
+  - *Idle backstop*: 30 days since the last interaction of any kind
+    (`RELAY_IDLE_TTL_MS`) — defence in depth for peers that vanished
+    without a `leave`. Both clocks sit at 30 days (ADR-0038's 2026-10-14
+    addendum): the two fire together, `inactive` stays the reported
+    reason, and the idle clock's remaining job is pruning the rev floor
+    once the room is gone.
   On firing, the room closes and every peer gets
   `{"type":"error","code":"room_expired","reason":"inactive"|"idle"}`. The
   relay then CLEARS each peer's room code, so a socket left over from the
@@ -100,7 +104,7 @@ all find the same room.
 - **Liveness**: heartbeat ping/pong every 30s; a socket that misses a
   pong is terminated and removed from its room. This is transport-level
   only and deliberately does **not** refresh room activity — a client
-  behind a half-open socket is exactly what the 24h clock is for.
+  behind a half-open socket is exactly what the inactivity clock is for.
 - **Health**: the HTTP response is a JSON echo of the running
   configuration (`inactivityTtlMs`, `idleTtlMs`, `attemptLimit`) so two
   relays can be told apart without guessing.

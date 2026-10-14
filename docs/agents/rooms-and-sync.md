@@ -20,8 +20,9 @@
   carries over). The client sends
   `{type:'keepalive'}` once a minute while live (one interval per
   socket, cleared on every end path) and the relay closes a room after
-  24h of no keepalive AND no state activity; the 7-day idle TTL is a
-  redundant backstop refreshed by the SAME signals (keepalive included —
+  30 days of no keepalive AND no state activity; the idle backstop sits
+  at the same 30 days (ADR-0038 addendum, 2026-10-14) refreshed by the
+  SAME signals (keepalive included —
   a connected peer is not an idle room), and either clock firing tells
   the peers `room_expired` and clears their room code so a stale socket
   can never write into, or delete, a room re-created under that code

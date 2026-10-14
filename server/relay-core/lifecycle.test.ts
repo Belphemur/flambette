@@ -392,11 +392,11 @@ describe('keepalive', () => {
     expect(h.registry.keepalive()).toEqual({ kind: 'refuse', error: RELAY_ERRORS.notInRoom })
   })
 
-  test('a household that keeps itself alive for a week is never closed by the idle backstop', () => {
+  test('a household that keeps itself alive for a month is never closed by the idle backstop', () => {
     const h = harness()
     h.registry.admit('join', 0)
-    // A WEEK of hourly keepalives, not eight hours: the clock under test
-    // is the 7-day backstop, and a shorter loop would still pass if
+    // A MONTH of hourly keepalives: the clock under test
+    // is the 30-day backstop, and a shorter loop would still pass if
     // `keepalive` stopped refreshing `idleAt` entirely — which is exactly
     // the review F1 regression this case exists to guard.
     const hours = IDLE_TTL_MS / HOUR + 8
@@ -404,11 +404,11 @@ describe('keepalive', () => {
       h.now(HOUR)
       expect(h.registry.keepalive()).toEqual({ kind: 'ok' })
       // A wake-up that fires while the room is still live must decide
-      // "not yet" every single time, for the whole week.
+      // "not yet" every single time, for the whole window.
       expect(h.registry.tick()).toBeNull()
       expect(h.expired).toEqual([])
     }
-    // And the deadline really did move: past the original 7-day mark.
+    // And the deadline really did move: past the original 30-day mark.
     expect(h.store.read()!.idleAt).toBeGreaterThan(1_000_000 + IDLE_TTL_MS)
     expect(h.registry.tick()).toBeNull()
   })
@@ -417,9 +417,9 @@ describe('keepalive', () => {
 /* --------------------------------------------------------------- expiry */
 
 describe('expiry clocks (ADR-0038 widening ADR-0026)', () => {
-  test('defaults are 24h inactivity and a 7-day idle backstop', () => {
-    expect(INACTIVITY_TTL_MS).toBe(24 * HOUR)
-    expect(IDLE_TTL_MS).toBe(7 * 24 * HOUR)
+  test('defaults are 30-day inactivity and a 30-day idle backstop', () => {
+    expect(INACTIVITY_TTL_MS).toBe(30 * 24 * HOUR)
+    expect(IDLE_TTL_MS).toBe(30 * 24 * HOUR)
   })
 
   test('one wake-up is armed, at the earlier of the two deadlines', () => {
@@ -429,7 +429,7 @@ describe('expiry clocks (ADR-0038 widening ADR-0026)', () => {
     expect(h.armedAt()).toBe(Math.min(row.inactivityAt, row.idleAt))
   })
 
-  test('24h of silence closes the room as `inactive`, drops the row and keeps the floor', () => {
+  test('a full inactivity window of silence closes the room as `inactive`, drops the row and keeps the floor', () => {
     const h = harness()
     h.registry.admit('join', 0)
     h.registry.push(3, { a: 1 }, 'p1')
@@ -486,12 +486,14 @@ describe('expiry clocks (ADR-0038 widening ADR-0026)', () => {
     const floor = h.store.floors.get('mauve-peacock-candle')!
     expect(h.armedAt()).toBe(floor.at + IDLE_TTL_MS)
 
-    // A wake-up that fires while the floor is still fresh decides nothing
-    // and re-arms for the same deadline.
+    // Both clocks sit at 30 days (ADR-0038 addendum), so the room expires
+    // AT the floor's prune boundary: the floor is still held at the expiry
+    // tick itself (the age-out test is a strict `>`), and the first
+    // wake-up past the boundary — even one hour — reclaims it. The
+    // retention window is the same 30 days for the room and its floor.
     h.now(HOUR)
     expect(h.registry.tick()).toBeNull()
-    expect(h.store.floors.size).toBe(1)
-    expect(h.armedAt()).toBe(floor.at + IDLE_TTL_MS)
+    expect(h.store.floors.size).toBe(0)
 
     // Once the floor has aged out, the wake-up reclaims it and stops.
     h.now(IDLE_TTL_MS)

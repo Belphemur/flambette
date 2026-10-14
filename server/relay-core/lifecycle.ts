@@ -138,9 +138,9 @@ export interface RoomRecord {
   createdAt: number
   /** When the room was last touched by any liveness signal. */
   lastActivityAt: number
-  /** Absolute deadline of the 24h inactivity clock. */
+  /** Absolute deadline of the 30-day inactivity clock. */
   inactivityAt: number
-  /** Absolute deadline of the 7-day idle backstop. */
+  /** Absolute deadline of the 30-day idle backstop. */
   idleAt: number
   /**
    * Monotonic peer counter. The DO derives `state.from` from it so peer
@@ -297,7 +297,7 @@ export function createRoomRegistry({
    * Restart BOTH expiry clocks. Every liveness signal funnels through
    * here — create, join, state AND keepalive (review F1) — because a
    * connected peer that keepalives is by definition not an idle room, and
-   * a 7-day-connected household must never be closed by the backstop.
+   * a 30-day-connected household must never be closed by the backstop.
    *
    * ONE deadline is armed, at the earlier of the two. The Bun relay used
    * to arm two `setTimeout`s and the DO one alarm; the arithmetic is

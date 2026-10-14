@@ -11,6 +11,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRoomRegistry, type RoomRegistry, type RoomStore } from './relay-core/lifecycle'
+import { IDLE_TTL_MS, INACTIVITY_TTL_MS } from './relay-core/policy'
 import { SYNCED_STORES, storeTableName } from './relay-core/stores'
 import { createSqliteStores, openRelayDatabase, persistedDeadlines } from './relaySqlite'
 
@@ -114,9 +115,11 @@ describe('the Bun relay persists to SQLite (ADR-0088 §1)', () => {
     registry.nextSerial()
     const { rooms, floors } = persistedDeadlines(db)
     expect(rooms).toEqual([
-      { code: 'c1', deadline: Math.min(1_000_000 + 24 * 60 * 60 * 1000, 1_000_000 + 7 * 24 * 60 * 60 * 1000) },
+      // The registry stamps BOTH expiry clocks together at the policy
+      // defaults; the sweep reports their min (the core's arithmetic).
+      { code: 'c1', deadline: 1_000_000 + Math.min(INACTIVITY_TTL_MS, IDLE_TTL_MS) },
     ])
-    expect(floors).toEqual([{ code: 'c1', deadline: 1_000_000 + 7 * 24 * 60 * 60 * 1000 }])
+    expect(floors).toEqual([{ code: 'c1', deadline: 1_000_000 + IDLE_TTL_MS }])
   })
 
   test('orphaned floors honor the relay\'s CONFIGURED idle TTL (qodo/kody review)', () => {

@@ -478,7 +478,7 @@ export class Room extends DurableObject<Env> {
       case 'keepalive': {
         // Never throttled: it carries no guessable input and must not be
         // able to burn a create/join budget. The core refreshes BOTH
-        // clocks, so a 7-day-connected household is never closed by the
+        // clocks, so a 30-day-connected household is never closed by the
         // idle backstop (review F1).
         if (!member || this.#room.keepalive().kind !== 'ok') {
           this.#fail(ws, RELAY_ERRORS.notInRoom)

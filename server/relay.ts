@@ -334,7 +334,8 @@ function attach(ws: Socket, code: string): void {
  * Remove a socket from its room. Since ADR-0088 §5 the room does NOT die
  * with its last peer — that was the one deliberate behavioural difference
  * from the Durable Object, now closed: the row (and its state) survives
- * until the 24h inactivity clock or the 7-day idle backstop fires, so a
+ * until the inactivity clock or the idle backstop fires — both 30 days
+ * (ADR-0038 addendum) — so a
  * phone that reconnects after a tunnel, a reload or a relay restart gets
  * its plan back instead of re-seeding an empty room. The wake-up the last
  * touch armed is exactly the expiry deadline, so it stays live and the
@@ -653,7 +654,7 @@ try {
             // carries no guessable input and must never be able to burn a
             // create/join budget. The answer is deliberately NOT named
             // `pong` — that name belongs to the socket-level beat below.
-            // The core refreshes BOTH expiry clocks, so a 7-day-connected
+            // The core refreshes BOTH expiry clocks, so a 30-day-connected
             // household is never closed by the idle backstop (review F1).
             if (!member || !room) {
               send(ws, { type: 'error', code: RELAY_ERRORS.notInRoom })

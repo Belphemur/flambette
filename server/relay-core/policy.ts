@@ -16,11 +16,17 @@
  * `server/relayPolicy.mjs`).
  */
 
-/** Rooms close after 24h with no keepalive and no state activity (ADR-0038, widening ADR-0026). */
-export const INACTIVITY_TTL_MS = 24 * 60 * 60 * 1000
+/** Rooms close after 30 days with no keepalive and no state activity (ADR-0038 widening ADR-0026; its 2026-10-14 addendum widened BOTH clocks to 30 days). */
+export const INACTIVITY_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
-/** Backstop TTL for a room whose peers vanished without `leave`. */
-export const IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+/**
+ * Backstop TTL for a room whose peers vanished without `leave` — the same
+ * 30 days (ADR-0038 addendum): the deletion deadline is the EARLIER of the
+ * two clocks, so a shorter backstop would cut the widened inactivity window
+ * back down. Its remaining job is pruning the rev floor once the room is
+ * gone.
+ */
+export const IDLE_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 /**
  * Legacy relay-minted room codes: Crockford base32 with every vowel

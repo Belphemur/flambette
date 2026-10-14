@@ -138,8 +138,8 @@ const RECONNECT_MIN_MS = 1000
 const RECONNECT_MAX_MS = 30_000
 /**
  * Application-level keepalive (ADR-0026; the windows are ADR-0038's). The
- * relay closes a room after 24h with no keepalive and no state activity,
- * and tells its peers `room_expired`. 60s is a wide margin on a 24h window
+ * relay closes a room after 30 days with no keepalive and no state activity,
+ * and tells its peers `room_expired`. 60s is a wide margin on a 30-day window
  * while costing one tiny frame a minute; it is NOT throttled server-side,
  * so a long-lived room can never spend its create/join budget on liveness.
  */
