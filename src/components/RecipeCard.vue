@@ -8,8 +8,10 @@ import type { VariantMeta } from '../lib/types'
 import { catalog } from '../lib/catalog'
 import { isUserRecipeId, showNewBadge } from '../lib/userRecipes'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
+import { pantryMatch } from '../lib/pantry'
 import { displayRating, useRatingStore } from '../stores/rating'
-import { Clock, Star } from '@lucide/vue'
+import { usePantryStore } from '../stores/pantry'
+import { Check, Clock, Star } from '@lucide/vue'
 
 const props = defineProps<{ meta: VariantMeta }>()
 
@@ -66,6 +68,31 @@ const showNew = computed(() => {
   if (!c) return false
   if (!isUserRecipeId(props.meta.id, c.userRecipeIds)) return false
   return showNewBadge(c.userRecipeAddedAt.get(props.meta.id))
+})
+
+/**
+ * The pantry badge (ADR-0087 Decision 6): rendered ONLY while the
+ * "In my kitchen" row is active, derived from the ONE pure shape
+ * (`pantryMatch` in src/lib/pantry.ts — no second computation here).
+ * The desktop and mobile grammars are two renderings of that same
+ * shape, swapped by breakpoint CSS — presentation only.
+ */
+const pantry = usePantryStore()
+const pantryBadge = computed(() => {
+  if (!pantry.active) return null
+  const m = pantryMatch(props.meta, pantry.keys)
+  if (m.ready) {
+    const text = `Ready (${m.have} of ${m.total})`
+    return { ready: true, desktop: text, mobile: text }
+  }
+  const k = m.missing.length
+  const needs =
+    k === 1 ? `Needs 1 more: ${pantry.nameFor(m.missing[0])}` : `Needs ${k} more`
+  return {
+    ready: false,
+    desktop: `You have ${m.have} of ${m.total} · ${needs}`,
+    mobile: `${m.have} of ${m.total} • Needs ${k}`,
+  }
 })
 </script>
 
@@ -171,6 +198,22 @@ const showNew = computed(() => {
   <span class="flex items-center gap-1 whitespace-nowrap font-mono-data tabular-nums" data-test="card-time">
   <Clock :size="16" aria-hidden="true" />{{ meta.cooking_minutes }} min
   </span>
+  </p>
+
+  <!-- ADR-0087 Decision 6: the pantry badge — only while the "In my
+  kitchen" row is active; desktop and mobile grammars from the SAME
+  shape, swapped by breakpoint CSS (presentation only). Ready wears the
+  brand tint + check glyph; a needs-state stays neutral (the words
+  carry the meaning, never a colour alone). -->
+  <p
+  v-if="pantryBadge"
+  class="mt-1.5 flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium tabular-nums"
+  :class="pantryBadge.ready ? 'bg-brand-tint text-brand-text' : 'bg-surface-sunken text-text-muted'"
+  data-test="pantry-badge"
+  >
+  <Check v-if="pantryBadge.ready" :size="12" aria-hidden="true" />
+  <span class="lg:hidden">{{ pantryBadge.mobile }}</span>
+  <span class="hidden lg:inline">{{ pantryBadge.desktop }}</span>
   </p>
 
   <div class="relative z-10 mt-1.5">

@@ -50,6 +50,9 @@ export function useListboxMenu(count: number, selectedIndex: () => number): List
   }
 
   function focusOption(index: number) {
+    // A zero-option menu (panel mode, ADR-0089: the Kitchen dropdown has
+    // no option rows) has nothing to focus — and (x % 0) is NaN.
+    if (count === 0) return
     // Modulo, not clamp: ArrowUp on the first option wraps to the last,
     // which is what a listbox does (and what the sort menu already did).
     const at = (index + count) % count

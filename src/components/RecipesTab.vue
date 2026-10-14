@@ -42,8 +42,11 @@ import {
   roleGlyph,
   type IconRole,
 } from '../lib/palette'
+import { preparePantry, sharesPantryIngredient } from '../lib/pantry'
 import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
+import { usePantryStore } from '../stores/pantry'
+import PantryFilterDropdown from './PantryFilterDropdown.vue'
 import { useUiStore } from '../stores/ui'
 import RecipeCard from './RecipeCard.vue'
 import RecipeSearchField from './RecipeSearchField.vue'
@@ -84,6 +87,10 @@ const ui = useUiStore()
 // applied here where the search pipeline runs — a recipe already in the plan
 // stays planned regardless.
 const restrictions = useRestrictions()
+// "In my kitchen" pantry (ADR-0087, placement per ADR-0089): device-local
+// nameKeys; the Kitchen dropdown below owns the editing, the pipeline
+// below owns filtering + ranking.
+const pantry = usePantryStore()
 
 /** The ONE filter object (ADR-0027): persisted, and synced in the room. */
 const filters = computed<QuickFilters>(() => ui.quickFilters)
@@ -328,6 +335,10 @@ const results = computed<{ list: VariantMeta[]; primaryLength: number }>(() => {
   const index = dietIndex.value
 
   const facets = (meta: VariantMeta): boolean => {
+  // ADR-0087 Decision 4: the pantry is a facet — a non-empty pantry
+  // keeps only recipes sharing at least one pantry ingredient.
+  if (pantry.active && !sharesPantryIngredient(meta, pantry.keys))
+  return false
   // The restriction verdict is upstream's own (removed = a strict subset);
   // user recipes are never in it (no upstream rework exists for them).
   if (restrictions.isRemoved(meta.recipe_id)) return false
@@ -346,6 +357,34 @@ const results = computed<{ list: VariantMeta[]; primaryLength: number }>(() => {
   if (!verdict || !matchesAllDiets(verdict, diets)) return false
   }
   return true
+  }
+
+  // ADR-0087 Decision 4: while the pantry row is active the grid is
+  // ranked ascending by MISSING pantry count; ties fall through to the
+  // selected sort comparator — composed here, so getSortComparator
+  // stays the ONE sort funnel. qodo round 2 (performance): an INACTIVE
+  // pantry sorts by the comparator alone — zero pantry work on every
+  // keystroke/filter/sort of the default browse — and an active one
+  // measures each candidate recipe at most ONCE per recomputation
+  // (memoized per meta id, key tokens precomputed in preparePantry)
+  // instead of running the full match on both recipes per comparison,
+  // with the sort comparator hoisted out of the per-comparison closure.
+  const baseComparator = getSortComparator(f.sortBy)
+  let rank: (a: VariantMeta, b: VariantMeta) => number
+  if (!pantry.active) {
+    rank = baseComparator
+  } else {
+    const prepared = preparePantry(pantry.keys)
+    const counts = new Map<number, number>()
+    const missingOf = (m: VariantMeta): number => {
+      let n = counts.get(m.id)
+      if (n === undefined) {
+        n = prepared.missingCount(m)
+        counts.set(m.id, n)
+      }
+      return n
+    }
+    rank = (a, b) => missingOf(a) - missingOf(b) || baseComparator(a, b)
   }
 
   let list: VariantMeta[]
@@ -367,8 +406,8 @@ const results = computed<{ list: VariantMeta[]; primaryLength: number }>(() => {
   return facets(meta)
   })
   // Sort primary and fallback separately so primary always comes first.
-  primary.sort(getSortComparator(f.sortBy))
-  fallback.sort(getSortComparator(f.sortBy))
+  primary.sort(rank)
+  fallback.sort(rank)
   // The split point is the FILTERED primary length — using the raw id
   // count would label facet-passing fallback cards as primary and
   // misplace the "More results" divider.
@@ -383,10 +422,26 @@ const results = computed<{ list: VariantMeta[]; primaryLength: number }>(() => {
   // The browse path sorts like the search path: without this the sort
   // dropdown is dead whenever the search box is empty (a regression the
   // search rewrite introduced — main sorted every list).
-  list.sort(getSortComparator(f.sortBy))
+  list.sort(rank)
   primaryLength = list.length
   }
   return { list, primaryLength }
+})
+
+/** The summary line's text (ADR-0087 Decision 6b + Addendum §2): while
+ *  the pantry row is active this is ALSO the aria-live announcement, so
+ *  it must never announce a count the current query has not produced
+ *  (qodo round 2): while a debounced/in-flight search has not landed,
+ *  `results` still reflects the PREVIOUS query — the summary reads
+ *  "Searching…" instead of a stale count, visibly and to screen
+ *  readers, and the settled count is announced once the search lands. */
+const pantrySummary = computed(() => {
+  if (pantry.active && searchPending.value) return 'Searching…'
+  const n = results.value.list.length
+  const noun = `${n} recipe${n === 1 ? '' : 's'}`
+  return pantry.active
+    ? `${noun} ${n === 1 ? 'matches' : 'match'} your kitchen`
+    : noun
 })
 
 const filtersActive = computed(() => query.value !== '' || hasActiveFilters(filters.value))
@@ -496,6 +551,13 @@ onUnmounted(() => observer?.disconnect())
   class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center"
   data-test="filter-bar"
   >
+  <!-- ADR-0089: the pantry IS a filter dropdown now — the "Kitchen"
+  chip leads the row and opens the In-My-Kitchen panel (chips + add
+  input + suggestions) through the ONE FilterDropdown shell. The
+  standalone "In my kitchen" row is retired (supersedes ADR-0087
+  Decision 1's placement). -->
+  <PantryFilterDropdown />
+
   <!-- ADR-0045: one FilterDropdown for all three — cook time, sort and
   meal type finally share one trigger + popup shell, and the native
   `<select>` (whose OS-drawn popup matched nothing) is deleted. -->
@@ -685,7 +747,21 @@ onUnmounted(() => observer?.disconnect())
   </div>
 
   <p class="font-mono-data text-xs tabular-nums text-text-muted">
-  {{ results.list.length }} recipe{{ results.list.length === 1 ? '' : 's' }}
+  <!-- ADR-0087 Decision 6b + Addendum §2: while the pantry row is
+  active the summary carries the render's "Cook With Your Pantry"
+  heading, then the real matching count — and the SAME text is the
+  aria-live status, so a pantry change re-rank is announced (the
+  heading stays OUTSIDE the live region: it never changes). While a
+  search is pending the text is "Searching…", never the previous
+  query's count (qodo round 2). Counts are the real filtered set
+  (results.list), never fabricated. -->
+  <span
+  v-if="pantry.active"
+  data-test="pantry-heading"
+  >Cook With Your Pantry · </span><span
+  :aria-live="pantry.active ? 'polite' : undefined"
+  data-test="pantry-summary"
+  >{{ pantrySummary }}</span>
   <button
   v-if="filtersActive"
   class="ml-2 text-brand-text underline"
@@ -740,7 +816,7 @@ onUnmounted(() => observer?.disconnect())
 
   <div v-if="results.list.length === 0 && !searchPending" class="py-16 text-center text-text-muted">
   <SearchX :size="40" class="mx-auto" aria-hidden="true" />
-  <p class="mt-2 font-medium">No recipes match your filters</p>
+  <p class="mt-2 font-medium">No recipes match your {{ pantry.active ? 'kitchen' : 'filters' }}</p>
   <!-- ADR-0070 Addendum 1: the hint no longer dead-ends as static
   text — it OPENS the disclosure, so a reader who got here with a
   too-clever query has a way out of it. -->

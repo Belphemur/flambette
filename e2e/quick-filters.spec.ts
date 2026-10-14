@@ -180,13 +180,16 @@ test.describe('filter bar layout on a phone (WS1)', () => {
     // The Pixel 7 project already runs this viewport; force it here too so
     // the assertion is identical in both projects.
     await page.setViewportSize({ width: 412, height: 915 })
+    // ADR-0089: the Kitchen dropdown chip joins the row (first position),
+    // so the tracked set is the WHOLE bar — six controls fill the 2-column
+    // phone grid exactly (3 rows of 2), keeping the no-orphan guarantee.
     const controls = page.locator(
-      '[data-test=cook-time-filter], [data-test=favourites-filter], [data-test=source-button], [data-test=sort-button]',
+      '[data-test=pantry-trigger], [data-test=cook-time-filter], [data-test=favourites-filter], [data-test=source-button], [data-test=sort-button], [data-test=mealtype-button]',
     )
-    await expect(controls).toHaveCount(4)
+    await expect(controls).toHaveCount(6)
 
     const boxes = []
-    for (let i = 0; i < 4; i++) boxes.push(await controls.nth(i).boundingBox())
+    for (let i = 0; i < 6; i++) boxes.push(await controls.nth(i).boundingBox())
     const rows = new Map<number, number>()
     for (const box of boxes) {
       expect(box).not.toBeNull()
