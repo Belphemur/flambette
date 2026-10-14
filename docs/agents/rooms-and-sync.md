@@ -118,7 +118,12 @@
   value with a `json_valid` CHECK, per-store `created_at`/`updated_at`)
   plus the room row, the rev floor and the peer serial — the Bun relay
   behind `RELAY_DB_PATH` (default `/data/relay.sqlite3`, Docker volume
-  `relay-data`), the Durable Object in its own storage SQL. The split
+  `relay-data`), the Durable Object in its own storage SQL. The
+  deprecated `room.state` column is a WRITE-ONLY legacy-blob mirror for
+  30 days after migration 002 (ADR-0088's 2026-10-14 addendum): upserts
+  bind the room's merged snapshot into it so a downgraded, pre-per-store
+  relay binary keeps serving real rooms, then bind NULL again — no read
+  path of the new binary ever touches it. The split
   (`splitSnapshot`) writes ONLY the keys present in the payload — the
   standing "absent = don't-touch" rule is enforced at the shared split,
   so no adapter can turn a missing key into a wipe — while an explicit

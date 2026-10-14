@@ -120,8 +120,12 @@ export function storeClearSql(store: SyncedStore): string {
  * INSERT OR REPLACE, deliberately: REPLACE would delete the conflicting
  * row and mint a new rowid, discarding the `id` the row already has (the
  * Durable Object's single room keeps id 1 for its whole life). The
- * deprecated `state` column is written NULL — always, from migration 002
- * onward (ADR-0088 §2/§4). The retired `idle_at` column is NOT NULL on
+ * deprecated `state` column is bound by the adapter: during the
+ * legacy-blob grace window it carries the record's merged snapshot (the
+ * downgrade-safety mirror, ADR-0088's 2026-10-14 addendum — `state`
+ * stays a real binding so the SQL is identical on both runtimes and the
+ * adapter owns the grace decision); after the window it is bound NULL.
+ * The retired `idle_at` column is NOT NULL on
  * every database that predates the expiry clocks' unification (ADR-0038's
  * addendum), and SQLite cannot drop it without a table rebuild the runner
  * refuses to do — so the upsert mirrors the deadline into it. Written,
@@ -129,7 +133,7 @@ export function storeClearSql(store: SyncedStore): string {
  */
 export const ROOM_UPSERT_SQL = `INSERT INTO room
   (code, rev, state, created_at, updated_at, last_activity, inactivity_at, idle_at, serial)
-  VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT (code) DO UPDATE SET
     rev = excluded.rev,
     state = excluded.state,
@@ -142,6 +146,27 @@ export const ROOM_UPSERT_SQL = `INSERT INTO room
 
 /** Forget one room row (its per-store rows go with it — see the adapters). */
 export const ROOM_DELETE_SQL = 'DELETE FROM room WHERE code = ?'
+
+/**
+ * When the legacy-blob grace window closes (ADR-0088's 2026-10-14
+ * addendum): migration 002's ledger stamp plus `graceMs`. The deadline
+ * lives in the LEDGER, not the environment — the core cannot read env,
+ * and both runtimes must agree (ADR-0040) — so the answer is derived
+ * from the one table every deployment of this schema has. A database
+ * whose ledger has no version-002 row (a fresh database mid-open, or a
+ * rolled-back one) returns 0: the gate is closed and the upsert binds
+ * NULL, the pre-grace behaviour.
+ *
+ * ONE implementation, called once per adapter at store-factory creation
+ * and cached there — re-reading the ledger on every write would spend a
+ * query per push to answer a question that cannot change within a
+ * process's lifetime (a later migration never moves an earlier stamp).
+ */
+export function readBlobGraceUntil(db: MigrationDatabase, graceMs: number): number {
+  const rows = db.all('SELECT applied_at FROM schema_migrations WHERE version = 2')
+  const appliedAt = rows[0]?.applied_at
+  return appliedAt === undefined ? 0 : Number(appliedAt) + graceMs
+}
 
 /**
  * Read one code's row from ONE store table, as raw JSON `text`. One

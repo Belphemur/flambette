@@ -301,7 +301,7 @@ describe('migration 002 splits the DO legacy blobs (ADR-0088 §4)', () => {
     return db
   }
 
-  test('per-store rows appear, the blob column is NULLed, updated_at is added and backfilled', () => {
+  test('per-store rows appear, a valid blob SURVIVES the split, updated_at is added and backfilled', () => {
     const db = legacyDb()
     const blob = JSON.stringify({
       plan: [{ variantId: 9, servings: 4 }],
@@ -327,7 +327,11 @@ describe('migration 002 splits the DO legacy blobs (ADR-0088 §4)', () => {
     expect(storeRowCount(db, 'ratings')).toBe(0)
     expect(storeRowCount(db, 'customItems')).toBe(0)
 
-    expect(db.all('SELECT state FROM room')[0]?.state).toBeNull()
+    // A valid blob SURVIVES the split — the original text, verbatim (the
+    // grace mirror, ADR-0088's 2026-10-14 addendum): old readers of this
+    // column keep seeing the room through the grace window. Only a blob
+    // that is not json_valid is nulled.
+    expect(db.all('SELECT state FROM room')[0]?.state).toBe(blob)
     // The guarded ALTER backfilled the new metadata column.
     expect(db.all('SELECT updated_at FROM room')[0]?.updated_at).toBe(222)
     // The floor/serial tables the legacy database already had are untouched.

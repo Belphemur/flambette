@@ -52,11 +52,12 @@ import {
   type RoomRegistry,
   type RoomStore,
 } from '../relay-core/lifecycle'
-import { ROOM_TTL_MS } from '../relay-core/policy'
+import { ROOM_TTL_MS, STATE_BLOB_GRACE_MS } from '../relay-core/policy'
 import { parseClientFrame, RELAY_ERRORS, type RelayErrorCode, type RelayMessage } from '../relay-core/protocol'
 import { canonicalizeCode } from '../relay-core/codes'
 import {
   applyMigrations,
+  readBlobGraceUntil,
   ROOM_DELETE_SQL,
   ROOM_UPSERT_SQL,
   storeClearSql,
@@ -214,17 +215,9 @@ export class Room extends DurableObject<Env> {
     )
     if (!row) return null
     // The store rows ARE the snapshot now; the deprecated `room.state`
-    // column (always NULL past migration 002) is never read back. One
-    // statement per store — workerd's storage SQL rejects a compound
-    // SELECT with one branch per table.
-    const stores = SYNCED_STORES.map((store) => ({
-      store,
-      text: (
-        [
-          ...this.ctx.storage.sql.exec(storeRowSql(store), this.#code),
-        ] as { text?: unknown }[]
-      )[0]?.text,
-    })) as unknown as { store: string; text: string | null }[]
+    // column (the legacy-blob grace mirror, ADR-0088's 2026-10-14
+    // addendum) is never read back.
+    const stores = this.#readStoreRowTexts()
     // Seed change detection with what is on disk (ADR-0088 §2): the first
     // touch after an eviction must not rewrite every store either.
     this.#planner.seed(this.#code, stores)
@@ -240,6 +233,23 @@ export class Room extends DurableObject<Env> {
   }
 
   /**
+   * One row per synchronized store, as raw JSON `text` — the read the
+   * joiner consumes and the grace mirror reuses. One statement per
+   * store: workerd's storage SQL rejects a compound SELECT with one
+   * branch per table.
+   */
+  #readStoreRowTexts(): { store: string; text: string | null }[] {
+    return SYNCED_STORES.map((store) => ({
+      store,
+      text: (
+        [
+          ...this.ctx.storage.sql.exec(storeRowSql(store), this.#code),
+        ] as { text?: unknown }[]
+      )[0]?.text,
+    })) as unknown as { store: string; text: string | null }[]
+  }
+
+  /**
    * The core's per-store change detection (ADR-0088 §2), one decision
    * consumed identically by the Bun adapter. Seeded by `#readRoom` (the
    * core only ever writes a record it just read, so the seed is warm even
@@ -247,12 +257,65 @@ export class Room extends DurableObject<Env> {
    */
   readonly #planner = createStoreWritePlanner()
 
+  /**
+   * When the legacy-blob grace window closes, or null until the first
+   * write derives it from the migration ledger (after `#ensureSchema`
+   * has run — the ledger table does not exist before that).
+   */
+  #blobGraceUntil: number | null = null
+
   #writeRoom(row: RoomRecord): void {
     this.#ensureSchema()
+    // The legacy-blob grace deadline (ADR-0088's 2026-10-14 addendum),
+    // derived from the migration ledger once per object and cached: a
+    // later migration never moves an earlier stamp, so the answer cannot
+    // change within this instance's lifetime. The cache is a plain field
+    // (not keyed to storage) because a storage rollback in the specs
+    // always comes with a fresh object. 0 = no version-002 stamp (gate
+    // closed, NULL) — same derivation the Bun adapter runs.
+    if (this.#blobGraceUntil === null) {
+      this.#blobGraceUntil = readBlobGraceUntil(this.#db, STATE_BLOB_GRACE_MS)
+    }
+    // The room row moved (its clocks genuinely changed); the store rows
+    // only move when their VALUE did (kody review): a keepalive must not
+    // re-upsert the unchanged stores and drag every `updated_at`
+    // along. The core's plan says which rows changed; a `state: null`
+    // write (a fresh establishment) clears every row. `created_at` is
+    // "first write": the upsert preserves it. Same as the Bun adapter's
+    // writeStoreRows. The store rows move FIRST, so the room upsert's
+    // grace mirror joins the POST-write rows (the merged snapshot) — the
+    // Bun half reorders the same way inside its transaction.
+    const plan = this.#planner.plan(row.code, row.state)
+    if (plan.clearAll) {
+      for (const store of SYNCED_STORES) {
+        this.ctx.storage.sql.exec(storeClearSql(store), this.#code)
+      }
+    } else {
+      for (const { store, text } of plan.changed) {
+        this.ctx.storage.sql.exec(
+          storeUpsertSql(store),
+          row.code,
+          text,
+          Date.now(),
+          Date.now(),
+        )
+      }
+    }
+    // `state` is the deprecated blob column: during the grace window it is
+    // bound the room's MERGED snapshot (the downgrade-safety mirror — a
+    // pre-per-store relay binary reading this column must keep seeing real
+    // rooms), after the window NULL. The record's own `state` is only the
+    // last commit's projection (an absent key is don't-touch at the shared
+    // split), so the mirror joins the just-written store rows — the SAME
+    // joinSnapshot the read path serves, never a second merge to drift.
+    // Write-only: #readRoom never touches it.
+    const merged =
+      Date.now() < this.#blobGraceUntil ? joinSnapshot(this.#readStoreRowTexts()) : null
     this.ctx.storage.sql.exec(
       ROOM_UPSERT_SQL,
       row.code,
       row.rev,
+      merged === null ? null : JSON.stringify(merged),
       row.createdAt,
       Date.now(),
       row.lastActivityAt,
@@ -262,29 +325,6 @@ export class Room extends DurableObject<Env> {
       row.deadline,
       row.serial,
     )
-    // The room row moved (its clocks genuinely changed); the store rows
-    // only move when their VALUE did (kody review): a keepalive must not
-    // re-upsert the unchanged stores and drag every `updated_at`
-    // along. The core's plan says which rows changed; a `state: null`
-    // write (a fresh establishment) clears every row. `created_at` is
-    // "first write": the upsert preserves it. Same as the Bun adapter's
-    // writeStoreRows.
-    const plan = this.#planner.plan(row.code, row.state)
-    if (plan.clearAll) {
-      for (const store of SYNCED_STORES) {
-        this.ctx.storage.sql.exec(storeClearSql(store), this.#code)
-      }
-      return
-    }
-    for (const { store, text } of plan.changed) {
-      this.ctx.storage.sql.exec(
-        storeUpsertSql(store),
-        row.code,
-        text,
-        Date.now(),
-        Date.now(),
-      )
-    }
   }
 
   #readFloor(): FloorRecord | null {

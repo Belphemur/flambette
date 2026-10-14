@@ -25,6 +25,7 @@ import {
 } from './relay-core/stores'
 import {
   applyMigrations,
+  readBlobGraceUntil,
   ROOM_DELETE_SQL,
   ROOM_UPSERT_SQL,
   storeClearSql,
@@ -32,7 +33,7 @@ import {
   storeUpsertSql,
   type MigrationDatabase,
 } from './relay-core/migrations'
-import { ROOM_TTL_MS } from './relay-core/policy'
+import { ROOM_TTL_MS, STATE_BLOB_GRACE_MS } from './relay-core/policy'
 import { type FloorRecord, type RoomRecord, type RoomStore } from './relay-core/lifecycle'
 
 /**
@@ -120,6 +121,12 @@ export function createSqliteStores(
   // path below, consulted by this write path.
   const planner = createStoreWritePlanner()
 
+  // The legacy-blob grace deadline (ADR-0088's 2026-10-14 addendum),
+  // derived from the migration ledger ONCE per factory: a later migration
+  // never moves an earlier stamp, so the answer cannot change within this
+  // process's lifetime. 0 = no version-002 stamp (gate closed, NULL).
+  const blobGraceUntil = readBlobGraceUntil(facadeOf(db), STATE_BLOB_GRACE_MS)
+
   const readRoomRow = (code: string): RoomSqlRow | undefined =>
     db
       .query(
@@ -141,13 +148,21 @@ export function createSqliteStores(
     // the schema-shaped DML is core code, not per-adapter strings (kody
     // review; ADR-0088 §4). It is an upsert, not INSERT OR REPLACE, so the
     // row keeps its `id` instead of minting a new rowid on every write.
-    // `state` is the deprecated blob column: NULL from migration 002
-    // onward, never written again (ADR-0088 §2/§4).
+    // `state` is the deprecated blob column: during the grace window it is
+    // bound the room's MERGED snapshot (the downgrade-safety mirror — a
+    // pre-per-store relay binary reading this column must keep seeing real
+    // rooms), after the window NULL. The record's own `state` is only the
+    // last commit's projection (an absent key is don't-touch at the shared
+    // split), so the mirror joins the just-written store rows — the SAME
+    // joinSnapshot the read path serves, never a second merge to drift.
+    // Write-only: no read path touches this column.
+    const merged = now() < blobGraceUntil ? joinSnapshot(readStoreRows(row.code)) : null
     db
       .query(ROOM_UPSERT_SQL)
       .run(
         row.code,
         row.rev,
+        merged === null ? null : JSON.stringify(merged),
         row.createdAt,
         now(),
         row.lastActivityAt,
@@ -189,8 +204,12 @@ export function createSqliteStores(
    * what their runtime allows.
    */
   const writeRoomAndStores = db.transaction((row: RoomRecord) => {
-    writeRoomRow(row)
+    // The store rows move FIRST, so the room upsert's grace mirror joins
+    // the POST-write rows — the merged snapshot, in the same transaction
+    // (qodo review) so an interruption can never publish one room's
+    // mirror over the next's stores.
     writeStoreRows(row)
+    writeRoomRow(row)
   })
   const dropRoomAndStores = db.transaction((code: string) => {
     db.query(ROOM_DELETE_SQL).run(code)

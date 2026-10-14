@@ -5,24 +5,26 @@
  * Up: for each synchronized store, copy the store's subtree out of every
  * blob that HAS the key — the `json_type` guard is the presence test,
  * because `json_extract` cannot distinguish an absent key from an explicit
- * JSON `null`, and `planIdentity: null` is a real answer (ADR-0034) — then
- * NULL the column. The column stays (deprecated, always NULL afterwards):
- * an additive step cannot fail on any workerd SQLite vintage, and the
- * peer_serial precedent shows additive beats clever here.
+ * JSON `null`, and `planIdentity: null` is a real answer (ADR-0034). The
+ * blob column itself SURVIVES the split when it is valid JSON (the
+ * downgrade-safety grace mirror, ADR-0088's 2026-10-14 addendum): the
+ * original blob text is the freshest full snapshot at migration time, so
+ * it is left in place for the grace window's upserts to refresh and,
+ * after the window closes, to keep serving old readers. Only a blob that
+ * is not valid JSON at all (a truncated write from a pre-ADR relay) is
+ * nulled — `json_type` RAISES on malformed text, and one poisoned row
+ * must not fail the whole migration before the trailing `UPDATE` can
+ * clear it. The room is served with empty state either way, which is
+ * what the previous codec's parse failure did (qodo review).
  *
  * `OR IGNORE` keeps the step re-runnable: a partially applied split
  * converges instead of colliding on the primary key, and a fully split
- * database re-inserts nothing (every blob is already NULL). On a fresh
+ * database re-inserts nothing new — the surviving blob cannot resurrect
+ * stale data, because `INSERT OR IGNORE` keeps the newer per-store rows
+ * the newer binary has written since. On a fresh
  * Bun database the same statements run over zero rows — the Bun side
  * ships 002 as the no-op it is there, so both runtimes agree on the
  * version history.
- *
- * A legacy blob that is not valid JSON at all (a truncated write from a
- * pre-ADR relay) is kept out of the split by the `json_valid` guard —
- * `json_type` RAISES on malformed text, and one poisoned row must not
- * fail the whole migration before the trailing `UPDATE` can clear it.
- * The blob is nulled either way, so the room is served with empty state,
- * which is what the previous codec's parse failure did (qodo review).
  *
  * The up half is SQL generated over the store vocabulary, but it cannot be
  * a static `up` string list: it needs the vocabulary at build-of-statement
@@ -31,7 +33,10 @@
  *
  * Down (explicit rollback only): re-fold every per-store row back into the
  * blob, key by key — `json_set` with a `json()` wrapper so the stored text
- * lands as JSON, not as a quoted string. The fold is best-effort by
+ * lands as JSON, not as a quoted string. Since the grace mirror
+ * (ADR-0088's 2026-10-14 addendum) a valid blob survives `up`, so the
+ * fold merges the per-store rows back into the blob the room already
+ * had. The fold is best-effort by
  * design: keys that were ABSENT in the original legacy blob come back as
  * explicit JSON `null`s, which the pre-per-store reader treats exactly
  * like an absent key (empty store state). A room with no rows in a store
@@ -85,7 +90,9 @@ export const MIGRATION_002: MigrationStep = {
          WHERE state IS NOT NULL AND json_valid(state) AND json_type(state, '${path}') IS NOT NULL`,
       )
     }
-    db.exec('UPDATE room SET state = NULL WHERE state IS NOT NULL')
+    db.exec(
+      'UPDATE room SET state = NULL WHERE state IS NOT NULL AND NOT json_valid(state)',
+    )
   },
   migrateDown(db) {
     for (const store of SYNCED_STORES) {

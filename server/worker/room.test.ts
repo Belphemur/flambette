@@ -595,7 +595,7 @@ describe('per-store schema (ADR-0088 §2/§4)', () => {
     expect(result).toBe('refused')
   })
 
-  it('a push lands as per-store rows, and the deprecated blob column stays NULL', async () => {
+  it('a push lands as per-store rows, and the blob column mirrors the merged snapshot', async () => {
     const room = nextRoom()
     const a = await dial(`/?op=create&room=${room}`)
     await a.expect('created')
@@ -615,8 +615,13 @@ describe('per-store schema (ADR-0088 §2/§4)', () => {
     expect(rows.identity).toEqual([{ value: 'null' }])
     // Absent keys insert no row at all — don't-touch, not a wipe.
     expect(rows.cleared).toHaveLength(0)
-    // The deprecated column is never written again.
-    expect(rows.blob).toEqual([{ state: null }])
+    // The grace mirror (ADR-0088's 2026-10-14 addendum): the blob column
+    // carries the room's MERGED snapshot — the same join the read path
+    // serves, including the explicit `planIdentity: null` — so a
+    // pre-per-store relay binary still sees real rooms after a downgrade.
+    expect(rows.blob).toEqual([
+      { state: JSON.stringify({ plan: [{ variantId: 5 }], planIdentity: null }) },
+    ])
   })
 
   it('a keepalive re-upserts NO store row — updated_at is per-store metadata (ADR-0088 §2)', async () => {
@@ -724,8 +729,15 @@ describe('per-store schema (ADR-0088 §2/§4)', () => {
     expect(split.identity).toEqual([{ value: 'null' }])
     // A key the blob did not carry inserted no row.
     expect(split.ratings).toHaveLength(0)
-    // The blob column is kept, deprecated, NULL afterwards.
-    expect(split.blob).toEqual([{ state: null }])
+    // A valid blob SURVIVES the split — the original text, verbatim (the
+    // grace mirror, ADR-0088's 2026-10-14 addendum); only a non-json_valid
+    // blob is nulled.
+    expect(split.blob).toEqual([
+      {
+        state:
+          '{"plan":[{"variantId":9,"servings":4}],"checked":{"12|butter":true},"planIdentity":null,"favorites":{"3":{"favorited":true,"updatedAt":42}}}',
+      },
+    ])
     // 001's guarded ALTER backfilled updated_at from last_activity.
     expect(split.updated).toEqual([{ updated_at: 222 }])
     expect(split.planMeta).toEqual([{ created_at: 111, updated_at: 222 }])

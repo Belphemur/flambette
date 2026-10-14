@@ -110,7 +110,11 @@ all find the same room.
   by the migration runner shared with the Cloudflare Durable Object
   (ADR-0088 §4). Point the Docker volume at `/data` (the compose file
   does) and a restart resumes every room's state, rev floor and peer
-  serial; the clock still deletes a room that stays silent. Throttle
+  serial; the clock still deletes a room that stays silent. The
+  deprecated `room.state` column keeps a legacy-blob mirror for 30 days
+  after the split migration (ADR-0088's 2026-10-14 addendum) so an old,
+  pre-per-store relay binary run against this database still sees real
+  rooms — the new binary itself never reads it. Throttle
   buckets stay in memory deliberately: rate-limit state is ephemeral by
   design, and persisting it would make a restart BOTH a pardon and a
   weapon.

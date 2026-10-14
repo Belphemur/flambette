@@ -41,10 +41,13 @@ import type { MigrationStep } from '../migrations'
  * legacy database gains additively.
  *
  * `state` is DEPRECATED (ADR-0088 §2/§4): the pre-per-store blob column,
- * kept — and only ever NULL from migration 002 onward — because an
+ * kept — populated only by migration 002's surviving legacy blobs and the
+ * grace-window mirror, NULL again after the grace closes (ADR-0088's
+ * 2026-10-14 addendum) — because an
  * additive step cannot fail on any workerd SQLite vintage. The Bun schema
  * carries the same column so both runtimes run the SAME steps: on a fresh
- * Bun database it simply never holds anything. `idle_at` is retired the
+ * Bun database it holds nothing until a grace-window upsert mirrors a
+ * room's snapshot into it. `idle_at` is retired the
  * same way (ADR-0038's addendum): the second expiry clock collapsed into
  * `inactivity_at` — the ONE deadline — but the column is NOT NULL on
  * databases that predate the unification and SQLite cannot drop it

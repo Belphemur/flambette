@@ -160,11 +160,13 @@ describe('the explicit rollback entry point (down runs ONLY here)', () => {
     applyMigrations(db, () => 2_000)
     expect(ledger(db).map((r) => Number(r.version))).toEqual([1, 2, 3])
     // 002's INSERT OR IGNORE re-inserts nothing over the surviving rows;
-    // the blob it re-nulled stays NULL — the split shape, again.
+    // the fold (rollback) left a valid JSON blob and the re-apply's split
+    // keeps it — the grace mirror's POST-migration shape (ADR-0088's
+    // 2026-10-14 addendum), still carrying the folded plan for old readers.
     expect(db.all('SELECT value FROM store_plan WHERE code = ?', 'c1')).toEqual([
       { value: '[1,2]' },
     ])
-    expect(db.all('SELECT state FROM room WHERE code = ?', 'c1')[0].state).toBeNull()
+    expect(db.all('SELECT state FROM room WHERE code = ?', 'c1')[0].state).toBe('{"plan":[1,2]}')
     db.close()
   })
 })

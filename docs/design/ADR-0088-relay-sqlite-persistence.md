@@ -182,8 +182,9 @@ Migration 001 is the fresh-install schema (everything above). Migration
 002 is the DO's real data migration: for each store, split the existing
 `room.state` blobs into per-store rows — `INSERT INTO store_x SELECT
 code, json_extract(state, '$.x'), created_at, updated_at …` per store —
-then `UPDATE room SET state = NULL`. The column is left in place
-(deprecated, always NULL afterwards) rather than dropped: an additive
+then NULL only the blobs that are not `json_valid` (a valid blob
+survives the split; see the 2026-10-14 addendum below for why). The
+column is left in place (deprecated) rather than dropped: an additive
 step cannot fail on any workerd SQLite vintage, and the peer_serial
 precedent shows additive beats clever here. The Bun side ships migration
 002 as a no-op — it has no pre-existing rows to split — but carries the
@@ -244,9 +245,57 @@ pardon and a weapon.
 - `docs/agents/rooms-and-sync.md` and `docs/agents/packaging-and-deploy.md`
   update in the implementation change (the standing "topic doc in the
   same change" rule); this record carries only the decision.
-- The DO carries two deprecated columns (`room.state`, NULL-filled; and
-  `idle_at` — the retired clock mirror, ADR-0038's addendum) until a
-  future migration removes them.
+- The DO carries two deprecated columns (`room.state` — the legacy-blob
+  grace mirror, ADR-0088's 2026-10-14 addendum; and `idle_at` — the
+  retired clock mirror, ADR-0038's addendum) until a future migration
+  removes them.
+
+## Addendum (2026-10-14): the legacy-blob grace mirror — downgrade safety for old readers
+
+**Grace-mirror addendum (2026-10-14, PR #92):** the owner directed that
+"we should also keep the old table for some time in case people use old
+clients". The only old format a downgrade can hurt is the legacy
+`room.state` blob: with §4's original prose (NULL everything at 002,
+write NULL forever) a pre-per-store relay binary — or any old reader of
+the column — running against a migrated database serves EMPTY rooms:
+silent data loss on a downgrade. This addendum amends §4's migration-002
+prose in place (the valid blob now survives the split) and adds the
+mirror below; the §4 Decision text has been corrected to match.
+
+1. **A valid blob survives the split.** 002's `migrate()` keeps the
+   original blob text when it is `json_valid` — it is the freshest full
+   snapshot at migration time. Only a non-`json_valid` blob (a truncated
+   pre-ADR write) is nulled; the corrupt-blob story is unchanged.
+   Re-run idempotence is preserved: `INSERT OR IGNORE` keeps the newer
+   per-store rows, so a re-applied 002 cannot resurrect stale data.
+2. **A bounded grace window mirrors the merged snapshot.** For
+   `STATE_BLOB_GRACE_MS` (30 days — one room-TTL window, symmetric with
+   the floor's post-expiry retention story) after 002 stamps its ledger
+   row, every room upsert binds the room's MERGED snapshot into the
+   deprecated `state` column. The deadline lives in the LEDGER, not the
+   environment — the core cannot read env and both runtimes must agree
+   (ADR-0040): `readBlobGraceUntil(db, graceMs)` returns
+   `applied_at(002) + graceMs`, 0 when no 002 stamp exists (gate closed).
+   Each adapter derives it ONCE at store-factory creation and caches it.
+3. **The mirror is the MERGED snapshot, joined the shared way.** A
+   record's `RoomRecord.state` is only the last commit's projection (an
+   absent key is don't-touch at the shared split); the whole-state shape
+   an old binary expects is the join over the per-store rows. Both
+   adapters bind `joinSnapshot` over the just-written rows — the SAME
+   join the read path serves — so there is no second merge to drift. The
+   store rows move before the room upsert (inside the Bun transaction;
+   per-statement-atomic on workerd) so the mirror never trails its rows.
+   A `state: null` re-establishment mirrors NULL, so an old reader sees
+   an emptied room too.
+4. **Retirement is inert.** After the window the upsert binds NULL
+   again. No timer, no retro-nulling: a room never written again keeps
+   its last mirrored blob — exactly what an old binary should serve.
+   Read paths NEVER touch the column; it stays write-only for old
+   readers, removed by a future migration once the window is safely
+   past on every deployment.
+
+The wire protocol does not change: the mirror is a storage-side
+accommodation for downgraded binaries, invisible to current clients.
 
 ## Addendum (2026-10-14): eleven stores, not nine — twelve as of ADR-0090; `planIdentity` is always-sent
 

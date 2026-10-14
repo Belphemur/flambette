@@ -30,6 +30,27 @@
 export const ROOM_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 /**
+ * How long the relay keeps MIRRORING the deprecated `room.state` blob
+ * after the per-store split migrated it (ADR-0088's 2026-10-14 addendum).
+ *
+ * A pre-per-store relay binary — or any old reader of the blob — running
+ * against a migrated database would see EMPTY rooms once the blob is
+ * nulled: silent data loss on a downgrade. For one grace window after
+ * migration 002 applies, every room upsert re-binds the record's merged
+ * snapshot into the blob column so an old binary keeps serving real data;
+ * after the window the upsert binds NULL again (the blob a room last
+ * mirrored simply stays — write-only, never read by the new binary).
+ *
+ * One room-TTL window (the same 30 days as ROOM_TTL_MS), symmetric with
+ * the floor's post-expiry retention story. NOT an env override on
+ * purpose: the grace deadline is derived from the migration ledger
+ * (`readBlobGraceUntil`), so both runtimes agree without configuration —
+ * this constant is the window, the same on a Bun relay and a Durable
+ * Object.
+ */
+export const STATE_BLOB_GRACE_MS = 30 * 24 * 60 * 60 * 1000
+
+/**
  * Legacy relay-minted room codes: Crockford base32 with every vowel
  * removed, so a code never spells a word. Word codes (ADR-0021) are
  * rolled client-side; this shape only exists for a `create` that arrived

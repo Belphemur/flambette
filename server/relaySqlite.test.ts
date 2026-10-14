@@ -11,7 +11,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRoomRegistry, type RoomRegistry, type RoomStore } from './relay-core/lifecycle'
-import { ROOM_TTL_MS } from './relay-core/policy'
+import { ROOM_TTL_MS, STATE_BLOB_GRACE_MS } from './relay-core/policy'
 import { SYNCED_STORES, storeTableName } from './relay-core/stores'
 import { createSqliteStores, openRelayDatabase, persistedDeadlines } from './relaySqlite'
 
@@ -261,8 +261,12 @@ describe('the Bun relay persists to SQLite (ADR-0088 §1)', () => {
     // Migration safety for existing Durable Object data (ADR-0088 §4): a
     // pre-split deployment persisted rooms as one JSON `state` blob. The
     // 002 split migrate() must carve each present key into its own store_*
-    // row and NULL the blob — and leave stores that were ABSENT out of
-    // storage entirely (no null rows), so the per-store tables stay sparse.
+    // row and leave stores that were ABSENT out of storage entirely (no
+    // null rows), so the per-store tables stay sparse. Since the grace
+    // mirror (ADR-0088's 2026-10-14 addendum) a VALID blob also SURVIVES
+    // the split — it is the freshest full snapshot at migration time,
+    // kept for old readers during the grace window; only a non-json_valid
+    // blob is nulled (the corrupt-blob test above).
     const dir = mkdtempSync(join(tmpdir(), 'relay-sqlite-'))
     const path = join(dir, 'relay.sqlite3')
     try {
@@ -286,8 +290,11 @@ describe('the Bun relay persists to SQLite (ADR-0088 §1)', () => {
         expect(JSON.parse(reopened.query('SELECT value FROM store_favorites').all()[0]?.value)).toEqual([
           'r42',
         ])
-        // The blob is gone — a later split is a no-op (re-runnable).
-        expect(reopened.query('SELECT state FROM room').all()[0]?.state).toBeNull()
+        // The blob SURVIVES the split — the original text, verbatim: an
+        // old reader of this column keeps seeing the room it knew.
+        expect(reopened.query('SELECT state FROM room').all()[0]?.state).toBe(
+          '{"plan":[{"id":"p1"}],"favorites":["r42"]}',
+        )
         // Absent keys are NOT materialized as null rows.
         expect(reopened.query('SELECT COUNT(*) AS n FROM store_pantry').all()[0]?.n).toBe(0)
       } finally {
@@ -295,6 +302,63 @@ describe('the Bun relay persists to SQLite (ADR-0088 §1)', () => {
       }
     } finally {
       rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('a fresh database mirrors the legacy blob during the grace window (the downgrade mirror)', () => {
+    // The grace applies uniformly — fresh installs included (ADR-0088's
+    // 2026-10-14 addendum): 002 stamps its ledger row at first open, so
+    // every write inside the window binds the record's merged snapshot
+    // into the deprecated `state` column too. Write-only: the new binary
+    // still reads the per-store rows; the mirror exists for a pre-per-store
+    // relay binary that runs against this database after a downgrade.
+    const { db, store } = freshDb()
+    const registry = registryFor('c1', store('c1'))
+    registry.admit('join', 0)
+    registry.push(5, { plan: [1], customItems: ['milk'] }, 'p1')
+    expect(db.query('SELECT state FROM room').all()[0]?.state).toBe(
+      JSON.stringify({ plan: [1], customItems: ['milk'] }),
+    )
+    // The split rows are still the source of truth for the new binary.
+    expect(JSON.parse(db.query('SELECT value FROM store_plan').all()[0]?.value)).toEqual([1])
+  })
+
+  test('a post-migration push refreshes the blob mirror with the merged snapshot', () => {
+    const { db, store } = freshDb()
+    const registry = registryFor('c1', store('c1'))
+    registry.admit('join', 0)
+    registry.push(1, { plan: [1] }, 'p1')
+    registry.push(2, { customItems: ['milk'] }, 'p1')
+    // The mirror is the record's MERGED snapshot (an absent key is
+    // don't-touch at the shared split), not the last push's partial one —
+    // exactly the whole-state shape an old binary expects to serve.
+    expect(db.query('SELECT state FROM room').all()[0]?.state).toBe(
+      JSON.stringify({ plan: [1], customItems: ['milk'] }),
+    )
+    // A re-establishment (a null snapshot) mirrors nothing: the blob goes
+    // NULL with the store rows, so an old reader sees an empty room too.
+    registry.admit('create', 0)
+    expect(db.query('SELECT state FROM room').all()[0]?.state).toBeNull()
+  })
+
+  test('a write past the grace deadline retires the blob mirror to NULL', () => {
+    const db = openRelayDatabase(':memory:')
+    try {
+      // The deadline lives in the LEDGER, not the environment
+      // (readBlobGraceUntil): backdate 002's stamp so the window has
+      // closed before the factory caches it, then write past the deadline.
+      db.exec('UPDATE schema_migrations SET applied_at = 1_000 WHERE version = 2')
+      const stores = createSqliteStores(db, () => 1_000 + STATE_BLOB_GRACE_MS + 1)
+      const registry = registryFor('c1', stores('c1'))
+      registry.admit('join', 0)
+      registry.push(5, { plan: [1] }, 'p1')
+      // After the window the upsert binds NULL again. No timer, no
+      // retro-nulling: rooms never written again keep their last mirror.
+      expect(db.query('SELECT state FROM room').all()[0]?.state).toBeNull()
+      // The per-store rows are still written — the new binary's truth.
+      expect(JSON.parse(db.query('SELECT value FROM store_plan').all()[0]?.value)).toEqual([1])
+    } finally {
+      db.close()
     }
   })
 })
