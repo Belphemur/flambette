@@ -35,12 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-setup
 
       - name: Preview the relay worker
         id: preview-relay
@@ -82,12 +77,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-setup
 
       - name: Build SPA (this PR's relay preview origin)
         run: bun run build
@@ -134,9 +124,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: ./.github/actions/bun-setup
         with:
-          bun-version: latest
+          install: false
 
       - name: Delete the web preview
         run: bunx wrangler@4.136.3 preview delete --name "pr-${{ github.event.pull_request.number }}" --skip-confirmation

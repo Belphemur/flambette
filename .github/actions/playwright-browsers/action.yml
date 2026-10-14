@@ -1,0 +1,29 @@
+name: Install Playwright chromium (cached)
+description: Cache the downloaded browser binaries and install chromium with system deps
+
+# ~/.cache/ms-playwright holds the downloaded browser builds (~150 MB per
+# version) — the single slowest non-build step of the e2e shards. The cache
+# key pins the resolved Playwright version (read from the just-installed
+# node_modules, so it always matches bun.lock), NOT the lockfile hash: a
+# bump of an unrelated dependency must not invalidate a 150 MB browser
+# cache. `playwright install --with-deps` still runs on a cache hit — it
+# validates the binaries in place (no re-download) and the apt-get leg keeps
+# the runner's system libraries honest, which a cache cannot restore.
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve the Playwright version
+      id: pw
+      shell: bash
+      run: echo "version=$(bunx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+    - name: Cache the browser binaries
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+
+    - name: Install chromium
+      shell: bash
+      run: bunx playwright install --with-deps chromium

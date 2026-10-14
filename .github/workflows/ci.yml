@@ -27,12 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-setup
 
       - name: Compute shard count from the test list
         id: plan
@@ -74,15 +69,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
+      - uses: ./.github/actions/bun-setup
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Install Playwright chromium
-        run: bunx playwright install --with-deps chromium
+      - uses: ./.github/actions/playwright-browsers
 
       - name: Build
         run: bun run build
@@ -105,12 +94,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-setup
 
       - name: Build
         run: bun run build
@@ -155,12 +139,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-setup
 
       - name: Worker types are up to date
         run: |
@@ -183,12 +162,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-setup
 
       - name: Download shard blobs
         uses: actions/download-artifact@v8
