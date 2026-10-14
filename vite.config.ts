@@ -2,10 +2,12 @@ import { execSync } from 'node:child_process'
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
-import { buildAppVersion } from './src/lib/appVersion'
+import { buildAppVersion } from './src/lib/appVersion.ts'
 // The dependency-free module, not ./src/lib/seo: seo.ts reaches the DOM
 // types (images.ts) and importing it here would break vue-tsc -b.
-import { DEFAULT_SITE_URL } from './src/lib/siteUrl'
+// Explicit extensions: Vite's native config loader warns on extensionless
+// relative imports (configLoader: 'native' becomes the default soon).
+import { DEFAULT_SITE_URL } from './src/lib/siteUrl.ts'
 
 // The live-room relay runs as a separate process (server/relay.ts, :8081 in
 // dev/e2e, the `relay` service behind nginx in production). Both the dev
