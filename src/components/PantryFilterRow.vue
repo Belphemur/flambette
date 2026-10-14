@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
-import { X } from '@lucide/vue'
+import { Refrigerator, X } from '@lucide/vue'
 import { usePantryStore } from '../stores/pantry'
 import PantryIngredientAdd from './PantryIngredientAdd.vue'
 
@@ -33,12 +33,17 @@ function clearAll() {
 
 <template>
   <div class="flex flex-wrap items-center gap-2" data-test="pantry-row">
-    <!-- Count label (Decision 2), hidden while the row is collapsed. -->
+    <!-- Count label (Decision 2 + Addendum notes): the kitchen glyph the
+    render shows beside the label. The addendum names lucide `Kitchen`,
+    which the pinned @lucide/vue set does not ship — `Refrigerator` is
+    the nearest honest shape (the aisleRole "nearest honest shapes"
+    rule) and no hand-rolled glyph is invented for one label. -->
     <span
       v-if="pantry.active"
-      class="text-sm font-medium text-text-muted"
+      class="flex items-center gap-1.5 text-sm font-medium text-text-muted"
       data-test="pantry-count"
     >
+      <Refrigerator :size="14" aria-hidden="true" />
       In my kitchen ({{ pantry.list.length }})
     </span>
 
@@ -58,7 +63,11 @@ function clearAll() {
 
     <!-- The ONE add affordance: present in both states so the row never
     grows a second editor for the same state (ADR-0087 Rejected elements). -->
-    <PantryIngredientAdd ref="addInput" class="w-full sm:w-56" @added="() => {}" />
+    <!-- Addendum notes: the add input widens past its cramped third-width
+    pill on desktop (sm:w-72 / lg:w-96 per the adopted render's
+    proportions). Phones keep w-full so the row can never overflow the
+    filter-bar grid. -->
+    <PantryIngredientAdd ref="addInput" class="w-full sm:w-72 lg:w-96" @added="() => {}" />
 
     <!-- Clear-all lives with the row's own state, never in the global
     "Clear filters" funnel (that one owns query + quick filters). -->

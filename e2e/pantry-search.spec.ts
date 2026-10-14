@@ -46,6 +46,11 @@ async function addPantryText(page: Page, name: string) {
   await pantryAddInput(page).press('Enter')
 }
 
+/** The "Cook With Your Pantry" active-state heading (Addendum §2). */
+function pantryHeading(page: Page) {
+  return page.getByTestId('pantry-heading')
+}
+
 /** The badge of one recipe card, in the CURRENT project's viewport. */
 function badgeOf(page: Page, variantId: number) {
   return page
@@ -72,6 +77,22 @@ test('pantry row collapses to the add affordance by default', async ({ page }) =
   await expect(page.getByTestId('pantry-clear')).toHaveCount(0)
   await expect(pantryAddInput(page)).toBeVisible()
   await expect(page.getByTestId('pantry-summary')).not.toContainText('your kitchen')
+  await expect(pantryHeading(page)).toHaveCount(0)
+
+  // The row (with the Addendum-n widened add input) never overflows the
+  // filter bar on phones (the ADR-0049 tooltip overflow class of bug).
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  )
+  expect(overflow).toBeLessThanOrEqual(0)
+
+  // Addendum notes: the add input widens on desktop (sm:w-72, lg:w-96);
+  // phones keep the full-width pill.
+  const width = (await page.viewportSize())?.width ?? 1280
+  const addWidth = (await pantryAddInput(page).boundingBox())?.width ?? 0
+  if (width >= 1024) expect(addWidth).toBeGreaterThanOrEqual(380)
+  else if (width >= 640) expect(addWidth).toBeGreaterThanOrEqual(280)
+  else expect(addWidth).toBeLessThanOrEqual(width)
 })
 
 test('add → chip → grid filters, re-ranks and badges; offline is kept', async ({ page }) => {
@@ -83,6 +104,9 @@ test('add → chip → grid filters, re-ranks and badges; offline is kept', asyn
   await addPantryText(page, 'banana')
   await expect(page.getByTestId('pantry-chip-banana')).toBeVisible()
   await expect(page.getByTestId('pantry-count')).toHaveText('In my kitchen (1)')
+  // Addendum §2: the active-state heading leads the summary, then the
+  // real matching count, then the aria-live status text.
+  await expect(pantryHeading(page)).toHaveText('Cook With Your Pantry · ')
   await expect(page.getByTestId('pantry-summary')).toContainText(/recipes match your kitchen/)
 
   // The badge only exists while the row is active — and now it does.
@@ -160,4 +184,24 @@ test('the pantry persists across a reload (device-local slice)', async ({ page }
   await expect(page.getByTestId('pantry-chip-banana')).toBeVisible()
   await expect(page.getByTestId('pantry-count')).toHaveText('In my kitchen (1)')
   await expect(page.getByTestId('pantry-badge').first()).toBeVisible()
+})
+
+test("the owner's case: 'cherry tomatoes' reaches the name-only recipes (Addendum §1)", async ({ page }) => {
+  await blockExternalRequests(page)
+  await page.goto('/recipes')
+  await waitForCatalog(page)
+
+  // NO variant lists `cherry tomatoes` under ingredient_names (the
+  // taxonomy uses grape tomatoes / tomato / diced tomatoes) — before the
+  // Addendum this pantry chip matched nothing at all.
+  await addPantryText(page, 'cherry tomatoes')
+  await expect(pantryHeading(page)).toHaveText('Cook With Your Pantry · ')
+  await expect(page.getByTestId('pantry-summary')).toContainText(/match your kitchen/)
+
+  // The Tuscan variant carries the words only in its NAME — it must now
+  // be in the filtered grid, READY for the whole pantry (Ready (1 of 1)).
+  const TUSCAN_ID = 9883
+  const card = page.locator(`article[data-variant-id="${TUSCAN_ID}"]`)
+  await expect(card).toBeVisible()
+  await expect(card.getByTestId('pantry-badge')).toHaveText(/Ready \(1 of 1\)/)
 })

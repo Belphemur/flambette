@@ -336,7 +336,7 @@ const results = computed<{ list: VariantMeta[]; primaryLength: number }>(() => {
   const facets = (meta: VariantMeta): boolean => {
   // ADR-0087 Decision 4: the pantry is a facet — a non-empty pantry
   // keeps only recipes sharing at least one pantry ingredient.
-  if (pantry.active && !sharesPantryIngredient(meta.ingredient_names, pantry.keys))
+  if (pantry.active && !sharesPantryIngredient(meta, pantry.keys))
   return false
   // The restriction verdict is upstream's own (removed = a strict subset);
   // user recipes are never in it (no upstream rework exists for them).
@@ -710,11 +710,16 @@ onUnmounted(() => observer?.disconnect())
   </div>
 
   <p class="font-mono-data text-xs tabular-nums text-text-muted">
-  <!-- ADR-0087 Decision 6b: while the pantry row is active the header
-  names the matching count and the SAME text is the aria-live status, so
-  a pantry change re-rank is announced. Counts are the real filtered
-  set (results.list), never fabricated. -->
+  <!-- ADR-0087 Decision 6b + Addendum §2: while the pantry row is
+  active the summary carries the render's "Cook With Your Pantry"
+  heading, then the real matching count — and the SAME text is the
+  aria-live status, so a pantry change re-rank is announced (the
+  heading stays OUTSIDE the live region: it never changes). Counts are
+  the real filtered set (results.list), never fabricated. -->
   <span
+  v-if="pantry.active"
+  data-test="pantry-heading"
+  >Cook With Your Pantry · </span><span
   :aria-live="pantry.active ? 'polite' : undefined"
   data-test="pantry-summary"
   >{{ results.list.length }} recipe{{ results.list.length === 1 ? '' : 's' }}{{
@@ -774,7 +779,7 @@ onUnmounted(() => observer?.disconnect())
 
   <div v-if="results.list.length === 0 && !searchPending" class="py-16 text-center text-text-muted">
   <SearchX :size="40" class="mx-auto" aria-hidden="true" />
-  <p class="mt-2 font-medium">No recipes match your filters</p>
+  <p class="mt-2 font-medium">No recipes match your {{ pantry.active ? 'kitchen' : 'filters' }}</p>
   <!-- ADR-0070 Addendum 1: the hint no longer dead-ends as static
   text — it OPENS the disclosure, so a reader who got here with a
   too-clever query has a way out of it. -->
