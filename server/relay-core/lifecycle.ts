@@ -256,11 +256,6 @@ export interface RoomRegistry {
    */
   nextSerial: () => number
   /**
-   * A peer detached. `remaining` is how many peers are left; the room dies
-   * with its last peer (ADR-0026) unless the adapter says otherwise.
-   */
-  leave: (remaining: number) => { dropped: boolean }
-  /**
    * Expiry check, called from the timer sink or the alarm. Returns the
    * reason when the room closed, null when it is still live (an early or
    * spurious wake-up is a no-op that re-arms itself).
@@ -389,10 +384,11 @@ export function createRoomRegistry({
     // the one about to be (ADR-0049).
     const count = livePeers + 1
     if (mode === 'create') {
-      // A stored room that nobody is in is, logically, gone — the room is
-      // deleted when its last peer leaves (ADR-0026), so a `create` lands
-      // on a fresh room either way. What survives the deletion is the rev
-      // FLOOR, and the `created` reply carries it.
+      // A stored room that nobody is in is, logically, gone — since ADR-0088
+      // §5 the row survives its last peer on BOTH runtimes, but an unoccupied
+      // room is not held against a `create` either way. The fresh room starts
+      // from the rev FLOOR (the `created` reply carries it), and its
+      // per-store rows are cleared with it.
       if (existing && livePeers > 0) return { kind: 'refuse', error: RELAY_ERRORS.codeTaken }
       return establish(count)
     }
@@ -463,10 +459,10 @@ export function createRoomRegistry({
   /**
    * Arm the wake-up that prunes an ORPHANED floor.
    *
-   * A floor outlives its room by design, so dropping the room leaves a
+   * A floor outlives its room by design, so an expired room leaves a
    * record that nothing else will ever look at: with no timer armed, a
    * relay that keeps serving codes would accumulate one floor entry per
-   * code it has EVER seen (the Bun adapter's `Map`, the DO's
+   * code it has EVER seen (the Bun adapter's SQLite rows, the DO's
    * `rev_floor`/`peer_serial` rows). The floor is small, but it is
    * unbounded, and it is read only if the code comes back — so the only
    * honest way to reclaim it is to wake up when it reaches its idle TTL.
@@ -476,21 +472,13 @@ export function createRoomRegistry({
     if (entry) arm(entry.at + idleTtlMs)
   }
 
-  function leave(remaining: number): { dropped: boolean } {
-    if (remaining > 0) return { dropped: false }
-    // Nobody is there, so the room (and its state) goes too. A returning
-    // client re-joins — which re-creates it — and re-seeds it. The
-    // per-code rev floor survives (review F4).
-    store.drop()
-    armFloorPrune()
-    return { dropped: true }
-  }
-
   /**
-   * Expiry. Whichever clock fired first closes the room, tells its peers
-   * `room_expired` (the client treats that as TERMINAL — a re-join would
-   * join-or-create an empty room and read as silent household data loss)
-   * and deletes the room row. The floor row deliberately stays, so the
+   * Expiry — the ONLY path that deletes a room now (ADR-0088 §5): since
+   * the row survives its last peer on BOTH runtimes, whichever clock fires
+   * first closes the room, tells its peers `room_expired` (the client
+   * treats that as TERMINAL — a re-join would join-or-create an empty room
+   * and read as silent household data loss) and deletes the room row and
+   * its per-store rows. The floor row deliberately stays, so the
    * household's revision history outlives the room until the idle TTL
    * prunes it.
    */
@@ -537,7 +525,6 @@ export function createRoomRegistry({
     keepalive,
     push,
     nextSerial,
-    leave,
     tick,
   }
 }

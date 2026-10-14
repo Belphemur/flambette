@@ -17,6 +17,7 @@ import { useGroceryStore } from './grocery'
 import { useRatingStore } from './rating'
 import { useUiStore } from './ui'
 import { useIdentityStore } from './identity'
+import { SHARED_STATE_KEYS } from '../lib/roomSyncStores'
 
 export type RoomStatus = 'idle' | 'connecting' | 'live' | 'error'
 
@@ -107,6 +108,19 @@ interface SharedState {
    */
   planIdentity?: { planId: string; planCreatedAt: number } | null
 }
+
+/**
+ * ADR-0088 §6, build-time half: the runtime key list must name EXACTLY the
+ * `SharedState` keys, in BOTH directions — a key added to one side without
+ * the other fails the build here, and the relay-core cross-check (`bun run
+ * test:unit`) fails when that list and `SYNCED_STORES` disagree. The chain
+ * SharedState ↔ SHARED_STATE_KEYS ↔ SYNCED_STORES has no unguarded link.
+ */
+type SharedStateKeyDrift =
+  | Exclude<keyof SharedState, (typeof SHARED_STATE_KEYS)[number]>
+  | Exclude<(typeof SHARED_STATE_KEYS)[number], keyof SharedState>
+const _sharedStateKeysAgree: SharedStateKeyDrift extends never ? true : never = true
+void _sharedStateKeysAgree
 
 const PUSH_DEBOUNCE_MS = 300
 const RECONNECT_MIN_MS = 1000
