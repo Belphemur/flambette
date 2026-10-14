@@ -1,6 +1,6 @@
 # ADR-0089: Pantry becomes the Kitchen filter dropdown on the Recipes tab
 
-Status: accepted (2026-10-14) — supersedes ADR-0087 in part (Decision 1 surface placement)
+Status: accepted (2026-10-14) — implemented in PR #90; supersedes ADR-0087 in part (Decision 1 surface placement)
 
 ## Context
 
