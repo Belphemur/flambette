@@ -128,6 +128,13 @@ export interface StoreWritePlanner {
   seed: (code: string, rows: readonly StoredStoreRow[]) => void
   /** The per-store statements a write of `state` must run. */
   plan: (code: string, state: SharedSnapshot | null | undefined) => StoreWritePlan
+  /**
+   * Forget a code's remembered texts: the room was dropped (expiry or
+   * the last peer's leave). Call from the adapters' `drop` so the
+   * planner's memory is bounded by the LIVE room set, never by every
+   * code the process has ever served (kody review).
+   */
+  forget: (code: string) => void
 }
 
 /**
@@ -183,6 +190,9 @@ export function createStoreWritePlanner(): StoreWritePlanner {
         }
       }
       return { changed, clearAll: false }
+    },
+    forget(code) {
+      for (const store of SYNCED_STORES) known.delete(key(code, store))
     },
   }
 }

@@ -226,7 +226,12 @@ export function createSqliteStores(
       } satisfies RoomRecord
     },
     write: (row) => writeRoomAndStores(row),
-    drop: () => dropRoomAndStores(code),
+    drop: () => {
+      dropRoomAndStores(code)
+      // The room is gone; its remembered texts are dead weight (kody
+      // review) — the planner stays bounded by the live room set.
+      planner.forget(code)
+    },
     readFloor: () => {
       const floor = db.query('SELECT code, rev, at FROM rev_floor WHERE code = ?').all(code)[0] as
         | Record<string, unknown>

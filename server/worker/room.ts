@@ -194,6 +194,9 @@ export class Room extends DurableObject<Env> {
         for (const store of SYNCED_STORES) {
           this.ctx.storage.sql.exec(storeClearSql(store), this.#code)
         }
+        // The room is gone; its remembered texts are dead weight (kody
+        // review) — the planner stays bounded by the live room set.
+        this.#planner.forget(this.#code)
       },
       readFloor: () => this.#readFloor(),
       writeFloor: (record) => this.#writeFloor(record),

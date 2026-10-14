@@ -196,6 +196,15 @@ describe('createStoreWritePlanner — a touch must not rewrite unchanged stores'
     planner.plan('c1', { plan: [1] })
     expect(planner.plan('c2', { plan: [1] }).changed).toEqual([{ store: 'plan', text: '[1]' }])
   })
+
+  test('forget reclaims a dropped room\'s entries — the memory is bounded by the live set', () => {
+    const planner = createStoreWritePlanner()
+    planner.plan('c1', { plan: [1] })
+    planner.forget('c1')
+    // A forgotten code writes conservatively again — a room with the same
+    // code can only exist after a fresh establishment anyway.
+    expect(planner.plan('c1', { plan: [1] }).changed).toEqual([{ store: 'plan', text: '[1]' }])
+  })
 })
 
 /* ----------------------------------------------------------------- runner */
