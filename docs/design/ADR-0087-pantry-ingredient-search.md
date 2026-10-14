@@ -1,6 +1,6 @@
 # ADR-0087: "Cook with what I have" — pantry ingredient search, Variant A inline row
 
-Status: accepted (2026-10-14)
+Status: accepted (2026-10-14) — implemented in PR #90
 
 Implements issue #80 ("Search recipes by ingredients on hand"). The number
 0087 was taken via `scripts/build_adr_index.py --next` on a fresh
