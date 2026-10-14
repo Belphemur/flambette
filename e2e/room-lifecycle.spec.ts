@@ -67,7 +67,9 @@ async function startRelay(slot: number, env: Record<string, string>): Promise<st
       continue // occupied by a DIFFERENT configuration — take the next port
     }
     const child = spawn('bun', ['server/relay.ts'], {
-      env: { ...process.env, PORT: String(port), ...env },
+      // `:memory:` is the ADR-0088 opt-in for tests: the spawned relay's
+      // rooms must be its own, not a file a previous run left behind.
+      env: { ...process.env, PORT: String(port), RELAY_DB_PATH: ':memory:', ...env },
       stdio: 'ignore',
     })
     spawned.push(child)
@@ -200,24 +202,36 @@ test('keepalive refreshes the inactivity clock; a silent room is closed with roo
   a.close()
 })
 
-test('the last peer leaving deletes the room, and a later join re-creates it', async () => {
+test('the last peer leaving keeps the room; a later join resumes its state (ADR-0088 §5)', async () => {
   const a = await Peer.open()
   const b = await Peer.open()
   a.send({ type: 'join', code: 'rose-thistle-moss' })
   await a.waitFor('created')
   b.send({ type: 'join', code: 'rose-thistle-moss' })
   await b.waitFor('joined')
+  a.send({ type: 'state', rev: 1, state: { plan: ['household'] } })
+  await wait(200)
 
   a.close()
   await wait(200)
+  // A keepalive first: the expiry clocks restart HERE, so the joining peer
+  // below has a full inactivity window to arrive in.
+  b.send({ type: 'keepalive' })
+  await b.waitFor('keepalive_ack')
   b.send({ type: 'leave' })
   await b.waitFor('left')
   await wait(200)
 
-  // Empty ⇒ deleted (no state, no room): the next join is a fresh create.
+  // Empty ⇒ KEPT (ADR-0088 §5, closing ADR-0026's deletion rule): the row
+  // and its state survive until the expiry clocks fire, so the next joiner
+  // gets the household's plan back instead of re-seeding an empty room.
   const c = await Peer.open()
   c.send({ type: 'join', code: 'rose-thistle-moss' })
-  expect(await c.waitFor('created')).toMatchObject({ code: 'rose-thistle-moss' })
+  expect(await c.waitFor('joined')).toMatchObject({
+    code: 'rose-thistle-moss',
+    rev: 1,
+    state: { plan: ['household'] },
+  })
   c.close()
 })
 
@@ -369,21 +383,23 @@ test('leaving a room for another does not leave a zombie peer behind (F3)', asyn
   solo.close()
 })
 
-test('a re-created room continues the household revision history (F4)', async () => {
+test('a room that expired continues the household revision history (F4)', async () => {
   const a = await Peer.open()
   a.send({ type: 'join', code: 'pebble-moss-falcon' })
   await a.waitFor('created')
   a.send({ type: 'state', rev: 12, state: { plan: ['household'] } })
+  await wait(200)
 
-  // Everyone leaves: the room (and its state) is deleted…
+  // Everyone leaves; since ADR-0088 §5 the row survives the departure and
+  // the expiry clocks (1.5s on this relay) are what close the room.
   a.send({ type: 'leave' })
   await a.waitFor('left')
-  await wait(200)
   a.close()
+  await wait(INACTIVITY_TTL_MS * 2)
 
-  // …and the next joiner is told the floor, so the room continues at 12
-  // instead of restarting at 0 and being mistaken for "newer than what
-  // the household already had".
+  // The next joiner is told the FLOOR, so the room continues at 12 instead
+  // of restarting at 0 and being mistaken for "newer than what the
+  // household already had".
   const b = await Peer.open()
   b.send({ type: 'join', code: 'pebble-moss-falcon' })
   expect(await b.waitFor('created')).toMatchObject({ code: 'pebble-moss-falcon', rev: 12 })
