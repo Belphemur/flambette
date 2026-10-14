@@ -1,6 +1,6 @@
 # ADR-0087: "Cook with what I have" — pantry ingredient search, Variant A inline row
 
-Status: accepted (2026-10-14) — implemented in PR #90
+Status: accepted (superseded in part by ADR-0089) (2026-10-14) — implemented in PR #90; Decision 1 surface placement moved to the Kitchen filter dropdown
 
 Implements issue #80 ("Search recipes by ingredients on hand"). The number
 0087 was taken via `scripts/build_adr_index.py --next` on a fresh

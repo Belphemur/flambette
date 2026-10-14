@@ -5,7 +5,7 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**93 records.** One file per decision (`ADR-NNNN-slug.md`),
+**94 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
@@ -93,7 +93,7 @@ architecture is shaped the way it is.
 | [0084](ADR-0084-confirm-modal.md) | Confirmations are modals — one slim ConfirmModal, the toast demoted to status | 2026-10-13 |
 | [0085](ADR-0085-replan-past-week.md) | "Cook that week again" — one-tap re-plan of a past week from cooked history | 2026-10-13 |
 | [0086](ADR-0086-fuzzy-ingredient-suggestions.md) | Fuzzy ingredient suggestions — typos still find the item, custom names included | 2026-10-13 |
-| [0087](ADR-0087-pantry-ingredient-search.md) | "Cook with what I have" — pantry ingredient search, Variant A inline row | 2026-10-14 |
+| [0089](ADR-0089-kitchen-filter-dropdown.md) | Pantry becomes the Kitchen filter dropdown on the Recipes tab _(supersedes ADR-0087)_ | 2026-10-14 |
 
 ## Not in force
 
@@ -119,6 +119,7 @@ understand why the current shape is the shape.
 | [0049](ADR-0049-household-join-ux-and-peer-count.md) | Household join UX, the live peer count, and the relay protocol | proposed | 2026-10-04 |
 | [0056](ADR-0056-dietary-restrictions.md) | dietary restrictions: a committed substitution dictionary, runtime-applied | accepted (superseded in part) | 2026-10-06 |
 | [0074](ADR-0074-explore-archive-composition.md) | Explore is the archive — count line, sort menu, and the card overlay grammar | accepted (superseded in part) | 2026-10-09 |
+| [0087](ADR-0087-pantry-ingredient-search.md) | "Cook with what I have" — pantry ingredient search, Variant A inline row | accepted (superseded in part) | 2026-10-14 |
 
 ## Known numbering collisions
 
@@ -135,8 +136,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0088**). Do not count the files -- that is how the
-   collisions above happened (93 files share 87 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0090**). Do not count the files -- that is how the
+   collisions above happened (94 files share 88 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.
