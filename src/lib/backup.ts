@@ -17,6 +17,7 @@
 import type { PlanEntry, CookedEntry } from '../stores/plan'
 import type { CustomIngredient } from '../stores/customIngredients'
 import type { PantryIngredient } from '../stores/pantry'
+import { pantryKeyOf } from './pantry'
 import { DIET_IDS, type DietId } from './dietFilter'
 import { normalizeQuickFilters, type QuickFilters } from './quickFilters'
 import { isServings, FALLBACK_SERVINGS, MAX_SERVINGS, MIN_SERVINGS } from './servings'
@@ -264,6 +265,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
     read: () => usePantryStore().list.map((r) => ({ ...r })),
     validate(value) {
       if (!Array.isArray(value)) return 'pantry.json must be an array'
+      const seen = new Set<string>()
       for (const r of value) {
         if (
           typeof r !== 'object' || r === null ||
@@ -272,6 +274,18 @@ export const STORE_SLICES: SliceDef<any>[] = [
         ) {
           return 'pantry ingredients must be {name, nameKey} strings'
         }
+        // Validation-first (qodo round 2): the identity key must be the
+        // canonical one derived from the name, and keys must be unique —
+        // anything else breaks the invariants `add()` enforces (a chip
+        // displaying one ingredient while matching another, duplicate
+        // chips colliding on their key).
+        if ((r as PantryIngredient).nameKey !== pantryKeyOf((r as PantryIngredient).name)) {
+          return 'pantry ingredient nameKey must match its name'
+        }
+        if (seen.has((r as PantryIngredient).nameKey)) {
+          return 'pantry ingredients must not repeat'
+        }
+        seen.add((r as PantryIngredient).nameKey)
       }
       return null
     },

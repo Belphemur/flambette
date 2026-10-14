@@ -42,7 +42,7 @@ import {
   roleGlyph,
   type IconRole,
 } from '../lib/palette'
-import { compareByMissingCount, sharesPantryIngredient } from '../lib/pantry'
+import { preparePantry, sharesPantryIngredient } from '../lib/pantry'
 import type { VariantMeta } from '../lib/types'
 import { useFavouritesStore } from '../stores/favourites'
 import { usePantryStore } from '../stores/pantry'
@@ -361,11 +361,30 @@ const results = computed<{ list: VariantMeta[]; primaryLength: number }>(() => {
   // ADR-0087 Decision 4: while the pantry row is active the grid is
   // ranked ascending by MISSING pantry count; ties fall through to the
   // selected sort comparator — composed here, so getSortComparator
-  // stays the ONE sort funnel. With an empty pantry the pantry term is
-  // 0 for every pair and the comparator is exactly the old one.
-  const byMissing = compareByMissingCount(pantry.keys)
-  const rank = (a: VariantMeta, b: VariantMeta) =>
-  byMissing(a, b) || getSortComparator(f.sortBy)(a, b)
+  // stays the ONE sort funnel. qodo round 2 (performance): an INACTIVE
+  // pantry sorts by the comparator alone — zero pantry work on every
+  // keystroke/filter/sort of the default browse — and an active one
+  // measures each candidate recipe at most ONCE per recomputation
+  // (memoized per meta id, key tokens precomputed in preparePantry)
+  // instead of running the full match on both recipes per comparison,
+  // with the sort comparator hoisted out of the per-comparison closure.
+  const baseComparator = getSortComparator(f.sortBy)
+  let rank: (a: VariantMeta, b: VariantMeta) => number
+  if (!pantry.active) {
+    rank = baseComparator
+  } else {
+    const prepared = preparePantry(pantry.keys)
+    const counts = new Map<number, number>()
+    const missingOf = (m: VariantMeta): number => {
+      let n = counts.get(m.id)
+      if (n === undefined) {
+        n = prepared.missingCount(m)
+        counts.set(m.id, n)
+      }
+      return n
+    }
+    rank = (a, b) => missingOf(a) - missingOf(b) || baseComparator(a, b)
+  }
 
   let list: VariantMeta[]
   let primaryLength: number
@@ -406,6 +425,22 @@ const results = computed<{ list: VariantMeta[]; primaryLength: number }>(() => {
   primaryLength = list.length
   }
   return { list, primaryLength }
+})
+
+/** The summary line's text (ADR-0087 Decision 6b + Addendum §2): while
+ *  the pantry row is active this is ALSO the aria-live announcement, so
+ *  it must never announce a count the current query has not produced
+ *  (qodo round 2): while a debounced/in-flight search has not landed,
+ *  `results` still reflects the PREVIOUS query — the summary reads
+ *  "Searching…" instead of a stale count, visibly and to screen
+ *  readers, and the settled count is announced once the search lands. */
+const pantrySummary = computed(() => {
+  if (pantry.active && searchPending.value) return 'Searching…'
+  const n = results.value.list.length
+  const noun = `${n} recipe${n === 1 ? '' : 's'}`
+  return pantry.active
+    ? `${noun} ${n === 1 ? 'matches' : 'match'} your kitchen`
+    : noun
 })
 
 const filtersActive = computed(() => query.value !== '' || hasActiveFilters(filters.value))
@@ -714,17 +749,17 @@ onUnmounted(() => observer?.disconnect())
   active the summary carries the render's "Cook With Your Pantry"
   heading, then the real matching count — and the SAME text is the
   aria-live status, so a pantry change re-rank is announced (the
-  heading stays OUTSIDE the live region: it never changes). Counts are
-  the real filtered set (results.list), never fabricated. -->
+  heading stays OUTSIDE the live region: it never changes). While a
+  search is pending the text is "Searching…", never the previous
+  query's count (qodo round 2). Counts are the real filtered set
+  (results.list), never fabricated. -->
   <span
   v-if="pantry.active"
   data-test="pantry-heading"
   >Cook With Your Pantry · </span><span
   :aria-live="pantry.active ? 'polite' : undefined"
   data-test="pantry-summary"
-  >{{ results.list.length }} recipe{{ results.list.length === 1 ? '' : 's' }}{{
-  pantry.active ? (results.list.length === 1 ? ' matches your kitchen' : ' match your kitchen') : ''
-  }}</span>
+  >{{ pantrySummary }}</span>
   <button
   v-if="filtersActive"
   class="ml-2 text-brand-text underline"

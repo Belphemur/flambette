@@ -184,6 +184,21 @@ record — same effort, same issue #80).
   so it is not the cramped third-width pill. These are token/canvas
   alignments, not behavioural changes — no further ADR text.
 
+### Change note (2026-10-14, review round 2): honest pending-state summary
+
+While a search is pending (`searchPending`), the summary's count still
+reflects the PREVIOUS query, so announcing it (Decision 6b makes the
+summary text the live region) tells screen-reader users a wrong match
+count. The summary text is now **"Searching…"** — visibly and to screen
+readers alike — while `pantry.active && searchPending`, and the settled
+count is announced once the search lands. Decision 6b's "the SAME text
+is the aria-live status" rule is unchanged; only the pending-state text
+is new. The same round also made the ranking cost one memoized match
+per recipe per recomputation (`preparePantry`, key tokens precomputed)
+instead of a full match per sort comparison, and an inactive pantry now
+bypasses the pantry term entirely — the Decision 4 ordering (missing
+ascending, ties to the selected comparator) is unchanged.
+
 ## Consequences
 
 - The competitor-named feature lands entirely on existing substrate —

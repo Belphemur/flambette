@@ -4,6 +4,7 @@ import {
   missingCount,
   pantryKeyOf,
   pantryMatch,
+  preparePantry,
   sharesPantryIngredient,
   type PantryRecipeInput,
 } from './pantry'
@@ -244,5 +245,36 @@ describe('missingCount + compareByMissingCount (ranking, ADR-0087 D4)', () => {
     const partial = pantryMatch({ name: 'Garlic confit', ingredient_names: ['tomato'] }, pantry)
     expect(partial.ready).toBe(false)
     expect(partial.missing).toEqual(['olive oil'])
+  })
+})
+
+/** qodo round 2 (performance): preparePantry is a memoized seam over the
+ *  same algorithm — its verdicts must be byte-identical to the plain
+ *  functions for every recipe surface (ingredient names AND the recipe
+ *  name), so the grid can never drift from the card badge. */
+describe('preparePantry (prepared/memoized seam)', () => {
+  const pantry = new Set(['tomato', 'garlic', 'olive oil', 'feta'])
+
+  test('missingCount + shares agree with pantryMatch on the full surface', () => {
+    const prepared = preparePantry(pantry)
+    const cases: PantryRecipeInput[] = [
+      { name: 'Shakshuka', ingredient_names: ['Tomatoes', 'garlic', 'olive oil', 'penne'] },
+      { name: 'Tomato & Garlic Confit in Olive Oil', ingredient_names: ['tomato'] },
+      { name: 'Garlic confit', ingredient_names: ['tomato'] },
+      { name: 'Feta Pie', ingredient_names: [] },
+      { name: 'Air', ingredient_names: [] },
+      { name: 'nothing here', ingredient_names: ['salt', 'pepper'] },
+    ]
+    for (const recipe of cases) {
+      const m = pantryMatch(recipe, pantry)
+      expect(prepared.missingCount(recipe)).toBe(m.missing.length)
+      expect(prepared.shares(recipe)).toBe(sharesPantryIngredient(recipe, pantry))
+    }
+  })
+
+  test('an empty pantry keeps the inactive verdicts (0 / false)', () => {
+    const prepared = preparePantry(new Set())
+    expect(prepared.missingCount({ name: 'x', ingredient_names: ['tomato'] })).toBe(0)
+    expect(prepared.shares({ name: 'x', ingredient_names: ['tomato'] })).toBe(false)
   })
 })

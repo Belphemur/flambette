@@ -92,6 +92,7 @@ function tokensContain(haystack: string[], needle: string[]): boolean {
 function usedPantryKeys(
   recipe: PantryRecipeInput,
   pantryKeys: ReadonlySet<string>,
+  keyTokens?: ReadonlyMap<string, string[]>,
 ): Set<string> {
   const used = new Set<string>()
   for (const name of recipe.ingredient_names) {
@@ -101,7 +102,8 @@ function usedPantryKeys(
   if (used.size < pantryKeys.size) {
     const nameTokens = phraseTokens(recipe.name)
     for (const key of pantryKeys) {
-      if (!used.has(key) && tokensContain(nameTokens, phraseTokens(key))) {
+      const needle = keyTokens ? keyTokens.get(key)! : phraseTokens(key)
+      if (!used.has(key) && tokensContain(nameTokens, needle)) {
         used.add(key)
       }
     }
@@ -164,4 +166,34 @@ export function compareByMissingCount(
 ): (a: VariantMeta, b: VariantMeta) => number {
   // VariantMeta carries both surface fields, so it IS a PantryRecipeInput.
   return (a, b) => missingCount(a, pantryKeys) - missingCount(b, pantryKeys)
+}
+
+/**
+ * A prepared pantry (qodo round 2, performance): the per-key token
+ * lists are tokenized ONCE up front, so a consumer that measures many
+ * recipes per recomputation (the grid's ranking over ~2.7k recipes)
+ * never re-runs `phraseTokens` for every pantry key on every recipe.
+ * The verdicts are IDENTICAL to `missingCount`/`sharesPantryIngredient`
+ * — this is a performance seam, not a second algorithm.
+ */
+export interface PreparedPantry {
+  /** Same value as `missingCount(recipe, pantryKeys)`. */
+  missingCount(recipe: PantryRecipeInput): number
+  /** Same value as `sharesPantryIngredient(recipe, pantryKeys)`. */
+  shares(recipe: PantryRecipeInput): boolean
+}
+
+export function preparePantry(pantryKeys: ReadonlySet<string>): PreparedPantry {
+  const keyTokens = new Map<string, string[]>()
+  for (const key of pantryKeys) keyTokens.set(key, phraseTokens(key))
+  return {
+    missingCount(recipe) {
+      if (pantryKeys.size === 0) return 0
+      return pantryKeys.size - usedPantryKeys(recipe, pantryKeys, keyTokens).size
+    },
+    shares(recipe) {
+      if (pantryKeys.size === 0) return false
+      return usedPantryKeys(recipe, pantryKeys, keyTokens).size > 0
+    },
+  }
 }

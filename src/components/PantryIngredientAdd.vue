@@ -86,6 +86,18 @@ async function refreshSuggestions() {
   open.value = true
 }
 
+/** Invalidate any in-flight suggestion request (qodo round 2: a request
+ *  finishing after an add/Escape would otherwise REOPEN the list for
+ *  text that is no longer in the input). Every path that closes or
+ *  empties the list bumps the token, so the late response loses the
+ *  guard and is discarded. */
+function invalidateSuggestions() {
+  suggestToken++
+  suggestions.value = []
+  open.value = false
+  activeIndex.value = -1
+}
+
 function onInput(event: Event) {
   query.value = (event.target as HTMLInputElement).value
   void refreshSuggestions()
@@ -96,9 +108,7 @@ function onInput(event: Event) {
 function addRow(row: IngredientSuggestion) {
   if (pantry.add(row.name)) emit('added', row.name)
   query.value = ''
-  suggestions.value = []
-  open.value = false
-  activeIndex.value = -1
+  invalidateSuggestions()
   // The input keeps focus after programmatic value changes (ADR-0014
   // bulk-add loop, applied to the pantry row).
   inputEl.value?.focus()
@@ -109,6 +119,10 @@ function optionId(index: number): string {
 }
 
 function onKeydown(event: KeyboardEvent) {
+  // IME compositions (coderabbit round 2): Enter confirms a CJK
+  // candidate — it must never be read as an add keystroke. keyCode 229
+  // is the legacy composition marker for browsers without the flag.
+  if (event.isComposing || event.keyCode === 229) return
   if (open.value && rows.value.length > 0) {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
@@ -142,26 +156,24 @@ function onKeydown(event: KeyboardEvent) {
     event.preventDefault()
     if (open.value) {
       // First Escape: collapse the dropdown, keep the typed text.
-      open.value = false
-      activeIndex.value = -1
+      invalidateSuggestions()
     } else {
       // The flow is an always-present affordance: closing = emptying it.
       query.value = ''
+      invalidateSuggestions()
     }
   }
 }
 
 function onBlurOut(event: FocusEvent) {
   if (!wrapper.value?.contains(event.relatedTarget as Node)) {
-    open.value = false
-    activeIndex.value = -1
+    invalidateSuggestions()
   }
 }
 
 function onGlobalPointer(event: Event) {
   if (!wrapper.value?.contains(event.target as Node)) {
-    open.value = false
-    activeIndex.value = -1
+    invalidateSuggestions()
   }
 }
 

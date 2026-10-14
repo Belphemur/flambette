@@ -677,3 +677,49 @@ describe('identity slice (ADR-0063 registry)', () => {
     expect(identity.id).toBe(UUID) // no-op, never blanked
   })
 })
+
+describe('pantry import validation (ADR-0087, qodo round 2)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    ;(globalThis as Record<string, unknown>).localStorage = memoryStorage()
+  })
+
+  const pantrySlice = () => {
+    const slice = STORE_SLICES.find((s) => s.file === 'pantry.json')
+    if (!slice) throw new Error('pantry.json slice missing from STORE_SLICES')
+    return slice
+  }
+
+  test('canonical rows validate', () => {
+    const slice = pantrySlice()
+    expect(slice.validate([{ name: 'Yellow Potatoes', nameKey: 'yellow potato' }])).toBeNull()
+  })
+
+  test('a nameKey that is not the canonical key of its name rejects the archive', () => {
+    const slice = pantrySlice()
+    expect(slice.validate([{ name: 'Yellow Potatoes', nameKey: 'yellow potatoes' }])).toContain(
+      'nameKey must match',
+    )
+  })
+
+  test('duplicate canonical keys reject the archive (validation-first)', () => {
+    const slice = pantrySlice()
+    expect(
+      slice.validate([
+        { name: 'Tomato', nameKey: 'tomato' },
+        { name: 'tomatoes', nameKey: 'tomato' },
+      ]),
+    ).toContain('must not repeat')
+  })
+
+  test('malformed rows keep the base shape error', () => {
+    const slice = pantrySlice()
+    expect(slice.validate([{ name: 'Tomato' }])).toContain('must be {name, nameKey} strings')
+    expect(slice.validate('nope')).toContain('must be an array')
+  })
+
+  test('a whitespace-padded name still meets the canonical key (nameKey trims)', () => {
+    const slice = pantrySlice()
+    expect(slice.validate([{ name: ' Basil ', nameKey: 'basil' }])).toBeNull()
+  })
+})
