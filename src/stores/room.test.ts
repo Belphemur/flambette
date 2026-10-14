@@ -967,45 +967,28 @@ describe('room store — the pantry is household state (ADR-0090)', () => {
     expect(socket.frames('state')).toHaveLength(before)
   })
 
-  test('adopting a predating-peer room keeps our list AND publishes it once (CodeRabbit)', async () => {
+  test('a payload WITHOUT pantry (older peer) leaves the local list alone', async () => {
     const pantry = usePantryStore()
-    // Added while no room exists: nothing is queued as an unsent edit.
+    // Added while no room exists: nothing is queued as an unsent edit, so
+    // this is the pure adoption path.
     pantry.add('Butter')
     const room = useRoomStore()
     room.join('mauve-peacock-candle')
     await sleep(5)
     const socket = sockets[sockets.length - 1]
-    // A room whose snapshot predates the pantry store: NO pantry key.
     socket.receive({
       type: 'joined',
       code: 'mauve-peacock-candle',
       rev: 3,
       state: { plan: [], customItems: [], checked: {} },
     })
-    // Absence = don't-touch held: our list survived the adoption…
     expect(pantry.list).toEqual([{ name: 'Butter', nameKey: 'butter' }])
-    // …and the room learned it with exactly ONE bounded reconcile push —
-    // the alternative (staying silent) leaves the household without our
-    // pantry until some unrelated edit pushes (CodeRabbit, major).
-    expect(socket.frames('state')).toHaveLength(1)
-    const pushed = socket.frames('state')[0]
-    expect(pushed.rev).toBe(4)
-    expect((pushed.state as { pantry?: unknown[] }).pantry).toEqual([
-      { name: 'Butter', nameKey: 'butter' },
-    ])
-  })
-
-  test('adoption of a pantry-less snapshot publishes NOTHING when we hold no pantry', async () => {
-    const { socket } = await startRoom()
-    const before = socket.frames('state').length
-    socket.receive({
-      type: 'joined',
-      code: 'mauve-peacock-candle',
-      rev: 3,
-      state: { plan: [], customItems: [], checked: {} },
-    })
-    // An empty list adopting an old room has nothing to teach it.
-    expect(socket.frames('state')).toHaveLength(before)
+    // Absence = don't-touch: the adoption must not echo a wipe — and it
+    // must not push, either: a post-adoption push re-sends the whole LWW
+    // state at maxSeenRev+1 and races a peer's in-flight edit (the exact
+    // freeze the no-echo rule exists to prevent, kody PR #92). The room
+    // learns the pantry on the next genuine edit (ADR-0090).
+    expect(socket.frames('state')).toHaveLength(0)
   })
 })
 

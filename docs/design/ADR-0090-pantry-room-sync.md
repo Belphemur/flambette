@@ -61,6 +61,19 @@ decision (surface, suggestion machinery, ranking, categories) stands.
   tab's "in my kitchen" filter and ranking are household-wide.
 - Leaving a room does not wipe the local list (absence = don't-touch; a
   departed device keeps its last-known pantry until it edits it).
+- A device joining a room whose stored snapshot predates the pantry
+  store keeps its local list and teaches the room the list on the
+  household's NEXT GENUINE EDIT — not on adoption. A post-adoption
+  reconcile push was considered and REJECTED (kody, PR #92 review):
+  every push re-sends the whole LWW state (the relay preserves only
+  `cookedHistory`/`planIdentity` when absent, so a pantry-only partial
+  frame would fan out to older peers as `plan: undefined` — which their
+  `state.plan ?? []` applies as a wipe), and an unchanged-content push
+  at `maxSeenRev + 1` races a peer's in-flight edit at the same rev —
+  the household freeze the join-echo rule exists to prevent. The pantry
+  is convenience state (the local list drives the device's UI
+  regardless of sync), so the bounded sync latency is the accepted
+  trade.
 - `docs/agents/rooms-and-sync.md`'s key list and the ADR-0088 store count
   (eleven → twelve) move in the same change as the code.
 
