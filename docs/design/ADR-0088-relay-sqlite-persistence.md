@@ -1,11 +1,9 @@
 # ADR-0088: Relay persistence — SQLite room state, per-store tables, one migration runner for both runtimes
 
-Status: Accepted (2026-10-14)
+Status: Accepted (2026-10-14) — implemented in PR #92
 Extends: ADR-0040 (relay core seam — the adapters own state), ADR-0038
 (the Cloudflare Durable Object path, §4 deviation), ADR-0025 (Docker
 packaging), ADR-0026 / ADR-0006 (room lifecycle and sync).
-Not yet implemented: this record is the design contract; the
-implementation PR follows it and flips this line.
 
 **Numbering note:** 0087 was handed out on `main`'s history but is
 reserved by the open branch `feat/pantry-ingredient-search` (PR #90,
@@ -86,7 +84,9 @@ store list lives in the core (`SYNCED_STORES` in `relay-core/`) — the
 store vocabulary is a DECISION about what the relay synchronizes, not a
 storage detail, and ADR-0040 puts decisions in the core.
 
-Nine store tables, one per `SYNCED_STORES` key:
+Nine store tables, one per `SYNCED_STORES` key (see Addendum
+2026-10-14 for the two keys — `ratingTombstones`, `planIdentity` — that
+implement ADR-0082 and ADR-0034 and ride the SAME per-store shape):
 
 ```sql
 CREATE TABLE store_plan (
@@ -139,7 +139,9 @@ per ADR-0040's boundary — makes it core code:
 - `splitSnapshot(state)` → the per-store rows to write, **containing
   only the keys present in the payload** (the standing "absent = don't
   touch" rule, now enforced at the shared split, so an adapter can never
-  turn a missing key into a wipe);
+  turn a missing key into a wipe). A present `null` is NOT silence —
+  `planIdentity: null` ("no current plan", ADR-0034) is written through;
+  only an ABSENT key is don't-touch (see Addendum 2026-10-14);
 - `joinSnapshot(rows)` → the single snapshot a `joined`/fan-out needs.
 
 `RoomRecord.state` stays `SharedSnapshot | null` in the core; the
@@ -241,6 +243,52 @@ pardon and a weapon.
   same change" rule); this record carries only the decision.
 - The DO carries one deprecated column (`room.state`, NULL-filled) until
   a future migration removes it.
+
+## Addendum (2026-10-14): eleven stores, not nine; `planIdentity` is always-sent
+
+Implementation of ADR-0088 surfaced a contract error in §2/§3: the relay's
+`SYNCED_STORES` (the runtime mirror of the client `SharedState` in
+`src/stores/room.ts`) contains **eleven** keys, not nine. The two the ADR
+omitted both attach payload semantics the record already relies on —
+
+- **`ratingTombstones`** (ADR-0082): `Record<string, number>` — the
+  deletion half of `ratings`; additive, published every snapshot while
+  non-empty.
+- **`planIdentity`** (ADR-0034): `{ planId, planCreatedAt } | null` —
+  **always sent**; `null` is a real value ("no current plan"), distinct
+  from the key being ABSENT ("older peer has nothing to say", ADR-0028).
+
+Consequence for §3: the "absence = don't touch" rule has an explicit
+exception — a missing `planIdentity` key stays don't-touch, but an
+explicit `planIdentity: null` is a PRESENT value and is written through.
+The core enforces this by writing every `SYNCED_STORES` key whose value
+is `!== undefined`; `undefined` (the parsed-JSON equivalent of omission)
+is silence, a real `null` is data. The eleven per-store tables are:
+`store_plan`, `store_custom_items`, `store_checked`, `store_cleared`,
+`store_customs`, `store_cooked_history`, `store_filters`,
+`store_favorites`, `store_ratings`, `store_rating_tombstones`,
+`store_plan_identity`.
+
+**No implementation change follows this correction:** `server/relay-core/stores.ts` already enumerates all eleven keys and already implements the
+exception — the `splitSnapshot` loop writes any key `present` and its
+comment pins `null` as a real value. The agreement is gated both ways:
+a compile-time assertion in `src/stores/room.ts` (mirrors `roomSyncStores.ts`
+or fails `bun run build`) and the test-time cross-check in
+`stores.test.ts` (fails `bun run test:unit` when the lists disagree). This
+Addendum only brings the prose back in line with the shipping code. The
+store-adding procedure (`.agents/skills/mealime-add-sync-store/SKILL.md`)
+touch surface (its step 5 and the Pitfalls) is aligned to the same
+eleven and to the `planIdentity` always-sent exception.
+
+**Resolved-at-impl note on §2's `json_valid` caveat:** the store tables
+carry `value TEXT NOT NULL CHECK (json_valid(value))` in the SHARED DDL
+(`storeTableDdl` in `server/relay-core/migrations.ts`) with no runtime
+probe, so both adapters run the identical `CREATE TABLE`. This is safe
+because `bun run test:worker` exercises that DDL against workerd's real
+`ctx.storage.sql` — the DO spec creates a store table with the CHECK on a
+fresh database in the workerd pool and passes — so `json_valid` IS
+available in workerd's bundled SQLite and the codec-side fallback the
+ADR hedged ("if absent, drop the CHECK") was never taken.
 
 ## Alternatives considered
 

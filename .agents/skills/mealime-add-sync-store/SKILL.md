@@ -49,6 +49,12 @@ crash) at the relay's storage boundary.
    Completion criterion: an old relay/client combination degrades
    gracefully — an old peer ignores the unknown key, a new peer reading
    an old peer's payload keeps its own data.
+   Note the always-sent exception: `planIdentity` (ADR-0034) is emitted on
+   EVERY snapshot and its `null` means "no current plan" — it is a real
+   value, never silence. The don't-touch rule applies to a MISSING key,
+   not to an explicit `null`; the split (`splitSnapshot`) must write
+   `planIdentity: null` through, and `joinSnapshot` must reconstruct it as
+   `null` (not omit it).
 3. **`snapshot()` / `applyRemote()` in the same file** — state the merge
    semantics HERE, explicitly: whole-state LWW under the room `rev` (the
    default), or per-key reconcile by record `updatedAt` with tombstones
@@ -132,3 +138,13 @@ crash) at the relay's storage boundary.
   per-store tables are STORAGE rows, not reconcile participants — the
   relay never merges per-key on the server's behalf (ADR-0088 §3).
   Adding server-side merge is a protocol change; new ADR.
+- **`json_valid` is real on workerd.** The store-table `CHECK (json_valid(value))`
+  ships in the shared DDL with no probe; this is verified by
+  `bun run test:worker`, which creates a table with that CHECK against
+  workerd's real `ctx.storage.sql`. Do not soften the CHECK to a runtime
+  codec check unless a workerd vintage regresses — and then file an ADR,
+  not a workaround.
+- **Silencing an explicit `null`.** "Absence = don't touch" does NOT mean
+  "a present `null` is dropped" — `planIdentity: null` ("no current plan")
+  is a real answer that must round-trip through split/join. Encoding
+  absence and explicit-null the same way wipes a meaningful plan-reset.
