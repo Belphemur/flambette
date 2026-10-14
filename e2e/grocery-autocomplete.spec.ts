@@ -174,6 +174,43 @@ test('gluten-free and lactose-free substitutes are suggestible (ADR-0052)', asyn
   await expectZeroMealimeRequests(page)
 })
 
+test('fuzzy tier: a typo surfaces the index row with its category chip (ADR-0086)', async ({ page }) => {
+  // 'bananna' exact-matches NOTHING in the baked index — before ADR-0086 the
+  // listbox showed only the typed "+" row. The fuzzy tier must now surface
+  // the correctly-spelled "bananas" row with the index's Produce chip, and
+  // the misspelling itself stays row 0 (unknown text stays addable).
+  await input(page).fill('bananna')
+  const box = page.locator('[data-test=ingredient-suggestions]')
+  await expect(box).toBeVisible()
+
+  const first = page.locator('[data-test=add-suggestion-first]')
+  await expect(first).toContainText('bananna')
+  await expect(first.locator('[data-test=suggestion-category]')).toHaveText('Other')
+
+  const fuzzy = matchRows(page).filter({ hasText: 'bananas' })
+  await expect(fuzzy).toHaveCount(1)
+  await expect(fuzzy.locator('[data-test=suggestion-category]')).toHaveText('Produce')
+  await expect(page.locator('[data-test=mine-badge]')).toHaveCount(0)
+  await expectZeroMealimeRequests(page)
+})
+
+test('fuzzy tier: a typo of a remembered custom name surfaces the mine row (ADR-0086)', async ({ page }) => {
+  // Remember a free-form name first, then mistype it — the fuzzy tier must
+  // find the remembered entry and keep its "mine" badge + remembered
+  // category (a typo'd custom name used to be unreachable).
+  const custom = 'Triple-filtered glacier water'
+  await input(page).fill(custom)
+  await input(page).press('Enter')
+  await expect(page.getByTestId('extra-section')).toContainText(custom)
+
+  await input(page).fill('glacier wter')
+  await expect(page.locator('[data-test=ingredient-suggestions]')).toBeVisible()
+  const mine = mineSuggestions(page).filter({ hasText: custom })
+  await expect(mine).toHaveCount(1)
+  await expect(mine.locator('[data-test=suggestion-category]')).toHaveText('Other')
+  await expectZeroMealimeRequests(page)
+})
+
 test('the add flow also works from Shopping mode (ShopView)', async ({ page }) => {
   // Need a non-empty list to reach ShopView's add form content area; add a
   // custom item on Grocery first, then start shopping and add another one.
