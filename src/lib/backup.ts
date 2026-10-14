@@ -16,6 +16,7 @@
  */
 import type { PlanEntry, CookedEntry } from '../stores/plan'
 import type { CustomIngredient } from '../stores/customIngredients'
+import type { PantryIngredient } from '../stores/pantry'
 import { DIET_IDS, type DietId } from './dietFilter'
 import { normalizeQuickFilters, type QuickFilters } from './quickFilters'
 import { isServings, FALLBACK_SERVINGS, MAX_SERVINGS, MIN_SERVINGS } from './servings'
@@ -45,6 +46,7 @@ export interface BackupCounts {
   checks: number
   favourites: number
   ratings: number
+  pantry: number
 }
 
 export interface ApplyResult {
@@ -252,6 +254,29 @@ export const STORE_SLICES: SliceDef<any>[] = [
     },
     write(value) {
       useCustomIngredientsStore().replaceAll(value as CustomIngredient[])
+    },
+  },
+  /* "In my kitchen" pantry (ADR-0087) — device-local, never room-synced. */
+  {
+    file: 'pantry.json',
+    label: 'my kitchen pantry ingredients',
+    persistKeys: ['mealime-planner:v1:pantry'],
+    read: () => usePantryStore().list.map((r) => ({ ...r })),
+    validate(value) {
+      if (!Array.isArray(value)) return 'pantry.json must be an array'
+      for (const r of value) {
+        if (
+          typeof r !== 'object' || r === null ||
+          typeof (r as PantryIngredient).name !== 'string' || !((r as PantryIngredient).name) ||
+          typeof (r as PantryIngredient).nameKey !== 'string' || !((r as PantryIngredient).nameKey)
+        ) {
+          return 'pantry ingredients must be {name, nameKey} strings'
+        }
+      }
+      return null
+    },
+    write(value) {
+      usePantryStore().replaceAll(value as PantryIngredient[])
     },
   },
   /* Persisted ui prefs (history-sharing opt-OUT + quick filters + household
@@ -793,6 +818,7 @@ export function applyBackup(zipBytes: Uint8Array): ApplyResult {
     checks: Object.keys((byFile.get('checked.json') as Record<string, boolean> | undefined) ?? {}).length,
     favourites: (byFile.get('favourites.json') as number[] | undefined)?.length ?? 0,
     ratings: ((byFile.get('ratings.json') as unknown[]) ?? []).length,
+    pantry: (byFile.get('pantry.json') as PantryIngredient[] | undefined)?.length ?? 0,
   }
   return { ok: true, counts }
 }
@@ -808,3 +834,4 @@ import { ratingsToRows, useRatingStore, type RatingFileRow } from '../stores/rat
 import { useIdentityStore } from '../stores/identity'
 import { useRoomStore } from '../stores/room'
 import { MAX_NAME_CHARS, isUuidShape, sanitizeDisplayName } from './profileName'
+import { usePantryStore } from '../stores/pantry'
