@@ -1,6 +1,6 @@
 # ADR-0087: "Cook with what I have" — pantry ingredient search, Variant A inline row
 
-Status: accepted (superseded in part by ADR-0089) (2026-10-14) — implemented in PR #90; Decision 1 surface placement moved to the Kitchen filter dropdown
+Status: accepted (superseded in part by ADR-0089, ADR-0090) (2026-10-14) — implemented in PR #90; Decision 1 surface placement moved to the Kitchen filter dropdown; Decision 7 device-local ruling reversed, the pantry joined the room sync (PR #92)
 
 Implements issue #80 ("Search recipes by ingredients on hand"). The number
 0087 was taken via `scripts/build_adr_index.py --next` on a fresh
@@ -109,6 +109,11 @@ divergence is listed under Rejected elements.
    room-sync payload — same ruling as custom ingredients (ADR-0012:
    device-local convenience state). A shared household pantry would be a
    deliberate payload extension, deferred, not smuggled in here.
+   **SUPERSEDED (in part) by ADR-0090** (2026-10-14, PR #92): the pantry
+   joined the room sync as the twelfth store, following the same 2026
+   policy change that moved custom ingredients (`customs`) to household
+   state under ADR-0012. The backup registration this decision mandated
+   stands unchanged.
 8. **Suggestion machinery is reused, not forked.** The pantry add input
    gets its suggestions from `ingredientSuggestions.ts` (the one
    suggestion source of truth) and reuses `IngredientAutocomplete`'s

@@ -28,7 +28,7 @@
  * their store implementation and nowhere else.
  */
 
-import { IDLE_TTL_MS, INACTIVITY_TTL_MS, PRESERVED_WHEN_ABSENT } from './policy'
+import { PRESERVED_WHEN_ABSENT, ROOM_TTL_MS } from './policy'
 import {
   RELAY_ERRORS,
   type ExpiryReason,
@@ -138,10 +138,14 @@ export interface RoomRecord {
   createdAt: number
   /** When the room was last touched by any liveness signal. */
   lastActivityAt: number
-  /** Absolute deadline of the 24h inactivity clock. */
-  inactivityAt: number
-  /** Absolute deadline of the 7-day idle backstop. */
-  idleAt: number
+  /**
+   * Absolute expiry deadline — the ONE room clock (ADR-0038 addendum),
+   * stamped `lastActivityAt + roomTtlMs` by every touch. The two
+   * pre-collapse stamps (`inactivityAt`/`idleAt`) collapsed into it: with
+   * equal windows they were always the same number, and the
+   * min-of-clocks arithmetic between them was dead weight.
+   */
+  deadline: number
   /**
    * Monotonic peer counter. The DO derives `state.from` from it so peer
    * ids are stable and unique within a code's history, even across a
@@ -219,8 +223,8 @@ export interface RegistryOptions {
   /** The room code this registry owns. */
   code: string
   store: RoomStore
-  inactivityTtlMs?: number
-  idleTtlMs?: number
+  /** The ONE room-retention window (ADR-0038's unification addendum). */
+  roomTtlMs?: number
   /** The clock. Injected so the decision table can pin time. */
   now?: () => number
   /**
@@ -240,9 +244,9 @@ export interface RoomRegistry {
   floor: () => number
   /** Decide, and persist, what an upgrade should be answered with. */
   admit: (mode: 'create' | 'join', livePeers: number) => Admission
-  /** A `keepalive` from a member. Refreshes BOTH clocks (review F1). */
+  /** A `keepalive` from a member. Refreshes the expiry clock (review F1). */
   keepalive: () => { kind: 'ok' } | { kind: 'refuse'; error: RelayErrorCode }
-  /** Commit a snapshot and refresh the clocks. */
+  /** Commit a snapshot and refresh the clock. */
   push: (rev: unknown, state: unknown, from: string) => PushVerdict
   /**
    * Mint the next peer serial for this room and persist it. Needed by
@@ -255,11 +259,6 @@ export interface RoomRegistry {
    * a repeated `from` would read as another device's push.
    */
   nextSerial: () => number
-  /**
-   * A peer detached. `remaining` is how many peers are left; the room dies
-   * with its last peer (ADR-0026) unless the adapter says otherwise.
-   */
-  leave: (remaining: number) => { dropped: boolean }
   /**
    * Expiry check, called from the timer sink or the alarm. Returns the
    * reason when the room closed, null when it is still live (an early or
@@ -281,34 +280,31 @@ function isCommitShape(rev: unknown, state: unknown): boolean {
 export function createRoomRegistry({
   code,
   store,
-  inactivityTtlMs = INACTIVITY_TTL_MS,
-  idleTtlMs = IDLE_TTL_MS,
+  roomTtlMs = ROOM_TTL_MS,
   now = () => Date.now(),
   arm,
   onExpire = () => {},
 }: RegistryOptions): RoomRegistry {
   /**
-   * Restart BOTH expiry clocks. Every liveness signal funnels through
+   * Restart THE expiry clock. Every liveness signal funnels through
    * here — create, join, state AND keepalive (review F1) — because a
-   * connected peer that keepalives is by definition not an idle room, and
-   * a 7-day-connected household must never be closed by the backstop.
+   * connected peer that keepalives is by definition not a silent room:
+   * a 30-day-connected household is never closed.
    *
-   * ONE deadline is armed, at the earlier of the two. The Bun relay used
-   * to arm two `setTimeout`s and the DO one alarm; the arithmetic is
-   * identical (both clocks are re-armed together, so the inactivity
-   * deadline is always the earlier one) and the single wake-up is what
-   * lets `tick()` tell which clock fired.
+   * ONE deadline is armed, at the room's own. The Bun relay used to arm
+   * two `setTimeout`s and the DO one alarm; with the clocks collapsed
+   * (ADR-0038's addendum) there is one deadline everywhere and nothing
+   * left to take a `min()` of.
    */
   function touch(row: RoomRecord): RoomRecord {
     const t = now()
     const next: RoomRecord = {
       ...row,
       lastActivityAt: t,
-      inactivityAt: t + inactivityTtlMs,
-      idleAt: t + idleTtlMs,
+      deadline: t + roomTtlMs,
     }
     store.write(next)
-    arm(Math.min(next.inactivityAt, next.idleAt))
+    arm(next.deadline)
     return next
   }
 
@@ -319,13 +315,13 @@ export function createRoomRegistry({
 
   /**
    * The canonical `rev` this code has reached (0 when unknown, or older
-   * than the idle TTL — the entry is pruned on the way through, which is
+   * than the room TTL — the entry is pruned on the way through, which is
    * what keeps the floor bounded without a clock of its own).
    */
   function floorRev(): number {
     const entry = store.readFloor()
     if (!entry) return 0
-    if (now() - entry.at > idleTtlMs) {
+    if (now() - entry.at > roomTtlMs) {
       store.dropFloor()
       return 0
     }
@@ -346,9 +342,9 @@ export function createRoomRegistry({
     // busy household never has its floor pruned underneath it. A stale
     // entry's AGE is replaced, never its REV: the floor is monotone PER
     // CODE, so a push whose rev is lower than a keepalive-refreshed entry
-    // (a keepalive-only gap longer than the idle TTL) must not move it
+    // (a keepalive-only gap longer than the room TTL) must not move it
     // backwards.
-    const stale = entry !== null && t - entry.at > idleTtlMs
+    const stale = entry !== null && t - entry.at > roomTtlMs
     if (!entry || stale || rev > entry.rev) {
       store.writeFloor({ code, rev: stale ? Math.max(rev, entry!.rev) : rev, at: t, serial })
       return
@@ -369,17 +365,17 @@ export function createRoomRegistry({
     // The serial is NOT bumped here: the adapter that admits the peer mints
     // it with `nextSerial()`, which also persists it to the floor record.
     const serial = Math.max(store.readFloor()?.serial ?? 0, store.read()?.serial ?? 0)
-    store.write({
+    const row: RoomRecord = {
       code,
       rev: floor,
       state: null,
       createdAt: t,
       lastActivityAt: t,
-      inactivityAt: t + inactivityTtlMs,
-      idleAt: t + idleTtlMs,
+      deadline: t + roomTtlMs,
       serial,
-    })
-    arm(Math.min(t + inactivityTtlMs, t + idleTtlMs))
+    }
+    store.write(row)
+    arm(row.deadline)
     return { kind: 'establish', code, rev: floor, count }
   }
 
@@ -389,10 +385,11 @@ export function createRoomRegistry({
     // the one about to be (ADR-0049).
     const count = livePeers + 1
     if (mode === 'create') {
-      // A stored room that nobody is in is, logically, gone — the room is
-      // deleted when its last peer leaves (ADR-0026), so a `create` lands
-      // on a fresh room either way. What survives the deletion is the rev
-      // FLOOR, and the `created` reply carries it.
+      // A stored room that nobody is in is, logically, gone — since ADR-0088
+      // §5 the row survives its last peer on BOTH runtimes, but an unoccupied
+      // room is not held against a `create` either way. The fresh room starts
+      // from the rev FLOOR (the `created` reply carries it), and its
+      // per-store rows are cleared with it.
       if (existing && livePeers > 0) return { kind: 'refuse', error: RELAY_ERRORS.codeTaken }
       return establish(count)
     }
@@ -463,35 +460,28 @@ export function createRoomRegistry({
   /**
    * Arm the wake-up that prunes an ORPHANED floor.
    *
-   * A floor outlives its room by design, so dropping the room leaves a
+   * A floor outlives its room by design, so an expired room leaves a
    * record that nothing else will ever look at: with no timer armed, a
    * relay that keeps serving codes would accumulate one floor entry per
-   * code it has EVER seen (the Bun adapter's `Map`, the DO's
+   * code it has EVER seen (the Bun adapter's SQLite rows, the DO's
    * `rev_floor`/`peer_serial` rows). The floor is small, but it is
    * unbounded, and it is read only if the code comes back — so the only
-   * honest way to reclaim it is to wake up when it reaches its idle TTL.
+   * honest way to reclaim it is to wake up when its age reaches the room
+   * TTL.
    */
   function armFloorPrune(): void {
     const entry = store.readFloor()
-    if (entry) arm(entry.at + idleTtlMs)
-  }
-
-  function leave(remaining: number): { dropped: boolean } {
-    if (remaining > 0) return { dropped: false }
-    // Nobody is there, so the room (and its state) goes too. A returning
-    // client re-joins — which re-creates it — and re-seeds it. The
-    // per-code rev floor survives (review F4).
-    store.drop()
-    armFloorPrune()
-    return { dropped: true }
+    if (entry) arm(entry.at + roomTtlMs)
   }
 
   /**
-   * Expiry. Whichever clock fired first closes the room, tells its peers
-   * `room_expired` (the client treats that as TERMINAL — a re-join would
-   * join-or-create an empty room and read as silent household data loss)
-   * and deletes the room row. The floor row deliberately stays, so the
-   * household's revision history outlives the room until the idle TTL
+   * Expiry — the ONLY path that deletes a room now (ADR-0088 §5): since
+   * the row survives its last peer on BOTH runtimes, the expiry clock
+   * closes the room, tells its peers `room_expired` (the client
+   * treats that as TERMINAL — a re-join would join-or-create an empty room
+   * and read as silent household data loss) and deletes the room row and
+   * its per-store rows. The floor row deliberately stays, so the
+   * household's revision history outlives the room until the room TTL
    * prunes it.
    */
   function tick(): ExpiryReason | null {
@@ -502,20 +492,22 @@ export function createRoomRegistry({
       // and re-arms itself for as long as the floor is still fresh.
       const entry = store.readFloor()
       if (!entry) return null
-      if (t - entry.at > idleTtlMs) {
+      if (t - entry.at > roomTtlMs) {
         store.dropFloor()
         return null
       }
-      arm(entry.at + idleTtlMs)
+      arm(entry.at + roomTtlMs)
       return null
     }
-    const deadline = Math.min(row.inactivityAt, row.idleAt)
+    const deadline = row.deadline
     if (t < deadline) {
       // Touched (a keepalive re-armed it) since the wake-up was set.
       arm(deadline)
       return null
     }
-    const reason: ExpiryReason = row.inactivityAt <= row.idleAt ? 'inactive' : 'idle'
+    // One clock, one reason (ADR-0038's addendum): the `idle` branch the
+    // min-of-clocks design kept for the backstop cannot fire any more.
+    const reason: ExpiryReason = 'inactive'
     try {
       onExpire(code, reason)
     } catch (err) {
@@ -523,9 +515,29 @@ export function createRoomRegistry({
       // already happened by contract.
       console.error(`[relay] expire hook failed for ${code}: ${(err as Error)?.message ?? err}`)
     }
+    // The room is gone but its floor survives — and its AGE re-anchors at
+    // the expiry instant, not at its last push: the floor now outlives its
+    // room by one more full room-TTL window. Without the re-anchor, a floor
+    // sharing the room's TTL would die at or before the room did (its age
+    // runs from the last push, which is never later than the last touch)
+    // and ADR-0088 §5's promises — a re-created room continues the
+    // household's revision history, and a peer id is never handed out twice
+    // within a code (review F4) — would hold only during a zero-width race
+    // after expiry. Re-anchoring keeps the ONE-TTL story while keeping both
+    // promises true for any re-create within a full window of the room's
+    // death.
+    //
+    // The re-anchor is written BEFORE the drop on purpose: the adapters
+    // commit these as separate transactions, and anchor-then-drop makes
+    // every interruption safe — a crash after the write leaves the room
+    // alive with a re-anchored floor (the next tick re-derives the
+    // unchanged deadline and drops again), while drop-then-anchor could
+    // persist the deletion alone: the restart sweep would then arm the
+    // orphaned floor at its stale, already-past deadline and the next
+    // tick would prune it — the F4 rev-0 regression (kody review).
+    const entry = store.readFloor()
+    if (entry) store.writeFloor({ ...entry, at: t })
     store.drop()
-    // The room is gone but its floor survives, so the prune wake-up moves
-    // from the room's deadline to the floor's (see `armFloorPrune`).
     armFloorPrune()
     return reason
   }
@@ -537,7 +549,6 @@ export function createRoomRegistry({
     keepalive,
     push,
     nextSerial,
-    leave,
     tick,
   }
 }

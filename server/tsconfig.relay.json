@@ -13,6 +13,8 @@
   },
   "include": [
     "relay.ts",
+    "relaySqlite.ts",
+    "bun-sqlite.d.ts",
     "relay-core/**/*.ts",
     "../src/lib/roomWords.ts"
   ],

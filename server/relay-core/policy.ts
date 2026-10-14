@@ -16,11 +16,39 @@
  * `server/relayPolicy.mjs`).
  */
 
-/** Rooms close after 24h with no keepalive and no state activity (ADR-0038, widening ADR-0026). */
-export const INACTIVITY_TTL_MS = 24 * 60 * 60 * 1000
+/**
+ * The ONE room-retention window: a room is deleted after 30 days with no
+ * keepalive and no state activity (ADR-0038's 2026-10-14 addendum,
+ * widening ADR-0026). The pre-collapse design carried a SECOND clock — a
+ * 7-day "idle backstop" whose deletion deadline was the earlier of the
+ * two — but once both clocks widened to the same 30 days the pair had
+ * nothing left to separate: two identical stamps, a no-op `min()`, and an
+ * expiry reason (`idle`) that could never fire. One room clock now
+ * governs deletion AND the rev floor's age-out (the floor keeps its own
+ * timestamp; its prune deadline is `floor.at + ROOM_TTL_MS`).
+ */
+export const ROOM_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
-/** Backstop TTL for a room whose peers vanished without `leave`. */
-export const IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+/**
+ * How long the relay keeps MIRRORING the deprecated `room.state` blob
+ * after the per-store split migrated it (ADR-0088's 2026-10-14 addendum).
+ *
+ * A pre-per-store relay binary — or any old reader of the blob — running
+ * against a migrated database would see EMPTY rooms once the blob is
+ * nulled: silent data loss on a downgrade. For one grace window after
+ * migration 002 applies, every room upsert re-binds the record's merged
+ * snapshot into the blob column so an old binary keeps serving real data;
+ * after the window the upsert binds NULL again (the blob a room last
+ * mirrored simply stays — write-only, never read by the new binary).
+ *
+ * One room-TTL window (the same 30 days as ROOM_TTL_MS), symmetric with
+ * the floor's post-expiry retention story. NOT an env override on
+ * purpose: the grace deadline is derived from the migration ledger
+ * (`readBlobGraceUntil`), so both runtimes agree without configuration —
+ * this constant is the window, the same on a Bun relay and a Durable
+ * Object.
+ */
+export const STATE_BLOB_GRACE_MS = 30 * 24 * 60 * 60 * 1000
 
 /**
  * Legacy relay-minted room codes: Crockford base32 with every vowel
@@ -61,13 +89,11 @@ export function parsePositiveNumber(raw: string | undefined | null, fallback: nu
  * and throttle limit.
  */
 export function healthPayload(config: {
-  inactivityTtlMs: number
-  idleTtlMs: number
+  roomTtlMs: number
   attemptLimit: number
 }): {
   service: typeof RELAY_SERVICE
-  inactivityTtlMs: number
-  idleTtlMs: number
+  roomTtlMs: number
   attemptLimit: number
 } {
   return { service: RELAY_SERVICE, ...config }

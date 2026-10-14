@@ -13,9 +13,18 @@
   (issue #6), and naming `roomWords.ts` alone re-created the same failure one
   level up.
 - CI's `docker` job **smoke-runs** the relay image and requires an HTTP 200
-  within 30s (dumping container logs on failure). A green `docker build`
-  proves the image assembles, never that the entrypoint starts — do not weaken
-  that step back to a bare build.
+  within 30s (dumping container logs on failure). Since ADR-0088 it ALSO
+  proves persistence: `RELAY_DB_PATH` points at a temporary path inside
+  the container (no volume — the point is the file, not the mount), a
+  create + state push runs against the live socket, and the SQLite file
+  is opened read-only to assert the per-store row landed. A green
+  `docker build` proves the image assembles, never that the entrypoint
+  starts — do not weaken that step back to a bare build.
+- The relay's SQLite database (ADR-0088 §1) lives at `RELAY_DB_PATH`
+  (default `/data/relay.sqlite3`) and MUST sit on a volume in any real
+  deployment — the compose file mounts the named `relay-data` volume at
+  `/data`; a `docker compose up -d` on an upgraded relay resumes every
+  room instead of dropping it. `:memory:` is the documented test opt-in.
 - When you add a relay module, no packaging change should be needed. If you
   ever find yourself editing `server/Dockerfile` to add a filename, that is the
   bug, not the fix.
@@ -65,10 +74,11 @@ spoken by a Durable Object instead of a Bun process.
   (ADR-0040), which BOTH adapters import. The core owns DECISIONS and speaks
   in intents (`read`/`write`/`drop`/`readFloor`/`writeFloor`/`dropFloor`);
   it never reads `process.env` or a runtime API — `server/relay.ts` (Bun)
-  implements the intents over Maps, `server/worker/room.ts` (DO) over SQL
-  tables. A semantics change lands in the core ONCE; the adapters differ in
-  the store and nowhere else (the DO keeping its room row after the last
-  peer leaves is the one deliberate behavioural difference, ADR-0038 §4).
+  implements the intents over SQLite (`server/relaySqlite.ts`),
+  `server/worker/room.ts` (DO) over storage SQL. A semantics change lands
+  in the core ONCE; the adapters differ in the store and nowhere else —
+  since ADR-0088 §5 even the keep-until-expiry behaviour is shared, and
+  both runtimes apply the SAME migration list.
 - Code canonicalisation is IMPORTED from `src/lib/roomWords.ts` in
   `server/relay-core/codes.ts` — the lockstep with the client is structural,
   not a hand-maintained copy. Nothing else in `server/` imports from `src/`.
@@ -77,6 +87,9 @@ spoken by a Durable Object instead of a Bun process.
   pure in-memory store; the runtime suites (`test:worker`, Playwright
   room-lifecycle e2e) pin the deployment-specific parts (hibernation, SQL
   survival, real sockets).
-- Rooms persist after the last peer leaves **only on Cloudflare**
-  (ADR-0038 §4): the Durable Object's storage survives until the expiry
-  clocks fire, while the Bun relay still deletes a room nobody is in.
+- Rooms persist after the last peer leaves on BOTH paths (ADR-0088 §5,
+  closing ADR-0038 §4's deliberate deviation): the Bun relay's SQLite
+  rows and the Durable Object's storage both survive the departure until
+  the expiry clock fires, and the relay's startup sweep re-arms those
+  wake-ups after a restart, so a resumption is a resumption on either
+  backend.

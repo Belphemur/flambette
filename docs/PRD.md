@@ -37,7 +37,7 @@ Unlike generic recipe scrapers, calorie-counting diaries, or bloated ad-supporte
    - Cook anytime without mandatory planning; single-step carousel view at a focused 672px reading measure with 20px body type, scaled ingredient chips, and persistent timers.
 5. **Frictionless Real-Time Household Sync (ADR-0026, ADR-0038, ADR-0063)**:
    - Ephemeral or persistent room codes using three memorable words (`amber-falcon-lantern`).
-   - Synchronizes meal plans, grocery checkmarks, custom pantry items, and connected member presence without user account creation or passwords.
+   - Synchronizes meal plans, grocery checkmarks, custom pantry items, the shared "In my kitchen" ingredient list, and connected member presence without user account creation or passwords.
 
 ---
 

@@ -4,6 +4,7 @@ import { usePlanStore } from './plan'
 import { useUiStore } from './ui'
 import { useRoomStore, type RoomStatus } from './room'
 import { useRatingStore } from './rating'
+import { usePantryStore } from './pantry'
 import { useIdentityStore } from './identity'
 import { STORE_SLICES } from '../lib/backup'
 
@@ -929,6 +930,65 @@ describe('room store — the plan identity is household state (ADR-0034)', () =>
     // the identity captured before the mark, not the (now empty) one.
     expect(sent.cookedHistory[0].planId).toBe(identity.planId)
     expect(sent.cookedHistory[0].planCreatedAt).toBe(identity.planCreatedAt)
+  })
+})
+
+describe('room store — the pantry is household state (ADR-0090)', () => {
+  test('a local pantry edit rides the snapshot', async () => {
+    const { socket } = await startRoom()
+    const pantry = usePantryStore()
+    pantry.add('Butter')
+    await sleep(500) // PUSH_DEBOUNCE_MS
+    const pushed = socket.frames('state').at(-1)!
+    expect((pushed.state as { pantry?: unknown[] }).pantry).toEqual([
+      { name: 'Butter', nameKey: 'butter' },
+    ])
+  })
+
+  test('a peer payload adopts the pantry through the normalization funnel', async () => {
+    const pantry = usePantryStore()
+    const { socket } = await startRoom()
+    const before = socket.frames('state').length
+    socket.receive({
+      type: 'joined',
+      code: 'mauve-peacock-candle',
+      rev: 3,
+      state: {
+        plan: [],
+        customItems: [],
+        checked: {},
+        // A buggy peer's stale key: the receiver re-derives the identity
+        // from the name, so the row lands canonical ('butter').
+        pantry: [{ name: 'Butter', nameKey: 'stale-key' }],
+      },
+    })
+    expect(pantry.list).toEqual([{ name: 'Butter', nameKey: 'butter' }])
+    // Adoption is not echoed back: no push beyond what the join already sent.
+    expect(socket.frames('state')).toHaveLength(before)
+  })
+
+  test('a payload WITHOUT pantry (older peer) leaves the local list alone', async () => {
+    const pantry = usePantryStore()
+    // Added while no room exists: nothing is queued as an unsent edit, so
+    // this is the pure adoption path.
+    pantry.add('Butter')
+    const room = useRoomStore()
+    room.join('mauve-peacock-candle')
+    await sleep(5)
+    const socket = sockets[sockets.length - 1]
+    socket.receive({
+      type: 'joined',
+      code: 'mauve-peacock-candle',
+      rev: 3,
+      state: { plan: [], customItems: [], checked: {} },
+    })
+    expect(pantry.list).toEqual([{ name: 'Butter', nameKey: 'butter' }])
+    // Absence = don't-touch: the adoption must not echo a wipe — and it
+    // must not push, either: a post-adoption push re-sends the whole LWW
+    // state at maxSeenRev+1 and races a peer's in-flight edit (the exact
+    // freeze the no-echo rule exists to prevent, kody PR #92). The room
+    // learns the pantry on the next genuine edit (ADR-0090).
+    expect(socket.frames('state')).toHaveLength(0)
   })
 })
 

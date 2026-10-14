@@ -45,7 +45,7 @@ export type ClientMessage =
    * fixed at join and no later frame can change it.
    */
   | { type: 'profile'; name?: unknown; id?: unknown }
-  /** Application-level liveness. Refreshes BOTH clocks; never throttled. */
+  /** Application-level liveness. Refreshes the expiry clock; never throttled. */
   | { type: 'keepalive' }
   /** A whole-state push at revision `rev`. */
   | { type: 'state'; rev?: unknown; state?: unknown }
@@ -79,8 +79,14 @@ export type RelayMessage =
   /** Every refusal, terminal or not. `reason` accompanies `room_expired`. */
   | { type: 'error'; code: RelayErrorCode; reason?: ExpiryReason }
 
-/** Why a room closed: which of the two expiry clocks fired (ADR-0038). */
-export type ExpiryReason = 'inactive' | 'idle'
+/**
+ * Why a room closed. The pre-2026-10-14 design judged a room by TWO clocks
+ * (`inactive` = the inactivity window elapsed, `idle` = the idle backstop);
+ * the clocks were then unified into one (ADR-0038's addendum), so only
+ * `inactive` can ever fire. The field stays on the `room_expired` frame —
+ * older peers read it — and keeps its historical single value.
+ */
+export type ExpiryReason = 'inactive'
 
 /**
  * The `error` payloads the relay can emit. One taxonomy for both runtimes

@@ -6,16 +6,21 @@
  *
  * 1. reads the configuration the core deliberately does not know about
  *    (`process.env`, which workerd does not have);
- * 2. implements the core's storage INTENTS over two Maps;
+ * 2. implements the core's storage INTENTS over the SQLite database that
+ *    `./relaySqlite` opens and migrates at startup (ADR-0088 §1) — the
+ *    in-process Maps stopped being the store of record;
  * 3. maps WebSocket events onto core verdicts and back onto the wire.
  *
- * Zero dependencies: Bun's native WebSocket support (`Bun.serve`), no
- * database, no persistence, and — as before this refactor — no build step
+ * Zero dependencies: Bun's native WebSocket support (`Bun.serve`) and
+ * Bun's built-in `bun:sqlite` — no npm install step, and no build step
  * (Bun runs the TypeScript directly).
  *
  * Rooms are keyed by canonical code and hold whole-state snapshots;
  * conflict resolution belongs to the client, via a monotonic `rev` the
- * relay only stores and fans out (ADR-0006).
+ * relay only stores and fans out (ADR-0006). The room ROW survives its
+ * last peer (ADR-0088 §5, like the Durable Object) until the expiry
+ * clock fires, and it survives a PROCESS restart: the startup sweep
+ * re-arms the wake-ups of every persisted room and orphaned floor.
  *
  * Run: `bun server/relay.ts` (listens on :8081, override with PORT env).
  */
@@ -26,23 +31,39 @@ import {
   normalizeProfileName,
   peersFrame,
   renamedProfile,
-  type FloorRecord,
   type PeerProfile,
-  type RoomRecord,
   type RoomRegistry,
   type RoomStore,
 } from './relay-core/lifecycle'
 import { canonicalizeCode, mintLegacyCode, resolveCreateIntent } from './relay-core/codes'
-import { healthPayload, IDLE_TTL_MS as IDLE_TTL_DEFAULT_MS, INACTIVITY_TTL_MS as INACTIVITY_TTL_DEFAULT_MS, parsePositiveNumber } from './relay-core/policy'
+import { healthPayload, ROOM_TTL_MS as ROOM_TTL_DEFAULT_MS, parsePositiveNumber } from './relay-core/policy'
 import { parseClientFrame, RELAY_ERRORS, type RelayMessage } from './relay-core/protocol'
 import type { ExpiryReason } from './relay-core/lifecycle'
 import { makeThrottle, MemoryAttemptBuckets } from './relay-core/throttle'
+import { createSqliteStores, openRelayDatabase, persistedDeadlines } from './relaySqlite'
 
 /* ------------------------------------------------------------------ config */
 
 const PORT = parsePositiveNumber(process.env.PORT, 8081)
-const INACTIVITY_TTL_MS = parsePositiveNumber(process.env.RELAY_INACTIVITY_TTL_MS, INACTIVITY_TTL_DEFAULT_MS)
-const IDLE_TTL_MS = parsePositiveNumber(process.env.RELAY_IDLE_TTL_MS, IDLE_TTL_DEFAULT_MS)
+/**
+ * The ONE room-retention window (ADR-0038's unification addendum). The
+ * pre-collapse design had a second `RELAY_IDLE_TTL_MS` knob; its separate
+ * meaning is gone. The old `RELAY_INACTIVITY_TTL_MS` is honored as a
+ * deprecated fallback so an existing deployment's override survives.
+ */
+const ROOM_TTL_MS = parsePositiveNumber(
+  process.env.RELAY_ROOM_TTL_MS,
+  // The deprecated fallback goes through the parser too, not through `??`:
+  // a set-but-empty or nonsense RELAY_ROOM_TTL_MS must fall through to it
+  // (parsePositiveNumber treats both as absent), so an existing
+  // deployment's old override still wins over the default (kody review).
+  parsePositiveNumber(process.env.RELAY_INACTIVITY_TTL_MS, ROOM_TTL_DEFAULT_MS),
+)
+/**
+ * The relay's room state persists here (ADR-0088 §1) — the Docker compose
+ * volume mounts the directory; `:memory:` is an explicit opt-in for tests.
+ */
+const RELAY_DB_PATH = process.env.RELAY_DB_PATH ?? '/data/relay.sqlite3'
 /** Transport liveness only — see the heartbeat at the bottom. */
 const HEARTBEAT_MS = 30_000
 
@@ -106,22 +127,27 @@ declare const Bun: {
 
 /* ------------------------------------------------------------------- state */
 
-/** One live room: the core's registry over its Map-backed store, plus peers. */
+/** One live room: the core's registry over its SQLite-backed store, plus peers. */
 interface Room {
   code: string
   registry: RoomRegistry
   peers: Set<Socket>
-  row: RoomRecord | null
   timer: ReturnType<typeof setTimeout> | undefined
 }
 
 const rooms = new Map<string, Room>()
-/** Per-code rev floors. Deliberately separate: they outlive their room. */
-const floors = new Map<string, FloorRecord>()
 /**
- * Wake-ups for floors whose room is gone. Kept apart from the rooms'
- * own timers so a room dying cannot cancel its floor's prune — and so
- * neither timer is cancelled by the other's lifecycle.
+ * The relay's database, opened and migrated before `Bun.serve` — see the
+ * startup block at the bottom. The store factory closes over it.
+ */
+let db: ReturnType<typeof openRelayDatabase> | undefined
+let sqliteStores: ((code: string) => RoomStore) | undefined
+/**
+ * Wake-ups for codes with NO live shell: an emptied room's expiry
+ * countdown (ADR-0088 §5 — the ROW outlives its last peer, the in-memory
+ * shell does not) and an orphaned floor's prune. Kept apart from the
+ * rooms' own timers so a room dying cannot cancel its floor's prune —
+ * and so neither timer is cancelled by the other's lifecycle.
  */
 const floorTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
@@ -132,36 +158,28 @@ const sockets = new Set<Socket>()
 let nextPeerId = 0
 
 /**
- * The core's storage intents, over the two Maps. This is the whole
- * "adapter owns state" half of ADR-0040 — the core never sees a Map.
+ * The core's storage intents over the SQLite database (see
+ * `./relaySqlite`) — the whole "adapter owns state" half of ADR-0040. The
+ * Maps stopped being the store of record: they hold only the in-memory
+ * shells (peer sets, timers) whose lifetime is the process's.
  */
 function storeFor(code: string): RoomStore {
-  return {
-    read: () => rooms.get(code)?.row ?? null,
-    write: (row) => {
-      const room = rooms.get(code)
-      if (room) room.row = row
-    },
-    drop: () => void rooms.delete(code),
-    readFloor: () => floors.get(code) ?? null,
-    writeFloor: (record) => void floors.set(code, record),
-    dropFloor: () => void floors.delete(code),
-  }
+  if (!sqliteStores) throw new Error('relay database not opened')
+  return sqliteStores(code)
 }
 
 /**
  * The core, wired to this adapter's clock, timer sink and store.
  *
  * Built per live room AND per floor prune: the Bun registry is a few
- * closures over the Maps, so a throwaway one costs nothing and keeps the
+ * closures over the store, so a throwaway one costs nothing and keeps the
  * prune decision in the core instead of duplicating it here.
  */
 function registryFor(code: string): RoomRegistry {
   return createRoomRegistry({
     code,
     store: storeFor(code),
-    inactivityTtlMs: INACTIVITY_TTL_MS,
-    idleTtlMs: IDLE_TTL_MS,
+    roomTtlMs: ROOM_TTL_MS,
     now: () => Date.now(),
     arm: (deadline) => armRoom(code, deadline),
     onExpire: (expired, reason) => notifyExpired(expired, reason),
@@ -187,7 +205,21 @@ function armRoom(code: string, deadline: number): void {
     if (room.timer) clearTimeout(room.timer)
     room.timer = setTimeout(() => {
       room.timer = undefined
-      room.registry.tick()
+      // Expiry (tick) is the only path that deletes a room now (ADR-0088
+      // §5) — the core has already dropped the rows and armed the floor's
+      // prune by the time it returns. A live verdict (a keepalive moved
+      // the deadline, an early wake-up re-armed) keeps the shell.
+      if (room.registry.tick() === null) return
+      rooms.delete(code)
+      // The floor prune that tick() armed went through `arm()` while this
+      // shell was still mapped, so the wake-up landed on room.timer. Drop
+      // the misrouted handle — it is the only thing left referencing the
+      // shell — and re-arm through the shell-less path, whose tick()
+      // schedules (or fires) the floor prune: otherwise every expired
+      // room keeps a live callback referencing it for up to the room TTL
+      // (qodo review).
+      if (room.timer) clearTimeout(room.timer)
+      registryFor(code).tick()
     }, delay)
     return
   }
@@ -207,10 +239,16 @@ function armRoom(code: string, deadline: number): void {
 function roomFor(code: string): Room {
   const existing = rooms.get(code)
   if (existing) return existing
+  // A shell-less wake-up for this code — an expiry countdown left behind
+  // by the last peer's departure, or a floor prune — is superseded: from
+  // here the shell's own touch→arm cycle takes the wake-ups (kody
+  // review).
+  const pending = floorTimers.get(code)
+  if (pending) clearTimeout(pending)
+  floorTimers.delete(code)
   const room: Room = {
     code,
     peers: new Set(),
-    row: null,
     timer: undefined,
     registry: registryFor(code),
   }
@@ -303,10 +341,16 @@ function attach(ws: Socket, code: string): void {
 }
 
 /**
- * Remove a socket from its room. The room dies with its last peer
- * (ADR-0026) — a returning client re-joins, which re-creates it, and it
- * is re-seeded. The per-code rev floor survives, so the re-created room
- * continues the household's revision history.
+ * Remove a socket from its room. Since ADR-0088 §5 the room does NOT die
+ * with its last peer — that was the one deliberate behavioural difference
+ * from the Durable Object, now closed: the row (and its state) survives
+ * until the expiry clock — 30 days (ADR-0038's unification addendum) —
+ * fires, so a
+ * phone that reconnects after a tunnel, a reload or a relay restart gets
+ * its plan back instead of re-seeding an empty room. The wake-up the last
+ * touch armed is exactly the expiry deadline, so it stays live and the
+ * timer callback's tick() closes the room later — no extra bookkeeping
+ * here, which is why `registry.leave()` is gone entirely.
  */
 function detach(ws: Socket): void {
   const code = ws.data.roomCode
@@ -315,18 +359,22 @@ function detach(ws: Socket): void {
   ws.data.roomCode = undefined
   if (!room) return
   room.peers.delete(ws)
-  // Everyone who is left learns the new headcount before the room may drop
-  // (it cannot if nobody is left — the fan-out would have no recipient).
-  if (room.peers.size > 0) broadcastPeers(room)
-  if (room.registry.leave(room.peers.size).dropped && room.timer) {
-    // The room is gone, so its wake-up has nothing left to decide — clear
-    // it. An armed 24h timer would keep the Room object (and its peer set)
-    // alive long after the last peer left, for every code the relay ever
-    // served; `roomLifecycle.mjs`'s dropRoom cleared both timers for the
-    // same reason.
-    clearTimeout(room.timer)
-    room.timer = undefined
+  if (room.peers.size > 0) {
+    // Everyone who is left learns the new headcount.
+    broadcastPeers(room)
+    return
   }
+  // Last peer out. ADR-0088 §5 keeps the ROW (state, floor, serial) until
+  // the expiry clock fires — the reconnect-after-a-tunnel promise — but
+  // the in-memory shell does not have to outlive its last socket (kody
+  // release it, and continue the wake-up through the shell-less
+  // timer path, whose tick() expires the row (and then prunes its floor)
+  // exactly as an in-memory shell would. The deadline is re-read from the
+  // row the last touch refreshed.
+  const row = storeFor(code).read()
+  rooms.delete(code)
+  if (room.timer) clearTimeout(room.timer)
+  if (row) armRoom(code, row.deadline)
 }
 
 /* ---------------------------------------------------------------- admission */
@@ -441,6 +489,43 @@ function performJoin(ws: Socket, rawCode: unknown): void {
 
 /* ------------------------------------------------------------------- server */
 
+/**
+ * Open and migrate the database BEFORE anything serves (ADR-0088 §4): a
+ * relay that answers a half-migrated schema is worse than one that refuses
+ * to start. The startup sweep then re-arms the wake-ups of every persisted
+ * room and orphaned floor — a restart is a resumption, not a reset, and a
+ * room nobody rejoined still reaches the clocks that are supposed to
+ * delete it.
+ */
+try {
+  db = openRelayDatabase(RELAY_DB_PATH)
+  sqliteStores = createSqliteStores(db, () => Date.now())
+  const { rooms: roomDeadlines, floors: floorDeadlines } = persistedDeadlines(db, ROOM_TTL_MS)
+  for (const { code, deadline } of roomDeadlines) {
+    // Shell-less on purpose (kody review): a persisted room nobody has
+    // rejoined gets a wake-up, not a live shell — the registry is built
+    // when a peer actually joins. `armRoom` routes a code with no shell
+    // to the shell-less timer path, whose tick() expires the row (and
+    // then prunes its floor) exactly as a live shell would.
+    armRoom(code, deadline)
+  }
+  for (const { code, deadline } of floorDeadlines) {
+    // A code with a room row keeps the ROOM deadline armed above; its
+    // floor prune is armed by tick() when the room expires.
+    if (floorTimers.has(code)) continue
+    floorTimers.set(
+      code,
+      setTimeout(() => {
+        floorTimers.delete(code)
+        registryFor(code).tick()
+      }, Math.max(0, deadline - Date.now())),
+    )
+  }
+} catch (err) {
+  console.error(`[relay] ${(err as Error).message}`)
+  process.exit(1)
+}
+
 try {
   Bun.serve({
     port: PORT,
@@ -492,8 +577,7 @@ try {
       // listener from an earlier run with DIFFERENT TTLs must never be
       // mistaken for the one a spec asked for.
       return new Response(JSON.stringify(healthPayload({
-        inactivityTtlMs: INACTIVITY_TTL_MS,
-        idleTtlMs: IDLE_TTL_MS,
+        roomTtlMs: ROOM_TTL_MS,
         attemptLimit: throttle.limit,
       })), { headers: { 'content-type': 'application/json' } })
     },
@@ -578,8 +662,8 @@ try {
             // carries no guessable input and must never be able to burn a
             // create/join budget. The answer is deliberately NOT named
             // `pong` — that name belongs to the socket-level beat below.
-            // The core refreshes BOTH expiry clocks, so a 7-day-connected
-            // household is never closed by the idle backstop (review F1).
+            // The core refreshes the expiry clock, so a 30-day-connected
+            // household is never closed (review F1).
             if (!member || !room) {
               send(ws, { type: 'error', code: RELAY_ERRORS.notInRoom })
               return
@@ -638,8 +722,7 @@ try {
 }
 
 console.log(
-  `[relay] listening on :${PORT} (inactivity TTL ${Math.round(INACTIVITY_TTL_MS / 1000)}s, ` +
-    `idle backstop TTL ${Math.round(IDLE_TTL_MS / 1000)}s)`,
+  `[relay] listening on :${PORT} (room TTL ${Math.round(ROOM_TTL_MS / 1000)}s, db ${RELAY_DB_PATH})`,
 )
 
 /**

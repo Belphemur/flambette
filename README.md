@@ -135,11 +135,10 @@ docker compose up -d --build
 # open http://localhost:8097
 ```
 
-Stop with `docker compose down`. The relay keeps room state in memory —
-restarting it drops live rooms (plans/checklists live in each browser's
-`localStorage` and are never lost). Any client back in afterwards simply
-re-establishes the room: `join` creates a code the relay does not know
-yet (ADR-0026).
+Stop with `docker compose down`. The relay keeps room state in SQLite
+(ADR-0088) behind the `relay-data` volume — restarting it resumes every
+room's state, rev floor and peer serial. Rooms expire after 30 days with
+no keepalive and no activity.
 
 ## Run with the published images
 
@@ -227,10 +226,11 @@ bunx playwright test             # e2e suite (starts the relay itself)
 ```
 
 The relay is a zero-dependency Bun service (`server/`, Bun's native
-WebSocket API, in-memory only — a room is created by whichever client
-arrives first, deleted when its last peer leaves, and expires after 24h
-with no keepalive and no activity, a 7-day idle backstop; ADR-0038
-widened ADR-0026's clocks);
+WebSocket API, persisting to SQLite per ADR-0088 — a room is created by
+whichever client arrives first, survives its last peer leaving, and
+expires after 30 days with no keepalive and no activity (the one room
+retention clock — ADR-0038's 2026-10-14 addendum unified the old
+inactivity/idle clock pair into it);
 `server/README.md` documents the wire protocol.
 
 ## Cloudflare deployment (ADR-0038)

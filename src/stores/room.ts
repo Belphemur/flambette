@@ -11,12 +11,14 @@ import {
   type SharedQuickFilters,
 } from '../lib/quickFilters'
 import { useCustomIngredientsStore, type CustomIngredient } from './customIngredients'
+import { usePantryStore, type PantryIngredient } from './pantry'
 import { useFavouritesStore, DEFAULT_STAMP } from './favourites'
 import { usePlanStore, cookedEventKey, type CookedEntry } from './plan'
 import { useGroceryStore } from './grocery'
 import { useRatingStore } from './rating'
 import { useUiStore } from './ui'
 import { useIdentityStore } from './identity'
+import { SHARED_STATE_KEYS } from '../lib/roomSyncStores'
 
 export type RoomStatus = 'idle' | 'connecting' | 'live' | 'error'
 
@@ -43,6 +45,16 @@ interface SharedState {
   /** Remembered custom-ingredient names — HOUSEHOLD state (ADR-0012:
    *  device-local → household, 2026 policy change). */
   customs?: CustomIngredient[]
+  /** "In my kitchen" pantry rows — HOUSEHOLD state (ADR-0087 Decision 7
+   *  superseded: device-local → household, 2026 policy change, the same
+   *  ruling ADR-0012 applied to `customs`). Payload rows are
+   *  `{name, nameKey}` normalized; the receiver re-runs the
+   *  `normalizePantryRows` funnel (`replaceAll`), so a stale key from a
+   *  buggy peer can never make a chip display one ingredient while
+   *  matching another, and the 500-row cap (`PANTRY_CAP`) bounds the
+   *  payload. OPTIONAL: a peer running older code sends no `pantry` key
+   *  and keeps its own — absence means "don't touch", NEVER a wipe. */
+  pantry?: PantryIngredient[]
   /** Cooked history — HOUSEHOLD state by default (ADR-0032 supersedes
    *  ADR-0011's opt-in) and included only when the SENDER has sharing on;
    *  a device that opted out never puts it on the wire. */
@@ -108,13 +120,26 @@ interface SharedState {
   planIdentity?: { planId: string; planCreatedAt: number } | null
 }
 
+/**
+ * ADR-0088 §6, build-time half: the runtime key list must name EXACTLY the
+ * `SharedState` keys, in BOTH directions — a key added to one side without
+ * the other fails the build here, and the relay-core cross-check (`bun run
+ * test:unit`) fails when that list and `SYNCED_STORES` disagree. The chain
+ * SharedState ↔ SHARED_STATE_KEYS ↔ SYNCED_STORES has no unguarded link.
+ */
+type SharedStateKeyDrift =
+  | Exclude<keyof SharedState, (typeof SHARED_STATE_KEYS)[number]>
+  | Exclude<(typeof SHARED_STATE_KEYS)[number], keyof SharedState>
+const _sharedStateKeysAgree: SharedStateKeyDrift extends never ? true : never = true
+void _sharedStateKeysAgree
+
 const PUSH_DEBOUNCE_MS = 300
 const RECONNECT_MIN_MS = 1000
 const RECONNECT_MAX_MS = 30_000
 /**
  * Application-level keepalive (ADR-0026; the windows are ADR-0038's). The
- * relay closes a room after 24h with no keepalive and no state activity,
- * and tells its peers `room_expired`. 60s is a wide margin on a 24h window
+ * relay closes a room after 30 days with no keepalive and no state activity,
+ * and tells its peers `room_expired`. 60s is a wide margin on a 30-day window
  * while costing one tiny frame a minute; it is NOT throttled server-side,
  * so a long-lived room can never spend its create/join budget on liveness.
  */
@@ -195,6 +220,7 @@ export const useRoomStore = defineStore('room', () => {
   const plan = usePlanStore()
   const grocery = useGroceryStore()
   const customIngredients = useCustomIngredientsStore()
+  const pantry = usePantryStore()
   const favourites = useFavouritesStore()
   const ratings = useRatingStore()
   const ui = useUiStore()
@@ -350,6 +376,11 @@ export const useRoomStore = defineStore('room', () => {
       cleared: { ...plan.clearedIngredients },
       // Household state (ADR-0012): remembered custom-ingredient names.
       customs: customIngredients.list.map((c) => ({ ...c })),
+      // Household state (ADR-0087 Decision 7 superseded): the kitchen
+      // pantry. Emitted even when empty, like `customs` — it is plain
+      // whole-state state under the room rev, not a reconciled record
+      // store, so an empty list IS the household's answer.
+      pantry: pantry.list.map((r) => ({ ...r })),
       // Household state (ADR-0028): the shared half of the quick filters.
       filters: toSharedFilters(ui.quickFilters),
     }
@@ -420,6 +451,11 @@ export const useRoomStore = defineStore('room', () => {
       // Household custom-ingredient memory (ADR-0012); absent on old
       // payloads → treated as "nothing shared yet", NOT as "wipe local".
       if (state.customs) customIngredients.replaceAll(state.customs)
+      // Household pantry (ADR-0087 Decision 7 superseded); absent on old
+      // payloads → "don't touch", NOT a wipe. `replaceAll` runs the same
+      // normalization funnel as backup import, so an inbound payload can
+      // never break the store's invariants (canonical keys, dedupe, cap).
+      if (state.pantry) pantry.replaceAll(state.pantry)
       // Cooked history arrives from senders that have sharing on
       // (ADR-0032). It is a UNION, not a replace: history is append-only
       // with no delete feature, and now that every device pushes it at
@@ -613,6 +649,7 @@ export const useRoomStore = defineStore('room', () => {
         grocery.map,
         plan.clearedIngredients,
         customIngredients.list,
+        pantry.list, // household state (ADR-0087 Decision 7 superseded)
         ui.quickFilters, // quick filters are household state (ADR-0028)
         plan.cookedHistory, // only pushed when ui.shareCookedHistory — snapshot() gates it
         ui.shareCookedHistory, // flipping sharing must trigger a retroactive push
@@ -736,6 +773,19 @@ export const useRoomStore = defineStore('room', () => {
         // pending push is older). Adopting a snapshot leaves our state
         // byte-identical to the room's, so that echo is never needed to
         // converge — it only creates a way to lose a peer's newer edit.
+        // ADR-0090: a snapshot from a peer that predates the pantry store
+        // carries NO pantry key, and adopting it leaves the room without
+        // our list until the next genuine push. Reconciling that gap with
+        // a post-adoption push was considered and REJECTED (kody, PR #92
+        // review): every push re-sends the WHOLE LWW state — the relay
+        // preserves only `cookedHistory`/`planIdentity` when absent, and
+        // a pantry-only partial frame would fan out to older peers as
+        // `plan: undefined`, which their `state.plan ?? []` applies as a
+        // wipe — and an unchanged-content push at `maxSeenRev + 1` races
+        // a peer's in-flight edit at the same rev, the exact household
+        // freeze the no-echo rule above exists to prevent. The pantry is
+        // convenience state (the local list drives this device's UI
+        // regardless); the room learns it on the next genuine edit.
         if (!adopted || unsentLocalEdit) {
           localRev = Math.max(localRev, maxSeenRev) + 1
           sendState()

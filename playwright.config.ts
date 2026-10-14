@@ -40,8 +40,11 @@ export default defineConfig({
       // keyed per IP — and every parallel Playwright worker shares ONE IP, so
       // the 30/min default starves the suite (32 failures on main, v0.12.0
       // CI). Tests are not the threat model: lift the cap for the spawned
-      // instance only (prod default 30 stands).
-      command: 'RELAY_ATTEMPT_LIMIT=100000 bun server/relay.ts',
+      // instance only (prod default 30 stands). The relay now persists to
+      // SQLite (ADR-0088) and the default path is the Docker volume's
+      // /data — `:memory:` is the ADR's explicit opt-in for tests, and
+      // keeps two runs from sharing (or resurrecting) a room database.
+      command: 'RELAY_ATTEMPT_LIMIT=100000 RELAY_DB_PATH=:memory: bun server/relay.ts',
       url: 'http://localhost:8081',
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,

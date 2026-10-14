@@ -6,6 +6,7 @@ import {
   SELF,
 } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
+import { SYNCED_STORES, storeTableName } from '../relay-core/stores'
 
 /**
  * Room lifecycle (ADR-0026, as deployed per ADR-0038) at the WIRE level,
@@ -178,8 +179,7 @@ describe('health', () => {
     expect(response.status).toBe(200)
     const body = await response.json<Record<string, unknown>>()
     expect(body.service).toBe('mealime-relay')
-    expect(body.inactivityTtlMs).toBe(24 * 60 * 60 * 1000)
-    expect(body.idleTtlMs).toBe(7 * 24 * 60 * 60 * 1000)
+    expect(body.roomTtlMs).toBe(30 * 24 * 60 * 60 * 1000)
     expect(body.attemptLimit).toBeTypeOf('number')
   })
 })
@@ -546,6 +546,235 @@ describe('liveness and expiry', () => {
       state: { plan: [{ id: 7 }] },
     })
     b.close()
+  })
+})
+
+describe('per-store schema (ADR-0088 §2/§4)', () => {
+  it('the shared migration list runs lazily on the first event and records itself', async () => {
+    const room = nextRoom()
+    const a = await dial(`/?op=create&room=${room}`)
+    await a.expect('created')
+    a.close()
+
+    const tables = await runInDurableObject(roomStub(room), (_i, state) => {
+      const rows = state.storage.sql
+        .exec("SELECT name FROM sqlite_master WHERE type = 'table'")
+        .toArray()
+      return rows.map((row) => String((row as { name: unknown }).name))
+    })
+    expect(tables).toContain('room')
+    expect(tables).toContain('schema_migrations')
+    // Derived from the vocabulary, not a hand-written list: a future
+    // synced store cannot be missed here (CodeRabbit).
+    for (const table of SYNCED_STORES.map(storeTableName)) {
+      expect(tables).toContain(table)
+    }
+    const ledger = await runInDurableObject(roomStub(room), (_i, state) =>
+      state.storage.sql.exec('SELECT version, name FROM schema_migrations ORDER BY version').toArray(),
+    )
+    expect(ledger).toHaveLength(3)
+  })
+
+  it('the json_valid CHECK makes a corrupt store write fail AT WRITE TIME', async () => {
+    // workerd must ship the JSON1 functions the shared DDL relies on — if
+    // it did not, migration 001 itself would fail and every case above
+    // would already be red; this pins the CHECK's enforcement, not just
+    // the DDL's acceptance.
+    const room = nextRoom()
+    const a = await dial(`/?op=create&room=${room}`)
+    await a.expect('created')
+    a.close()
+    const result = await runInDurableObject(roomStub(room), (_i, state) => {
+      try {
+        state.storage.sql.exec("INSERT INTO store_plan (code, value, created_at, updated_at) VALUES (?, ?, 1, 1)", room, 'not json')
+        return 'inserted'
+      } catch {
+        return 'refused'
+      }
+    })
+    expect(result).toBe('refused')
+  })
+
+  it('a push lands as per-store rows, and the blob column mirrors the merged snapshot', async () => {
+    const room = nextRoom()
+    const a = await dial(`/?op=create&room=${room}`)
+    await a.expect('created')
+    a.send({ type: 'state', rev: 2, state: { plan: [{ variantId: 5 }], planIdentity: null } })
+    await expectStoredRev(roomStub(room), 2)
+    a.close()
+
+    const rows = await runInDurableObject(roomStub(room), (_i, state) => ({
+      plan: state.storage.sql.exec('SELECT value FROM store_plan WHERE code = ?', room).toArray(),
+      identity: state.storage.sql.exec('SELECT value FROM store_plan_identity WHERE code = ?', room).toArray(),
+      cleared: state.storage.sql.exec('SELECT value FROM store_cleared WHERE code = ?', room).toArray(),
+      blob: state.storage.sql.exec('SELECT state FROM room WHERE code = ?', room).toArray(),
+    }))
+    expect(rows.plan).toEqual([{ value: '[{"variantId":5}]' }])
+    // An explicit `planIdentity: null` is a PRESENT value and is written
+    // through as the JSON text 'null' (ADR-0088 §3 addendum).
+    expect(rows.identity).toEqual([{ value: 'null' }])
+    // Absent keys insert no row at all — don't-touch, not a wipe.
+    expect(rows.cleared).toHaveLength(0)
+    // The grace mirror (ADR-0088's 2026-10-14 addendum): the blob column
+    // carries the room's MERGED snapshot — the same join the read path
+    // serves, including the explicit `planIdentity: null` — so a
+    // pre-per-store relay binary still sees real rooms after a downgrade.
+    expect(rows.blob).toEqual([
+      { state: JSON.stringify({ plan: [{ variantId: 5 }], planIdentity: null }) },
+    ])
+  })
+
+  it('a keepalive re-upserts NO store row — updated_at is per-store metadata (ADR-0088 §2)', async () => {
+    const room = nextRoom()
+    const stub = roomStub(room)
+    const a = await dial(`/?op=create&room=${room}`)
+    await a.expect('created')
+    a.send({ type: 'state', rev: 2, state: { plan: [{ variantId: 5 }] } })
+    await expectStoredRev(stub, 2)
+
+    const readMeta = () =>
+      runInDurableObject(stub, (_i, state) => ({
+        store: state.storage.sql
+          .exec('SELECT created_at AS c, updated_at AS u FROM store_plan WHERE code = ?', room)
+          .toArray() as { c: number; u: number }[],
+        room: state.storage.sql
+          .exec('SELECT updated_at AS u FROM room WHERE id = 1')
+          .toArray() as { u: number }[],
+      }))
+    const before = await readMeta()
+    // Every liveness signal funnels through the core's touch(), which
+    // re-writes the full record — the plan must skip the unchanged store.
+    for (let i = 0; i < 3; i++) {
+      a.send({ type: 'keepalive' })
+      await a.expect('keepalive_ack')
+    }
+    const after = await readMeta()
+    expect(after.store).toEqual(before.store)
+    // ...while the ROOM row's own clock moved with the touch (equal only
+    // if every event landed inside one millisecond).
+    expect(after.room[0]!.u).toBeGreaterThanOrEqual(before.room[0]!.u)
+
+    // A genuinely changed value still re-stamps the store it carries.
+    a.send({ type: 'state', rev: 3, state: { plan: [{ variantId: 6 }] } })
+    await expectStoredRev(stub, 3)
+    const moved = await runInDurableObject(stub, (_i, state) =>
+      state.storage.sql
+        .exec('SELECT value, updated_at FROM store_plan WHERE code = ?', room)
+        .toArray() as { value: string; updated_at: number }[],
+    )
+    expect(moved[0]!.value).toBe('[{"variantId":6}]')
+    expect(moved[0]!.updated_at).toBeGreaterThan(before.store[0]!.u)
+    a.close()
+  })
+
+  it('migration 002 splits a legacy room.state blob into per-store rows', async () => {
+    const room = nextRoom()
+    // A database in the shape the Durable Object shipped BEFORE ADR-0088:
+    // legacy room table (no updated_at, no store tables), one row whose
+    // whole snapshot sits in the `state` blob.
+    await runInDurableObject(roomStub(room), (_i, state) => {
+      state.storage.sql.exec(`
+        CREATE TABLE room (
+          id INTEGER PRIMARY KEY,
+          code TEXT NOT NULL,
+          rev INTEGER NOT NULL,
+          state TEXT,
+          created_at INTEGER NOT NULL,
+          last_activity INTEGER NOT NULL,
+          inactivity_at INTEGER NOT NULL,
+          idle_at INTEGER NOT NULL,
+          serial INTEGER NOT NULL
+        );
+        CREATE TABLE rev_floor (code TEXT PRIMARY KEY, rev INTEGER NOT NULL, at INTEGER NOT NULL);
+        CREATE TABLE peer_serial (code TEXT PRIMARY KEY, serial INTEGER NOT NULL);
+      `)
+      state.storage.sql.exec(
+        `INSERT INTO room (id, code, rev, state, created_at, last_activity, inactivity_at, idle_at, serial)
+         VALUES (1, ?, 5, ?, 111, 222, ?, ?, 2)`,
+        room,
+        JSON.stringify({
+          plan: [{ variantId: 9, servings: 4 }],
+          checked: { '12|butter': true },
+          planIdentity: null,
+          favorites: { '3': { favorited: true, updatedAt: 42 } },
+        }),
+        Date.now() + 60_000,
+        Date.now() + 60_000,
+      )
+      state.storage.sql.exec('INSERT INTO rev_floor (code, rev, at) VALUES (?, 5, 222)', room)
+      // The migration path under test must run WITHOUT a room write (a
+      // socket event would touch the room and restamp its metadata), so
+      // the migrations are pulled in by the alarm's tick instead.
+      state.storage.setAlarm(Date.now() + 500)
+    })
+    await runDurableObjectAlarm(roomStub(room))
+
+    // The split, stamped from the backfilled room row: created_at from the
+    // room's creation, updated_at from 001's guarded-ALTER backfill
+    // (last_activity), untouched by any socket event.
+    const split = await runInDurableObject(roomStub(room), (_i, state) => ({
+      plan: state.storage.sql.exec('SELECT value FROM store_plan WHERE code = ?', room).toArray(),
+      planMeta: state.storage.sql
+        .exec('SELECT created_at, updated_at FROM store_plan WHERE code = ?', room)
+        .toArray(),
+      favorites: state.storage.sql.exec('SELECT value FROM store_favorites WHERE code = ?', room).toArray(),
+      identity: state.storage.sql.exec('SELECT value FROM store_plan_identity WHERE code = ?', room).toArray(),
+      ratings: state.storage.sql.exec('SELECT value FROM store_ratings WHERE code = ?', room).toArray(),
+      blob: state.storage.sql.exec('SELECT state FROM room WHERE code = ?', room).toArray(),
+      updated: state.storage.sql.exec('SELECT updated_at FROM room WHERE code = ?', room).toArray(),
+      ledger: state.storage.sql.exec('SELECT version FROM schema_migrations ORDER BY version').toArray(),
+    }))
+    expect(split.plan).toEqual([{ value: '[{"variantId":9,"servings":4}]' }])
+    expect(split.favorites).toHaveLength(1)
+    expect(split.identity).toEqual([{ value: 'null' }])
+    // A key the blob did not carry inserted no row.
+    expect(split.ratings).toHaveLength(0)
+    // A valid blob SURVIVES the split — the original text, verbatim (the
+    // grace mirror, ADR-0088's 2026-10-14 addendum); only a non-json_valid
+    // blob is nulled.
+    expect(split.blob).toEqual([
+      {
+        state:
+          '{"plan":[{"variantId":9,"servings":4}],"checked":{"12|butter":true},"planIdentity":null,"favorites":{"3":{"favorited":true,"updatedAt":42}}}',
+      },
+    ])
+    // 001's guarded ALTER backfilled updated_at from last_activity.
+    expect(split.updated).toEqual([{ updated_at: 222 }])
+    expect(split.planMeta).toEqual([{ created_at: 111, updated_at: 222 }])
+    expect(split.ledger).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }])
+
+    // The split is a round-trip: the joiner adopts the blob's stores.
+    const a = await dial(`/?op=join&room=${room}`)
+    const joined = await a.expect('joined')
+    a.close()
+
+    // The split is a round-trip: the joiner adopts the blob's stores.
+    expect(joined).toMatchObject({
+      rev: 5,
+      state: {
+        plan: [{ variantId: 9, servings: 4 }],
+        checked: { '12|butter': true },
+        planIdentity: null,
+        favorites: { '3': { favorited: true, updatedAt: 42 } },
+      },
+    })
+
+    const after = await runInDurableObject(roomStub(room), (_i, state) => ({
+      plan: state.storage.sql.exec('SELECT value FROM store_plan WHERE code = ?', room).toArray(),
+      planMeta: state.storage.sql
+        .exec('SELECT created_at, updated_at FROM store_plan WHERE code = ?', room)
+        .toArray(),
+      favorites: state.storage.sql.exec('SELECT value FROM store_favorites WHERE code = ?', room).toArray(),
+      identity: state.storage.sql.exec('SELECT value FROM store_plan_identity WHERE code = ?', room).toArray(),
+      ratings: state.storage.sql.exec('SELECT value FROM store_ratings WHERE code = ?', room).toArray(),
+      blob: state.storage.sql.exec('SELECT state FROM room WHERE code = ?', room).toArray(),
+      updated: state.storage.sql.exec('SELECT updated_at FROM room WHERE code = ?', room).toArray(),
+    }))
+    expect(after.plan).toEqual([{ value: '[{"variantId":9,"servings":4}]' }])
+    expect(after.favorites).toHaveLength(1)
+    expect(after.identity).toEqual([{ value: 'null' }])
+    // A key the blob did not carry inserted no row.
+    expect(after.ratings).toHaveLength(0)
   })
 })
 

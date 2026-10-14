@@ -6,7 +6,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
  * with short clocks.
  *
  * The suite's own relay (playwright.config webServer) runs with production
- * TTLs, so the 24h expiry and its `room_expired` reply are unreachable
+ * TTLs, so the 30-day expiry and its `room_expired` reply are unreachable
  * there. This spec spawns its own relays and speaks the protocol directly
  * from Node (global WebSocket) — the app always reaches its relay through
  * the /ws proxy on 8081, which cannot be repointed per test.
@@ -22,10 +22,8 @@ import { spawn, type ChildProcess } from 'node:child_process'
  * path) lives in room.spec.ts and waste-diet-household.spec.ts.
  */
 
-const INACTIVITY_TTL_MS = 1_500
+const ROOM_TTL_MS = 1_500
 const KEEPALIVE_EVERY_MS = 300
-/** Mirrors the relay's default idle backstop (server/relay-core/policy.ts: 7 days). */
-const IDLE_TTL_DEFAULT_MS = 7 * 24 * 60 * 60 * 1000
 
 /** Child relays this worker started, killed in afterAll. */
 const spawned: ChildProcess[] = []
@@ -40,8 +38,7 @@ let portBase = 8099
  */
 async function startRelay(slot: number, env: Record<string, string>): Promise<string> {
   const want = {
-    inactivityTtlMs: Number(env.RELAY_INACTIVITY_TTL_MS ?? INACTIVITY_TTL_MS),
-    idleTtlMs: Number(env.RELAY_IDLE_TTL_MS ?? IDLE_TTL_DEFAULT_MS),
+    roomTtlMs: Number(env.RELAY_ROOM_TTL_MS ?? ROOM_TTL_MS),
     attemptLimit: Number(env.RELAY_ATTEMPT_LIMIT ?? 30),
   }
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -58,8 +55,7 @@ async function startRelay(slot: number, env: Record<string, string>): Promise<st
     const live = await probe()
     if (live.reachable) {
       if (
-        live.config?.inactivityTtlMs === want.inactivityTtlMs &&
-        live.config?.idleTtlMs === want.idleTtlMs &&
+        live.config?.roomTtlMs === want.roomTtlMs &&
         live.config?.attemptLimit === want.attemptLimit
       ) {
         return url
@@ -67,7 +63,9 @@ async function startRelay(slot: number, env: Record<string, string>): Promise<st
       continue // occupied by a DIFFERENT configuration — take the next port
     }
     const child = spawn('bun', ['server/relay.ts'], {
-      env: { ...process.env, PORT: String(port), ...env },
+      // `:memory:` is the ADR-0088 opt-in for tests: the spawned relay's
+      // rooms must be its own, not a file a previous run left behind.
+      env: { ...process.env, PORT: String(port), RELAY_DB_PATH: ':memory:', ...env },
       stdio: 'ignore',
     })
     spawned.push(child)
@@ -88,7 +86,7 @@ let relayUrl = ''
 test.beforeAll(async () => {
   portBase = 8099 + test.info().workerIndex * 10
   relayUrl = await startRelay(0, {
-    RELAY_INACTIVITY_TTL_MS: String(INACTIVITY_TTL_MS),
+    RELAY_ROOM_TTL_MS: String(ROOM_TTL_MS),
     RELAY_ATTEMPT_LIMIT: '100000',
   })
 })
@@ -190,7 +188,7 @@ test('keepalive refreshes the inactivity clock; a silent room is closed with roo
   }
 
   // …then go silent: the room is closed and the peer is told to disconnect.
-  const expired = await a.waitFor('error', INACTIVITY_TTL_MS * 3)
+  const expired = await a.waitFor('error', ROOM_TTL_MS * 3)
   expect(expired).toMatchObject({ type: 'error', code: 'room_expired', reason: 'inactive' })
   // The room is gone: a keepalive no longer refreshes anything.
   a.reset()
@@ -200,24 +198,36 @@ test('keepalive refreshes the inactivity clock; a silent room is closed with roo
   a.close()
 })
 
-test('the last peer leaving deletes the room, and a later join re-creates it', async () => {
+test('the last peer leaving keeps the room; a later join resumes its state (ADR-0088 §5)', async () => {
   const a = await Peer.open()
   const b = await Peer.open()
   a.send({ type: 'join', code: 'rose-thistle-moss' })
   await a.waitFor('created')
   b.send({ type: 'join', code: 'rose-thistle-moss' })
   await b.waitFor('joined')
+  a.send({ type: 'state', rev: 1, state: { plan: ['household'] } })
+  await wait(200)
 
   a.close()
   await wait(200)
+  // A keepalive first: the expiry clock restarts HERE, so the joining peer
+  // below has a full inactivity window to arrive in.
+  b.send({ type: 'keepalive' })
+  await b.waitFor('keepalive_ack')
   b.send({ type: 'leave' })
   await b.waitFor('left')
   await wait(200)
 
-  // Empty ⇒ deleted (no state, no room): the next join is a fresh create.
+  // Empty ⇒ KEPT (ADR-0088 §5, closing ADR-0026's deletion rule): the row
+  // and its state survive until the expiry clock fires, so the next joiner
+  // gets the household's plan back instead of re-seeding an empty room.
   const c = await Peer.open()
   c.send({ type: 'join', code: 'rose-thistle-moss' })
-  expect(await c.waitFor('created')).toMatchObject({ code: 'rose-thistle-moss' })
+  expect(await c.waitFor('joined')).toMatchObject({
+    code: 'rose-thistle-moss',
+    rev: 1,
+    state: { plan: ['household'] },
+  })
   c.close()
 })
 
@@ -227,7 +237,7 @@ test('keepalive never spends the create/join budget (F7)', async () => {
   // (that was review finding F7 — the old version of this test was
   // unfalsifiable).
   const url = await startRelay(1, {
-    RELAY_INACTIVITY_TTL_MS: '1500',
+    RELAY_ROOM_TTL_MS: '1500',
     RELAY_ATTEMPT_LIMIT: '3',
   })
   const a = await Peer.open(url)
@@ -262,39 +272,16 @@ test('keepalive never spends the create/join budget (F7)', async () => {
   a.close()
 })
 
-test('keepalive keeps a connected room alive past the idle backstop (F1)', async () => {
-  // The idle backstop is SHORTER than the inactivity window, so the room
-  // can only survive if keepalive refreshes BOTH clocks. Before F1 the
-  // keepalive refreshed only the inactivity clock and this peer was closed with
-  // room_expired/idle after 2s of perfectly healthy keepalives.
-  const url = await startRelay(2, {
-    RELAY_INACTIVITY_TTL_MS: '60000',
-    RELAY_IDLE_TTL_MS: '2000',
-    RELAY_ATTEMPT_LIMIT: '100000',
-  })
-  const a = await Peer.open(url)
-  a.send({ type: 'join', code: 'amber-falcon-lantern' })
-  await a.waitFor('created')
-
-  // 3.6s of keepalives against a 2s idle backstop, no state traffic.
-  for (let i = 0; i < 12; i++) {
-    await wait(300)
-    a.send({ type: 'keepalive' })
-  }
-  await wait(300)
-  expect(a.countOf('keepalive_ack')).toBe(12)
-  expect(a.countOf('error')).toBe(0)
-
-  // Control: once the keepalives stop, the room does close.
-  a.reset()
-  expect(await a.waitFor('error', 5000)).toMatchObject({ code: 'room_expired' })
-  a.close()
-})
+// (Review F1's dedicated wire test is retired with the two-clock design:
+// its premise — an idle backstop SHORTER than the inactivity window, so a
+// keepalive that missed the backstop could be closed `room_expired/idle` —
+// is unexpressible now that ONE clock governs the room. The keepalive
+// refreshes the expiry deadline by construction, and the default-relay
+// case above pins the wire behaviour.)
 
 test('an expired peer cannot write into a room re-created under the same code (F2)', async () => {
   const url = await startRelay(3, {
-    RELAY_INACTIVITY_TTL_MS: '2500',
-    RELAY_IDLE_TTL_MS: '60000',
+    RELAY_ROOM_TTL_MS: '2500',
     RELAY_ATTEMPT_LIMIT: '100000',
   })
   const stale = await Peer.open(url)
@@ -332,8 +319,7 @@ test('an expired peer cannot write into a room re-created under the same code (F
 
 test('leaving a room for another does not leave a zombie peer behind (F3)', async () => {
   const url = await startRelay(4, {
-    RELAY_INACTIVITY_TTL_MS: '1200',
-    RELAY_IDLE_TTL_MS: '60000',
+    RELAY_ROOM_TTL_MS: '1200',
     RELAY_ATTEMPT_LIMIT: '100000',
   })
   const solo = await Peer.open(url)
@@ -369,21 +355,27 @@ test('leaving a room for another does not leave a zombie peer behind (F3)', asyn
   solo.close()
 })
 
-test('a re-created room continues the household revision history (F4)', async () => {
+test('a room that expired continues the household revision history (F4)', async () => {
   const a = await Peer.open()
   a.send({ type: 'join', code: 'pebble-moss-falcon' })
   await a.waitFor('created')
   a.send({ type: 'state', rev: 12, state: { plan: ['household'] } })
+  await wait(200)
 
-  // Everyone leaves: the room (and its state) is deleted…
+  // Everyone leaves; since ADR-0088 §5 the row survives the departure and
+  // the expiry clock (1.5s on this relay) is what closes the room.
   a.send({ type: 'leave' })
   await a.waitFor('left')
-  await wait(200)
   a.close()
+  // The floor's age re-anchors at the expiry instant and lives one more
+  // full room-TTL window (ADR-0088 §5, review F4) — so the re-join waits
+  // out the expiry plus a margin, well INSIDE the re-anchored window.
+  // Waiting a full second window would race the floor's own boundary.
+  await wait(ROOM_TTL_MS + 200)
 
-  // …and the next joiner is told the floor, so the room continues at 12
-  // instead of restarting at 0 and being mistaken for "newer than what
-  // the household already had".
+  // The next joiner is told the FLOOR, so the room continues at 12 instead
+  // of restarting at 0 and being mistaken for "newer than what the
+  // household already had".
   const b = await Peer.open()
   b.send({ type: 'join', code: 'pebble-moss-falcon' })
   expect(await b.waitFor('created')).toMatchObject({ code: 'pebble-moss-falcon', rev: 12 })

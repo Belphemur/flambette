@@ -12,20 +12,26 @@
 - **Room lifecycle (ADR-0026)**: `join` is join-or-create (first peer
   ESTABLISHES the room, answered `created`; a known room answers
   `joined`); `create` is unchanged and still the host path. A room whose
-  LAST peer leaves is deleted immediately (state included) — the peer
-  that returns re-joins, which re-creates it. The client sends
+  LAST peer leaves is KEPT, not deleted (ADR-0088 §5, amending ADR-0026
+  — both runtimes now behave alike): the row and its state survive until
+  the expiry clock fires, so the peer that returns re-joins a LIVE room
+  and gets its plan back instead of re-seeding an empty room; a `create`
+  onto an unoccupied room still establishes a fresh one (the rev FLOOR
+  carries over). The client sends
   `{type:'keepalive'}` once a minute while live (one interval per
   socket, cleared on every end path) and the relay closes a room after
-  24h of no keepalive AND no state activity; the 7-day idle TTL is a
-  redundant backstop refreshed by the SAME signals (keepalive included —
-  a connected peer is not an idle room), and either clock firing tells
+  30 days of no keepalive AND no state activity — the ONE room clock
+  (ADR-0038's 2026-10-14 addendum: the old inactivity/idle clock pair
+  collapsed once both windows sat at 30 days), refreshed by the SAME
+  signals (keepalive included — a connected peer is not a silent room),
+  and its firing tells
   the peers `room_expired` and clears their room code so a stale socket
   can never write into, or delete, a room re-created under that code
-  (the windows are ADR-0038's, widening ADR-0026). A socket belongs to
+  (the window is ADR-0038's, widening ADR-0026). A socket belongs to
   at most one room: join/create detaches it from the previous one, so a
   client that moved on is never notified about the room it left. `rev`
   is monotone per CODE (the floor survives the room deletion, pruned at
-  the idle TTL) and is handed back in `created` / `joined`, so a
+  the room TTL) and is handed back in `created` / `joined`, so a
   re-created room never passes a stale snapshot off as newer. The client
   treats `room_expired`/`not_found` as TERMINAL (latched `roomGone`, no
   reconnect) — re-joining would join-or-create an empty room and read as
@@ -59,7 +65,9 @@
   (cleared on every socket end path); ids are FIXED AT DIAL — a rename
   announces a `profile` frame, a restored backup announces the name and
   the sheet's you-marker keys on `room.joinedProfileId` (never re-dial
-  to apply an id: as the only peer it deletes the room, ADR-0026).
+  to apply an id: the id is fixed at a socket's first admission by
+  design, ADR-0063 — since ADR-0088 §5 a lone re-dial no longer even
+  deletes the room, but the rule stands on its own).
   Profile ids are CLIENT-ASSERTED within the room-code trust boundary;
   binding them to a server secret is an auth layer, a future ADR.
   Avatars: `PersonAvatar` wraps `hashvatar` (dither, hashed on the NAME,
@@ -77,11 +85,22 @@
   copy, cooked-history toggle, leave); there is no size ceiling, because
   a room link is the same length for any plan.
 - **Room sync**: whole-state last-write-wins keyed by `rev`; shared
-  state = `{plan, customItems, checked, cleared, customs, favorites,
-  ratings}` — `cleared` is `clearedIngredients` (household state:
-  clearing hides ingredients for everyone until re-planned/cooked) and
+  state = `{plan, customItems, checked, cleared, customs, pantry,
+  cookedHistory, filters, favorites, ratings, ratingTombstones,
+  planIdentity}` — the SAME TWELVE keys the relay's per-store storage
+  knows as `SYNCED_STORES`
+  (ADR-0088 §6 cross-checks the two vocabularies; adding a key without a
+  migration and a `SYNCED_STORES` entry is exactly the drift the gate
+  catches — follow `.agents/skills/mealime-add-sync-store/SKILL.md`) —
+  `cleared` is `clearedIngredients` (household state:
+  clearing hides ingredients for everyone until re-planned/cooked),
   `customs` is the remembered custom-ingredient memory (household since
-  2026-09-27, ADR-0012 change note). `favorites` + `ratings` are
+  2026-09-27, ADR-0012 change note), and `pantry` is the "In my
+  kitchen" list (household since ADR-0090, superseding ADR-0087
+  Decision 7's device-local ruling — whole-state LWW like `customs`,
+  the 500-row `PANTRY_CAP` doubles as the payload cap, and the receiver
+  re-derives every `nameKey` through `normalizePantryRows`).
+  `favorites` + `ratings` are
   household PREFERENCE (ADR-0031) and the one deliberate exception to
   whole-state LWW: both are RECORDS carrying `updatedAt` and reconcile
   PER KEY, last writer by timestamp wins. `favorites` records are
@@ -94,6 +113,29 @@
   `schedulePush(immediate?)`, guarded by `applyingRemote`; preference
   edits pass `immediate` and skip the debounce, everything else keeps
   it.
+- **Relay storage is per-store SQLite (ADR-0088)**: both runtimes keep
+  ONE TABLE per `SYNCED_STORES` key (`store_<snake_name>`, JSON-text
+  value with a `json_valid` CHECK, per-store `created_at`/`updated_at`)
+  plus the room row, the rev floor and the peer serial — the Bun relay
+  behind `RELAY_DB_PATH` (default `/data/relay.sqlite3`, Docker volume
+  `relay-data`), the Durable Object in its own storage SQL. The
+  deprecated `room.state` column is a WRITE-ONLY legacy-blob mirror for
+  30 days after migration 002 (ADR-0088's 2026-10-14 addendum): upserts
+  bind the room's merged snapshot into it so a downgraded, pre-per-store
+  relay binary keeps serving real rooms, then bind NULL again — no read
+  path of the new binary ever touches it. The split
+  (`splitSnapshot`) writes ONLY the keys present in the payload — the
+  standing "absent = don't-touch" rule is enforced at the shared split,
+  so no adapter can turn a missing key into a wipe — while an explicit
+  `planIdentity: null` is written through (ADR-0034's always-sent
+  exception). `joinSnapshot` rebuilds the single snapshot a `joined`
+  needs. The schema is versioned by ONE migration runner in the core
+  (`server/relay-core/migrations.ts`, `schema_migrations` ledger,
+  applied at Bun startup and lazily per event in the DO): adding a
+  synchronized store is now a migration on BOTH runtimes, in the same
+  change as the `SYNCED_STORES` entry (the skill above carries the
+  touch surface). The wire protocol did NOT move: this re-scopes
+  storage, not sync semantics.
 - **Join reconciliation (ADR-0028)**: a `joined` that ADOPTED the room's
   snapshot does NOT push afterwards (the echo re-published a possibly
   stale snapshot at a higher rev and could freeze the household on old

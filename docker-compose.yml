@@ -30,7 +30,16 @@ services:
     # build:
     #   context: .
     #   dockerfile: server/Dockerfile
-    # Rooms are held in memory only: restarting the relay drops live rooms,
-    # while each browser's plan and checklist survive untouched in
-    # localStorage.
+    # Room state persists to SQLite (ADR-0088): the named volume survives a
+    # `docker compose up -d` on an upgraded relay, so a restart is a
+    # resumption — a phone that reconnects after the restart gets its plan
+    # back instead of re-seeding an empty room. Each browser's plan and
+    # checklist ALSO survive locally in localStorage, as before.
+    volumes:
+      - relay-data:/data
+    environment:
+      RELAY_DB_PATH: /data/relay.sqlite3
     restart: unless-stopped
+
+volumes:
+  relay-data:

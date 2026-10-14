@@ -30,7 +30,7 @@ import { RELAY_ERRORS } from '../relay-core/protocol'
 import { Room } from './room'
 import { refuseSocket } from './refuseSocket'
 import { makeThrottle } from '../relay-core/throttle'
-import { DEFAULT_ATTEMPT_LIMIT, healthPayload, IDLE_TTL_MS, INACTIVITY_TTL_MS, parsePositiveNumber } from '../relay-core/policy'
+import { DEFAULT_ATTEMPT_LIMIT, healthPayload, ROOM_TTL_MS, parsePositiveNumber } from '../relay-core/policy'
 
 export { Room }
 
@@ -89,8 +89,7 @@ function clientAddress(request: Request): string {
 
 function health(env: Env): Response {
   return Response.json(healthPayload({
-    inactivityTtlMs: INACTIVITY_TTL_MS,
-    idleTtlMs: IDLE_TTL_MS,
+    roomTtlMs: ROOM_TTL_MS,
     attemptLimit: getThrottle(env).limit,
   }))
 }

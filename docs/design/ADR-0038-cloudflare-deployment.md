@@ -84,17 +84,18 @@ room code:
   `planIdentity: null` is a real answer and replaces.
 - **Rev floor in storage**: the per-code `rev` floor (review F4) is just the
   stored `rev`; after an expiry clears the room row, a separate floor row
-  `{rev, at}` keeps the household's revision history for the idle TTL, then
+  `{rev, at}` keeps the household's revision history for the room TTL, then
   is pruned — the same promise the Bun relay's in-memory `revFloor` map makes.
-- **Expiry by DO alarms**, not timers: one alarm scheduled at the earlier of
-  the two clocks — 24h without `keepalive` AND without `state` activity, and
-  a 7-day idle backstop refreshed by the SAME signals. **This ADR widens
-  ADR-0026's clocks (1h / 12h) for BOTH relay backends**: durable storage
-  removes the memory pressure the short clocks were sized for, and one
-  lifecycle promise should not fork per platform. On fire: push
-  `room_expired` to every hibernating socket, close them, clear the room
-  row, keep the floor row until its own TTL. `keepalive` is never
-  throttled and always refreshes both clocks, exactly as today.
+- **Expiry by DO alarms**, not timers: one alarm scheduled at the room's
+  expiry deadline — 30 days without `keepalive` AND without `state`
+  activity (one room clock; the 2026-10-14 addendum below unified the old
+  inactivity/idle clock pair). **This ADR widens ADR-0026's clocks (1h /
+  12h) for BOTH relay backends**: durable storage removes the memory
+  pressure the short clocks were sized for, and one lifecycle promise
+  should not fork per platform. On fire: push `room_expired` to every
+  hibernating socket, close them, clear the room row, keep the floor row
+  until its own TTL. `keepalive` is never throttled and always refreshes
+  the clock, exactly as today.
 - **Hibernation**: `ctx.acceptWebSocket()` + `webSocketMessage` /
   `webSocketClose` handlers; the peer set is `ctx.getWebSockets()`.
 - **Code canonicalisation** is imported from the client (`normalizeRoomCode`
@@ -108,7 +109,7 @@ ADR-0026 deletes a room the instant its last peer leaves because the Bun
 relay is memory-only — "nobody is here" needs no timer. With durable storage
 that deletion would discard the household's state for nothing. On the
 Cloudflare relay, a room whose last peer leaves KEEPS its stored state until
-the ordinary inactivity/idle clocks fire. The client cannot tell the
+the ordinary expiry clock fires. The client cannot tell the
 difference: a returning peer gets `joined` + stored state instead of
 `created` + re-seed, and both paths are already handled. The Bun relay is
 unchanged; its "delete on last leave" stays correct for a memory backend.
@@ -215,3 +216,37 @@ follow-up, not part of this ADR.
   protocol; `AGENTS.md` documents both configs and the new commands
   (`wrangler deploy -c server/wrangler.jsonc`, `wrangler dev -c
   server/wrangler.jsonc`, `wrangler types`).
+
+## Addendum (2026-10-14): the room clocks unify at 30 days
+
+The owner widened the room-deletion window to **30 days** of silence —
+and then unified the mechanism. The pre-addendum design judged a room by
+TWO clocks stamped together on every liveness signal: an inactivity clock
+(24h) and an idle backstop (7d), the deletion deadline being the EARLIER
+of the two (`expiryDeadlineOf` in `server/relay-core/lifecycle.ts`).
+Because the backstop could cut the inactivity window short, "30 days
+before we delete the room" needed both widened — and once both sat at
+the same 30 days the pair had nothing left to separate: two identical
+stamps, a no-op `min()`, and an `idle` expiry reason that could never
+fire.
+
+The collapse (same change): **one room clock** — `ROOM_TTL_MS`, env
+`RELAY_ROOM_TTL_MS` — stamps one stored deadline per room
+(`inactivity_at`; the retired `idle_at` column stays as a NOT NULL
+mirror, because deployed DO databases cannot drop it without a table
+rebuild the migration runner refuses). `room_expired` keeps its `reason`
+field for older peers, always `"inactive"`. The rev floor outlives its
+room by one more full window — expiry re-anchors the floor's age at the
+death instant, so it prunes at `expiry + ROOM_TTL_MS` and ADR-0088 §5's
+F4 promises (revision history and peer serial continue across a
+re-created code) survive the unification. Health reports `roomTtlMs`.
+
+Rationale: with ADR-0088 §5 persisting rooms across restarts and past
+their last peer, a household that does not open the app for a few weeks
+should come back to its plan rather than find it reaped. The
+half-open-socket concern that sized the 24h window stays covered by the
+transport-level heartbeat (a missed pong terminates the socket); the room
+clock is retention, not liveness detection. Operators who set the old
+`RELAY_INACTIVITY_TTL_MS` keep their override (read as a deprecated
+fallback); `RELAY_IDLE_TTL_MS` is retired — its separate meaning is
+gone; the e2e suite shrinks the one clock via env.
