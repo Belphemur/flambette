@@ -27,7 +27,7 @@ import {
   type RoomRegistry,
   type RoomStore,
 } from './lifecycle'
-import { CODE_ALPHABET, IDLE_TTL_MS, INACTIVITY_TTL_MS } from './policy'
+import { CODE_ALPHABET, ROOM_TTL_MS } from './policy'
 import { parseClientFrame, RELAY_ERRORS } from './protocol'
 import { canonicalizeCode, WORD_CODE_RE, mintLegacyCode, normalizeRoomCode, resolveCreateIntent } from './codes'
 
@@ -227,13 +227,13 @@ describe('admission (ADR-0026 join-or-create)', () => {
     expect(h.registry.admit('create', 3)).toEqual({ kind: 'refuse', error: RELAY_ERRORS.codeTaken })
   })
 
-  test('admission refreshes the clocks of the room it admits into', () => {
+  test('admission refreshes the expiry clock of the room it admits into', () => {
     const h = harness()
     h.registry.admit('join', 0)
     h.now(HOUR)
-    const before = h.store.rooms.get('mauve-peacock-candle')!.inactivityAt
+    const before = h.store.rooms.get('mauve-peacock-candle')!.deadline
     h.registry.admit('join', 1)
-    expect(h.store.rooms.get('mauve-peacock-candle')!.inactivityAt).toBeGreaterThan(before)
+    expect(h.store.rooms.get('mauve-peacock-candle')!.deadline).toBeGreaterThan(before)
   })
 })
 
@@ -316,8 +316,8 @@ describe('the per-code rev floor', () => {
     h.registry.admit('join', 0)
     h.registry.push(11, { a: 1 }, 'p1')
     // The only path that deletes a room now (ADR-0088 §5) is the expiry
-    // clocks firing.
-    h.now(INACTIVITY_TTL_MS)
+    // clock firing.
+    h.now(ROOM_TTL_MS)
     expect(h.registry.tick()).toBe('inactive')
     expect(h.store.rooms.size).toBe(0)
     // Re-created under the same code: created/join reports the FLOOR, so a
@@ -326,30 +326,56 @@ describe('the per-code rev floor', () => {
     expect(h.store.rooms.get('mauve-peacock-candle')!.state).toBeNull()
   })
 
-  test('the floor is pruned once it is idle-TTL old', () => {
+  test('the floor is pruned once it is room-TTL old', () => {
     const h = harness()
     h.registry.admit('join', 0)
     h.registry.push(11, { a: 1 }, 'p1')
-    h.now(IDLE_TTL_MS + 1)
+    h.now(ROOM_TTL_MS + 1)
     expect(h.registry.floor()).toBe(0)
     expect(h.store.floors.size).toBe(0)
   })
 
   test('a stale entry keeps the HIGHER floor: a lower rev never moves it backwards', () => {
     // The floor is monotone PER CODE (review F4). A keepalive-only gap
-    // longer than the idle TTL refreshes the entry's AGE, and the push
+    // longer than the room TTL refreshes the entry's AGE, and the push
     // that follows must replace that AGE, not the rev.
     const h = harness()
     h.registry.admit('join', 0)
     h.registry.push(11, { a: 1 }, 'p1')
     expect(h.registry.floor()).toBe(11)
-    // Keepalives alone past the idle TTL make the entry stale.
-    h.now(IDLE_TTL_MS + 1)
+    // Keepalives alone past the room TTL make the entry stale.
+    h.now(ROOM_TTL_MS + 1)
     h.registry.keepalive()
     expect(h.store.floors.get('mauve-peacock-candle')!.rev).toBe(11)
     // A push with a LOWER rev arrives: the floor stays at 11.
     h.registry.push(7, { a: 2 }, 'p1')
     expect(h.registry.floor()).toBe(11)
+  })
+
+  test('a floor re-anchored at expiry outlives its room by one more full window', () => {
+    // ADR-0088 §5 via review F4: a re-created room continues the
+    // household's history. With the room and floor sharing ONE TTL, the
+    // re-anchor at the expiry instant is what keeps that promise true for
+    // a re-create arriving well past the last push — the push-age alone
+    // would have pruned the floor at or before the room died.
+    const h = harness()
+    h.registry.admit('join', 0)
+    h.registry.push(11, { a: 1 }, 'p1')
+    h.registry.nextSerial()
+    h.now(ROOM_TTL_MS + HOUR)
+    expect(h.registry.tick()).toBe('inactive')
+    expect(h.store.rooms.size).toBe(0)
+    // A day later — far past the push, well inside the re-anchored window.
+    h.now(24 * HOUR)
+    expect(h.registry.admit('join', 0)).toEqual({
+      kind: 'establish',
+      code: 'mauve-peacock-candle',
+      rev: 11,
+      count: 1,
+    })
+    // And the serial continues: the re-created room's first minted peer id
+    // is not the one the dead room already handed out.
+    expect(h.registry.nextSerial()).toBe(2)
   })
 
   test('a room’s peer serial never repeats across re-creations of the same code', () => {
@@ -360,7 +386,7 @@ describe('the per-code rev floor', () => {
     expect(h.store.rooms.get('mauve-peacock-candle')!.serial).toBe(2)
     // The room dies at expiry, not at leave (ADR-0088 §5); the count must
     // not restart across that deletion either.
-    h.now(INACTIVITY_TTL_MS)
+    h.now(ROOM_TTL_MS)
     expect(h.registry.tick()).toBe('inactive')
     h.registry.admit('join', 0)
     expect(h.registry.nextSerial()).toBe(3)
@@ -375,15 +401,14 @@ describe('the per-code rev floor', () => {
 /* ------------------------------------------------------------- liveness */
 
 describe('keepalive', () => {
-  test('is accepted for a live room and refreshes BOTH clocks', () => {
+  test('is accepted for a live room and refreshes the expiry clock', () => {
     const h = harness()
     h.registry.admit('join', 0)
     h.now(2 * HOUR)
     const before = h.store.rooms.get('mauve-peacock-candle')!
     h.registry.keepalive()
     const after = h.store.rooms.get('mauve-peacock-candle')!
-    expect(after.inactivityAt).toBeGreaterThan(before.inactivityAt)
-    expect(after.idleAt).toBeGreaterThan(before.idleAt)
+    expect(after.deadline).toBeGreaterThan(before.deadline)
     expect(after.lastActivityAt).toBe(2 * HOUR + 1_000_000)
   })
 
@@ -396,10 +421,10 @@ describe('keepalive', () => {
     const h = harness()
     h.registry.admit('join', 0)
     // A MONTH of hourly keepalives: the clock under test
-    // is the 30-day backstop, and a shorter loop would still pass if
-    // `keepalive` stopped refreshing `idleAt` entirely — which is exactly
-    // the review F1 regression this case exists to guard.
-    const hours = IDLE_TTL_MS / HOUR + 8
+    // is the 30-day expiry deadline, and a shorter loop would still pass
+    // if `keepalive` stopped moving the deadline entirely — which is
+    // exactly the review F1 regression this case exists to guard.
+    const hours = ROOM_TTL_MS / HOUR + 8
     for (let i = 0; i < hours; i++) {
       h.now(HOUR)
       expect(h.registry.keepalive()).toEqual({ kind: 'ok' })
@@ -409,31 +434,30 @@ describe('keepalive', () => {
       expect(h.expired).toEqual([])
     }
     // And the deadline really did move: past the original 30-day mark.
-    expect(h.store.read()!.idleAt).toBeGreaterThan(1_000_000 + IDLE_TTL_MS)
+    expect(h.store.read()!.deadline).toBeGreaterThan(1_000_000 + ROOM_TTL_MS)
     expect(h.registry.tick()).toBeNull()
   })
 })
 
 /* --------------------------------------------------------------- expiry */
 
-describe('expiry clocks (ADR-0038 widening ADR-0026)', () => {
-  test('defaults are 30-day inactivity and a 30-day idle backstop', () => {
-    expect(INACTIVITY_TTL_MS).toBe(30 * 24 * HOUR)
-    expect(IDLE_TTL_MS).toBe(30 * 24 * HOUR)
+describe('the expiry clock (ADR-0038 addendum: the two clocks unified)', () => {
+  test('the default is a 30-day room TTL', () => {
+    expect(ROOM_TTL_MS).toBe(30 * 24 * HOUR)
   })
 
-  test('one wake-up is armed, at the earlier of the two deadlines', () => {
+  test('one wake-up is armed, at the room deadline', () => {
     const h = harness()
     h.registry.admit('join', 0)
     const row = h.store.rooms.get('mauve-peacock-candle')!
-    expect(h.armedAt()).toBe(Math.min(row.inactivityAt, row.idleAt))
+    expect(h.armedAt()).toBe(row.deadline)
   })
 
   test('a full inactivity window of silence closes the room as `inactive`, drops the row and keeps the floor', () => {
     const h = harness()
     h.registry.admit('join', 0)
     h.registry.push(3, { a: 1 }, 'p1')
-    h.now(INACTIVITY_TTL_MS)
+    h.now(ROOM_TTL_MS)
     expect(h.registry.tick()).toBe('inactive')
     expect(h.expired).toEqual([{ code: 'mauve-peacock-candle', reason: 'inactive' }])
     expect(h.store.rooms.size).toBe(0)
@@ -447,23 +471,14 @@ describe('expiry clocks (ADR-0038 widening ADR-0026)', () => {
     h.now(HOUR)
     expect(h.registry.tick()).toBeNull()
     expect(h.store.rooms.size).toBe(1)
-    expect(h.armedAt()).toBe(row.inactivityAt)
-  })
-
-  test('a row whose idle clock has passed but whose inactivity clock has not closes as `idle`', () => {
-    const h = harness()
-    h.registry.admit('join', 0)
-    const row = h.store.rooms.get('mauve-peacock-candle')!
-    h.store.write({ ...row, inactivityAt: h.store.read()!.idleAt + HOUR, idleAt: 1_000_000 - 1 })
-    expect(h.registry.tick()).toBe('idle')
-    expect(h.expired[0]!.reason).toBe('idle')
+    expect(h.armedAt()).toBe(row.deadline)
   })
 
   test('a tick for a room that is already gone prunes only a stale floor', () => {
     const h = harness()
     h.registry.admit('join', 0)
     h.registry.push(3, { a: 1 }, 'p1')
-    h.now(IDLE_TTL_MS + 1)
+    h.now(ROOM_TTL_MS + 1)
     h.store.drop()
     expect(h.registry.tick()).toBeNull()
     expect(h.expired).toEqual([])
@@ -481,22 +496,22 @@ describe('expiry clocks (ADR-0038 widening ADR-0026)', () => {
     // The real drop path, not a raw `store.drop()`: the adapter never
     // touches the store directly, and expiry is what re-aims the
     // wake-up at the floor it leaves behind (ADR-0088 §5).
-    h.now(INACTIVITY_TTL_MS)
+    h.now(ROOM_TTL_MS)
     expect(h.registry.tick()).toBe('inactive')
     const floor = h.store.floors.get('mauve-peacock-candle')!
-    expect(h.armedAt()).toBe(floor.at + IDLE_TTL_MS)
+    expect(h.armedAt()).toBe(floor.at + ROOM_TTL_MS)
 
-    // Both clocks sit at 30 days (ADR-0038 addendum), so the room expires
-    // AT the floor's prune boundary: the floor is still held at the expiry
-    // tick itself (the age-out test is a strict `>`), and the first
-    // wake-up past the boundary — even one hour — reclaims it. The
-    // retention window is the same 30 days for the room and its floor.
+    // The floor's age re-anchored at the expiry instant, so it is still
+    // fresh an hour later — the wake-up re-arms for the same deadline and
+    // the floor outlives its room by a FULL room-TTL window (the re-anchor
+    // is what keeps ADR-0088 §5's F4 promises alive under one TTL).
     h.now(HOUR)
     expect(h.registry.tick()).toBeNull()
-    expect(h.store.floors.size).toBe(0)
+    expect(h.store.floors.size).toBe(1)
 
-    // Once the floor has aged out, the wake-up reclaims it and stops.
-    h.now(IDLE_TTL_MS)
+    // Once the re-anchored window has run out, the wake-up reclaims the
+    // floor and stops.
+    h.now(ROOM_TTL_MS)
     expect(h.registry.tick()).toBeNull()
     expect(h.store.floors.size).toBe(0)
   })
@@ -508,7 +523,7 @@ describe('expiry clocks (ADR-0038 widening ADR-0026)', () => {
     h.registry.admit('join', 0)
     const armedWhileLive = h.armedAt()
     expect(h.store.floors.size).toBe(0)
-    h.now(INACTIVITY_TTL_MS)
+    h.now(ROOM_TTL_MS)
     expect(h.registry.tick()).toBe('inactive')
     expect(h.armedAt()).toBe(armedWhileLive)
   })
@@ -518,11 +533,14 @@ describe('expiry clocks (ADR-0038 widening ADR-0026)', () => {
     h.registry.admit('join', 0)
     h.registry.push(3, { a: 1 }, 'p1')
     const floor = h.store.floors.get('mauve-peacock-candle')!
-    h.now(INACTIVITY_TTL_MS)
+    h.now(ROOM_TTL_MS)
     expect(h.registry.tick()).toBe('inactive')
     expect(h.store.rooms.size).toBe(0)
     expect(h.store.floors.size).toBe(1)
-    expect(h.armedAt()).toBe(floor.at + IDLE_TTL_MS)
+    // The floor's age re-anchored at the expiry instant: the wake-up aims
+    // one full room-TTL window past the room's death, not past the push.
+    const reanchored = h.store.floors.get('mauve-peacock-candle')!
+    expect(h.armedAt()).toBe(reanchored.at + ROOM_TTL_MS)
   })
 
   test('a throwing expire hook cannot keep a room alive', () => {
@@ -538,7 +556,7 @@ describe('expiry clocks (ADR-0038 widening ADR-0026)', () => {
       },
     })
     registry.admit('join', 0)
-    t += INACTIVITY_TTL_MS
+    t += ROOM_TTL_MS
     expect(registry.tick()).toBe('inactive')
     expect(store.rooms.size).toBe(0)
   })
@@ -555,9 +573,9 @@ describe('a room survives its last peer (ADR-0088 §5, amending ADR-0026)', () =
     expect(h.store.read()!.state).toEqual({ plan: ['a'] })
     expect(h.registry.floor()).toBe(2)
     // The wake-up that will eventually close the now-empty room is still
-    // armed at the expiry clocks the last touch set.
+    // armed at the expiry deadline the last touch set.
     const row = h.store.read()!
-    expect(h.armedAt()).toBe(Math.min(row.inactivityAt, row.idleAt))
+    expect(h.armedAt()).toBe(row.deadline)
   })
 
   test('a returning peer re-joins and finds the STORED snapshot, not a re-seed', () => {
@@ -581,7 +599,7 @@ describe('a room survives its last peer (ADR-0088 §5, amending ADR-0026)', () =
     const h = harness()
     h.registry.admit('join', 0)
     h.registry.push(2, { plan: ['a'] }, 'p1')
-    h.now(INACTIVITY_TTL_MS)
+    h.now(ROOM_TTL_MS)
     expect(h.registry.tick()).toBe('inactive')
     expect(h.expired).toEqual([{ code: 'mauve-peacock-candle', reason: 'inactive' }])
     expect(h.store.rooms.size).toBe(0)

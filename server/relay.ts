@@ -19,15 +19,14 @@
  * conflict resolution belongs to the client, via a monotonic `rev` the
  * relay only stores and fans out (ADR-0006). The room ROW survives its
  * last peer (ADR-0088 §5, like the Durable Object) until the expiry
- * clocks fire, and it survives a PROCESS restart: the startup sweep
- * re-arms the clocks of every persisted room and orphaned floor.
+ * clock fires, and it survives a PROCESS restart: the startup sweep
+ * re-arms the wake-ups of every persisted room and orphaned floor.
  *
  * Run: `bun server/relay.ts` (listens on :8081, override with PORT env).
  */
 
 import {
   createRoomRegistry,
-  expiryDeadlineOf,
   normalizeProfile,
   normalizeProfileName,
   peersFrame,
@@ -37,7 +36,7 @@ import {
   type RoomStore,
 } from './relay-core/lifecycle'
 import { canonicalizeCode, mintLegacyCode, resolveCreateIntent } from './relay-core/codes'
-import { healthPayload, IDLE_TTL_MS as IDLE_TTL_DEFAULT_MS, INACTIVITY_TTL_MS as INACTIVITY_TTL_DEFAULT_MS, parsePositiveNumber } from './relay-core/policy'
+import { healthPayload, ROOM_TTL_MS as ROOM_TTL_DEFAULT_MS, parsePositiveNumber } from './relay-core/policy'
 import { parseClientFrame, RELAY_ERRORS, type RelayMessage } from './relay-core/protocol'
 import type { ExpiryReason } from './relay-core/lifecycle'
 import { makeThrottle, MemoryAttemptBuckets } from './relay-core/throttle'
@@ -46,8 +45,16 @@ import { createSqliteStores, openRelayDatabase, persistedDeadlines } from './rel
 /* ------------------------------------------------------------------ config */
 
 const PORT = parsePositiveNumber(process.env.PORT, 8081)
-const INACTIVITY_TTL_MS = parsePositiveNumber(process.env.RELAY_INACTIVITY_TTL_MS, INACTIVITY_TTL_DEFAULT_MS)
-const IDLE_TTL_MS = parsePositiveNumber(process.env.RELAY_IDLE_TTL_MS, IDLE_TTL_DEFAULT_MS)
+/**
+ * The ONE room-retention window (ADR-0038's unification addendum). The
+ * pre-collapse design had a second `RELAY_IDLE_TTL_MS` knob; its separate
+ * meaning is gone. The old `RELAY_INACTIVITY_TTL_MS` is honored as a
+ * deprecated fallback so an existing deployment's override survives.
+ */
+const ROOM_TTL_MS = parsePositiveNumber(
+  process.env.RELAY_ROOM_TTL_MS ?? process.env.RELAY_INACTIVITY_TTL_MS,
+  ROOM_TTL_DEFAULT_MS,
+)
 /**
  * The relay's room state persists here (ADR-0088 §1) — the Docker compose
  * volume mounts the directory; `:memory:` is an explicit opt-in for tests.
@@ -168,8 +175,7 @@ function registryFor(code: string): RoomRegistry {
   return createRoomRegistry({
     code,
     store: storeFor(code),
-    inactivityTtlMs: INACTIVITY_TTL_MS,
-    idleTtlMs: IDLE_TTL_MS,
+    roomTtlMs: ROOM_TTL_MS,
     now: () => Date.now(),
     arm: (deadline) => armRoom(code, deadline),
     onExpire: (expired, reason) => notifyExpired(expired, reason),
@@ -206,7 +212,7 @@ function armRoom(code: string, deadline: number): void {
       // the misrouted handle — it is the only thing left referencing the
       // shell — and re-arm through the shell-less path, whose tick()
       // schedules (or fires) the floor prune: otherwise every expired
-      // room keeps a live callback referencing it for up to the idle TTL
+      // room keeps a live callback referencing it for up to the room TTL
       // (qodo review).
       if (room.timer) clearTimeout(room.timer)
       registryFor(code).tick()
@@ -334,8 +340,8 @@ function attach(ws: Socket, code: string): void {
  * Remove a socket from its room. Since ADR-0088 §5 the room does NOT die
  * with its last peer — that was the one deliberate behavioural difference
  * from the Durable Object, now closed: the row (and its state) survives
- * until the inactivity clock or the idle backstop fires — both 30 days
- * (ADR-0038 addendum) — so a
+ * until the expiry clock — 30 days (ADR-0038's unification addendum) —
+ * fires, so a
  * phone that reconnects after a tunnel, a reload or a relay restart gets
  * its plan back instead of re-seeding an empty room. The wake-up the last
  * touch armed is exactly the expiry deadline, so it stays live and the
@@ -355,17 +361,16 @@ function detach(ws: Socket): void {
     return
   }
   // Last peer out. ADR-0088 §5 keeps the ROW (state, floor, serial) until
-  // the expiry clocks fire — the reconnect-after-a-tunnel promise — but
+  // the expiry clock fires — the reconnect-after-a-tunnel promise — but
   // the in-memory shell does not have to outlive its last socket (kody
-  // review): release it, and continue the wake-up through the shell-less
+  // release it, and continue the wake-up through the shell-less
   // timer path, whose tick() expires the row (and then prunes its floor)
   // exactly as an in-memory shell would. The deadline is re-read from the
-  // row the last touch refreshed; the min-of-clocks arithmetic is the
-  // core's.
+  // row the last touch refreshed.
   const row = storeFor(code).read()
   rooms.delete(code)
   if (room.timer) clearTimeout(room.timer)
-  if (row) armRoom(code, expiryDeadlineOf(row))
+  if (row) armRoom(code, row.deadline)
 }
 
 /* ---------------------------------------------------------------- admission */
@@ -491,7 +496,7 @@ function performJoin(ws: Socket, rawCode: unknown): void {
 try {
   db = openRelayDatabase(RELAY_DB_PATH)
   sqliteStores = createSqliteStores(db, () => Date.now())
-  const { rooms: roomDeadlines, floors: floorDeadlines } = persistedDeadlines(db, IDLE_TTL_MS)
+  const { rooms: roomDeadlines, floors: floorDeadlines } = persistedDeadlines(db, ROOM_TTL_MS)
   for (const { code, deadline } of roomDeadlines) {
     // Shell-less on purpose (kody review): a persisted room nobody has
     // rejoined gets a wake-up, not a live shell — the registry is built
@@ -568,8 +573,7 @@ try {
       // listener from an earlier run with DIFFERENT TTLs must never be
       // mistaken for the one a spec asked for.
       return new Response(JSON.stringify(healthPayload({
-        inactivityTtlMs: INACTIVITY_TTL_MS,
-        idleTtlMs: IDLE_TTL_MS,
+        roomTtlMs: ROOM_TTL_MS,
         attemptLimit: throttle.limit,
       })), { headers: { 'content-type': 'application/json' } })
     },
@@ -654,8 +658,8 @@ try {
             // carries no guessable input and must never be able to burn a
             // create/join budget. The answer is deliberately NOT named
             // `pong` — that name belongs to the socket-level beat below.
-            // The core refreshes BOTH expiry clocks, so a 30-day-connected
-            // household is never closed by the idle backstop (review F1).
+            // The core refreshes the expiry clock, so a 30-day-connected
+            // household is never closed (review F1).
             if (!member || !room) {
               send(ws, { type: 'error', code: RELAY_ERRORS.notInRoom })
               return
@@ -714,8 +718,7 @@ try {
 }
 
 console.log(
-  `[relay] listening on :${PORT} (inactivity TTL ${Math.round(INACTIVITY_TTL_MS / 1000)}s, ` +
-    `idle backstop TTL ${Math.round(IDLE_TTL_MS / 1000)}s, db ${RELAY_DB_PATH})`,
+  `[relay] listening on :${PORT} (room TTL ${Math.round(ROOM_TTL_MS / 1000)}s, db ${RELAY_DB_PATH})`,
 )
 
 /**

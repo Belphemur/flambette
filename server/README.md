@@ -19,9 +19,9 @@ bun relay.ts      # listens on :8081 (override with PORT)
 Env knobs (defaults in brackets): `PORT` [8081], `RELAY_DB_PATH`
 [`/data/relay.sqlite3` — set it to `:memory:` to run without persistence,
 e.g. in tests], `RELAY_ATTEMPT_LIMIT` [30 per minute per socket/IP],
-`RELAY_INACTIVITY_TTL_MS` [30 days], `RELAY_IDLE_TTL_MS` [30 days] —
-ADR-0038 widened ADR-0026's clocks, and its 2026-10-14 addendum widened
-both to 30 days.
+`RELAY_ROOM_TTL_MS` [30 days] — the ONE room-retention window (ADR-0038's
+2026-10-14 addendum unified the old inactivity/idle clock pair into it;
+the deprecated `RELAY_INACTIVITY_TTL_MS` is still honored as a fallback).
 
 Or via Docker / from the repo root:
 
@@ -71,22 +71,18 @@ all find the same room.
   first establishes the room — there is no "room not found" dead end.
 - **Empty rooms persist (ADR-0088 §5)**: the last peer leaving no longer
   deletes the room — the row (and its per-store state) survives until the
-  expiry clocks below fire, on this relay and the Durable Object alike, so
+  expiry clock below fires, on this relay and the Durable Object alike, so
   a phone that reconnects after a tunnel, a reload or a relay restart gets
   its plan back instead of re-seeding an empty room.
-- **Expiry (ADR-0026)**: two clocks per room, BOTH refreshed by every
-  liveness signal — `keepalive` included, because a connected peer that
-  keepalives is not an idle room.
-  - *Inactivity*: 30 days with no `keepalive` and no `state` traffic
-    (`RELAY_INACTIVITY_TTL_MS`).
-  - *Idle backstop*: 30 days since the last interaction of any kind
-    (`RELAY_IDLE_TTL_MS`) — defence in depth for peers that vanished
-    without a `leave`. Both clocks sit at 30 days (ADR-0038's 2026-10-14
-    addendum): the two fire together, `inactive` stays the reported
-    reason, and the idle clock's remaining job is pruning the rev floor
-    once the room is gone.
+- **Expiry (ADR-0026, unified by ADR-0038's 2026-10-14 addendum)**: ONE
+  clock per room, refreshed by every liveness signal — `keepalive`
+  included, because a connected peer is not a silent room. 30 days with no
+  `keepalive` and no `state` traffic (`RELAY_ROOM_TTL_MS`) and the room is
+  deleted; the same TTL ages out the rev floor once the room is gone. (The
+  pre-unification design carried a second "idle backstop" clock — with
+  both windows at 30 days it collapsed into this one.)
   On firing, the room closes and every peer gets
-  `{"type":"error","code":"room_expired","reason":"inactive"|"idle"}`. The
+  `{"type":"error","code":"room_expired","reason":"inactive"}`. The
   relay then CLEARS each peer's room code, so a socket left over from the
   dead room can neither write state into, nor `leave` away, a room that
   somebody else has since re-created under the same code. A socket
@@ -95,18 +91,18 @@ all find the same room.
   (or killed by) the room it left.
 - **Revisions**: `rev` is monotone per CODE, not per room instance. The
   highest `rev` a code reached survives the room's deletion (pruned after
-  the idle TTL) and is handed back in `created`/`joined`, so a re-created
+  the room TTL) and is handed back in `created`/`joined`, so a re-created
   room continues the household's history instead of restarting at 0 and
   passing a stale snapshot off as newer.
 - **Keepalive**: `{"type":"keepalive"}` is the *application* heartbeat —
-  it refreshes both room clocks and is deliberately NOT throttled: a
+  it refreshes the room's expiry clock and is deliberately NOT throttled: a
   liveness frame must never be able to spend the create/join budget.
 - **Liveness**: heartbeat ping/pong every 30s; a socket that misses a
   pong is terminated and removed from its room. This is transport-level
   only and deliberately does **not** refresh room activity — a client
   behind a half-open socket is exactly what the inactivity clock is for.
 - **Health**: the HTTP response is a JSON echo of the running
-  configuration (`inactivityTtlMs`, `idleTtlMs`, `attemptLimit`) so two
+  configuration (`roomTtlMs`, `attemptLimit`) so two
   relays can be told apart without guessing.
 - **Persistence**: room state is stored in a SQLite database — one table
   per synchronized store plus the room/floor rows — opened in WAL mode at
@@ -114,7 +110,7 @@ all find the same room.
   by the migration runner shared with the Cloudflare Durable Object
   (ADR-0088 §4). Point the Docker volume at `/data` (the compose file
   does) and a restart resumes every room's state, rev floor and peer
-  serial; the clocks still delete a room that stays idle. Throttle
+  serial; the clock still deletes a room that stays silent. Throttle
   buckets stay in memory deliberately: rate-limit state is ephemeral by
   design, and persisting it would make a restart BOTH a pardon and a
   weapon.

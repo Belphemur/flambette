@@ -107,10 +107,12 @@ CREATE TABLE store_plan (
   moves to the adapter's codec — the column stays TEXT JSON either way.)
 - `created_at` / `updated_at` are per-STORE metadata: when this store
   was first and last written for this room. They are distinct from the
-  room row's activity clocks (`last_activity`, `inactivity_at`,
-  `idle_at`), which answer liveness questions, not history questions.
+  room row's activity stamps (`last_activity` and the `inactivity_at`
+  expiry deadline — `idle_at` is its retired NOT NULL mirror, per
+  ADR-0038's unification addendum), which answer liveness questions, not
+  history questions.
 - The non-store tables keep their roles and join the versioned schema:
-  `room` (rev, the two deadline clocks, serial — now with
+  `room` (rev, the expiry deadline, serial — now with
   `created_at`/`updated_at` of its own), `rev_floor` and `peer_serial`
   (which outlive rooms and are the whole point of review F4).
 - Store names get a `store_` prefix so no table name collides with a
@@ -191,8 +193,8 @@ same step so both runtimes agree on the version history.
 
 With durable state, the Bun relay stops deleting a room when its last
 peer leaves and adopts the DO's ADR-0038 §4 behaviour: the row survives
-until the 30-day inactivity clock or the 30-day idle backstop fires
-(ADR-0038's 2026-10-14 addendum), so a
+until the room's one 30-day expiry clock fires
+(ADR-0038's 2026-10-14 unification addendum), so a
 phone that reconnects after a tunnel, a reload, or (new) a relay restart
 gets its plan back instead of re-seeding an empty room. This CLOSES the
 one deliberate behavioural difference between the adapters — after this
@@ -242,8 +244,9 @@ pardon and a weapon.
 - `docs/agents/rooms-and-sync.md` and `docs/agents/packaging-and-deploy.md`
   update in the implementation change (the standing "topic doc in the
   same change" rule); this record carries only the decision.
-- The DO carries one deprecated column (`room.state`, NULL-filled) until
-  a future migration removes it.
+- The DO carries two deprecated columns (`room.state`, NULL-filled; and
+  `idle_at` — the retired clock mirror, ADR-0038's addendum) until a
+  future migration removes them.
 
 ## Addendum (2026-10-14): eleven stores, not nine — twelve as of ADR-0090; `planIdentity` is always-sent
 

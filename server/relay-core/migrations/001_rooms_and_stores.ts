@@ -44,7 +44,12 @@ import type { MigrationStep } from '../migrations'
  * kept — and only ever NULL from migration 002 onward — because an
  * additive step cannot fail on any workerd SQLite vintage. The Bun schema
  * carries the same column so both runtimes run the SAME steps: on a fresh
- * Bun database it simply never holds anything.
+ * Bun database it simply never holds anything. `idle_at` is retired the
+ * same way (ADR-0038's addendum): the second expiry clock collapsed into
+ * `inactivity_at` — the ONE deadline — but the column is NOT NULL on
+ * databases that predate the unification and SQLite cannot drop it
+ * without a table rebuild, so it is written as a mirror of `inactivity_at`
+ * and never read.
  */
 const ROOM_DDL = `
 CREATE TABLE IF NOT EXISTS room (

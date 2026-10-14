@@ -16,17 +16,18 @@
  * `server/relayPolicy.mjs`).
  */
 
-/** Rooms close after 30 days with no keepalive and no state activity (ADR-0038 widening ADR-0026; its 2026-10-14 addendum widened BOTH clocks to 30 days). */
-export const INACTIVITY_TTL_MS = 30 * 24 * 60 * 60 * 1000
-
 /**
- * Backstop TTL for a room whose peers vanished without `leave` — the same
- * 30 days (ADR-0038 addendum): the deletion deadline is the EARLIER of the
- * two clocks, so a shorter backstop would cut the widened inactivity window
- * back down. Its remaining job is pruning the rev floor once the room is
- * gone.
+ * The ONE room-retention window: a room is deleted after 30 days with no
+ * keepalive and no state activity (ADR-0038's 2026-10-14 addendum,
+ * widening ADR-0026). The pre-collapse design carried a SECOND clock — a
+ * 7-day "idle backstop" whose deletion deadline was the earlier of the
+ * two — but once both clocks widened to the same 30 days the pair had
+ * nothing left to separate: two identical stamps, a no-op `min()`, and an
+ * expiry reason (`idle`) that could never fire. One room clock now
+ * governs deletion AND the rev floor's age-out (the floor keeps its own
+ * timestamp; its prune deadline is `floor.at + ROOM_TTL_MS`).
  */
-export const IDLE_TTL_MS = 30 * 24 * 60 * 60 * 1000
+export const ROOM_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 /**
  * Legacy relay-minted room codes: Crockford base32 with every vowel
@@ -67,13 +68,11 @@ export function parsePositiveNumber(raw: string | undefined | null, fallback: nu
  * and throttle limit.
  */
 export function healthPayload(config: {
-  inactivityTtlMs: number
-  idleTtlMs: number
+  roomTtlMs: number
   attemptLimit: number
 }): {
   service: typeof RELAY_SERVICE
-  inactivityTtlMs: number
-  idleTtlMs: number
+  roomTtlMs: number
   attemptLimit: number
 } {
   return { service: RELAY_SERVICE, ...config }

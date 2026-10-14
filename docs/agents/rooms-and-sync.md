@@ -14,23 +14,24 @@
   `joined`); `create` is unchanged and still the host path. A room whose
   LAST peer leaves is KEPT, not deleted (ADR-0088 §5, amending ADR-0026
   — both runtimes now behave alike): the row and its state survive until
-  the expiry clocks fire, so the peer that returns re-joins a LIVE room
+  the expiry clock fires, so the peer that returns re-joins a LIVE room
   and gets its plan back instead of re-seeding an empty room; a `create`
   onto an unoccupied room still establishes a fresh one (the rev FLOOR
   carries over). The client sends
   `{type:'keepalive'}` once a minute while live (one interval per
   socket, cleared on every end path) and the relay closes a room after
-  30 days of no keepalive AND no state activity; the idle backstop sits
-  at the same 30 days (ADR-0038 addendum, 2026-10-14) refreshed by the
-  SAME signals (keepalive included —
-  a connected peer is not an idle room), and either clock firing tells
+  30 days of no keepalive AND no state activity — the ONE room clock
+  (ADR-0038's 2026-10-14 addendum: the old inactivity/idle clock pair
+  collapsed once both windows sat at 30 days), refreshed by the SAME
+  signals (keepalive included — a connected peer is not a silent room),
+  and its firing tells
   the peers `room_expired` and clears their room code so a stale socket
   can never write into, or delete, a room re-created under that code
-  (the windows are ADR-0038's, widening ADR-0026). A socket belongs to
+  (the window is ADR-0038's, widening ADR-0026). A socket belongs to
   at most one room: join/create detaches it from the previous one, so a
   client that moved on is never notified about the room it left. `rev`
   is monotone per CODE (the floor survives the room deletion, pruned at
-  the idle TTL) and is handed back in `created` / `joined`, so a
+  the room TTL) and is handed back in `created` / `joined`, so a
   re-created room never passes a stale snapshot off as newer. The client
   treats `room_expired`/`not_found` as TERMINAL (latched `roomGone`, no
   reconnect) — re-joining would join-or-create an empty room and read as

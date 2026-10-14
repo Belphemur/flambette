@@ -32,8 +32,8 @@ import {
   storeUpsertSql,
   type MigrationDatabase,
 } from './relay-core/migrations'
-import { IDLE_TTL_MS } from './relay-core/policy'
-import { expiryDeadlineOf, type FloorRecord, type RoomRecord, type RoomStore } from './relay-core/lifecycle'
+import { ROOM_TTL_MS } from './relay-core/policy'
+import { type FloorRecord, type RoomRecord, type RoomStore } from './relay-core/lifecycle'
 
 /**
  * Bun's `Database`, as declared in `./bun-sqlite.d.ts` — the structural
@@ -49,8 +49,8 @@ interface RoomSqlRow {
   created_at: unknown
   updated_at: unknown
   last_activity: unknown
+  /** The room's expiry deadline — the ONE clock (ADR-0038's addendum). */
   inactivity_at: unknown
-  idle_at: unknown
   serial: unknown
 }
 
@@ -123,7 +123,7 @@ export function createSqliteStores(
   const readRoomRow = (code: string): RoomSqlRow | undefined =>
     db
       .query(
-        'SELECT code, rev, created_at, updated_at, last_activity, inactivity_at, idle_at, serial FROM room WHERE code = ?',
+        'SELECT code, rev, created_at, updated_at, last_activity, inactivity_at, serial FROM room WHERE code = ?',
       )
       .all(code)[0] as unknown as RoomSqlRow | undefined
 
@@ -151,8 +151,10 @@ export function createSqliteStores(
         row.createdAt,
         now(),
         row.lastActivityAt,
-        row.inactivityAt,
-        row.idleAt,
+        row.deadline,
+        // The retired `idle_at` column is NOT NULL on databases that
+        // predate the clocks' unification — mirror the deadline, never read.
+        row.deadline,
         row.serial,
       )
   }
@@ -220,8 +222,7 @@ export function createSqliteStores(
         state: joinSnapshot(rows),
         createdAt: num(row.created_at),
         lastActivityAt: num(row.last_activity),
-        inactivityAt: num(row.inactivity_at),
-        idleAt: num(row.idle_at),
+        deadline: num(row.inactivity_at),
         serial: num(row.serial),
       } satisfies RoomRecord
     },
@@ -263,22 +264,24 @@ export function createSqliteStores(
  */
 export function persistedDeadlines(
   db: SqliteDatabase,
-  /** The relay's CONFIGURED idle TTL — the caller's, not the default. */
-  idleTtlMs: number = IDLE_TTL_MS,
+  /** The relay's CONFIGURED room TTL — the caller's, not the default. */
+  roomTtlMs: number = ROOM_TTL_MS,
 ): {
   rooms: { code: string; deadline: number }[]
   floors: { code: string; deadline: number }[]
 } {
   const rooms = db
-    .query('SELECT code, inactivity_at, idle_at FROM room')
+    .query('SELECT code, inactivity_at FROM room')
     .all()
     .map((row) => ({
       code: String(row.code),
-      deadline: expiryDeadlineOf({ inactivityAt: num(row.inactivity_at), idleAt: num(row.idle_at) }),
+      // The persisted deadline is read as stored: the clock the last
+      // touch armed, not recomputed against today's config.
+      deadline: num(row.inactivity_at),
     }))
   const floors = db
     .query('SELECT code, at FROM rev_floor')
     .all()
-    .map((row) => ({ code: String(row.code), deadline: num(row.at) + idleTtlMs }))
+    .map((row) => ({ code: String(row.code), deadline: num(row.at) + roomTtlMs }))
   return { rooms, floors }
 }

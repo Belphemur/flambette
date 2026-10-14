@@ -21,13 +21,13 @@
  * What the in-memory relay expressed with a Map and a `setTimeout` becomes
  * a SQL row and an alarm:
  *
- * - the room row (rev, state JSON, created_at, last_activity, both
- *   deadlines, a peer serial);
+ * - the room row (rev, state JSON, created_at, last_activity, the expiry
+ *   deadline, a peer serial);
  * - the per-code floor row, which OUTLIVES the room row and is handed back
  *   in `created`/`joined` so a room re-created after an expiry cannot
  *   restart the household's revision history at zero (review F4).
  *
- * ONE alarm, armed at the earlier of the two deadlines. workerd gives a
+ * ONE alarm, armed at the room's expiry deadline. workerd gives a
  * hibernated object no timers at all, so a `setTimeout` here would simply
  * not fire once the object went idle — an alarm is the only clock that
  * survives eviction.
@@ -52,7 +52,7 @@ import {
   type RoomRegistry,
   type RoomStore,
 } from '../relay-core/lifecycle'
-import { IDLE_TTL_MS, INACTIVITY_TTL_MS } from '../relay-core/policy'
+import { ROOM_TTL_MS } from '../relay-core/policy'
 import { parseClientFrame, RELAY_ERRORS, type RelayErrorCode, type RelayMessage } from '../relay-core/protocol'
 import { canonicalizeCode } from '../relay-core/codes'
 import {
@@ -119,8 +119,7 @@ export class Room extends DurableObject<Env> {
     return createRoomRegistry({
       code: this.#code,
       store: this.#store,
-      inactivityTtlMs: INACTIVITY_TTL_MS,
-      idleTtlMs: IDLE_TTL_MS,
+      roomTtlMs: ROOM_TTL_MS,
       now: () => Date.now(),
       arm: (deadline) => this.ctx.storage.setAlarm(deadline),
       onExpire: (_code, reason) => this.#notifyExpired(reason),
@@ -210,7 +209,7 @@ export class Room extends DurableObject<Env> {
 
   #readRoom(): RoomRecord | null {
     const row = this.#one(
-      'SELECT code, rev, created_at, updated_at, last_activity, inactivity_at, idle_at, serial FROM room WHERE code = ?',
+      'SELECT code, rev, created_at, updated_at, last_activity, inactivity_at, serial FROM room WHERE code = ?',
       this.#code,
     )
     if (!row) return null
@@ -235,8 +234,7 @@ export class Room extends DurableObject<Env> {
       state: joinSnapshot(stores),
       createdAt: Number(row.created_at),
       lastActivityAt: Number(row.last_activity),
-      inactivityAt: Number(row.inactivity_at),
-      idleAt: Number(row.idle_at),
+      deadline: Number(row.inactivity_at),
       serial: Number(row.serial),
     }
   }
@@ -258,8 +256,10 @@ export class Room extends DurableObject<Env> {
       row.createdAt,
       Date.now(),
       row.lastActivityAt,
-      row.inactivityAt,
-      row.idleAt,
+      row.deadline,
+      // The retired `idle_at` column is NOT NULL on databases that predate
+      // the clocks' unification — mirror the deadline, never read.
+      row.deadline,
       row.serial,
     )
     // The room row moved (its clocks genuinely changed); the store rows
@@ -477,9 +477,8 @@ export class Room extends DurableObject<Env> {
     switch (msg.type) {
       case 'keepalive': {
         // Never throttled: it carries no guessable input and must not be
-        // able to burn a create/join budget. The core refreshes BOTH
-        // clocks, so a 30-day-connected household is never closed by the
-        // idle backstop (review F1).
+        // able to burn a create/join budget. The core refreshes the expiry
+        // clock, so a 30-day-connected household is never closed (review F1).
         if (!member || this.#room.keepalive().kind !== 'ok') {
           this.#fail(ws, RELAY_ERRORS.notInRoom)
           return
@@ -609,11 +608,11 @@ export class Room extends DurableObject<Env> {
   /* ----------------------------------------------------------------- alarms */
 
   /**
-   * Expiry. The core reads the row, decides which of the two clocks fired
-   * (and re-arms the alarm when a keepalive moved the deadline), notifies
+   * Expiry. The core reads the row and judges it against its stored
+   * deadline (re-arming the alarm when a keepalive moved it), notifies
    * the peers through `onExpire` and drops the row. The floor row
    * deliberately stays, so the household's revision history outlives the
-   * room until the idle TTL prunes it.
+   * room until the room TTL prunes it.
    */
   async alarm(): Promise<void> {
     this.#ensureSchema()

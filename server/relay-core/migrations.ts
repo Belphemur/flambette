@@ -121,7 +121,11 @@ export function storeClearSql(store: SyncedStore): string {
  * row and mint a new rowid, discarding the `id` the row already has (the
  * Durable Object's single room keeps id 1 for its whole life). The
  * deprecated `state` column is written NULL — always, from migration 002
- * onward (ADR-0088 §2/§4).
+ * onward (ADR-0088 §2/§4). The retired `idle_at` column is NOT NULL on
+ * every database that predates the expiry clocks' unification (ADR-0038's
+ * addendum), and SQLite cannot drop it without a table rebuild the runner
+ * refuses to do — so the upsert mirrors the deadline into it. Written,
+ * never read.
  */
 export const ROOM_UPSERT_SQL = `INSERT INTO room
   (code, rev, state, created_at, updated_at, last_activity, inactivity_at, idle_at, serial)

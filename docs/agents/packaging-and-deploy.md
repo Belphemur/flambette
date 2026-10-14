@@ -90,6 +90,6 @@ spoken by a Durable Object instead of a Bun process.
 - Rooms persist after the last peer leaves on BOTH paths (ADR-0088 §5,
   closing ADR-0038 §4's deliberate deviation): the Bun relay's SQLite
   rows and the Durable Object's storage both survive the departure until
-  the expiry clocks fire, and the relay's startup sweep re-arms those
-  clocks after a restart, so a resumption is a resumption on either
+  the expiry clock fires, and the relay's startup sweep re-arms those
+  wake-ups after a restart, so a resumption is a resumption on either
   backend.

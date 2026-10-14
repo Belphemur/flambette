@@ -228,9 +228,9 @@ bunx playwright test             # e2e suite (starts the relay itself)
 The relay is a zero-dependency Bun service (`server/`, Bun's native
 WebSocket API, persisting to SQLite per ADR-0088 — a room is created by
 whichever client arrives first, survives its last peer leaving, and
-expires after 30 days with no keepalive and no activity; ADR-0038
-widened ADR-0026's clocks, and its 2026-10-14 addendum set both expiry
-clocks to 30 days);
+expires after 30 days with no keepalive and no activity (the one room
+retention clock — ADR-0038's 2026-10-14 addendum unified the old
+inactivity/idle clock pair into it);
 `server/README.md` documents the wire protocol.
 
 ## Cloudflare deployment (ADR-0038)
