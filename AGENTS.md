@@ -29,8 +29,8 @@ The PRD is NOT an ADR: the generated `docs/design/index.md` does not index it.
 - MiniSearch (search), `@vueuse/core` (`useDark`, `useClipboard({ legacy: true })`),
   `lucide-vue-next` (icons, bundled — ADR-0029)
 - WebSocket relay (`server/relay.ts` over the shared TS core in
-  `server/relay-core/` — ADR-0040; zero-dep Bun-native WebSocket)
-  for live room sync
+  `server/relay-core/` — ADR-0040; zero-dep Bun-native WebSocket,
+  SQLite-backed rooms per ADR-0088) for live room sync
 - Bun 1.x toolchain (`bun.lock`); docker bases `oven/bun:1-alpine`
   (build) + `nginx:alpine` (serve); **never pin a major** on base
   images or actions

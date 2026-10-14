@@ -211,9 +211,16 @@ jobs:
       # carry server/relay-core/ and src/lib/roomWords.ts, which the Dockerfile
       # copies. Run it and require a real HTTP 200 off the health endpoint
       # before the image is considered good.
+      #
+      # Since ADR-0088 the relay also has to PERSIST: RELAY_DB_PATH points
+      # at a temporary path inside the container (no volume — the point is
+      # the file, not the mount), a create + state push runs against the
+      # live socket, and the SQLite database is then opened read-only to
+      # prove the per-store row landed — the volume story without a volume.
       - name: Smoke-run relay image
         run: |
-          docker run -d --name relay-smoke -p 18081:8081 flambette-relay:ci
+          docker run -d --name relay-smoke -p 18081:8081 \
+            -e RELAY_DB_PATH=/tmp/ci-relay.sqlite3 flambette-relay:ci
           # Relay answers plain HTTP on non-upgrade requests, so poll it.
           for i in $(seq 1 30); do
             if curl -fsS http://localhost:18081/ >/dev/null 2>&1; then
@@ -233,6 +240,38 @@ jobs:
             exit 1
           }
           echo "relay image serves HTTP"
+          cat >/tmp/ci_push_client.ts <<'EOF'
+          const ws = new WebSocket('ws://localhost:8081/?op=create&room=cismoke000')
+          ws.addEventListener('message', (ev) => {
+            const msg = JSON.parse(ev.data as string)
+            if (msg.type === 'created') {
+              ws.send(JSON.stringify({ type: 'state', rev: 1, state: { plan: [{ variantId: 1, servings: 2 }] } }))
+              // The push has no ack (the fan-out goes to other peers); give
+              // the relay a moment to store it before this client exits.
+              setTimeout(() => process.exit(0), 500)
+            }
+          })
+          ws.addEventListener('error', () => {
+            console.error('smoke client: websocket error')
+            process.exit(1)
+          })
+          setTimeout(() => {
+            console.error('smoke client: never answered created')
+            process.exit(1)
+          }, 10_000)
+          EOF
+          docker cp /tmp/ci_push_client.ts relay-smoke:/tmp/ci_push_client.ts
+          docker exec relay-smoke bun /tmp/ci_push_client.ts || {
+            echo "create+push smoke failed:" >&2
+            docker logs relay-smoke >&2
+            exit 1
+          }
+          test -s /tmp/ci-relay.sqlite3 || {
+            echo "relay did not create its SQLite database" >&2
+            exit 1
+          }
+          docker exec relay-smoke bun -e 'const { Database } = require("bun:sqlite"); const db = new Database(process.env.RELAY_DB_PATH); const rows = db.query("SELECT value FROM store_plan").all(); if (rows.length < 1) { console.error("store_plan row missing after the push"); process.exit(1) } console.log("store_plan rows:", rows.length)'
+          echo "relay image persists room state"
 
       - name: Relay image smoke logs
         if: always()

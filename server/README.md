@@ -1,13 +1,14 @@
 # Mealime relay
 
-An in-memory WebSocket relay for the planner's live room sync. One user
-creates a room, everyone with the code joins, and every client pushes its
-whole shared state through the relay. The relay stores nothing but the
-latest state per room — conflict resolution lives entirely on the client
+A WebSocket relay for the planner's live room sync, persisting to SQLite.
+One user creates a room, everyone with the code joins, and every client
+pushes its whole shared state through the relay. The relay stores the
+latest state per room — split across one table per synchronized store
+(ADR-0088) — and conflict resolution lives entirely on the client
 (last-write-wins keyed by a monotonic `rev`).
 
-A zero-dependency Bun service (Bun's native WebSocket API — no npm
-install step at all).
+A zero-dependency Bun service (Bun's native WebSocket API and its
+built-in `bun:sqlite` — no npm install step at all).
 
 Run it directly:
 
@@ -15,9 +16,11 @@ Run it directly:
 bun relay.ts      # listens on :8081 (override with PORT)
 ```
 
-Env knobs (defaults in brackets): `PORT` [8081], `RELAY_ATTEMPT_LIMIT`
-[30 per minute per socket/IP], `RELAY_INACTIVITY_TTL_MS` [24h],
-`RELAY_IDLE_TTL_MS` [7 days] — ADR-0038 widened ADR-0026's clocks.
+Env knobs (defaults in brackets): `PORT` [8081], `RELAY_DB_PATH`
+[`/data/relay.sqlite3` — set it to `:memory:` to run without persistence,
+e.g. in tests], `RELAY_ATTEMPT_LIMIT` [30 per minute per socket/IP],
+`RELAY_INACTIVITY_TTL_MS` [24h], `RELAY_IDLE_TTL_MS` [7 days] — ADR-0038
+widened ADR-0026's clocks.
 
 Or via Docker / from the repo root:
 
@@ -65,9 +68,11 @@ all find the same room.
   as the host path, so the client seeds the room with its own state); an
   existing room answers `joined` with its current state. Whoever arrives
   first establishes the room — there is no "room not found" dead end.
-- **Empty rooms die immediately (ADR-0026)**: the last peer leaving (or
-  its socket closing) deletes the room, state included. A peer that comes
-  back re-joins, which re-creates the room.
+- **Empty rooms persist (ADR-0088 §5)**: the last peer leaving no longer
+  deletes the room — the row (and its per-store state) survives until the
+  expiry clocks below fire, on this relay and the Durable Object alike, so
+  a phone that reconnects after a tunnel, a reload or a relay restart gets
+  its plan back instead of re-seeding an empty room.
 - **Expiry (ADR-0026)**: two clocks per room, BOTH refreshed by every
   liveness signal — `keepalive` included, because a connected peer that
   keepalives is not an idle room.
@@ -99,6 +104,13 @@ all find the same room.
 - **Health**: the HTTP response is a JSON echo of the running
   configuration (`inactivityTtlMs`, `idleTtlMs`, `attemptLimit`) so two
   relays can be told apart without guessing.
-- **Persistence**: none. Restarting the relay empties all rooms; clients
-  re-create/re-join via their reconnect logic (a `join` re-creates the
-  room, so a relay restart is self-healing for the first peer back).
+- **Persistence**: room state is stored in a SQLite database — one table
+  per synchronized store plus the room/floor rows — opened in WAL mode at
+  `RELAY_DB_PATH` (default `/data/relay.sqlite3`), with the schema managed
+  by the migration runner shared with the Cloudflare Durable Object
+  (ADR-0088 §4). Point the Docker volume at `/data` (the compose file
+  does) and a restart resumes every room's state, rev floor and peer
+  serial; the clocks still delete a room that stays idle. Throttle
+  buckets stay in memory deliberately: rate-limit state is ephemeral by
+  design, and persisting it would make a restart BOTH a pardon and a
+  weapon.
