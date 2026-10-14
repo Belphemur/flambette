@@ -1,6 +1,43 @@
 {
-  "generatedAt": "2026-10-13T15:59:39Z",
+  "generatedAt": "2026-10-14T22:38:41Z",
   "versions": [
+    {
+      "version": "v2.11.0",
+      "date": "2026-10-14",
+      "title": "Rooms survive restarts \u2014 SQLite persistence, pantry sync, 30-day retention",
+      "features": [
+        {
+          "text": "rooms survive restarts \u2014 SQLite persistence, pantry sync, 30-day retention",
+          "scope": null,
+          "pr": 92,
+          "adr": null
+        },
+        {
+          "text": "search recipes by the ingredients in your kitchen",
+          "scope": "pantry",
+          "pr": 90,
+          "adr": null
+        },
+        {
+          "text": "typos still find the item \u2014 fuzzy suggestions on the grocery add form",
+          "scope": null,
+          "pr": 88,
+          "adr": null
+        },
+        {
+          "text": "cook that week again \u2014 repeat any past week in one tap",
+          "scope": null,
+          "pr": 87,
+          "adr": null
+        },
+        {
+          "text": "confirmations become a slim modal \u2014 toasts restyled, longer, quieter",
+          "scope": null,
+          "pr": 86,
+          "adr": null
+        }
+      ]
+    },
     {
       "version": "v2.10.0",
       "date": "2026-10-13",
