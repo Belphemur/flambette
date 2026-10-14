@@ -6,11 +6,19 @@
  * answers a half-migrated schema is worse than one that refuses to start);
  * the Durable Object applies it lazily on the first event of each — workerd
  * gives an object no `ctx.storage` before the first event, so "at startup"
- * does not exist there. The runner itself is runtime-neutral: steps are
- * inline TypeScript (the build-less Bun image has no asset filesystem to
- * read `.sql` files from, and a DO bundle would need an import-rule
- * exception to carry them), and the database is reached through the tiny
+ * does not exist there. The runner itself is runtime-neutral: each step is
+ * ONE TypeScript module under `migrations/` that embeds its SQL — for BOTH
+ * directions — as template literals (the build-less Bun image has no asset
+ * filesystem to read `.sql` files from, and a DO bundle would need an
+ * import-rule exception to carry them, but a plain `.ts` import travels in
+ * both with no exception), and the database is reached through the tiny
  * `MigrationDatabase` facade each adapter implements over its own SQL API.
+ *
+ * `up` runs automatically from the ledger: every pending step, ascending,
+ * recorded after it applies. `down` NEVER runs automatically — it exists
+ * for the explicit ops/rollback entry point (`rollbackTo`) and nothing
+ * else, so a botched down migration can never happen as a side effect of
+ * an ordinary relay start or object wake.
  *
  * Tracking is a `schema_migrations` table, not `PRAGMA user_version`: the
  * runner is one mechanism for two runtimes and workerd's storage SQL does
@@ -41,9 +49,11 @@ export interface MigrationDatabase {
 }
 
 /**
- * One versioned step: plain DDL `statements`, and/or a typed `migrate` for
- * the data reshaping that cannot be expressed as DDL (migration 002). A
- * step may carry both — the statements run first.
+ * One versioned step, as declared by its own module under `migrations/`:
+ * the SQL for BOTH directions as template-literal string lists, plus an
+ * optional typed `migrate` hook for the data reshaping that cannot be a
+ * literal list (migration 002's split). The statements run before the
+ * hook, in both directions' conceptual order.
  */
 export interface MigrationStep {
   readonly version: number
@@ -53,7 +63,14 @@ export interface MigrationStep {
    * `sqlite_master` even when the ledger already records the version.
    */
   readonly expects?: readonly string[]
-  readonly statements?: readonly string[]
+  /** Forward SQL — applied automatically when the ledger says pending. */
+  readonly up: readonly string[]
+  /**
+   * Rollback SQL — applied ONLY by the explicit `rollbackTo` entry point,
+   * never by `applyMigrations`. Every step ships one, even when the honest
+   * rollback is "drop what up created".
+   */
+  readonly down: readonly string[]
   readonly migrate?: (db: MigrationDatabase) => void
 }
 
@@ -202,99 +219,11 @@ export function storeRowSql(store: SyncedStore): string {
 
 /* ---------------------------------------------------------------- steps */
 
-/**
- * Migration 001 — the fresh-install schema: the room row, the floor tables
- * and one table per synchronized store.
- *
- * The `migrate` half reconciles a database that predates this schema (the
- * Durable Object's live deployments): `CREATE TABLE IF NOT EXISTS` cannot
- * widen the existing `room` table with `updated_at`, so the column is
- * probed and added with a guarded `ALTER TABLE` — additive, and safe to
- * re-run because the probe answers for the column's presence, not for the
- * ledger. Pre-existing rows are backfilled to `last_activity`, the closest
- * honest answer to "when was this last written".
- */
-const MIGRATION_001: MigrationStep = {
-  version: 1,
-  name: 'per-store base schema',
-  expects: [
-    'room',
-    'room_code_idx',
-    'rev_floor',
-    'peer_serial',
-    ...SYNCED_STORES.map(storeTableName),
-  ],
-  statements: [
-    ROOM_DDL,
-    ROOM_CODE_INDEX_DDL,
-    FLOOR_DDL,
-    PEER_SERIAL_DDL,
-    ...SYNCED_STORES.map(storeTableDdl),
-  ],
-  migrate(db) {
-    let hasUpdatedAt = true
-    try {
-      db.exec('SELECT updated_at FROM room LIMIT 1')
-    } catch {
-      hasUpdatedAt = false
-    }
-    if (!hasUpdatedAt) {
-      db.exec('ALTER TABLE room ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0')
-      db.exec('UPDATE room SET updated_at = last_activity')
-    }
-  },
-}
-
-/**
- * Migration 002 — split the deprecated `room.state` blobs into per-store
- * rows (the Durable Object's real data migration). Per store: copy the
- * subtree out of every blob that HAS the key — the `json_type` guard is
- * the presence test, because `json_extract` cannot distinguish an absent
- * key from an explicit JSON `null`, and `planIdentity: null` is a real
- * answer (ADR-0034) — then NULL the column. The column stays (deprecated,
- * always NULL afterwards): an additive step cannot fail on any workerd
- * SQLite vintage, and the peer_serial precedent shows additive beats
- * clever here.
- *
- * `OR IGNORE` keeps the step re-runnable: a partially applied split
- * converges instead of colliding on the primary key, and a fully split
- * database re-inserts nothing (every blob is already NULL). On a fresh
- * Bun database the same statements run over zero rows — the Bun side
- * ships 002 as the no-op it is there, so both runtimes agree on the
- * version history.
- *
- * A legacy blob that is not valid JSON at all (a truncated write from a
- * pre-ADR relay) is kept out of the split by the `json_valid` guard —
- * `json_type` RAISES on malformed text, and one poisoned row must not
- * fail the whole migration before the trailing `UPDATE` can clear it.
- * The blob is nulled either way, so the room is served with empty state,
- * which is what the previous codec's parse failure did (qodo review).
- */
-const MIGRATION_002: MigrationStep = {
-  version: 2,
-  name: 'split room state blobs into per-store rows',
-  migrate(db) {
-    for (const store of SYNCED_STORES) {
-      const path = `$.${store}`
-      db.exec(
-        `INSERT OR IGNORE INTO ${storeTableName(store)} (code, value, created_at, updated_at)
-         SELECT code,
-           CASE json_type(state, '${path}')
-             WHEN 'null' THEN 'null'
-             WHEN 'text' THEN json_quote(json_extract(state, '${path}'))
-             WHEN 'true' THEN 'true'
-             WHEN 'false' THEN 'false'
-             ELSE json_extract(state, '${path}')
-           END,
-           created_at,
-           updated_at
-         FROM room
-         WHERE state IS NOT NULL AND json_valid(state) AND json_type(state, '${path}') IS NOT NULL`,
-      )
-    }
-    db.exec('UPDATE room SET state = NULL WHERE state IS NOT NULL')
-  },
-}
+/* The steps live in ONE module each, under `migrations/` — import them in
+ * version order. The list stays append-only; never renumber a shipped
+ * step, and never reorder: the ledger records versions, not positions. */
+import { MIGRATION_001 } from './migrations/001_rooms_and_stores'
+import { MIGRATION_002 } from './migrations/002_split_state_blobs'
 
 /** The ordered migration list — append-only; never renumber a shipped step. */
 export const MIGRATIONS: readonly MigrationStep[] = [MIGRATION_001, MIGRATION_002]
@@ -307,7 +236,7 @@ export function applyMigrations(db: MigrationDatabase, now: () => number): void 
   )
   for (const step of MIGRATIONS) {
     if (applied.has(step.version) && stepVerified(db, step)) continue
-    for (const statement of step.statements ?? []) db.exec(statement)
+    for (const statement of step.up) db.exec(statement)
     step.migrate?.(db)
     // OR IGNORE: a re-applied step keeps its original application stamp.
     db.exec(
@@ -332,4 +261,26 @@ function stepVerified(db: MigrationDatabase, step: MigrationStep): boolean {
     ),
   )
   return step.expects.every((name) => present.has(name))
+}
+
+/**
+ * The explicit rollback entry point — the ONLY way a `down` step ever
+ * runs. Walks the recorded steps descending and applies each one's `down`
+ * SQL for every version above `target`, removing its ledger row as it
+ * goes; versions at or below `target` (and versions the ledger never
+ * recorded) are left untouched. An ops tool calls this deliberately —
+ * "roll the database back to version N" — and the NEXT ordinary
+ * `applyMigrations` will see the rolled-back versions as pending and
+ * re-apply their `up`, which is exactly the recovery loop a rollback
+ * exists to enable.
+ */
+export function rollbackTo(db: MigrationDatabase, targetVersion: number): void {
+  const applied = new Set(
+    db.all('SELECT version FROM schema_migrations').map((row) => Number(row.version)),
+  )
+  for (const step of [...MIGRATIONS].reverse()) {
+    if (step.version <= targetVersion || !applied.has(step.version)) continue
+    for (const statement of step.down) db.exec(statement)
+    db.exec('DELETE FROM schema_migrations WHERE version = ?', step.version)
+  }
 }
