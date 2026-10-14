@@ -3,7 +3,12 @@
  *
  * THE one place that computes, given a pantry (a set of ingredient
  * nameKeys — the same merge key grocery aggregation uses, ADR-0012) and a
- * recipe's `variant_meta.ingredient_names`:
+ * recipe's match surface — `variant_meta.ingredient_names` PLUS the
+ * recipe name (ADR-0087 Addendum §1: no variant lists `cherry tomatoes`
+ * under `ingredient_names`, yet many carry it in the name, so a pantry
+ * key is "used" when it appears in `ingredient_names` OR its word tokens
+ * occur as a contiguous, case-insensitive, nameKey-normalized sequence
+ * in the recipe name):
  *
  *  - the per-recipe data shape {have, total, missing[], ready} that the
  *    card badge renders from (ADR-0087 Decision 6),
@@ -18,6 +23,17 @@
  */
 import { nameKey } from './grocery'
 import type { VariantMeta } from './types'
+
+/**
+ * The per-recipe match surface: what a pantry is matched against. Both
+ * fields come straight off `VariantMeta` — passing the meta itself (or
+ * any object of this shape) keeps ONE call shape for every consumer
+ * (RecipesTab's facet/rank, RecipeCard's badge) and for the unit pins.
+ */
+export interface PantryRecipeInput {
+  name: string
+  ingredient_names: readonly string[]
+}
 
 /** Per-recipe pantry match, derived only from real data (ADR-0087 §6). */
 export interface PantryMatch {
@@ -43,46 +59,87 @@ export function pantryKeyOf(name: string): string {
 }
 
 /**
+ * Word tokens of a phrase, each through the nameKey rule (case + English
+ * plural folding). Punctuation is a word boundary, so a name's
+ * "…Spinach, & Cherry Tomatoes" yields [..., 'cherry', 'tomato'].
+ */
+function phraseTokens(phrase: string): string[] {
+  return phrase
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 0)
+    .map(nameKey)
+}
+
+/** Does `haystack` contain `needle`'s token sequence contiguously? */
+function tokensContain(haystack: string[], needle: string[]): boolean {
+  if (needle.length === 0 || haystack.length < needle.length) return false
+  outer: for (let i = 0; i <= haystack.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) continue outer
+    }
+    return true
+  }
+  return false
+}
+
+/**
+ * The pantry keys this recipe USES (Addendum §1): every key met on the
+ * `ingredient_names` surface, plus every key whose word tokens occur as
+ * a contiguous sequence in the recipe name. A key absent from BOTH
+ * surfaces is a genuine "missing".
+ */
+function usedPantryKeys(
+  recipe: PantryRecipeInput,
+  pantryKeys: ReadonlySet<string>,
+): Set<string> {
+  const used = new Set<string>()
+  for (const name of recipe.ingredient_names) {
+    const key = nameKey(name)
+    if (pantryKeys.has(key)) used.add(key)
+  }
+  if (used.size < pantryKeys.size) {
+    const nameTokens = phraseTokens(recipe.name)
+    for (const key of pantryKeys) {
+      if (!used.has(key) && tokensContain(nameTokens, phraseTokens(key))) {
+        used.add(key)
+      }
+    }
+  }
+  return used
+}
+
+/**
  * The ONE per-recipe computation. An empty pantry yields the inactive
  * shape (have 0, total 0, no missing) — callers treat an empty pantry as
  * "feature off" and never render from it, but the shape stays total so
  * nothing downstream needs an extra guard.
  */
 export function pantryMatch(
-  ingredientNames: readonly string[],
+  recipe: PantryRecipeInput,
   pantryKeys: ReadonlySet<string>,
 ): PantryMatch {
   const total = pantryKeys.size
-  const used = new Set<string>()
-  let have = 0
-  for (const name of ingredientNames) {
-    const key = nameKey(name)
-    if (pantryKeys.has(key) && !used.has(key)) {
-      used.add(key)
-      have++
-    }
-  }
+  if (total === 0) return { have: 0, total: 0, missing: [], ready: false }
+  const used = usedPantryKeys(recipe, pantryKeys)
   const missing: string[] = []
   for (const key of pantryKeys) if (!used.has(key)) missing.push(key)
-  return { have, total, missing, ready: total > 0 && missing.length === 0 }
+  return { have: used.size, total, missing, ready: missing.length === 0 }
 }
 
 /**
  * The ≥1-overlap filter (ADR-0087 Decision 4): with a non-empty pantry a
  * recipe stays in the grid only when it shares at least one pantry
- * ingredient. An empty pantry matches nothing — callers must keep the
- * grid on its normal browse path when the row is inactive, never call
- * this.
+ * ingredient — on the full match surface (names + recipe name, Addendum
+ * §1). An empty pantry matches nothing — callers must keep the grid on
+ * its normal browse path when the row is inactive, never call this.
  */
 export function sharesPantryIngredient(
-  ingredientNames: readonly string[],
+  recipe: PantryRecipeInput,
   pantryKeys: ReadonlySet<string>,
 ): boolean {
   if (pantryKeys.size === 0) return false
-  for (const name of ingredientNames) {
-    if (pantryKeys.has(nameKey(name))) return true
-  }
-  return false
+  return usedPantryKeys(recipe, pantryKeys).size > 0
 }
 
 /**
@@ -90,10 +147,10 @@ export function sharesPantryIngredient(
  * key. Fewer missing ranks first.
  */
 export function missingCount(
-  ingredientNames: readonly string[],
+  recipe: PantryRecipeInput,
   pantryKeys: ReadonlySet<string>,
 ): number {
-  return pantryMatch(ingredientNames, pantryKeys).missing.length
+  return pantryMatch(recipe, pantryKeys).missing.length
 }
 
 /**
@@ -105,5 +162,6 @@ export function missingCount(
 export function compareByMissingCount(
   pantryKeys: ReadonlySet<string>,
 ): (a: VariantMeta, b: VariantMeta) => number {
-  return (a, b) => missingCount(a.ingredient_names, pantryKeys) - missingCount(b.ingredient_names, pantryKeys)
+  // VariantMeta carries both surface fields, so it IS a PantryRecipeInput.
+  return (a, b) => missingCount(a, pantryKeys) - missingCount(b, pantryKeys)
 }

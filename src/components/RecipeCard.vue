@@ -80,7 +80,7 @@ const showNew = computed(() => {
 const pantry = usePantryStore()
 const pantryBadge = computed(() => {
   if (!pantry.active) return null
-  const m = pantryMatch(props.meta.ingredient_names, pantry.keys)
+  const m = pantryMatch(props.meta, pantry.keys)
   if (m.ready) {
     const text = `Ready (${m.have} of ${m.total})`
     return { ready: true, desktop: text, mobile: text }
