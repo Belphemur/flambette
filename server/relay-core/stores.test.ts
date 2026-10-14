@@ -11,6 +11,7 @@ import { Database } from 'bun:sqlite'
 import { SHARED_STATE_KEYS } from '../../src/lib/roomSyncStores'
 import {
   SYNCED_STORES,
+  createStoreWritePlanner,
   joinSnapshot,
   splitSnapshot,
   storeTableName,
@@ -138,6 +139,62 @@ describe('joinSnapshot — the single snapshot a joined/fan-out needs', () => {
 
   test("the JSON 'null' store value parses back as a present null", () => {
     expect(joinSnapshot([{ store: 'planIdentity', text: 'null' }])).toEqual({ planIdentity: null })
+  })
+})
+
+/* -------------------------------------------------------- write planning */
+
+describe('createStoreWritePlanner — a touch must not rewrite unchanged stores', () => {
+  test('an unseeded store text defaults to WRITE IT — the safe superset', () => {
+    const planner = createStoreWritePlanner()
+    const plan = planner.plan('c1', { plan: [1] })
+    expect(plan.clearAll).toBe(false)
+    expect(plan.changed).toEqual([{ store: 'plan', text: '[1]' }])
+  })
+
+  test('an unchanged text is not re-upserted; a changed one is', () => {
+    const planner = createStoreWritePlanner()
+    planner.plan('c1', { plan: [1], favorites: { a: 1 } })
+    // The touch-shaped rewrite: same values, nothing moves.
+    expect(planner.plan('c1', { plan: [1], favorites: { a: 1 } }).changed).toEqual([])
+    // One store changed: only that one is planned.
+    expect(planner.plan('c1', { plan: [2], favorites: { a: 1 } }).changed).toEqual([
+      { store: 'plan', text: '[2]' },
+    ])
+    // A store ABSENT from the write stays don't-touch (existing split rule).
+    expect(planner.plan('c1', { plan: [2] }).changed).toEqual([])
+  })
+
+  test('seeding from the read path warms the planner — restarts do not rewrite', () => {
+    const planner = createStoreWritePlanner()
+    planner.seed('c1', [
+      { store: 'plan', text: '[1]' },
+      { store: 'favorites', text: null },
+      { store: 'fromTheFuture', text: '{}' },
+    ])
+    // The stored text already matches what a write would serialize.
+    expect(planner.plan('c1', { plan: [1] }).changed).toEqual([])
+    // A store the room never carried reads as null; writing a value for
+    // it is a change.
+    expect(planner.plan('c1', { favorites: { b: 2 } }).changed).toEqual([
+      { store: 'favorites', text: '{"b":2}' },
+    ])
+  })
+
+  test('a `state: null` write plans clearAll and forgets the texts', () => {
+    const planner = createStoreWritePlanner()
+    planner.plan('c1', { plan: [1] })
+    const plan = planner.plan('c1', null)
+    expect(plan).toEqual({ changed: [], clearAll: true })
+    // After the clear the planner knows the rows are gone: writing the
+    // same value again is a change (a fresh first write), not a skip.
+    expect(planner.plan('c1', { plan: [1] }).changed).toEqual([{ store: 'plan', text: '[1]' }])
+  })
+
+  test('codes are tracked independently', () => {
+    const planner = createStoreWritePlanner()
+    planner.plan('c1', { plan: [1] })
+    expect(planner.plan('c2', { plan: [1] }).changed).toEqual([{ store: 'plan', text: '[1]' }])
   })
 })
 

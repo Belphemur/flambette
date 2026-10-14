@@ -164,6 +164,66 @@ describe('the Bun relay persists to SQLite (ADR-0088 §1)', () => {
     ])
   })
 
+  test('a keepalive moves no store\'s updated_at — change detection (kody review)', () => {
+    const { db, stamp, store } = freshDb()
+    const registry = registryFor('c1', store('c1'))
+    registry.admit('join', 0)
+    registry.push(1, { plan: [1] }, 'p1')
+    // A keepalive (and a serial mint — both touch-shaped writes) moves
+    // only the ROOM row's clocks: updated_at is "when THIS store was last
+    // written" (ADR-0088 §2), and no store was.
+    stamp.now = 2_000
+    registry.keepalive()
+    registry.nextSerial()
+    expect(db.query('SELECT created_at AS c, updated_at AS u FROM store_plan').all()).toEqual([
+      { c: 1_000, u: 1_000 },
+    ])
+    // ...while the room row's own updated_at moved with the touch.
+    expect(db.query('SELECT updated_at AS u FROM room WHERE code = \'c1\'').all()).toEqual([
+      { u: 2_000 },
+    ])
+  })
+
+  test('a real changed push still re-stamps the store it carries', () => {
+    const { db, stamp, store } = freshDb()
+    const registry = registryFor('c1', store('c1'))
+    registry.admit('join', 0)
+    registry.push(1, { plan: [1] }, 'p1')
+    stamp.now = 2_000
+    registry.keepalive()
+    stamp.now = 3_000
+    registry.push(2, { plan: [2] }, 'p1')
+    expect(db.query('SELECT created_at AS c, updated_at AS u FROM store_plan').all()).toEqual([
+      { c: 1_000, u: 3_000 },
+    ])
+  })
+
+  test('after a RESTART the first keepalive still rewrites no store (seed from the read path)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'relay-sqlite-'))
+    const path = join(dir, 'relay.sqlite3')
+    try {
+      {
+        const { db } = freshDb(path)
+        const stores = createSqliteStores(db, () => 1_000)
+        const registry = registryFor('c1', stores('c1'))
+        registry.admit('join', 0)
+        registry.push(1, { plan: [1] }, 'p1')
+        db.close()
+      }
+      // Restart: a fresh process, a cold change detector.
+      const { db } = freshDb(path)
+      const stores = createSqliteStores(db, () => 2_000)
+      const registry = registryFor('c1', stores('c1'))
+      // touchIfLive reads first, so the seed is warm before the write.
+      registry.keepalive()
+      expect(db.query('SELECT created_at AS c, updated_at AS u FROM store_plan').all()).toEqual([
+        { c: 1_000, u: 1_000 },
+      ])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   test('a corrupt legacy state blob is skipped by the split, not a migration failure (qodo review)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'relay-sqlite-'))
     const path = join(dir, 'relay.sqlite3')

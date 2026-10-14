@@ -103,6 +103,91 @@ export interface StoredStoreRow {
 }
 
 /**
+ * The per-store statements one write must run, as change detection
+ * computed them (ADR-0088 §2). The core decides; the adapters execute.
+ */
+export interface StoreWritePlan {
+  /**
+   * Store rows whose text differs from the last-known text — upsert
+   * exactly these, in this order.
+   */
+  changed: { store: SyncedStore; text: string }[]
+  /**
+   * A `state: null` write (a fresh establishment) clears every store row
+   * — the same wipe-overwrite the blob write used to be.
+   */
+  clearAll: boolean
+}
+
+export interface StoreWritePlanner {
+  /**
+   * Record the raw texts a read returned — the seed change detection
+   * compares against. Call this from the adapter's READ path with every
+   * row it read (even the ones the joiner skips).
+   */
+  seed: (code: string, rows: readonly StoredStoreRow[]) => void
+  /** The per-store statements a write of `state` must run. */
+  plan: (code: string, state: SharedSnapshot | null | undefined) => StoreWritePlan
+}
+
+/**
+ * Per-store change detection (ADR-0088 §2): `updated_at` is "when THIS
+ * store was last written" — and the core's `touch()` re-writes the whole
+ * record to move the expiry clocks, carrying every store with it. Without
+ * detection, every keepalive re-serializes and re-upserts all eleven
+ * stores and drags each `updated_at` along, which lies about the metadata
+ * the per-store tables exist to expose.
+ *
+ * ONE decision here in the core (ADR-0040): both adapters consume the
+ * same plan, so the semantics cannot drift between Bun and workerd.
+ *
+ * The planner remembers the last-known row TEXT per code+store, seeded
+ * from the adapter's read path — the core only ever writes a record it
+ * just read (`touch`, `push`, `nextSerial` all read first; `establish`
+ * writes `state: null`), so after a restart or a workerd eviction the
+ * first write is always preceded by a read on the same instance and the
+ * seed is warm. An UNSEED store text defaults to "write it": the safe
+ * superset, one redundant upsert at worst, never a lost write.
+ *
+ * Comparison is on the SERIALIZED text, not the parsed value: the stored
+ * text was produced by this same `JSON.stringify` path, so identical
+ * values round-trip to identical text, and any key-order or encoding
+ * change the client makes shows up as a change — conservative, never
+ * silent.
+ */
+export function createStoreWritePlanner(): StoreWritePlanner {
+  const known = new Map<string, string | null>()
+  const key = (code: string, store: string): string => `${code}\u0000${store}`
+  return {
+    seed(code, rows) {
+      for (const row of rows) {
+        // A text the vocabulary does not know cannot have been written by
+        // this binary's tables — skip it, like the joiner does.
+        if (!(SYNCED_STORES as readonly string[]).includes(row.store)) continue
+        known.set(key(code, row.store), row.text ?? null)
+      }
+    },
+    plan(code, state) {
+      const rows = splitSnapshot(state)
+      if (!rows) {
+        for (const store of SYNCED_STORES) known.set(key(code, store), null)
+        return { changed: [], clearAll: true }
+      }
+      const changed: { store: SyncedStore; text: string }[] = []
+      for (const { store, value } of rows) {
+        const text = JSON.stringify(value)
+        const k = key(code, store)
+        if (known.get(k) !== text) {
+          known.set(k, text)
+          changed.push({ store, text })
+        }
+      }
+      return { changed, clearAll: false }
+    },
+  }
+}
+
+/**
  * The single snapshot a `joined`/fan-out needs, from the per-store rows a
  * read returned. Rows for stores the vocabulary does not know are skipped
  * (they cannot exist on the same binary that wrote them), as are absent

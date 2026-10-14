@@ -617,6 +617,49 @@ describe('per-store schema (ADR-0088 §2/§4)', () => {
     expect(rows.blob).toEqual([{ state: null }])
   })
 
+  it('a keepalive re-upserts NO store row — updated_at is per-store metadata (ADR-0088 §2)', async () => {
+    const room = nextRoom()
+    const stub = roomStub(room)
+    const a = await dial(`/?op=create&room=${room}`)
+    await a.expect('created')
+    a.send({ type: 'state', rev: 2, state: { plan: [{ variantId: 5 }] } })
+    await expectStoredRev(stub, 2)
+
+    const readMeta = () =>
+      runInDurableObject(stub, (_i, state) => ({
+        store: state.storage.sql
+          .exec('SELECT created_at AS c, updated_at AS u FROM store_plan WHERE code = ?', room)
+          .toArray() as { c: number; u: number }[],
+        room: state.storage.sql
+          .exec('SELECT updated_at AS u FROM room WHERE id = 1')
+          .toArray() as { u: number }[],
+      }))
+    const before = await readMeta()
+    // Every liveness signal funnels through the core's touch(), which
+    // re-writes the full record — the plan must skip the unchanged store.
+    for (let i = 0; i < 3; i++) {
+      a.send({ type: 'keepalive' })
+      await a.expect('keepalive_ack')
+    }
+    const after = await readMeta()
+    expect(after.store).toEqual(before.store)
+    // ...while the ROOM row's own clock moved with the touch (equal only
+    // if every event landed inside one millisecond).
+    expect(after.room[0]!.u).toBeGreaterThanOrEqual(before.room[0]!.u)
+
+    // A genuinely changed value still re-stamps the store it carries.
+    a.send({ type: 'state', rev: 3, state: { plan: [{ variantId: 6 }] } })
+    await expectStoredRev(stub, 3)
+    const moved = await runInDurableObject(stub, (_i, state) =>
+      state.storage.sql
+        .exec('SELECT value, updated_at FROM store_plan WHERE code = ?', room)
+        .toArray() as { value: string; updated_at: number }[],
+    )
+    expect(moved[0]!.value).toBe('[{"variantId":6}]')
+    expect(moved[0]!.updated_at).toBeGreaterThan(before.store[0]!.u)
+    a.close()
+  })
+
   it('migration 002 splits a legacy room.state blob into per-store rows', async () => {
     const room = nextRoom()
     // A database in the shape the Durable Object shipped BEFORE ADR-0088:

@@ -64,7 +64,11 @@ import {
   storeUpsertSql,
   type MigrationDatabase,
 } from '../relay-core/migrations'
-import { joinSnapshot, splitSnapshot, SYNCED_STORES } from '../relay-core/stores'
+import {
+  createStoreWritePlanner,
+  joinSnapshot,
+  SYNCED_STORES,
+} from '../relay-core/stores'
 import { refuseSocket } from './refuseSocket'
 import type { ExpiryReason } from '../relay-core/lifecycle'
 
@@ -219,6 +223,9 @@ export class Room extends DurableObject<Env> {
         ] as { text?: unknown }[]
       )[0]?.text,
     })) as unknown as { store: string; text: string | null }[]
+    // Seed change detection with what is on disk (ADR-0088 §2): the first
+    // touch after an eviction must not rewrite every store either.
+    this.#planner.seed(this.#code, stores)
     return {
       code: String(row.code),
       rev: Number(row.rev),
@@ -230,6 +237,14 @@ export class Room extends DurableObject<Env> {
       serial: Number(row.serial),
     }
   }
+
+  /**
+   * The core's per-store change detection (ADR-0088 §2), one decision
+   * consumed identically by the Bun adapter. Seeded by `#readRoom` (the
+   * core only ever writes a record it just read, so the seed is warm even
+   * after this isolate is evicted and a fresh one starts cold).
+   */
+  readonly #planner = createStoreWritePlanner()
 
   #writeRoom(row: RoomRecord): void {
     this.#ensureSchema()
@@ -244,26 +259,25 @@ export class Room extends DurableObject<Env> {
       row.idleAt,
       row.serial,
     )
-    // Absent keys are don't-touch at the shared split: only the stores the
-    // snapshot carries are upserted, and a `state: null` write (a fresh
-    // establishment) clears the rows — exactly what overwriting the blob
-    // did. `created_at` is "first write": the upsert preserves it.
-    const rows = splitSnapshot(row.state)
-    if (!rows) {
+    // The room row moved (its clocks genuinely changed); the store rows
+    // only move when their VALUE did (kody review): a keepalive must not
+    // re-upsert eleven unchanged stores and drag every `updated_at`
+    // along. The core's plan says which rows changed; a `state: null`
+    // write (a fresh establishment) clears every row. `created_at` is
+    // "first write": the upsert preserves it. Same as the Bun adapter's
+    // writeStoreRows.
+    const plan = this.#planner.plan(row.code, row.state)
+    if (plan.clearAll) {
       for (const store of SYNCED_STORES) {
         this.ctx.storage.sql.exec(storeClearSql(store), this.#code)
       }
       return
     }
-    for (const { store, value } of rows) {
-      // `created_at` is when THIS store was first written (qodo review): the
-      // room's own createdAt is the room's, not the store's — the upsert
-      // preserves it on conflict, so now() is the honest stamp. Same as the
-      // Bun adapter's writeStoreRows.
+    for (const { store, text } of plan.changed) {
       this.ctx.storage.sql.exec(
         storeUpsertSql(store),
         row.code,
-        JSON.stringify(value),
+        text,
         Date.now(),
         Date.now(),
       )

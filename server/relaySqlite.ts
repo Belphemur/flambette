@@ -18,8 +18,8 @@
 import { mkdirSync } from 'node:fs'
 import { Database } from 'bun:sqlite'
 import {
+  createStoreWritePlanner,
   joinSnapshot,
-  splitSnapshot,
   SYNCED_STORES,
   type StoredStoreRow,
 } from './relay-core/stores'
@@ -115,6 +115,11 @@ export function createSqliteStores(
   db: SqliteDatabase,
   now: () => number,
 ): (code: string) => RoomStore {
+  // The core's per-store change detection (ADR-0088 §2): one decision,
+  // consumed here and by the Durable Object alike. Seeded by this read
+  // path below, consulted by this write path.
+  const planner = createStoreWritePlanner()
+
   const readRoomRow = (code: string): RoomSqlRow | undefined =>
     db
       .query(
@@ -153,16 +158,21 @@ export function createSqliteStores(
   }
 
   function writeStoreRows(row: RoomRecord): void {
-    const rows = splitSnapshot(row.state)
-    if (!rows) {
+    // Change detection (kody review): the core's `touch()` re-writes the
+    // whole record to move the expiry clocks — without the plan, every
+    // keepalive would re-upsert all eleven stores and drag each
+    // `updated_at` along, contradicting "when THIS store was last
+    // written" (ADR-0088 §2). Only genuinely changed rows are upserted.
+    const plan = planner.plan(row.code, row.state)
+    if (plan.clearAll) {
       for (const store of SYNCED_STORES) db.query(storeClearSql(store)).run(row.code)
       return
     }
-    for (const { store, value } of rows) {
+    for (const { store, text } of plan.changed) {
       // `created_at` is when THIS store was first written (qodo review):
       // the room's own createdAt is the room's, not the store's — the
       // upsert preserves it on conflict, so now() is the honest stamp.
-      db.query(storeUpsertSql(store)).run(row.code, JSON.stringify(value), now(), now())
+      db.query(storeUpsertSql(store)).run(row.code, text, now(), now())
     }
   }
 
@@ -200,10 +210,14 @@ export function createSqliteStores(
     read: () => {
       const row = readRoomRow(code)
       if (!row) return null
+      const rows = readStoreRows(code)
+      // Seed change detection with what is on disk (ADR-0088 §2): the
+      // first touch after a restart must not rewrite every store either.
+      planner.seed(code, rows)
       return {
         code: String(row.code),
         rev: num(row.rev),
-        state: joinSnapshot(readStoreRows(code)),
+        state: joinSnapshot(rows),
         createdAt: num(row.created_at),
         lastActivityAt: num(row.last_activity),
         inactivityAt: num(row.inactivity_at),
