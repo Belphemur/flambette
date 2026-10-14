@@ -25,13 +25,15 @@ import {
 } from './relay-core/stores'
 import {
   applyMigrations,
+  ROOM_DELETE_SQL,
+  ROOM_UPSERT_SQL,
   storeClearSql,
   storeRowSql,
   storeUpsertSql,
   type MigrationDatabase,
 } from './relay-core/migrations'
 import { IDLE_TTL_MS } from './relay-core/policy'
-import type { FloorRecord, RoomRecord, RoomStore } from './relay-core/lifecycle'
+import { expiryDeadlineOf, type FloorRecord, type RoomRecord, type RoomStore } from './relay-core/lifecycle'
 
 /**
  * Bun's `Database`, as declared in `./bun-sqlite.d.ts` — the structural
@@ -130,14 +132,14 @@ export function createSqliteStores(
   }
 
   function writeRoomRow(row: RoomRecord): void {
-    // `state` is the deprecated blob column: NULL from migration 002 onward,
-    // never written again (ADR-0088 §2/§4).
+    // The SHARED room SQL, the same statements the Durable Object runs —
+    // the schema-shaped DML is core code, not per-adapter strings (kody
+    // review; ADR-0088 §4). It is an upsert, not INSERT OR REPLACE, so the
+    // row keeps its `id` instead of minting a new rowid on every write.
+    // `state` is the deprecated blob column: NULL from migration 002
+    // onward, never written again (ADR-0088 §2/§4).
     db
-      .query(
-        `INSERT OR REPLACE INTO room
-         (code, rev, state, created_at, updated_at, last_activity, inactivity_at, idle_at, serial)
-       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
-      )
+      .query(ROOM_UPSERT_SQL)
       .run(
         row.code,
         row.rev,
@@ -150,17 +152,49 @@ export function createSqliteStores(
       )
   }
 
-  function writeStoreRows(code: string, row: RoomRecord): void {
+  function writeStoreRows(row: RoomRecord): void {
     const rows = splitSnapshot(row.state)
     if (!rows) {
-      for (const store of SYNCED_STORES) db.query(storeClearSql(store)).run(code)
+      for (const store of SYNCED_STORES) db.query(storeClearSql(store)).run(row.code)
       return
     }
     for (const { store, value } of rows) {
-      // `created_at` is "first write": the upsert preserves it on conflict.
-      db.query(storeUpsertSql(store)).run(code, JSON.stringify(value), row.createdAt, now())
+      // `created_at` is when THIS store was first written (qodo review):
+      // the room's own createdAt is the room's, not the store's — the
+      // upsert preserves it on conflict, so now() is the honest stamp.
+      db.query(storeUpsertSql(store)).run(row.code, JSON.stringify(value), now(), now())
     }
   }
+
+  /**
+   * A write (room row + per-store rows), a drop, and a floor write are
+   * each ONE transaction (qodo review): an interruption between the room
+   * upsert and its store rows must not attach one room's stores to the
+   * next, and a floor write must not land half of its two rows. This is
+   * the Bun half of the ADR-0088 §4 atomicity story — workerd's storage
+   * SQL is per-statement atomic with no explicit BEGIN/COMMIT, which is
+   * why the runner itself stays transaction-free and the adapters wrap
+   * what their runtime allows.
+   */
+  const writeRoomAndStores = db.transaction((row: RoomRecord) => {
+    writeRoomRow(row)
+    writeStoreRows(row)
+  })
+  const dropRoomAndStores = db.transaction((code: string) => {
+    db.query(ROOM_DELETE_SQL).run(code)
+    for (const store of SYNCED_STORES) db.query(storeClearSql(store)).run(code)
+  })
+  const writeFloorRecord = db.transaction((record: FloorRecord) => {
+    db.query('INSERT OR REPLACE INTO rev_floor (code, rev, at) VALUES (?, ?, ?)').run(
+      record.code,
+      record.rev,
+      record.at,
+    )
+    db.query('INSERT OR REPLACE INTO peer_serial (code, serial) VALUES (?, ?)').run(
+      record.code,
+      record.serial,
+    )
+  })
 
   return (code: string) => ({
     read: () => {
@@ -177,14 +211,8 @@ export function createSqliteStores(
         serial: num(row.serial),
       } satisfies RoomRecord
     },
-    write: (row) => {
-      writeRoomRow(row)
-      writeStoreRows(code, row)
-    },
-    drop: () => {
-      db.query('DELETE FROM room WHERE code = ?').run(code)
-      for (const store of SYNCED_STORES) db.query(storeClearSql(store)).run(code)
-    },
+    write: (row) => writeRoomAndStores(row),
+    drop: () => dropRoomAndStores(code),
     readFloor: () => {
       const floor = db.query('SELECT code, rev, at FROM rev_floor WHERE code = ?').all(code)[0] as
         | Record<string, unknown>
@@ -200,17 +228,7 @@ export function createSqliteStores(
         serial: serial ? num(serial.serial) : 0,
       } satisfies FloorRecord
     },
-    writeFloor: (record) => {
-      db.query('INSERT OR REPLACE INTO rev_floor (code, rev, at) VALUES (?, ?, ?)').run(
-        record.code,
-        record.rev,
-        record.at,
-      )
-      db.query('INSERT OR REPLACE INTO peer_serial (code, serial) VALUES (?, ?)').run(
-        record.code,
-        record.serial,
-      )
-    },
+    writeFloor: (record) => writeFloorRecord(record),
     dropFloor: () => {
       db.query('DELETE FROM rev_floor WHERE code = ?').run(code)
       db.query('DELETE FROM peer_serial WHERE code = ?').run(code)
@@ -224,7 +242,11 @@ export function createSqliteStores(
  * timers for them at startup — without this, a room nobody rejoined would
  * never reach the clocks that are supposed to delete it.
  */
-export function persistedDeadlines(db: SqliteDatabase): {
+export function persistedDeadlines(
+  db: SqliteDatabase,
+  /** The relay's CONFIGURED idle TTL — the caller's, not the default. */
+  idleTtlMs: number = IDLE_TTL_MS,
+): {
   rooms: { code: string; deadline: number }[]
   floors: { code: string; deadline: number }[]
 } {
@@ -233,11 +255,11 @@ export function persistedDeadlines(db: SqliteDatabase): {
     .all()
     .map((row) => ({
       code: String(row.code),
-      deadline: Math.min(num(row.inactivity_at), num(row.idle_at)),
+      deadline: expiryDeadlineOf({ inactivityAt: num(row.inactivity_at), idleAt: num(row.idle_at) }),
     }))
   const floors = db
     .query('SELECT code, at FROM rev_floor')
     .all()
-    .map((row) => ({ code: String(row.code), deadline: num(row.at) + IDLE_TTL_MS }))
+    .map((row) => ({ code: String(row.code), deadline: num(row.at) + idleTtlMs }))
   return { rooms, floors }
 }

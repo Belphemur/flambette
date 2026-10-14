@@ -20,6 +20,15 @@ declare module 'bun:sqlite' {
       run: (...bindings: unknown[]) => unknown
       all: (...bindings: unknown[]) => Record<string, unknown>[]
     }
+    /**
+     * A transaction: the callable it returns runs the function inside one
+     * SQLite transaction — committed when the function returns, rolled
+     * back when it throws. The adapter only CALLS the result, so the
+     * declaration shows just the callable face.
+     */
+    transaction<Args extends readonly unknown[]>(
+      fn: (...args: Args) => unknown,
+    ): (...args: Args) => void
     close(): void
   }
 }

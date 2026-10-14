@@ -27,6 +27,7 @@
 
 import {
   createRoomRegistry,
+  expiryDeadlineOf,
   normalizeProfile,
   normalizeProfileName,
   peersFrame,
@@ -131,9 +132,11 @@ const rooms = new Map<string, Room>()
 let db: ReturnType<typeof openRelayDatabase> | undefined
 let sqliteStores: ((code: string) => RoomStore) | undefined
 /**
- * Wake-ups for floors whose room is gone. Kept apart from the rooms'
- * own timers so a room dying cannot cancel its floor's prune — and so
- * neither timer is cancelled by the other's lifecycle.
+ * Wake-ups for codes with NO live shell: an emptied room's expiry
+ * countdown (ADR-0088 §5 — the ROW outlives its last peer, the in-memory
+ * shell does not) and an orphaned floor's prune. Kept apart from the
+ * rooms' own timers so a room dying cannot cancel its floor's prune —
+ * and so neither timer is cancelled by the other's lifecycle.
  */
 const floorTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
@@ -196,7 +199,17 @@ function armRoom(code: string, deadline: number): void {
       // §5) — the core has already dropped the rows and armed the floor's
       // prune by the time it returns. A live verdict (a keepalive moved
       // the deadline, an early wake-up re-armed) keeps the shell.
-      if (room.registry.tick() !== null) rooms.delete(code)
+      if (room.registry.tick() === null) return
+      rooms.delete(code)
+      // The floor prune that tick() armed went through `arm()` while this
+      // shell was still mapped, so the wake-up landed on room.timer. Drop
+      // the misrouted handle — it is the only thing left referencing the
+      // shell — and re-arm through the shell-less path, whose tick()
+      // schedules (or fires) the floor prune: otherwise every expired
+      // room keeps a live callback referencing it for up to the idle TTL
+      // (qodo review).
+      if (room.timer) clearTimeout(room.timer)
+      registryFor(code).tick()
     }, delay)
     return
   }
@@ -216,6 +229,13 @@ function armRoom(code: string, deadline: number): void {
 function roomFor(code: string): Room {
   const existing = rooms.get(code)
   if (existing) return existing
+  // A shell-less wake-up for this code — an expiry countdown left behind
+  // by the last peer's departure, or a floor prune — is superseded: from
+  // here the shell's own touch→arm cycle takes the wake-ups (kody
+  // review).
+  const pending = floorTimers.get(code)
+  if (pending) clearTimeout(pending)
+  floorTimers.delete(code)
   const room: Room = {
     code,
     peers: new Set(),
@@ -328,9 +348,23 @@ function detach(ws: Socket): void {
   ws.data.roomCode = undefined
   if (!room) return
   room.peers.delete(ws)
-  // Everyone who is left learns the new headcount. An emptied room has no
-  // recipient — but also nothing to tear down anymore.
-  if (room.peers.size > 0) broadcastPeers(room)
+  if (room.peers.size > 0) {
+    // Everyone who is left learns the new headcount.
+    broadcastPeers(room)
+    return
+  }
+  // Last peer out. ADR-0088 §5 keeps the ROW (state, floor, serial) until
+  // the expiry clocks fire — the reconnect-after-a-tunnel promise — but
+  // the in-memory shell does not have to outlive its last socket (kody
+  // review): release it, and continue the wake-up through the shell-less
+  // timer path, whose tick() expires the row (and then prunes its floor)
+  // exactly as an in-memory shell would. The deadline is re-read from the
+  // row the last touch refreshed; the min-of-clocks arithmetic is the
+  // core's.
+  const row = storeFor(code).read()
+  rooms.delete(code)
+  if (room.timer) clearTimeout(room.timer)
+  if (row) armRoom(code, expiryDeadlineOf(row))
 }
 
 /* ---------------------------------------------------------------- admission */
@@ -456,15 +490,19 @@ function performJoin(ws: Socket, rawCode: unknown): void {
 try {
   db = openRelayDatabase(RELAY_DB_PATH)
   sqliteStores = createSqliteStores(db, () => Date.now())
-  const { rooms: roomDeadlines, floors: floorDeadlines } = persistedDeadlines(db)
+  const { rooms: roomDeadlines, floors: floorDeadlines } = persistedDeadlines(db, IDLE_TTL_MS)
   for (const { code, deadline } of roomDeadlines) {
-    roomFor(code)
+    // Shell-less on purpose (kody review): a persisted room nobody has
+    // rejoined gets a wake-up, not a live shell — the registry is built
+    // when a peer actually joins. `armRoom` routes a code with no shell
+    // to the shell-less timer path, whose tick() expires the row (and
+    // then prunes its floor) exactly as a live shell would.
     armRoom(code, deadline)
   }
   for (const { code, deadline } of floorDeadlines) {
-    if (rooms.has(code)) continue
-    const pending = floorTimers.get(code)
-    if (pending) clearTimeout(pending)
+    // A code with a room row keeps the ROOM deadline armed above; its
+    // floor prune is armed by tick() when the room expires.
+    if (floorTimers.has(code)) continue
     floorTimers.set(
       code,
       setTimeout(() => {

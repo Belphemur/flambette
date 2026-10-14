@@ -119,6 +119,18 @@ describe('the Bun relay persists to SQLite (ADR-0088 §1)', () => {
     expect(floors).toEqual([{ code: 'c1', deadline: 1_000_000 + 7 * 24 * 60 * 60 * 1000 }])
   })
 
+  test('orphaned floors honor the relay\'s CONFIGURED idle TTL (qodo/kody review)', () => {
+    const { db, store } = freshDb()
+    const registry = registryFor('c1', store('c1'))
+    registry.admit('join', 0)
+    registry.push(3, { plan: [1] }, 'p1')
+    registry.nextSerial()
+    // An operator that shortens RELAY_IDLE_TTL_MS must not wait out the
+    // policy default on the floor's rows after a restart.
+    const { floors } = persistedDeadlines(db, 5_000)
+    expect(floors).toEqual([{ code: 'c1', deadline: 1_000_000 + 5_000 }])
+  })
+
   test('store metadata is stamped: created_at is the first write, updated_at the latest', () => {
     const { db, stamp, store } = freshDb()
     const registry = registryFor('c1', store('c1'))
@@ -129,10 +141,56 @@ describe('the Bun relay persists to SQLite (ADR-0088 §1)', () => {
     const row = store('c1').read()
     expect(row?.createdAt).toBe(1_000_000)
     // Per-store metadata (ADR-0088 §2): first write vs latest write. The
-    // first write stamps the room's own creation; the update moves only
-    // updated_at.
+    // first write stamps the STORE's first write — the clock the store is
+    // built with, not the room's own createdAt (qodo review); the update
+    // moves only updated_at.
     expect(db.query('SELECT created_at AS c, updated_at AS u FROM store_plan').all()).toEqual([
-      { c: 1_000_000, u: 2_000 },
+      { c: 1_000, u: 2_000 },
     ])
+  })
+
+  test('a store first written AFTER the room existed stamps its own birth (qodo review)', () => {
+    const { db, stamp, store } = freshDb()
+    const registry = registryFor('c1', store('c1'))
+    registry.admit('join', 0) // the room is born at the registry's pinned clock
+    stamp.now = 5_000
+    registry.push(1, { plan: [1] }, 'p1')
+    stamp.now = 6_000
+    registry.push(2, { favorites: ['r1'] }, 'p1')
+    expect(db.query('SELECT created_at AS c FROM store_plan').all()).toEqual([{ c: 5_000 }])
+    // The favorites store appeared at ITS first write, not the room's.
+    expect(db.query('SELECT created_at AS c, updated_at AS u FROM store_favorites').all()).toEqual([
+      { c: 6_000, u: 6_000 },
+    ])
+  })
+
+  test('a corrupt legacy state blob is skipped by the split, not a migration failure (qodo review)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'relay-sqlite-'))
+    const path = join(dir, 'relay.sqlite3')
+    try {
+      {
+        const { db } = freshDb(path)
+        // A legacy room whose blob is malformed (a truncated write from a
+        // pre-ADR relay) — json_type RAISES on this text.
+        db.exec(
+          `INSERT INTO room (code, rev, state, created_at, updated_at, last_activity, inactivity_at, idle_at, serial)
+           VALUES ('c1', 1, '{"plan":[1', 1, 1, 1, 1, 1, 1)`,
+        )
+        // Rewind to pre-002 so the split re-runs over the corrupt row.
+        db.exec('DELETE FROM schema_migrations WHERE version = 2')
+        db.close()
+      }
+      // "Restart": migration 002 re-runs. Without the json_valid guard
+      // this open throws before the trailing UPDATE can clear the blob.
+      const reopened = openRelayDatabase(path)
+      try {
+        expect(reopened.query('SELECT state FROM room').all()[0]?.state).toBeNull()
+        expect(reopened.query('SELECT COUNT(*) AS n FROM store_plan').all()[0]?.n).toBe(0)
+      } finally {
+        reopened.close()
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

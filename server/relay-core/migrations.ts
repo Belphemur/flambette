@@ -262,6 +262,13 @@ const MIGRATION_001: MigrationStep = {
  * Bun database the same statements run over zero rows — the Bun side
  * ships 002 as the no-op it is there, so both runtimes agree on the
  * version history.
+ *
+ * A legacy blob that is not valid JSON at all (a truncated write from a
+ * pre-ADR relay) is kept out of the split by the `json_valid` guard —
+ * `json_type` RAISES on malformed text, and one poisoned row must not
+ * fail the whole migration before the trailing `UPDATE` can clear it.
+ * The blob is nulled either way, so the room is served with empty state,
+ * which is what the previous codec's parse failure did (qodo review).
  */
 const MIGRATION_002: MigrationStep = {
   version: 2,
@@ -282,7 +289,7 @@ const MIGRATION_002: MigrationStep = {
            created_at,
            updated_at
          FROM room
-         WHERE state IS NOT NULL AND json_type(state, '${path}') IS NOT NULL`,
+         WHERE state IS NOT NULL AND json_valid(state) AND json_type(state, '${path}') IS NOT NULL`,
       )
     }
     db.exec('UPDATE room SET state = NULL WHERE state IS NOT NULL')

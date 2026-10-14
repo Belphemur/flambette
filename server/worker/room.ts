@@ -256,11 +256,15 @@ export class Room extends DurableObject<Env> {
       return
     }
     for (const { store, value } of rows) {
+      // `created_at` is when THIS store was first written (qodo review): the
+      // room's own createdAt is the room's, not the store's — the upsert
+      // preserves it on conflict, so now() is the honest stamp. Same as the
+      // Bun adapter's writeStoreRows.
       this.ctx.storage.sql.exec(
         storeUpsertSql(store),
         row.code,
         JSON.stringify(value),
-        row.createdAt,
+        Date.now(),
         Date.now(),
       )
     }

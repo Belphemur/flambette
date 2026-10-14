@@ -167,6 +167,17 @@ export interface FloorRecord {
 }
 
 /**
+ * The earlier of a room record's two expiry clocks — the ONE min-of-clocks
+ * arithmetic, exported because the adapters re-arm wake-ups from stored
+ * rows too (the Bun relay's restart sweep, its last-peer release and its
+ * persisted-deadline input): the core owns the arithmetic even where the
+ * adapter owns the row read.
+ */
+export function expiryDeadlineOf(row: Pick<RoomRecord, 'inactivityAt' | 'idleAt'>): number {
+  return Math.min(row.inactivityAt, row.idleAt)
+}
+
+/**
  * The storage intents. Every method is a question the core asks, never an
  * assumption about where bytes live.
  */
@@ -303,7 +314,7 @@ export function createRoomRegistry({
       idleAt: t + idleTtlMs,
     }
     store.write(next)
-    arm(Math.min(next.inactivityAt, next.idleAt))
+    arm(expiryDeadlineOf(next))
     return next
   }
 
@@ -364,7 +375,7 @@ export function createRoomRegistry({
     // The serial is NOT bumped here: the adapter that admits the peer mints
     // it with `nextSerial()`, which also persists it to the floor record.
     const serial = Math.max(store.readFloor()?.serial ?? 0, store.read()?.serial ?? 0)
-    store.write({
+    const row: RoomRecord = {
       code,
       rev: floor,
       state: null,
@@ -373,8 +384,9 @@ export function createRoomRegistry({
       inactivityAt: t + inactivityTtlMs,
       idleAt: t + idleTtlMs,
       serial,
-    })
-    arm(Math.min(t + inactivityTtlMs, t + idleTtlMs))
+    }
+    store.write(row)
+    arm(expiryDeadlineOf(row))
     return { kind: 'establish', code, rev: floor, count }
   }
 
@@ -497,7 +509,7 @@ export function createRoomRegistry({
       arm(entry.at + idleTtlMs)
       return null
     }
-    const deadline = Math.min(row.inactivityAt, row.idleAt)
+    const deadline = expiryDeadlineOf(row)
     if (t < deadline) {
       // Touched (a keepalive re-armed it) since the wake-up was set.
       arm(deadline)
