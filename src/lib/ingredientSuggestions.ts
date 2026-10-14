@@ -51,7 +51,7 @@ interface Scored {
 }
 
 /** Document indexed by the fuzzy tier's MiniSearch instance (ADR-0086). */
-interface FuzzyDoc {
+export interface FuzzyDoc {
   id: string
   /** The nameKey — the same normalized vocabulary the exact tiers match. */
   key: string
@@ -151,20 +151,25 @@ interface FuzzyHit {
  * remaining room, ordered by MiniSearch score then alphabetical name
  * (same stability rule as sortScored — deterministic, e2e-pinnable).
  */
-async function fuzzyRows(
-  key: string,
-  custom: CustomIngredient[],
-  exactKeys: Set<string>,
+/**
+ * Pure core of the fuzzy tier's cap (unit-pinned): rank the FULL
+ * eligible pool score-then-name BEFORE capping to `room`. An early
+ * break at the cutoff would keep MiniSearch's return order for
+ * equal-score names straddling it, so an alphabetically EARLIER
+ * ingredient could be omitted in favour of a later one — the ADR-0086
+ * §6 tie-break is a global promise, not a within-the-cap one.
+ */
+export function capFuzzyPool(
+  hits: ReadonlyArray<{ id: string; score: number }>,
+  docs: ReadonlyMap<string, FuzzyDoc>,
+  exactKeys: ReadonlySet<string>,
   room: number,
-): Promise<IngredientSuggestion[]> {
+): IngredientSuggestion[] {
   if (room <= 0) return []
-  const { index, docs } = await getFuzzyIndex(custom)
-  const hits = index.search(key, { fields: ['key'], prefix: true, fuzzy: 0.2 })
   const picked: FuzzyHit[] = []
   const pickedKeys = new Set<string>()
   for (const hit of hits) {
-    if (picked.length >= room) break // hits come score-desc: top-room kept
-    const doc = docs.get(hit.id as string)
+    const doc = docs.get(hit.id)
     if (!doc || exactKeys.has(doc.key) || pickedKeys.has(doc.key)) continue
     pickedKeys.add(doc.key)
     picked.push({
@@ -183,7 +188,19 @@ async function fuzzyRows(
       b.score - a.score ||
       a.suggestion.name.localeCompare(b.suggestion.name, 'en', { sensitivity: 'base' }),
   )
-  return picked.map((h) => h.suggestion)
+  return picked.slice(0, room).map((h) => h.suggestion)
+}
+
+async function fuzzyRows(
+  key: string,
+  custom: CustomIngredient[],
+  exactKeys: Set<string>,
+  room: number,
+): Promise<IngredientSuggestion[]> {
+  if (room <= 0) return []
+  const { index, docs } = await getFuzzyIndex(custom)
+  const hits = index.search(key, { fields: ['key'], prefix: true, fuzzy: 0.2 })
+  return capFuzzyPool(hits, docs, exactKeys, room)
 }
 
 /**

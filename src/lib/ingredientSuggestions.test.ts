@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  capFuzzyPool,
   isSuggestionListVisible,
   suggestIngredients,
+  type FuzzyDoc,
 } from './ingredientSuggestions'
 import type { CustomIngredient } from '../stores/customIngredients'
 
@@ -141,6 +143,53 @@ describe('suggestIngredients — fuzzy tier 3 (ADR-0086)', () => {
     const c = await suggestIngredients('bananna', [])
     const d = await suggestIngredients('bananna', [])
     expect(d).toEqual(c)
+  })
+
+  test('capFuzzyPool: the score-then-name tie-break is GLOBAL across the cutoff (qodo round-5)', () => {
+    // MiniSearch returns equal-score hits in internal order, not
+    // alphabetical. With an early break at the cutoff, 'zucchini'
+    // (returned first) would take the row while alphabetically earlier
+    // 'apple' and 'banana' — the SAME score — are dropped. The cap must
+    // rank the WHOLE eligible pool first, then slice.
+    const doc = (id: string, name: string): [string, FuzzyDoc] => [
+      id,
+      { id, key: id, name, category: 'Produce', mine: false },
+    ]
+    const docs = new Map<string, FuzzyDoc>([
+      doc('a', 'apple'),
+      doc('b', 'banana'),
+      doc('z', 'zucchini'),
+    ])
+    const hits = [
+      { id: 'z', score: 2 },
+      { id: 'b', score: 2 },
+      { id: 'a', score: 2 },
+    ]
+    expect(capFuzzyPool(hits, docs, new Set(), 2)).toEqual([
+      expect.objectContaining({ nameKey: 'a' }),
+      expect.objectContaining({ nameKey: 'b' }),
+    ])
+    // A strictly-higher score still wins its slot regardless of name.
+    expect(capFuzzyPool([{ id: 'z', score: 3 }, ...hits.slice(1)], docs, new Set(), 2)).toEqual([
+      expect.objectContaining({ nameKey: 'z' }),
+      expect.objectContaining({ nameKey: 'a' }),
+    ])
+  })
+
+  test('capFuzzyPool: exact rows stay deduped and room<=0 stays empty', () => {
+    const docs = new Map<string, FuzzyDoc>([
+      ['a', { id: 'a', key: 'a', name: 'apple', category: 'Produce', mine: false }],
+      ['m', { id: 'm', key: 'm', name: 'apple', category: 'Other', mine: true }],
+    ])
+    const hits = [
+      { id: 'm', score: 2 },
+      { id: 'a', score: 2 },
+    ]
+    // Same display name, different keys: BOTH rows survive (nameKey dedupe).
+    expect(capFuzzyPool(hits, docs, new Set(), 8)).toHaveLength(2)
+    // An exact tier already owns 'a' — the fuzzy tier drops it.
+    expect(capFuzzyPool(hits, docs, new Set(['a']), 8)).toHaveLength(1)
+    expect(capFuzzyPool(hits, docs, new Set(), 0)).toEqual([])
   })
 
   test('a changed custom list rebuilds the fuzzy index (new array identity)', async () => {
