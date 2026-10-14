@@ -285,7 +285,10 @@ test("the owner's case: 'cherry tomatoes' reaches the name-only recipes (Addendu
   await expect(pantryPanel(page)).toBeVisible()
   await pantryAddInput(page).fill('cherry tomatoes')
   await pantryAddInput(page).press('Enter')
-  await expect(page.getByTestId('pantry-chip-cherry-tomatoes')).toBeVisible()
+  // nameKey folds the plural: 'cherry tomatoes' → 'cherry tomato'
+  // (keys keep the folded words' spaces — the pantry-chip-<nameKey>
+  // hook is built from the key verbatim).
+  await expect(page.getByTestId('pantry-chip-cherry tomato')).toBeVisible()
   // Leave the panel open — the grid behind re-ranks live.
   await expect(pantryHeading(page)).toHaveText('Cook With Your Pantry · ')
   await expect(page.getByTestId('pantry-summary')).toContainText(/match your kitchen/)
