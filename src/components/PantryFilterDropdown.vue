@@ -82,7 +82,7 @@ function clearAll() {
     data-test="pantry-row"
     :options="[]"
     :selected-index="0"
-    label="In My Kitchen"
+    label="Kitchen"
     trigger-aria-label="My kitchen — ingredients I have"
     trigger-test="pantry-trigger"
     menu-test="pantry-panel"

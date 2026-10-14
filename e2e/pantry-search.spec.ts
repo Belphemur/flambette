@@ -95,6 +95,10 @@ test('the Kitchen chip renders inactive with the panel closed by default', async
   // is empty, and the panel is closed (not mounted).
   await expect(page.getByTestId('pantry-row')).toBeVisible()
   await expect(pantryTrigger(page)).toBeVisible()
+  // ADR-0089 Decision 1: the chip's label is "Kitchen" — the "In My
+  // Kitchen" words belong to the panel header, never the chip (FilterDropdown
+  // renders `selected?.label ?? label` on the closed trigger).
+  await expect(pantryTrigger(page).getByText('Kitchen', { exact: true })).toBeVisible()
   await expect(page.getByTestId('pantry-trigger-badge')).toHaveCount(0)
   await expect(pantryTrigger(page)).toHaveAttribute('aria-expanded', 'false')
   await expect(pantryPanel(page)).toHaveCount(0)
