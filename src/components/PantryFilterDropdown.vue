@@ -76,8 +76,10 @@ function clearAll() {
 
 <template>
   <!-- `pantry-row` stays the feature's wrapper hook (the e2e anchors
-  visibility checks on it); the trigger itself is `pantry-trigger`. -->
+  visibility checks on it — it is now the trigger chip + panel, not a
+  row); the trigger itself is `pantry-trigger`. -->
   <FilterDropdown
+    data-test="pantry-row"
     :options="[]"
     :selected-index="0"
     label="In My Kitchen"
