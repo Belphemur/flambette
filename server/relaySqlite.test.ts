@@ -256,4 +256,45 @@ describe('the Bun relay persists to SQLite (ADR-0088 §1)', () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  test('a legacy room state blob is split into per-store rows on reopen (the data migration)', () => {
+    // Migration safety for existing Durable Object data (ADR-0088 §4): a
+    // pre-split deployment persisted rooms as one JSON `state` blob. The
+    // 002 split migrate() must carve each present key into its own store_*
+    // row and NULL the blob — and leave stores that were ABSENT out of
+    // storage entirely (no null rows), so the per-store tables stay sparse.
+    const dir = mkdtempSync(join(tmpdir(), 'relay-sqlite-'))
+    const path = join(dir, 'relay.sqlite3')
+    try {
+      {
+        const { db } = freshDb(path)
+        // A legacy blob carrying two stores' subtrees and leaving the rest
+        // absent — the older codec's whole-state blob shape.
+        db.exec(
+          `INSERT INTO room (code, rev, state, created_at, updated_at, last_activity, inactivity_at, idle_at, serial)\n           VALUES ('c1', 3, '{\"plan\":[{\"id\":\"p1\"}],\"favorites\":[\"r42\"]}', 10, 20, 30, 40, 5, 6)`,
+        )
+        // Rewind past the split so it re-runs over the seeded blob.
+        db.exec('DELETE FROM schema_migrations WHERE version = 2')
+        db.close()
+      }
+      // "Restart": 002.migrate splits the blob into per-store rows.
+      const reopened = openRelayDatabase(path)
+      try {
+        expect(JSON.parse(reopened.query('SELECT value FROM store_plan').all()[0]?.value)).toEqual([
+          { id: 'p1' },
+        ])
+        expect(JSON.parse(reopened.query('SELECT value FROM store_favorites').all()[0]?.value)).toEqual([
+          'r42',
+        ])
+        // The blob is gone — a later split is a no-op (re-runnable).
+        expect(reopened.query('SELECT state FROM room').all()[0]?.state).toBeNull()
+        // Absent keys are NOT materialized as null rows.
+        expect(reopened.query('SELECT COUNT(*) AS n FROM store_pantry').all()[0]?.n).toBe(0)
+      } finally {
+        reopened.close()
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })
