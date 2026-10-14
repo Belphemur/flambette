@@ -12,18 +12,61 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Sharded e2e: one chromium project per shard, run in a matrix so the
-  # whole suite parallelizes across runners and each job fails with its
-  # own focused report. Shards must sum to the full spec list —
-  # add a spec file? extend BOTH shard globs (a file matched by no shard
-  # silently never runs in CI).
+  # Dynamic e2e sharding: one cheap "plan" job counts the tests Playwright
+  # will run (list run — no build, no browsers) and derives the shard count
+  # from that number, so the matrix grows with the suite instead of being
+  # pinned at a fixed 4. The shard count is ceil(tests / TESTS_PER_SHARD),
+  # clamped to [MIN, MAX] so a tiny suite doesn't collapse to one runner and
+  # a huge one doesn't fan out unbounded. Adding a spec file needs NO matrix
+  # edit — Playwright's own sharding guarantees every shard slices the same
+  # full list, so no file can silently fall outside the run.
+  e2e-plan:
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Compute shard count from the test list
+        id: plan
+        env:
+          TESTS_PER_SHARD: '100'
+          MIN_E2E_SHARDS: '2'
+          MAX_E2E_SHARDS: '10'
+        run: |
+          bunx playwright test --list --reporter=json > pw-list.json
+          # Tests (not specs): each spec runs once per project in the config
+          # (Desktop Chrome + Pixel 7), and Playwright sharding balances
+          # tests, so the project-multiplied count is the real denominator.
+          total=$(jq '[recurse(.suites[]?) | .specs[]? | .tests[]?] | length' pw-list.json)
+          if [[ -z "$total" || "$total" -eq 0 ]]; then
+            echo "test list produced $total tests — refusing to plan a run" >&2
+            exit 1
+          fi
+          shards=$(( (total + TESTS_PER_SHARD - 1) / TESTS_PER_SHARD ))
+          if (( shards < MIN_E2E_SHARDS )); then shards=$MIN_E2E_SHARDS; fi
+          if (( shards > MAX_E2E_SHARDS )); then shards=$MAX_E2E_SHARDS; fi
+          echo "tests=$total -> shards=$shards (target $TESTS_PER_SHARD/shard)"
+          # A JSON array for fromJSON: [1,2,...,N]
+          echo "shards=[$(seq -s, 1 "$shards")]" >> "$GITHUB_OUTPUT"
+
+  # Sharded e2e: one matrix job per computed shard. strategy.job-total is
+  # the matrix size from e2e-plan's output, so --shard=N/T needs no second
+  # matrix axis to keep in sync.
   e2e:
+    needs: e2e-plan
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
-        total: [4]
+        shard: ${{ fromJSON(needs.e2e-plan.outputs.shards) }}
     steps:
       - uses: actions/checkout@v7
         # Full history so the baked app version sees the reachable tag
@@ -45,7 +88,7 @@ jobs:
         run: bun run build
 
       - name: Run e2e shard ${{ matrix.shard }}
-        run: bunx playwright test --shard=${{ matrix.shard }}/${{ matrix.total }}
+        run: bunx playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
       - name: Upload Playwright blob report
         if: always()

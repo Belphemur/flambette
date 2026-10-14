@@ -27,8 +27,11 @@
   Corollary: once a reconciled full-suite run exists on a tip that is an
   ANCESTOR of what you are about to push, do NOT re-run the suite
   locally — land build + unit, push, and let CI arbitrate.
-- Sharded CI: shards must sum to the full spec list — a file matched by
-  NO shard silently never runs.
+- Sharded CI is DYNAMIC (`e2e-plan` job in ci.yml): the shard count is
+  derived from the actual test count (`playwright test --list
+  --reporter=json`, counted per PROJECT) via ceil(tests/100), clamped to
+  [2, 10]. Adding a spec file needs no matrix edit — Playwright sharding
+  always slices the full list, so no file can silently never run.
 - `ERR_CONNECTION_REFUSED` ×N at suite start = stale webServer reuse:
   `rm -rf test-results` and rerun from a clean state; the specs never
   ran, so do not debug them.
