@@ -717,10 +717,9 @@ onUnmounted(() => observer?.disconnect())
   <span
   :aria-live="pantry.active ? 'polite' : undefined"
   data-test="pantry-summary"
-  >{{ results.list.length }} recipe{{ results.list.length === 1 ? '' : 's' }}<template
-  v-if="pantry.active"
-  > {{ results.list.length === 1 ? 'matches' : 'match' }} your kitchen</template
-  ></span>
+  >{{ results.list.length }} recipe{{ results.list.length === 1 ? '' : 's' }}{{
+  pantry.active ? (results.list.length === 1 ? ' matches your kitchen' : ' match your kitchen') : ''
+  }}</span>
   <button
   v-if="filtersActive"
   class="ml-2 text-brand-text underline"
