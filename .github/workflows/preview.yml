@@ -6,10 +6,11 @@ name: Preview
 # preview SPA talks to ITS OWN preview relay, whose rooms live in the
 # preview's isolated Durable Object namespace. The URLs are DETERMINISTIC
 # (pr-<N>.relay.dev.flambette.app), so the two jobs run in parallel with no
-# ordering dependency. Each job surfaces as its own GitHub deployment whose
-# environment is stable per PR (`preview-web-pr-<N>` / `preview-relay-pr-<N>`
-# — reused on every push instead of a fresh deployment each time). Production
-# deploys happen only in release.yml, on a `v*` tag.
+# push. Only the WEB preview creates a GitHub deployment (ADR-0091): the
+# relay job passes no gitHubToken, so each PR surfaces ONE GitHub
+# deployment on environment `pr-<N>` (the action uses the wrangler preview
+# name verbatim as the environment) instead of two. Production deploys
+# happen only in release.yml, on a `v*` tag.
 
 on:
   pull_request:
@@ -44,7 +45,13 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4.151.0"
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          # NO `gitHubToken` on purpose (ADR-0091): the relay preview must NOT
+          # create a GitHub deployment — that right belongs to the web job
+          # alone, so each PR owns ONE environment (`pr-<N>`) with ONE
+          # deployment. wrangler-action creates a deployment whenever a
+          # GITHUB_TOKEN is configured (verified in wrangler-action source:
+          # createPreviewGitHubDeploymentAndJobSummary early-returns without
+          # one); omitting it here is the only switch.
           command: preview --name pr-${{ github.event.pull_request.number || 'main' }} --config server/wrangler.jsonc
         # NO `environment` input on purpose: the action feeds it to wrangler's
         # --env, which renames the preview worker (flambette-preview-...-<env>),
@@ -99,6 +106,9 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4.151.0"
+          # The ONLY step that creates the PR's GitHub deployment (ADR-0091):
+          # the relay job passes no gitHubToken. The action uses the wrangler
+          # preview name (`pr-<N>`) verbatim as the GitHub environment.
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           command: preview --name pr-${{ github.event.pull_request.number || 'main' }}
         # Same reasoning as the relay job: no `environment` input — an env
@@ -116,7 +126,14 @@ jobs:
   # Preview rooms are auto-destroyed when the PR is merged or closed: each
   # preview's rooms live in that preview's OWN Durable Object namespace, and
   # deleting the preview deletes the namespace with its storage. Preview
-  # names are scoped per Worker, so BOTH workers' previews go.
+  # names are scoped per Worker, so BOTH workers' previews go. The PR's
+  # GitHub deployments (environment `pr-<N>`, created by the web job) are
+  # deleted too (ADR-0091): first an `inactive` status (GitHub requires a
+  # deployment to be inactive before it can be deleted), then the deletion —
+  # with the environment left empty, it disappears from the Deployments page.
+  # `deployments: write` (workflow-level) is all GITHUB_TOKEN needs; deleting
+  # the ENVIRONMENT itself is not possible from Actions (it requires
+  # `administration: write`, which the token cannot hold).
   cleanup:
     # Fork PRs get no secrets — there is no preview of theirs to clean up.
     if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
@@ -139,3 +156,23 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Delete the PR's GitHub deployments
+        run: |
+          set -euo pipefail
+          env_name="pr-${{ github.event.pull_request.number }}"
+          ids=$(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=${env_name}" --paginate --jq '.[].id' || true)
+          if [ -z "$ids" ]; then
+            echo "No GitHub deployments on environment ${env_name} — nothing to delete."
+            exit 0
+          fi
+          for id in $ids; do
+            echo "Deleting deployment ${id} (environment ${env_name})"
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/deployments/${id}/statuses" \
+              -f state=inactive \
+              -f description="Preview deleted (PR closed)"
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/deployments/${id}"
+          done
+          echo "Deleted all ${env_name} deployments."
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -51,11 +51,15 @@ spoken by a Durable Object instead of a Bun process.
   `bun run typecheck:worker`, `bun run typecheck:relay` (the Bun adapter).
   `bunx wrangler deploy --dry-run` on BOTH configs is the worker-side gate
   before any push.
-- Deploys fire from **GitHub Actions** (ADR-0039): `release.yml` deploys both
-  workers on the `v*` tag (alongside the GHCR images); `preview.yml` previews
-  BOTH workers per PR / main push on preview-only hosts
-  (`pr-<N>.{app,relay}.dev.flambette.app`, auto-destroyed when the PR
-  closes). The `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets are
+- Deploys fire from **GitHub Actions** (ADR-0039, ADR-0091): `release.yml`
+  deploys both workers on the `v*` tag (alongside the GHCR images);
+  `preview.yml` previews BOTH workers per PR / main push on preview-only
+  hosts (`pr-<N>.{app,relay}.dev.flambette.app`, auto-destroyed when the PR
+  closes). Only the WEB preview creates a GitHub deployment (environment
+  `pr-<N>` — the action uses the wrangler preview name verbatim); the PR's
+  GitHub deployments are deleted on close with the previews, so the
+  Deployments page shows only open PRs + `pr-main` (ADR-0091). The
+  `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets are
   minted and scoped by `scripts/cf_ci_secrets.py` — never hand-paste a
   token, and never add a second deploy path.
 - **The hosted web build MUST set `VITE_RELAY_WS_URL=wss://ws.flambette.app/ws`**

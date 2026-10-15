@@ -1,6 +1,9 @@
 # ADR-0039: Cloudflare deploys run from GitHub Actions — previews on PR/main, releases on a tag
 
-**Status:** Accepted (2026-10-02).
+**Status:** Accepted (2026-10-02). §2's GitHub-deployment clause
+(both preview jobs post deployments) is superseded by
+[ADR-0091](ADR-0091-preview-github-deployments-web-only.md) — web-only
+deployments, deleted on PR close.
 **Supersedes:** ADR-0038 §8's deployment *mechanism* (Workers Builds + tag
 trigger). The two-Worker architecture, the wrangler configs, the domain
 attachment and the first-ship sequence of ADR-0038 all stand. (A
