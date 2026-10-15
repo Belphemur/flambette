@@ -41,10 +41,13 @@ the one worth a green checkmark and an environment link.
    environment itself. Deleting the ENVIRONMENT object is NOT possible from
    Actions: it needs `administration: write`, a permission the default
    `GITHUB_TOKEN` cannot be granted, so deployment deletion is the mechanism.
-3. **The stranded environments were swept once** (2026-10-15, ADR cut in the
-   same change): deployments of every `pr-<N>` environment whose PR is
-   merged/closed were made inactive and deleted from the live repo;
-   `pr-main` and any PR still open were left alone.
+3. **The stranded records were swept once** (2026-10-15, ADR cut in the same
+   change): all 102 `pr-<N>` deployments (every PR in the range was
+   merged/closed), 525 stale `vercel[bot]` deployment records (the
+   ADR-0027-era Vercel GitHub App still posts `Production`/`Preview`
+   deployments on every push — its uninstall and `vercel.json` removal are a
+   separate, still-open decision), and 170 old `pr-main` deployments (latest
+   kept) were made inactive and deleted from the live repo.
 
 ## Consequences
 
