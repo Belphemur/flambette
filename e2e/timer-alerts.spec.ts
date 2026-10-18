@@ -100,6 +100,46 @@ test('both toggles default ON, persist a reload, and travel through a backup', a
   await expectZeroMealimeRequests(page)
 })
 
+test('a browser without navigator.vibrate says so and disables the toggle in place (ADR-0093)', async ({ page }) => {
+  // The beforeEach patch defines vibrate; this init script is registered
+  // AFTER it, so it runs later and removes the API — Firefox ≥ 129
+  // removed Navigator.vibrate() entirely (Bugzilla 1900037) and no iOS
+  // browser ever exposed it.
+  await page.addInitScript(() => {
+    // Shadowing (not deleting) is required: the patched own property sits
+    // OVER Chromium's native Navigator.prototype.vibrate, and deleting the
+    // own property would fall through to the prototype's function.
+    Object.defineProperty(navigator, 'vibrate', {
+      configurable: true,
+      get: () => undefined,
+    })
+  })
+  await gotoSettings(page)
+  const note = page.getByTestId('timer-alert-vibrate-unsupported')
+  await expect(note).toBeVisible()
+  await expect(note).toContainText('cannot vibrate')
+  const vibrate = page.getByTestId('timer-alert-vibrate')
+  await expect(vibrate).toBeDisabled()
+  // The stored preference is kept untouched — default ON, nothing wrote it.
+  await expect(vibrate).toBeChecked()
+  // A sound-toggle flip persists the whole ui slice: the vibrate pref
+  // travels as true — an incapable browser never silently rewrites it.
+  await page.getByTestId('timer-alert-sound').click()
+  await page.reload()
+  await expect(page.getByTestId('timer-alert-vibrate-unsupported')).toBeVisible()
+  await expect(page.getByTestId('timer-alert-vibrate')).toBeDisabled()
+  await expect(page.getByTestId('timer-alert-vibrate')).toBeChecked()
+  const uiBlob = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('mealime-planner:v1:ui') ?? '{}'),
+  )
+  expect(uiBlob.timerAlertVibrate).toBe(true)
+  // The sound row is unaffected — still enabled (the chime carries the
+  // alarm), and its own flip survived the reload alongside the vibrate pref.
+  await expect(page.getByTestId('timer-alert-sound')).toBeEnabled()
+  await expect(page.getByTestId('timer-alert-sound')).not.toBeChecked()
+  await expectZeroMealimeRequests(page)
+})
+
 test('a finished timer buzzes when vibration is ON and stays silent when OFF — the announcement always runs', async ({ page }) => {
   test.setTimeout(240_000)
   const cooking = await startCooking(page)
