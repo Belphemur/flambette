@@ -3,6 +3,7 @@ import { catalog, getRecipe } from './catalog'
 import {
   aggregateGroceries,
   aggregateRowKeys,
+  lineKeyIdentity,
   mealSurvivingLines,
   type GroceryItemView,
 } from './grocery'
@@ -108,22 +109,18 @@ export function useGroceryList() {
    */
   const mealSummaries = computed<MealLineSummary[]>(() => {
     if (aggregateInputs.value.length !== plannedMetas.value.length) return []
-    // The merged render's per-group SURVIVING line counts — the same
+    // The merged render's per-group SURVIVING line identities — the same
     // pass `items` runs, so the card and the list share one derivation.
-    const visibleLinesByGroup = new Map(
-      items.value.map((item) => [item.normalized, item.lines.length]),
+    const visibleIdentitiesByGroup = new Map(
+      items.value.map(
+        (item) => [item.normalized, new Set(item.lines.map((line) => lineKeyIdentity(line.key)))] as const,
+      ),
     )
     return aggregateInputs.value.map((input) => {
-      // The SAME rows `aggregateGroceries` walks (the shared
-      // aggregateRowKeys derivation) matched with the SAME visibility
-      // rules (the bare-nameKey skip plus the line-granular clears
-      // through the merged render's surviving lines) — the count cannot
-      // disagree with the list by construction.
-      const lines = mealSurvivingLines(
-        aggregateRowKeys(input),
-        input.cleared,
-        visibleLinesByGroup,
-      )
+      // The lines THIS meal contributes that survive the merged render's
+      // visibility (the bare-nameKey skip plus the line-granular clears)
+      // — the count cannot disagree with the list by construction.
+      const lines = mealSurvivingLines(input, visibleIdentitiesByGroup)
       return {
         id: input.doc.id,
         name: input.recipeName,

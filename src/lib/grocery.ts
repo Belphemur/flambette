@@ -252,7 +252,7 @@ export function onlyTrueKeys(map: Record<string, boolean>): Record<string, boole
  * most one rendered line and an unchecked sibling line (a DIFFERENT
  * unit) can never be swallowed.
  */
-function lineKeyIdentity(key: string): string {
+export function lineKeyIdentity(key: string): string {
   const sep = key.indexOf('||')
   if (sep < 0) return key
   const nameKey = key.slice(0, sep)
@@ -266,32 +266,34 @@ function lineKeyIdentity(key: string): string {
 
 /**
  * The Contributing Meals card's line count for ONE meal (kody PR #94
- * round 2, K2): derived from the SAME visibility rules
- * `aggregateGroceries` applies — a row survives when its nameKey is not
- * bare-cleared for THIS meal and the merged render still shows lines
- * for its group, and the row contributes the group's SURVIVING
- * rendered-line count. A partially cleared two-line ingredient
- * therefore counts one (the card's "N grocery lines" tracks the list
- * line-for-line), a fully cleared one counts zero, and a bare-cleared
- * row counts zero even when the merged group survives on other meals'
- * contributions (this meal's own contribution stays hidden).
+ * round 2, K2 + round-2 follow-up): the lines THIS meal contributes
+ * that SURVIVE in the merged render — the meal's own rendered line
+ * identities (a single-input aggregation of the same input, so a meal
+ * using soy sauce in tbsp while another uses ml attributes only its own
+ * unit line) intersected with its groups' surviving identities from the
+ * merged pass, and rows bare-cleared for THIS meal skipped (its own
+ * contribution stays hidden even when the merged group survives on
+ * other meals).
  *
- * `visibleLinesByGroup` is the merged render's per-group surviving line
- * counts (`item.normalized` → `item.lines.length`), so the card cannot
- * disagree with the list by construction. Rows are DEDUPED: a recipe
- * that lists an ingredient twice contributes to the same merged group,
- * and the merged render carries one line set for it — counting per
- * occurrence would multiply the group's lines by the row count.
+ * `visibleIdentitiesByGroup` is the merged render's per-group surviving
+ * line identities (`item.normalized` → the set of
+ * `lineKeyIdentity(line.key)` over its visible lines), so the card
+ * cannot disagree with the list by construction. Identities are counted
+ * once each (a degenerate same-identity raw pair cannot double-count).
  */
 export function mealSurvivingLines(
-  rowKeys: readonly string[],
-  cleared: ReadonlySet<string> | undefined,
-  visibleLinesByGroup: ReadonlyMap<string, number>,
+  input: AggregateInput,
+  visibleIdentitiesByGroup: ReadonlyMap<string, ReadonlySet<string>>,
 ): number {
+  const own = aggregateGroceries([{ ...input, cleared: undefined }])
   let lines = 0
-  for (const key of new Set(rowKeys)) {
-    if (cleared?.has(key)) continue
-    lines += visibleLinesByGroup.get(key) ?? 0
+  for (const group of own) {
+    if (input.cleared?.has(group.normalized)) continue
+    const surviving = visibleIdentitiesByGroup.get(group.normalized)
+    if (!surviving) continue
+    for (const id of new Set(group.lines.map((line) => lineKeyIdentity(line.key)))) {
+      if (surviving.has(id)) lines += 1
+    }
   }
   return lines
 }

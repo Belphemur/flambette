@@ -166,3 +166,12 @@ visibility (kody round 2, K2): a meal's row counts its group's
 surviving rendered lines (`mealSurvivingLines`), so a partially cleared
 two-line ingredient reports one line and the card tracks the list
 line-for-line instead of filtering bare nameKeys only.
+
+Follow-up (same day, kody's round-2 re-review): the count is attributed
+PER MEAL — `mealSurvivingLines` aggregates the meal's input alone and
+intersects its own rendered line identities with the merged group's
+surviving identities, so two meals using the same ingredient in
+different units each count only the line they actually contribute (a
+shared tbsp+ml group is 1 line per meal, not 2), and a meal whose own
+unit line was cleared counts zero even while the merged group survives
+on the other meal's contribution.
