@@ -5,14 +5,14 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**99 records.** One file per decision (`ADR-NNNN-slug.md`),
+**100 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
 
 ## In force
 
-The 81 accepted records below all still govern. Skim the ones
+The 82 accepted records below all still govern. Skim the ones
 near your change before proposing anything -- they encode *why* the
 architecture is shaped the way it is.
 
@@ -99,6 +99,7 @@ architecture is shaped the way it is.
 | [0091](ADR-0091-preview-github-deployments-web-only.md) | Previews create ONE GitHub deployment per PR (web only) and PR close deletes it _(supersedes ADR-0039)_ | 2026-10-15 |
 | [0092](ADR-0092-clear-checked-pull-to-clear.md) | Clear-checked removes only checked items; pull-to-clear gesture | 2026-10-18 |
 | [0093](ADR-0093-timer-alarm-recurring-pitch.md) | Timer alarm — recurring escalating alert with per-timer pitch | 2026-10-18 |
+| [0094](ADR-0094-grocery-object-cleared-storage.md) | Object-JSON cleared-ingredient storage (serving-safe clear-checked) | 2026-10-18 |
 
 ## Not in force
 
@@ -141,8 +142,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0094**). Do not count the files -- that is how the
-   collisions above happened (99 files share 93 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0095**). Do not count the files -- that is how the
+   collisions above happened (100 files share 94 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.
