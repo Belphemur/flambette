@@ -71,7 +71,10 @@ describe('the store vocabulary (ADR-0088 §2/§6)', () => {
   test('every store maps to a DISTINCT snake_case table name', () => {
     const names = SYNCED_STORES.map(storeTableName)
     expect(new Set(names).size).toBe(SYNCED_STORES.length)
-    for (const name of names) expect(name).toMatch(/^store_[a-z_]+$/)
+    // Digits are legal in a SQLite identifier's tail (store_cleared_v2,
+    // ADR-0094's wire-versioned cleared spelling) — the store_ prefix
+    // guarantees the leading character is a letter either way.
+    for (const name of names) expect(name).toMatch(/^store_[a-z0-9_]+$/)
   })
 
   test('the ADR-0088 table spellings are kept', () => {

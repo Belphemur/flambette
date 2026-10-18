@@ -1195,3 +1195,89 @@ describe('room identity rides the join/create dial (ADR-0063)', () => {
     room.leave()
   })
 })
+
+/**
+ * ADR-0094 — the cleared state rides the room wire in BOTH spellings: the
+ * legacy `nameKey||basis` strings (so an older peer always receives a
+ * payload it can parse and apply) and the object arrays (`clearedV2`) a
+ * new peer prefers. The apply side chooses by KEY PRESENCE, never shape
+ * guessing.
+ */
+describe('cleared-state wire versioning (ADR-0094)', () => {
+  const meta = (id: number, servingCount = 4) => ({ id, serving_count: servingCount }) as never
+
+  const byUnitEntry = {
+    keyName: 'flour',
+    unit: { kind: 'byUnit', unit: 'ml', amount: 67.5 },
+    factor: 1,
+    servingsAtClear: 4,
+    scope: 'line',
+  }
+
+  test('the payload emits clearedV2 (objects) ALONGSIDE the legacy cleared strings', async () => {
+    const plan = usePlanStore()
+    const { socket } = await startRoom()
+    plan.addToPlan(meta(7), 4)
+    plan.mergeIngredientsForCurrentMeals({ 7: ['flour||67.5 ml'] })
+    await sleep(500) // debounce
+    const pushed = socket.frames('state').at(-1)!.state as Record<string, unknown>
+    expect(pushed.clearedV2).toEqual({ 7: [byUnitEntry] })
+    // The legacy spelling derives from the same objects: an older peer
+    // keeps a payload whose shape it knows.
+    expect(pushed.cleared).toEqual({ 7: ['flour||67.5 ml'] })
+  })
+
+  test('a LEGACY peer snapshot (string cleared) still reconciles — migrated to objects', async () => {
+    const plan = usePlanStore()
+    const { socket } = await startRoom()
+    plan.addToPlan(meta(7), 4)
+    await sleep(500) // let the debounced push flush — a queued edit withholds inbound content
+    socket.receive({
+      type: 'state',
+      rev: 3,
+      state: {
+        plan: [{ variantId: 7, servings: 4 }],
+        customItems: [],
+        checked: {},
+        cleared: { 7: ['flour||67.5 ml'] },
+      },
+    })
+    expect(plan.clearedIngredients[7]).toEqual([byUnitEntry])
+  })
+
+  test('a snapshot carrying clearedV2 applies it and ignores the stale legacy spelling', async () => {
+    const plan = usePlanStore()
+    const { socket } = await startRoom()
+    plan.addToPlan(meta(7), 4)
+    await sleep(500) // let the debounced push flush — a queued edit withholds inbound content
+    socket.receive({
+      type: 'state',
+      rev: 4,
+      state: {
+        plan: [{ variantId: 7, servings: 4 }],
+        customItems: [],
+        checked: {},
+        cleared: { 7: ['stale-key||1 cup'] },
+        clearedV2: { 7: [byUnitEntry] },
+      },
+    })
+    expect(plan.clearedIngredients[7]).toEqual([byUnitEntry])
+  })
+
+  test('a snapshot carrying NEITHER key behaves as before (empty replace)', async () => {
+    const plan = usePlanStore()
+    const { socket } = await startRoom()
+    plan.addToPlan(meta(7), 4)
+    plan.mergeIngredientsForCurrentMeals({ 7: ['flour||67.5 ml'] })
+    await sleep(500) // let the debounced push flush — a queued edit withholds inbound content
+    socket.receive({
+      type: 'state',
+      rev: 5,
+      state: { plan: [{ variantId: 7, servings: 4 }], customItems: [], checked: {} },
+    })
+    // The pre-ADR-0094 whole-state semantics: an absent cleared key is the
+    // household saying "nothing is cleared" (a really old peer has no
+    // cleared key at all), so the local map empties.
+    expect(plan.clearedIngredients[7]).toBeUndefined()
+  })
+})
