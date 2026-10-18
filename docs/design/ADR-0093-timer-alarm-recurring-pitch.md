@@ -1,6 +1,6 @@
 # ADR-0093: Timer alarm — recurring escalating alert with per-timer pitch
 
-Status: accepted (2026-10-18)
+Status: accepted (2026-10-18) — implemented in PR #95
 
 Amends the "Timer alerts" section of ADR-0081 (cooking-mode composition):
 the one-shot completion alert is revised into a RECURRING, ESCALATING
