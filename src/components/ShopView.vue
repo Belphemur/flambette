@@ -21,7 +21,8 @@ const {
   sections,
   ensureDocs,
   plan,
-  confirmAndClearGrocery,
+  clearButtonLabel,
+  handleClearClick,
 } = useGroceryList()
 
 /* ---------- Auto-collapse of completed categories (ADR-0008 addendum) ---------- */
@@ -238,14 +239,13 @@ function exitShopping() {
   </div>
   </div>
   <button
-  v-if="checkedCount > 0"
   class="flex h-11 shrink-0 items-center gap-1 rounded-xl border border-border-strong bg-surface-raised px-3 text-sm font-medium text-text active:bg-surface-sunken"
-  data-test="clear-list"
-  aria-label="Clear grocery list"
-  @click="confirmAndClearGrocery()"
+  data-test="grocery-clear"
+  :aria-label="clearButtonLabel"
+  @click="handleClearClick"
   >
   <Eraser :size="16" aria-hidden="true" class="mr-1 inline" />
-  Clear list
+  {{ clearButtonLabel }}
   </button>
   </div>
   </div>

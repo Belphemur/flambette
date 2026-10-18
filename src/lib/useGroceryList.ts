@@ -10,6 +10,7 @@ import { STORE_SECTIONS } from './sections'
 import { extraCheckedKey } from './extraCheckedKeys'
 import type { RecipeDoc, VariantMeta } from './types'
 import {
+  clearCheckedItems,
   confirmAndClearGrocery,
   registerClearSnapshotProvider,
 } from '../composables/useConfirm'
@@ -250,6 +251,30 @@ export function useGroceryList() {
     { deep: true },
   )
 
+  /* ---------- Adaptive clear button (ADR-0092) ---------- */
+
+  /**
+   * The ONE clear button, shared by GroceryTab and ShopView, adapts to
+   * the checked state: with something checked it reads "Clear checked"
+   * and removes only those lines (direct, toast-reported); with nothing
+   * checked but a non-empty list it reads "Clear list" and keeps the
+   * ADR-0005 confirm-modal clear-everything flow — forced past the old
+   * `!anythingChecked()` no-op guard, because a button that reads
+   * "Clear list" must actually clear.
+   *
+   * The label text IS the distinguishable state the e2e asserts on.
+   * Both views consume this one implementation; never a view copy.
+   */
+  const clearCheckedActive = computed(() => checkedCount.value > 0)
+  const clearButtonLabel = computed(() =>
+    clearCheckedActive.value ? 'Clear checked' : 'Clear list',
+  )
+
+  function handleClearClick(): void {
+    if (clearCheckedActive.value) clearCheckedItems()
+    else void confirmAndClearGrocery(undefined, { force: true })
+  }
+
   return {
     plan,
     checked,
@@ -264,5 +289,8 @@ export function useGroceryList() {
     sections,
     ensureDocs,
     confirmAndClearGrocery,
+    clearCheckedActive,
+    clearButtonLabel,
+    handleClearClick,
   }
 }

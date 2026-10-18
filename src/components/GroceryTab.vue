@@ -39,7 +39,8 @@ const {
   mealSummaries,
   sections,
   ensureDocs,
-  confirmAndClearGrocery,
+  clearButtonLabel,
+  handleClearClick,
 } = useGroceryList()
 
 /* ---------- Custom (free-form) grocery items ---------- */
@@ -337,14 +338,13 @@ const shopperCount = computed(() => room.peers)
   data-test="grocery-progress-percent"
   >{{ progressPct }}%</span>
   <button
-  v-if="checkedCount > 0"
   class="flex h-11 shrink-0 items-center gap-1 rounded-lg px-2 text-label-sm font-medium text-text-muted hover:text-text"
-  data-test="clear-list"
-  aria-label="Clear grocery list"
-  @click="confirmAndClearGrocery()"
+  data-test="grocery-clear"
+  :aria-label="clearButtonLabel"
+  @click="handleClearClick"
   >
   <Eraser :size="16" aria-hidden="true" class="mr-1 inline" />
-  Clear list
+  {{ clearButtonLabel }}
   </button>
   </div>
 
