@@ -2,9 +2,11 @@ import { describe, expect, test } from 'bun:test'
 import {
   CHIME_TONES_HZ,
   TIMER_VIBRATE_PATTERN,
+  chimeTonesForOrdinal,
   createTimerAlerts,
   type ChimeContext,
 } from './timerAlert'
+import { MAX_CONCURRENT_TIMERS } from './stepTimer'
 
 /** A stub AudioContext that records the chime's graph operations. */
 function stubContext(state = 'running') {
@@ -134,5 +136,54 @@ describe('timer alerts (ADR-0081 amendment)', () => {
     sound = true // the toggle flipped mid-cook
     alerts.fire()
     expect(oscillators).toHaveLength(2)
+  })
+})
+
+describe('per-timer pitch (ADR-0093)', () => {
+  test("ordinal 0 is today's A5→D6 exactly", () => {
+    expect(chimeTonesForOrdinal(0)).toEqual([CHIME_TONES_HZ[0], CHIME_TONES_HZ[1]])
+  })
+
+  test('each ordinal transposes BOTH tones and preserves the rising interval', () => {
+    for (const ordinal of [0, 1, 2, 3]) {
+      const { ctx, oscillators } = stubContext()
+      const alerts = createTimerAlerts(() => ({ sound: true, vibrate: false }), () => ctx)
+      alerts.unlock()
+      alerts.fire(ordinal)
+      const [lo, hi] = chimeTonesForOrdinal(ordinal)
+      expect(oscillators.map((o) => o.freq)[0]).toBeCloseTo(lo)
+      expect(oscillators.map((o) => o.freq)[1]).toBeCloseTo(hi)
+      // The SAME offset shifts both tones: the pair's ratio is unchanged.
+      expect(hi / lo).toBeCloseTo(CHIME_TONES_HZ[1] / CHIME_TONES_HZ[0])
+    }
+  })
+
+  test('the semitone offsets are 0/+2/+4/+7 (freq = base * 2 ** (st / 12))', () => {
+    const semitonesAbove = (freq: number, base: number): number => 12 * Math.log2(freq / base)
+    const [lo0] = chimeTonesForOrdinal(0)
+    expect(semitonesAbove(chimeTonesForOrdinal(0)[0], lo0)).toBeCloseTo(0)
+    expect(semitonesAbove(chimeTonesForOrdinal(1)[0], lo0)).toBeCloseTo(2)
+    expect(semitonesAbove(chimeTonesForOrdinal(2)[0], lo0)).toBeCloseTo(4)
+    expect(semitonesAbove(chimeTonesForOrdinal(3)[0], lo0)).toBeCloseTo(7)
+    // …and every high tone carries the same offset as its own low tone.
+    for (const ordinal of [0, 1, 2, 3]) {
+      const [lo, hi] = chimeTonesForOrdinal(ordinal)
+      expect(semitonesAbove(hi, lo)).toBeCloseTo(12 * Math.log2(CHIME_TONES_HZ[1] / CHIME_TONES_HZ[0]))
+    }
+  })
+
+  test('ordinals are bounded by MAX_CONCURRENT_TIMERS — beyond the cap clamps to the last offset', () => {
+    expect(chimeTonesForOrdinal(MAX_CONCURRENT_TIMERS)).toEqual(chimeTonesForOrdinal(MAX_CONCURRENT_TIMERS - 1))
+    expect(chimeTonesForOrdinal(99)).toEqual(chimeTonesForOrdinal(3))
+    // A nonsense ordinal never crashes or drops below the base pitch.
+    expect(chimeTonesForOrdinal(-1)).toEqual(chimeTonesForOrdinal(0))
+  })
+
+  test('sound OFF stays silent for any ordinal', () => {
+    const { ctx, oscillators } = stubContext()
+    const alerts = createTimerAlerts(() => ({ sound: false, vibrate: false }), () => ctx)
+    alerts.unlock()
+    alerts.fire(3)
+    expect(oscillators).toEqual([])
   })
 })
