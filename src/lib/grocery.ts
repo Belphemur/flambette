@@ -526,9 +526,22 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
     // composition-stale case above). The raw-dedup above ran against the
     // UNfiltered list (dedup semantics unchanged); the filter only hides.
     const visible = lineCleared.size
-      ? lines.filter(
-          (l) => !lineCleared.has(l.key) && !lineIdentityCleared.has(lineKeyIdentity(l.key)),
-        )
+      ? lines.filter((l) => {
+          if (lineCleared.has(l.key)) return false
+          // kody round-3 (K5): an identity may name MORE than one rendered
+          // line in the same group (a raw row beside a by-unit line —
+          // `egg||4` and `egg||6` both reduce to `egg||`; singular/plural
+          // spellings collapse too). Hiding every line that shares an
+          // identity would swallow an unchecked sibling, so identity
+          // hiding applies only when it names exactly ONE line here —
+          // shared identities fall back to exact-key matching above.
+          const id = lineKeyIdentity(l.key)
+          if (!lineIdentityCleared.has(id)) return true
+          // hide ONLY when this identity names exactly one rendered line;
+          // a shared identity (>= 2 lines) falls back to exact-key matching.
+          const shared = lines.filter((other) => lineKeyIdentity(other.key) === id).length !== 1
+          return shared
+        })
       : lines
     // A group whose every line is cleared disappears entirely — an
     // ingredient header with zero lines would otherwise linger.
