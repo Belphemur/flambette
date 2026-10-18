@@ -2,6 +2,12 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { VariantMeta } from '../lib/types'
 import { normalizePlanServings } from '../lib/servings'
+import {
+  clearedEntryIdentity,
+  isClearedIngredient,
+  migrateClearedMap,
+} from '../lib/grocery'
+import type { ClearedIngredient } from './grocery'
 
 export interface PlanEntry {
   variantId: number
@@ -81,6 +87,38 @@ function nextPlanId(): string {
 }
 
 /**
+ * Merge two cleared-entry lists (ADR-0094): the same identity is the same
+ * claim and the incoming (newer) context wins; a whole-ingredient (row)
+ * clear supersedes every line claim of the same ingredient, and a line
+ * claim never resurrects under an existing row claim. Order-stable:
+ * surviving entries keep their first-seen order (existing first, then new
+ * identities in arrival order).
+ */
+export function mergeClearedEntries(
+  existing: readonly ClearedIngredient[],
+  add: readonly ClearedIngredient[],
+): ClearedIngredient[] {
+  const byIdentity = new Map<string, ClearedIngredient>()
+  const rowKeys = new Set<string>()
+  for (const e of existing) {
+    byIdentity.set(clearedEntryIdentity(e), e)
+    if (e.unit.kind === 'row') rowKeys.add(e.keyName)
+  }
+  for (const e of add) {
+    if (e.unit.kind === 'row') {
+      for (const [id, held] of [...byIdentity]) {
+        if (held.keyName === e.keyName) byIdentity.delete(id)
+      }
+      rowKeys.add(e.keyName)
+      byIdentity.set(clearedEntryIdentity(e), e)
+    } else if (!rowKeys.has(e.keyName)) {
+      byIdentity.set(clearedEntryIdentity(e), e)
+    }
+  }
+  return [...byIdentity.values()]
+}
+
+/**
  * Meal plan: list of {variantId, servings}. Persisted to localStorage under
  * the `mealime-planner:v1:plan` key by pinia-plugin-persistedstate.
  */
@@ -101,10 +139,18 @@ export const usePlanStore = defineStore(
      *  opt-out per device. Part of the shared room state when the user
      *  has the sharing on. */
     const cookedHistory = ref<CookedEntry[]>([])
-    /** variantId -> nameKey-normalized ingredient keys cleared from the
-     *  grocery list for that meal. Stays until the meal is cooked or
-     *  re-planned fresh. Part of the shared room state. */
-    const clearedIngredients = ref<Record<number, string[]>>({})
+    /** variantId -> the ingredient clears for that meal (ADR-0094 object
+     *  grammar: a stable discriminated identity plus the clear-time serving
+     *  context, so the render re-derives the successor key instead of
+     *  string-matching a stale rendered basis). Stays until the meal is
+     *  cooked or re-planned fresh. Part of the shared room state. */
+    const clearedIngredients = ref<Record<number, ClearedIngredient[]>>({})
+
+    /** The plan servings a migrated legacy entry stamps as its clear-time
+     *  context (the ADR-0094 approximation: current state is the best
+     *  available proxy for a blob that predates the object model). */
+    const servingsFor = (variantId: number): number =>
+      plan.value.find((e) => e.variantId === variantId)?.servings ?? 1
 
     function planContains(variantId: number): boolean {
       return plan.value.some((e) => e.variantId === variantId)
@@ -230,12 +276,19 @@ export const usePlanStore = defineStore(
      * provided by the caller — the grocery engine holds the recipe docs).
      * The cleared ingredients stay hidden in the derived grocery list until
      * the meal is cooked or re-planned fresh.
+     *
+     * ADR-0094: the input may be the legacy `nameKey||basis` strings or
+     * the new object grammar — the store migrates on apply, so every
+     * ingress converges on the object shape.
      */
-    function clearIngredientsForCurrentMeals(keysByVariant: Record<number, string[]>): void {
+    function clearIngredientsForCurrentMeals(
+      keysByVariant: Record<number, readonly (string | ClearedIngredient)[]>,
+    ): void {
+      const normalized = migrateClearedMap(keysByVariant, servingsFor)
       for (const entry of plan.value) {
-        const keys = keysByVariant[entry.variantId]
+        const keys = normalized[entry.variantId]
         if (keys?.length) {
-          clearedIngredients.value[entry.variantId] = [...new Set(keys)]
+          clearedIngredients.value[entry.variantId] = keys
         }
       }
     }
@@ -252,13 +305,15 @@ export const usePlanStore = defineStore(
      * Only variants that are still planned are touched, matching the
      * replace primitive's scope; unknown variants' keys are dropped.
      */
-    function mergeIngredientsForCurrentMeals(keysByVariant: Record<number, string[]>): void {
+    function mergeIngredientsForCurrentMeals(
+      keysByVariant: Record<number, readonly (string | ClearedIngredient)[]>,
+    ): void {
+      const normalized = migrateClearedMap(keysByVariant, servingsFor)
       for (const entry of plan.value) {
-        const keys = keysByVariant[entry.variantId]
-        if (keys?.length) {
-          const existing = clearedIngredients.value[entry.variantId]
-          clearedIngredients.value[entry.variantId] = [...new Set([...(existing ?? []), ...keys])]
-        }
+        const add = normalized[entry.variantId]
+        if (!add?.length) continue
+        const merged = mergeClearedEntries(clearedIngredients.value[entry.variantId] ?? [], add)
+        clearedIngredients.value[entry.variantId] = merged
       }
     }
 
@@ -267,9 +322,14 @@ export const usePlanStore = defineStore(
       delete clearedIngredients.value[variantId]
     }
 
-    /** Replace the cleared map wholesale (room-sync apply path). */
-    function setClearedIngredients(value: Record<number, string[]>): void {
-      clearedIngredients.value = value
+    /** Replace the cleared map wholesale (room-sync apply path). ADR-0094:
+     *  the inbound map may be either shape — legacy peer snapshots arrive
+     *  as `nameKey||basis` strings and migrate here; unknown-shape entries
+     *  are dropped rather than stored. */
+    function setClearedIngredients(
+      value: Record<number, readonly (string | ClearedIngredient)[]>,
+    ): void {
+      clearedIngredients.value = migrateClearedMap(value, servingsFor)
     }
 
     /**
@@ -405,7 +465,7 @@ export const usePlanStore = defineStore(
      */
     function undoMarkCooked(
       event: CookedEntry,
-      prior: { entry: PlanEntry | null; cleared: string[] | null },
+      prior: { entry: PlanEntry | null; cleared: ClearedIngredient[] | string[] | null },
     ): void {
       unmarkCooked(event)
       if (!prior.entry) return
@@ -421,7 +481,11 @@ export const usePlanStore = defineStore(
         planCreatedAt.value = event.planCreatedAt ?? 0
       }
       if (prior.cleared) {
-        clearedIngredients.value[prior.entry.variantId] = [...prior.cleared]
+        const restored = migrateClearedMap(
+          { [prior.entry.variantId]: prior.cleared },
+          servingsFor,
+        )
+        clearedIngredients.value[prior.entry.variantId] = restored[prior.entry.variantId] ?? []
       }
     }
 
@@ -448,6 +512,34 @@ export const usePlanStore = defineStore(
         return { ...e, servings }
       })
       if (changed) plan.value = next
+
+      // ADR-0094: migrate a legacy string-keyed cleared map (or one that
+      // carries entries the object grammar cannot validate) to the object
+      // grammar, once, at hydration — the same afterHydrate funnel every
+      // other persisted-blob migration runs through. Only a map that
+      // actually needs it triggers the write, so a clean object blob
+      // never re-persists.
+      const raw = clearedIngredients.value as unknown as Record<number, readonly unknown[]>
+      let needsMigration = false
+      for (const list of Object.values(raw)) {
+        if (!Array.isArray(list)) {
+          needsMigration = true
+          break
+        }
+        for (const item of list) {
+          if (typeof item !== 'object' || item === null || !isClearedIngredient(item)) {
+            needsMigration = true
+            break
+          }
+        }
+        if (needsMigration) break
+      }
+      if (needsMigration) {
+        clearedIngredients.value = migrateClearedMap(
+          raw as Record<number, readonly unknown[]>,
+          servingsFor,
+        )
+      }
     }
 
     /** Replace the whole plan (used when importing a shared plan).

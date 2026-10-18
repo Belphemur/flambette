@@ -3,6 +3,7 @@ import { catalog, getRecipe } from './catalog'
 import {
   aggregateGroceries,
   aggregateRowKeys,
+  clearedLineKey,
   lineKeyIdentity,
   mealSurvivingLines,
   type GroceryItemView,
@@ -72,13 +73,21 @@ export function useGroceryList() {
     plannedMetas.value.flatMap((meta) => {
       const doc = docs.value.get(meta.id)
       if (!doc) return []
-      const cleared = plan.clearedIngredients[meta.id]
+      const clearedEntries = plan.clearedIngredients[meta.id]
+      // ADR-0094 Task-1 bridge: the cleared state is object-shaped in the
+      // store; the render filter still consumes the legacy string keys, so
+      // the objects are spelled back into `nameKey||basis` keys here until
+      // the successor-key filter rewrite lands (the same seam the ADR
+      // names for the rewrite).
+      const cleared = clearedEntries?.length
+        ? new Set(clearedEntries.map(clearedLineKey))
+        : undefined
       return [
         {
           doc,
           factor: entryServings(meta.id) / doc.serving_count,
           recipeName: meta.name,
-          cleared: cleared?.length ? new Set(cleared) : undefined,
+          cleared,
           displayLines:
             eventsDisplayLines(doc, restrictionPrefs.index.value, restrictionPrefs.activeIds.value) ??
             groceryDisplayLines(doc, restrictionPrefs.index.value,

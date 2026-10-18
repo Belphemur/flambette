@@ -17,6 +17,23 @@ function meta(id: number, servingCount = 6): VariantMeta {
   return { id, serving_count: servingCount } as VariantMeta
 }
 
+/**
+ * The migrated object entry a legacy bare-nameKey clear stamps (ADR-0094):
+ * a whole-ingredient (row) claim whose clear-time context is the plan's
+ * current servings for that variant, factor 1 (a legacy ingress cannot
+ * know the recipe's base servings — the successor math uses the servings
+ * ratio, which the base cancels out of).
+ */
+function row(keyName: string, servingsAtClear: number) {
+  return {
+    keyName,
+    unit: { kind: 'row' },
+    factor: 1,
+    servingsAtClear,
+    scope: 'ingredient',
+  }
+}
+
 describe('plan identity (ADR-0034)', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
@@ -236,7 +253,11 @@ describe('clear-checked merge (ADR-0092)', () => {
     // Already cleared on an earlier pass.
     plan.clearIngredientsForCurrentMeals({ 1: ['flour', 'salt'] })
     plan.mergeIngredientsForCurrentMeals({ 1: ['salt', 'butter'] })
-    expect(plan.clearedIngredients[1]).toEqual(['flour', 'salt', 'butter'])
+    expect(plan.clearedIngredients[1]).toEqual([
+      row('flour', 4),
+      row('salt', 4),
+      row('butter', 4),
+    ])
   })
 
   test('merging preserves pre-existing cleared entries for OTHER variants', () => {
@@ -246,8 +267,8 @@ describe('clear-checked merge (ADR-0092)', () => {
     plan.clearIngredientsForCurrentMeals({ 2: ['rice'] })
     // Only variant 1's checked keys arrive.
     plan.mergeIngredientsForCurrentMeals({ 1: ['flour'] })
-    expect(plan.clearedIngredients[1]).toEqual(['flour'])
-    expect(plan.clearedIngredients[2]).toEqual(['rice'])
+    expect(plan.clearedIngredients[1]).toEqual([row('flour', 4)])
+    expect(plan.clearedIngredients[2]).toEqual([row('rice', 2)])
   })
 
   test('variants not planned are not touched', () => {
@@ -262,7 +283,7 @@ describe('clear-checked merge (ADR-0092)', () => {
     plan.addToPlan(meta(1), 4)
     plan.clearIngredientsForCurrentMeals({ 1: ['flour'] })
     plan.clearIngredientsForCurrentMeals({ 1: ['salt'] })
-    expect(plan.clearedIngredients[1]).toEqual(['salt'])
+    expect(plan.clearedIngredients[1]).toEqual([row('salt', 4)])
   })
 })
 
@@ -280,7 +301,7 @@ describe('undoing a cook (ADR-0034)', () => {
 
     plan.undoMarkCooked(event, { entry: { variantId: 1, servings: 4 }, cleared: ['flour', 'salt'] })
     expect(plan.plan).toEqual([{ variantId: 1, servings: 4 }])
-    expect(plan.clearedIngredients[1]).toEqual(['flour', 'salt'])
+    expect(plan.clearedIngredients[1]).toEqual([row('flour', 4), row('salt', 4)])
     // The plan is the SAME plan it was before the cook: a mid-cook undo
     // must not leave the household looking at a different plan id.
     expect(plan.planId).toBe(identity.planId)

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
-import { onlyTrueKeys } from '../lib/grocery'
+import { clearedMapToLegacy, onlyTrueKeys } from '../lib/grocery'
 import { describeRelayError } from '../lib/relayErrors'
 import {
   mergeSharedFilters,
@@ -373,7 +373,11 @@ export const useRoomStore = defineStore('room', () => {
       plan: plan.plan.map((e) => ({ variantId: e.variantId, servings: e.servings })),
       customItems: [...plan.customItems],
       checked,
-      cleared: { ...plan.clearedIngredients },
+      // ADR-0094 interim wire shape (Appendix A): the store holds object
+      // entries; the `cleared` key still carries the legacy `nameKey||basis`
+      // strings so an older peer never sees a shape it cannot parse. Task 4
+      // replaces this with the `clearedV2` + legacy dual emission.
+      cleared: clearedMapToLegacy(plan.clearedIngredients),
       // Household state (ADR-0012): remembered custom-ingredient names.
       customs: customIngredients.list.map((c) => ({ ...c })),
       // Household state (ADR-0087 Decision 7 superseded): the kitchen

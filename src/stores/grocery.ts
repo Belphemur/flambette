@@ -4,6 +4,35 @@ import { reconcileCheckedExtras, LEGACY_EXTRA_KEY_PREFIX } from '../lib/extraChe
 import { usePlanStore } from './plan'
 
 /**
+ * One cleared-ingredient entry (ADR-0094): the stable, discriminated
+ * identity of a grocery clear plus the clear-time serving context, so the
+ * render re-derives the successor line key deterministically instead of
+ * string-matching a stale rendered basis (`egg||4` -> `egg||8`).
+ *
+ * The kind payloads carry the clear-time basis data the successor
+ * derivation re-scales — the ADR's "clear-time amount" lives here (a
+ * by-unit line without its amount could not predict the re-summed basis,
+ * and a container line without its count could not re-derive the
+ * ceil-merged package count).
+ */
+export interface ClearedIngredient {
+  /** BASE doc nameKey, e.g. `egg`, `soy sauce` (never the rendered `||basis`). */
+  keyName: string
+  /** Grammar class of the cleared line; discriminates the identity bucket. */
+  unit:
+    | { kind: 'byUnit'; unit: string; amount: number } // parsed quantity, e.g. `tbsp`, `ml`
+    | { kind: 'container'; noun: string; annotation: string; count: number } // container phrase, e.g. `pkg`, `small bunch`
+    | { kind: 'raw'; basis: string } // unparseable `raw||` row, e.g. `to taste`; basis verbatim
+    | { kind: 'row' } // whole-ingredient clear (bare nameKey)
+  /** Clear-time plan factor = entryServings / recipe.baseServings. */
+  factor: number
+  /** Serving count the plan held at clear time. */
+  servingsAtClear: number
+  /** `line` = hide one rendered line; `ingredient` = clear the whole ingredient group. */
+  scope: 'line' | 'ingredient'
+}
+
+/**
  * Grocery checkbox state, keyed by grocery line key. Persisted to localStorage
  * under the `mealime-planner:v1:checked` key by pinia-plugin-persistedstate.
  */

@@ -8,6 +8,7 @@ import { parseQuantity, formatAmount, formatMetricAmount, unitKey } from './quan
 import { scaleSeasoningAware } from './recipe'
 import { bucketFor, type StoreSection } from './sections'
 import type { RecipeDoc } from './types'
+import type { ClearedIngredient } from '../stores/grocery'
 
 export interface GroceryLine {
   /** Stable key for the checkbox state: `<normalized name>||<key basis>` */
@@ -31,6 +32,215 @@ export interface GroceryLine {
  */
 function lineKeyBasis(amount: number, unit: string): string {
   return unit ? `${formatAmount(amount)} ${unit}` : formatAmount(amount)
+}
+
+/* ---------- ADR-0094: object-JSON cleared-ingredient storage ---------- */
+
+/**
+ * Merge-identity of one cleared entry (ADR-0094): the nameKey plus the
+ * GRAMMAR BUCKET the entry claims — `row` for whole-ingredient clears,
+ * the verbatim basis for raw rows, the container key for container lines,
+ * the unit key for by-unit lines. Two entries with the same identity are
+ * the same claim (the newest one wins on merge); entries with different
+ * identities never collapse — which is exactly the discrimination the
+ * old `nameKey||basis` string keys lost (`egg||4` and `egg||6 to taste`
+ * both reducing to `egg||`).
+ */
+export function clearedEntryIdentity(entry: ClearedIngredient): string {
+  const u = entry.unit
+  switch (u.kind) {
+    case 'byUnit':
+      return `${entry.keyName}||u:${unitKey(u.unit)}`
+    case 'container':
+      return `${entry.keyName}||c:${containerKey(u.noun, u.annotation)}`
+    case 'raw':
+      return `${entry.keyName}||r:${u.basis}`
+    case 'row':
+      return `${entry.keyName}||row`
+  }
+}
+
+/** The clear-time serving context stamped onto every migrated entry. */
+export interface ClearedClearContext {
+  /** Clear-time plan factor (entryServings / recipe.baseServings), when known. */
+  factor: number
+  /** Serving count the plan held at clear time. */
+  servingsAtClear: number
+}
+
+/**
+ * Classify one legacy cleared key (`nameKey||basis`, or a bare nameKey)
+ * into the ADR-0094 object grammar. The basis is classified with the SAME
+ * parsers the render uses, so a migrated entry claims the same bucket its
+ * string key did:
+ *
+ * - bare nameKey -> `{ kind: 'row' }`, scope `ingredient` (the Clear-list
+ *   whole-ingredient ledger);
+ * - `nameKey||raw||<basis>` -> `{ kind: 'raw', basis }`, verbatim (raw
+ *   rows never re-sum, so the basis IS the identity);
+ * - a parseable container quantity -> `{ kind: 'container', ... }` with
+ *   the clear-time count;
+ * - any other parseable quantity -> `{ kind: 'byUnit', unit, amount }`;
+ * - anything unparseable -> `{ kind: 'raw', basis }` with the basis
+ *   preserved verbatim.
+ *
+ * Returns null for a key that cannot yield a nameKey (defensive: a
+ * malformed `||...` string is dropped rather than stored as an
+ * empty-named claim).
+ */
+export function clearedEntryFromKey(
+  key: string,
+  ctx: ClearedClearContext,
+): ClearedIngredient | null {
+  if (!key) return null
+  const sep = key.indexOf('||')
+  if (sep < 0) {
+    return {
+      keyName: key,
+      unit: { kind: 'row' },
+      factor: ctx.factor,
+      servingsAtClear: ctx.servingsAtClear,
+      scope: 'ingredient',
+    }
+  }
+  const keyName = key.slice(0, sep)
+  const basis = key.slice(sep + 2)
+  if (!keyName) return null
+  const scope: 'line' | 'ingredient' = 'line'
+  if (basis.startsWith('raw||')) {
+    return { keyName, unit: { kind: 'raw', basis: basis.slice('raw||'.length) }, factor: ctx.factor, servingsAtClear: ctx.servingsAtClear, scope }
+  }
+  const container = parseContainerQuantity(basis)
+  if (container) {
+    return {
+      keyName,
+      unit: { kind: 'container', noun: container.container, annotation: container.annotation, count: container.count },
+      factor: ctx.factor,
+      servingsAtClear: ctx.servingsAtClear,
+      scope,
+    }
+  }
+  const parsed = parseQuantity(basis)
+  if (parsed) {
+    return { keyName, unit: { kind: 'byUnit', unit: parsed.unit, amount: parsed.amount }, factor: ctx.factor, servingsAtClear: ctx.servingsAtClear, scope }
+  }
+  return { keyName, unit: { kind: 'raw', basis }, factor: ctx.factor, servingsAtClear: ctx.servingsAtClear, scope }
+}
+
+/** Runtime shape guard for one ADR-0094 cleared entry off the wire/backup. */
+export function isClearedIngredient(value: unknown): value is ClearedIngredient {
+  if (typeof value !== 'object' || value === null) return false
+  const e = value as Partial<ClearedIngredient>
+  if (typeof e.keyName !== 'string' || !e.keyName) return false
+  if (e.scope !== 'line' && e.scope !== 'ingredient') return false
+  if (typeof e.factor !== 'number' || !Number.isFinite(e.factor)) return false
+  if (typeof e.servingsAtClear !== 'number' || !Number.isFinite(e.servingsAtClear)) return false
+  const u = e.unit as { kind?: unknown; unit?: unknown; amount?: unknown; noun?: unknown; annotation?: unknown; count?: unknown; basis?: unknown } | undefined
+  if (typeof u !== 'object' || u === null) return false
+  switch (u.kind) {
+    case 'byUnit':
+      return typeof u.unit === 'string' && typeof u.amount === 'number' && Number.isFinite(u.amount)
+    case 'container':
+      return (
+        typeof u.noun === 'string' &&
+        typeof u.annotation === 'string' &&
+        typeof u.count === 'number' &&
+        Number.isFinite(u.count)
+      )
+    case 'raw':
+      return typeof u.basis === 'string'
+    case 'row':
+      return true
+    default:
+      return false
+  }
+}
+
+/**
+ * Normalize a cleared map that may be EITHER shape — the ADR-0094 object
+ * arrays (used as-is) or the legacy `Record<number, string[]>` (migrated
+ * entry-by-entry). Legacy entries get their serving context stamped from
+ * `servingsFor` (the plan's CURRENT state — the ADR's documented
+ * approximation: at stamp time the servings ratio is 1, so a migrated
+ * entry hides exactly the line its string key named, strictly no worse
+ * than the string model; `factor` is stamped 1 because a legacy blob
+ * cannot know the recipe's base servings — the successor derivation uses
+ * the servings ratio, which is mathematically identical since the base
+ * cancels).
+ *
+ * Entries are deduped per variant by `clearedEntryIdentity`, incoming
+ * last (so a re-clear's fresher context wins). Variants whose arrays are
+ * empty or whose entries all fail validation are dropped.
+ */
+export function migrateClearedMap(
+  raw: Record<number, readonly unknown[]> | Record<string, readonly unknown[]> | undefined,
+  servingsFor: (variantId: number) => number,
+): Record<number, ClearedIngredient[]> {
+  const out: Record<number, ClearedIngredient[]> = {}
+  if (!raw) return out
+  for (const [rawId, list] of Object.entries(raw)) {
+    if (!Array.isArray(list) || list.length === 0) continue
+    const variantId = Number(rawId)
+    if (!Number.isFinite(variantId)) continue
+    const ctx: ClearedClearContext = { factor: 1, servingsAtClear: servingsFor(variantId) }
+    const byIdentity = new Map<string, ClearedIngredient>()
+    for (const item of list) {
+      const entry =
+        typeof item === 'string'
+          ? clearedEntryFromKey(item, ctx)
+          : isClearedIngredient(item)
+            ? item
+            : null
+      if (!entry) continue
+      byIdentity.set(clearedEntryIdentity(entry), entry)
+    }
+    if (byIdentity.size > 0) out[variantId] = [...byIdentity.values()]
+  }
+  return out
+}
+
+/**
+ * The legacy `nameKey||basis` spelling of a cleared entry — the shape the
+ * string model persisted and the render filter still consumes. Used as
+ * the Task-1 bridge at the `useGroceryList` seam until the successor-key
+ * filter rewrite lands: byUnit/raw/row entries round-trip exactly; a
+ * container entry re-spells its noun through the canonical formatter
+ * (`½ (142 g) pkg` -> `½ (142 g) pkgs`), which can transiently re-spell a
+ * legacy verbatim key — the Task-3 filter matches containers by parsed
+ * (containerKey, count) instead, so the shipped behavior is exact.
+ */
+export function clearedLineKey(entry: ClearedIngredient): string {
+  const u = entry.unit
+  switch (u.kind) {
+    case 'row':
+      return entry.keyName
+    case 'raw':
+      return `${entry.keyName}||raw||${u.basis}`
+    case 'container':
+      return `${entry.keyName}||${formatContainerQuantity(u.count, u.noun, u.annotation)}`
+    case 'byUnit':
+      return `${entry.keyName}||${lineKeyBasis(u.amount, u.unit)}`
+  }
+}
+
+/**
+ * The whole cleared map in the legacy string spelling — the interim wire
+ * shape (room snapshot's `cleared` key, ADR-0094 Appendix A) and the
+ * Task-1 bridge input at the `useGroceryList` seam. Older peers keep
+ * receiving exactly the payload shape they always did; Task 4 replaces
+ * this with the `clearedV2` + legacy dual emission.
+ */
+export function clearedMapToLegacy(
+  map: Record<number, readonly ClearedIngredient[]>,
+): Record<number, string[]> {
+  const out: Record<number, string[]> = {}
+  for (const [rawId, entries] of Object.entries(map)) {
+    if (!Array.isArray(entries) || entries.length === 0) continue
+    const id = Number(rawId)
+    if (!Number.isFinite(id)) continue
+    out[id] = [...new Set(entries.map(clearedLineKey))]
+  }
+  return out
 }
 
 /**
