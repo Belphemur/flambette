@@ -150,18 +150,40 @@ The ADR-0041 GLOBAL multi-timer strip remains the RUNNING-timers surface
 (visible across steps, multiple concurrent timers); the per-step card
 owns only the ADD affordance.
 
-## Timer alerts (ADR-0081 amendment)
+## Timer alerts (ADR-0081 amendment; recurring alarm per ADR-0093)
 
-When a timer reaches zero the device alerts per settings: a synthesized
-two-tone chime (Web Audio, generated at runtime — NO audio asset, NO new
-dependency) and/or a vibration pattern (`navigator.vibrate`,
-feature-detected, graceful no-op). The live-region announcement STAYS —
-the alert adds channels, never replaces.
+When a timer THIS session watched count down reaches zero, the device
+alerts in ROUNDS (ADR-0093): each round is a synthesized two-tone chime
+(Web Audio, generated at runtime — NO audio asset, NO new dependency)
+and/or a vibration pattern (`navigator.vibrate`, feature-detected,
+graceful no-op), each channel honoring its toggle read live. The
+pause AFTER a round GROWS — 2 s, 4 s, 8 s, 16 s, then a 30 s cap — and
+the alarm repeats UNTIL THE USER STOPS THE TIMER: Restart/Resume
+re-arms (the countdown is live again), Cancel/Clear removes the timer.
+NO new control exists; finishing the cook does NOT silence an alarm —
+only stopping the timer does. A timer already expired when the session
+first saw it never alarms (the ADR-0081 seeding rule stands). The
+live-region announcement STAYS — the alert adds channels, never
+replaces. The ONE 1 s host interval (`src/lib/timerAlertHost.ts`) is
+still the scheduler (the tick checks which rounds are due — no
+per-round timers), and its loop stays alive while any timer is
+alarming even though nothing is counting.
 
 - Settings → "Timer alerts": Sound and Vibration toggles
   (`ui.timerAlertSound` / `ui.timerAlertVibrate`), both DEFAULT ON.
   Persisted in the existing `mealime-planner:v1:ui` slice, so backup
-  carries them (no new slice).
+  carries them (no new slice). Where `navigator.vibrate` is NOT a
+  function (Firefox ≥ 129 removed the API — Bugzilla 1900037, inert
+  since 79 per Bugzilla 1653318; no iOS browser ever exposed it), the
+  Vibration row shows an inline "this browser cannot vibrate" note
+  (`timer-alert-vibrate-unsupported`) and the toggle is disabled in
+  place; the stored preference is KEPT untouched.
+- PER-TIMER PITCH (ADR-0093): the chime is transposed by the timer's
+  ORDINAL among its recipe's timers (the strip's order, oldest id
+  first) — semitone offsets 0/+2/+4/+7 for timers 1–4, bounded by
+  `MAX_CONCURRENT_TIMERS`, every tone of the A5→D6 pair shifted so the
+  rising interval is preserved (`freq = base * 2 ** (st / 12)`). The
+  host derives the ordinal at fire time; the engine stays pure.
 - DELIBERATELY DEVICE-LOCAL, never room-synced (ADR-0037's reasoning):
   sound/vibration are per-device capabilities; one household member must
   not configure another phone's alerts.
