@@ -5,14 +5,14 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**97 records.** One file per decision (`ADR-NNNN-slug.md`),
+**98 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
 
 ## In force
 
-The 79 accepted records below all still govern. Skim the ones
+The 80 accepted records below all still govern. Skim the ones
 near your change before proposing anything -- they encode *why* the
 architecture is shaped the way it is.
 
@@ -97,6 +97,7 @@ architecture is shaped the way it is.
 | [0089](ADR-0089-kitchen-filter-dropdown.md) | Pantry becomes the Kitchen filter dropdown on the Recipes tab _(supersedes ADR-0087)_ | 2026-10-14 |
 | [0090](ADR-0090-pantry-room-sync.md) | the pantry becomes household state — room-synced like custom ingredients _(supersedes ADR-0087)_ | 2026-10-14 |
 | [0091](ADR-0091-preview-github-deployments-web-only.md) | Previews create ONE GitHub deployment per PR (web only) and PR close deletes it _(supersedes ADR-0039)_ | 2026-10-15 |
+| [0092](ADR-0092-clear-checked-pull-to-clear.md) | Clear-checked removes only checked items; pull-to-clear gesture | 2026-10-18 |
 
 ## Not in force
 
@@ -139,8 +140,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0092**). Do not count the files -- that is how the
-   collisions above happened (97 files share 91 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0093**). Do not count the files -- that is how the
+   collisions above happened (98 files share 92 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.
