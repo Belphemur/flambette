@@ -178,10 +178,14 @@ test('room sync: A clears the grocery list and B sees it empty', async ({ browse
   await a.goto('/grocery')
   await expect(a.locator('main label').first()).toBeVisible({ timeout: 10_000 })
   await a.locator('main input[type=checkbox]').first().click()
-  // ADR-0092: with a checked item the button reads "Clear checked" and
-  // clears directly (no confirm modal) — checked lines are merged into
-  // the cleared snapshot and B's list empties live.
+  // ADR-0092: with a checked item the button reads "Clear checked"; A
+  // wants the FULL clear, so A unchecks first — with NOTHING checked the
+  // button reads "Clear list" and the confirm-modal clear-everything
+  // (forced past the old empty guard) hides every line for the room.
+  await expect(a.locator('[data-test=grocery-clear]')).toHaveText(/Clear checked/)
+  await a.locator('main input[type=checkbox]').first().click()
   await a.locator('[data-test=grocery-clear]').click()
+  await a.getByTestId('confirm-action').click()
   await expect(a.getByTestId('cleared-empty')).toBeVisible()
 
   // …and B's list empties live (cleared ingredients are household state).
