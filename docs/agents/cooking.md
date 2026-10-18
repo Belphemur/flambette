@@ -169,6 +169,22 @@ still the scheduler (the tick checks which rounds are due — no
 per-round timers), and its loop stays alive while any timer is
 alarming even though nothing is counting.
 
+Review hardening (ADR-0093 change note 2026-10-19, all four real):
+(1) the shell shows a GLOBAL alarm banner (`alarm-banner` in App.vue)
+while any timer rings — `Time's up — still ringing: …` + **Stop** — on
+every non-fullscreen surface, because the strip's stop verbs are
+unreachable after Finish (Done lands on /history); Stop performs the
+timer's own Clear verb (NO new alarm state — ADR-0093's rejected
+"silence button" stays rejected); hidden on cooking/shopping.
+(2) the alarm is pinned to the record's run-segment fingerprint, so a
+backup restore re-creating the same ids drops the old alarm instead of
+inheriting its rounds (a rename keeps it; a Pause IS a stop).
+(3) the pitch ordinal is CAPTURED at round 1 — clearing a lower-id
+timer never moves a ringing alarm to another voice.
+(4) with BOTH channels dead (sound off; vibration off or API absent)
+the host never enters/stays in the alarming set — no invisible alarm
+can pin the 1 s interval forever, and no banner shows (nothing rings).
+
 - Settings → "Timer alerts": Sound and Vibration toggles
   (`ui.timerAlertSound` / `ui.timerAlertVibrate`), both DEFAULT ON.
   Persisted in the existing `mealime-planner:v1:ui` slice, so backup

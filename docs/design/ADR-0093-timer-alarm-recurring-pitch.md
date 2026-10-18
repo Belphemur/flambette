@@ -92,5 +92,40 @@ permission surface; `navigator.vibrate` re-fires freely where it exists.
   unshipped — rejected for this round.
 - **Fixed-interval repetition** (no growth): nonstop identical buzzing
   is worse than escalating; the owner asked for growth.
+
+## Change note — 2026-10-19 (review hardening, PR #95)
+
+Four review findings tightened the implementation without changing the
+stop rule (only the user stops the timer):
+
+1. **Stop must be reachable everywhere** (qodo, High): the stop verbs
+   live on the cooking strip, so a cook who finished (post-cook Done
+   lands on /history) had a ringing alarm with no stop in reach. The
+   shell now shows a small **alarm banner** while any timer rings —
+   `Time's up — still ringing: …` with a **Stop** button — on every
+   non-fullscreen surface. This is NOT the rejected "separate silence
+   button": Stop performs the timer's own **Clear** verb on each ringing
+   timer, which the host observes exactly like a strip tap, so the alarm
+   still has no state the timer does not have. Cooking keeps its full
+   strip (banner hidden there); shopping is a modal flow the banner
+   would cover.
+2. **The alarm is pinned to the record it was raised against** (qodo):
+   the alarming state fingerprints the run segment
+   (`remaining|running|startedAt|total`). A backup restore that
+   re-creates the same `variantId:timerId` with a different segment
+   drops the old alarm; the restored record re-enters the normal rules
+   (an already-expired restore is seeded silently). A rename keeps the
+   alarm; a Pause rewrites the segment and IS a stop (§1 lists Pause).
+3. **The pitch is captured at round 1** (qodo): the ordinal among the
+   recipe's timers is frozen into the alarm state, so clearing a
+   lower-id timer never moves a ringing alarm to another voice.
+4. **A dead alarm never pins the loop** (kody): with BOTH channels
+   unable to output (sound off, vibration off or the API absent — read
+   live, honoring the honest-capability rule), the host never enters —
+   or stays in — the alarming set. A mid-alarm toggle-off is a user
+   stop and does not resurrect; the 1 s interval therefore cannot leak
+   forever behind silent alarms. The banner mirrors the alarming set
+   reactively (`alarmingTimers`); with nothing audible to stop, no
+   banner shows.
 - **Distinct melodies per ordinal**: harder to keep "slightly
   different", and a transposed interval is trivially unit-testable.

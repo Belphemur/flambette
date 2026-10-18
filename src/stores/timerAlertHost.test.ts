@@ -1,9 +1,11 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { createPinia, setActivePinia } from 'pinia'
 import {
+  alarmingTimers,
   resetTimerAlertHostForTests,
   scanTimerCompletions,
   stopTimerAlertHost,
+  timerAlertLoopRunning,
   unlockTimerAlertAudio,
 } from '../lib/timerAlertHost'
 import { chimeTonesForOrdinal } from '../lib/timerAlert'
@@ -285,5 +287,99 @@ describe('recurring escalating alarm (ADR-0093)', () => {
     expect(Math.abs(chimeTones.at(-1)!.freq - hi)).toBeLessThan(0.01)
     // Strictly higher than timer 1's tones — the ear can tell them apart.
     expect(chimeTones.at(-2)!.freq).toBeGreaterThan(880)
+  })
+
+  test('a ringing timer keeps its voice when a lower-id timer is cleared (round-1 ordinal capture)', () => {
+    const t0 = 1_000_000
+    setTimers({ 5264: { 2: timer(2, 120, t0), 1: timer(1, 60, t0) } })
+    unlockTimerAlertAudio()
+    scanTimerCompletions(t0) // both armed
+    scanTimerCompletions(t0 + 61_000) // timer 1 → ordinal 0
+    scanTimerCompletions(t0 + 63_000) // timer 1 round 2
+    scanTimerCompletions(t0 + 121_000) // timer 2 → ordinal 1
+    const [, hi] = chimeTonesForOrdinal(1)
+    expect(Math.abs(chimeTones.at(-1)!.freq - hi)).toBeLessThan(0.01)
+    // The cook CLEARS timer 1 while timer 2 is still ringing: timer 2's
+    // next round must NOT drop to the freed ordinal 0 — the pitch was
+    // captured at its round 1 (ADR-0093: the ear tells timers apart).
+    setTimers({ 5264: { 2: timer(2, 120, t0) } })
+    scanTimerCompletions(t0 + 151_000) // timer 2's next round is due
+    expect(Math.abs(chimeTones.at(-1)!.freq - hi)).toBeLessThan(0.01)
+    expect(chimeTones.at(-1)!.freq).toBeGreaterThan(1000) // never the base D6 pair
+  })
+
+  test('a backup restore that re-creates the same ids drops the old alarm and never inherits its rounds', () => {
+    const t0 = 1_000_000
+    setTimers({ 5264: { 1: timer(1, 60, t0) } })
+    scanTimerCompletions(t0) // armed
+    scanTimerCompletions(t0 + 61_000) // round 1
+    expect(vibrateCalls).toHaveLength(1)
+    // A rename does NOT drop the alarm (a label is not a stop — only the
+    // run segment identifies the alarmed record):
+    setTimers({ 5264: { 1: { ...timer(1, 60, t0), label: 'Renamed' } } })
+    scanTimerCompletions(t0 + 63_000) // round 2 due
+    expect(vibrateCalls).toHaveLength(2)
+    // A backup import replaces the record wholesale: same variantId and
+    // timer id, a DIFFERENT run segment (already expired). The old alarm
+    // is not this record's alarm — it must stop, and the restored record
+    // is seeded silently (never re-fires).
+    setTimers({ 5264: { 1: timer(1, 60, t0 - 7_200_000) } })
+    scanTimerCompletions(t0 + 123_000) // what would have been round 3
+    scanTimerCompletions(t0 + 183_000) // and every later due moment
+    expect(vibrateCalls).toHaveLength(2)
+    expect(alarmingTimers.value).toEqual([])
+  })
+
+  test('the banner mirror lists the ringing timers by label and empties when the alarm stops', () => {
+    const t0 = 1_000_000
+    setTimers({ 5264: { 2: timer(2, 120, t0), 1: timer(1, 60, t0) } })
+    scanTimerCompletions(t0)
+    expect(alarmingTimers.value).toEqual([])
+    scanTimerCompletions(t0 + 61_000) // timer 1 rings
+    expect(alarmingTimers.value).toEqual([{ variantId: 5264, timerId: 1, label: 'T1' }])
+    scanTimerCompletions(t0 + 121_000) // timer 2 joins
+    expect(alarmingTimers.value).toEqual([
+      { variantId: 5264, timerId: 1, label: 'T1' },
+      { variantId: 5264, timerId: 2, label: 'T2' },
+    ])
+    setTimers({ 5264: {} }) // the cook clears both
+    scanTimerCompletions(t0 + 125_000)
+    expect(alarmingTimers.value).toEqual([])
+  })
+
+  test('with BOTH channels dead the host never enters the alarming set — no invisible 1 s loop', () => {
+    const ui = useUiStore()
+    ui.timerAlertSound = false
+    ui.timerAlertVibrate = false
+    const t0 = 1_000_000
+    setTimers({ 5264: { 1: timer(1, 60, t0) } })
+    scanTimerCompletions(t0) // armed
+    scanTimerCompletions(t0 + 61_000) // expiry: round 1 would be due
+    expect(vibrateCalls).toEqual([])
+    // Nothing is ringing, so nothing is alarming and the loop's OWN stop
+    // condition fired — no permanent 1 s interval parked on an expired
+    // timer nobody can hear (kody: the setInterval leak).
+    expect(alarmingTimers.value).toEqual([])
+    expect(timerAlertLoopRunning()).toBe(false)
+    scanTimerCompletions(t0 + 120_000)
+    expect(vibrateCalls).toEqual([])
+  })
+
+  test('turning the last channel OFF mid-alarm stops it (the flip is a user stop)', () => {
+    const ui = useUiStore()
+    const t0 = 1_000_000
+    setTimers({ 5264: { 1: timer(1, 60, t0) } })
+    scanTimerCompletions(t0)
+    scanTimerCompletions(t0 + 61_000) // round 1 (both channels on)
+    expect(vibrateCalls).toHaveLength(1)
+    ui.timerAlertSound = false
+    ui.timerAlertVibrate = false
+    scanTimerCompletions(t0 + 63_000) // round 2 would be due
+    expect(vibrateCalls).toHaveLength(1)
+    expect(alarmingTimers.value).toEqual([])
+    // Re-enabling later does NOT resurrect the stopped alarm.
+    ui.timerAlertSound = true
+    scanTimerCompletions(t0 + 95_000)
+    expect(vibrateCalls).toHaveLength(1)
   })
 })

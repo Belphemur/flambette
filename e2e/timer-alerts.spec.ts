@@ -192,6 +192,47 @@ test('a finished timer buzzes when vibration is ON and stays silent when OFF —
   await expectZeroMealimeRequests(page)
 })
 
+test('a ringing alarm is stoppable from ANY surface — the shell banner (ADR-0093 change note)', async ({ page }) => {
+  test.setTimeout(240_000)
+  const cooking = await startCooking(page)
+  await armPreset1(page)
+  await expectCompletion(page)
+
+  // Finish the cook: the prompt's Done lands on /history — a surface with
+  // NO timer controls. ADR-0093 keeps "only the user stops the alarm", so
+  // the alarm keeps ringing there — but a stop must be REACHABLE: the
+  // shell shows the banner for the ringing timer (the preset label is the
+  // normalized default). The host fires round 1 on its own 1 s cadence,
+  // so visibility is polled.
+  // Finish only renders on the LAST step (v-else on the Next button) —
+  // walk there first, exactly like cooking.spec's gotoLastStep.
+  const progress = await cooking.getByText(/Step 1 \/ (\d+)/).textContent()
+  const total = Number(progress!.match(/Step 1 \/ (\d+)/)![1])
+  const next = cooking.getByRole('button', { name: /Next/ })
+  for (let i = 1; i < total; i++) await next.click()
+  await cooking.getByTestId('finish').click()
+  await page.getByTestId('post-cook-done').click()
+  await expect(page).toHaveURL(/\/history/)
+  const banner = page.getByTestId('alarm-banner')
+  await expect(banner).toBeVisible({ timeout: 15_000 })
+  await expect(banner.getByTestId('alarm-banner-text')).toContainText("Time's up — still ringing: “Step”")
+
+  // Stop = the timer's own Clear verb: the record is removed, the host
+  // observes the vanished key, the banner and the alarm both end — and
+  // the strip (if the cook ever returns) carries no ghost chip.
+  await banner.getByTestId('alarm-banner-stop').click()
+  await expect(banner).toBeHidden()
+  const uiBlob = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('mealime-planner:v1:ui') ?? '{}'),
+  )
+  expect(uiBlob.stepTimers?.['10085'] ?? {}).toEqual({})
+  // And the alarm really stopped: no further vibration rounds arrive.
+  const callsAfter = await vibrateCalls(page)
+  await page.waitForTimeout(2_500)
+  expect(await vibrateCalls(page)).toEqual(callsAfter)
+  await expectZeroMealimeRequests(page)
+})
+
 /* ---------- helpers ---------- */
 
 async function startCooking(page: Page) {

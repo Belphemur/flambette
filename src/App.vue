@@ -7,7 +7,11 @@ import ChangelogModal from './components/ChangelogModal.vue'
 import { checkVersion, type VersionState } from './lib/versionCheck'
 import { TABS, useUiStore } from './stores/ui'
 import { getCatalog } from './lib/catalog'
-import { ensureTimerAlertPolling } from './lib/timerAlertHost'
+import {
+  alarmingTimers,
+  ensureTimerAlertPolling,
+  type AlarmingTimer,
+} from './lib/timerAlertHost'
 import { usePlanStore } from './stores/plan'
 import { useRoomStore, type RoomStatus } from './stores/room'
 import { initFavourites } from './stores/favourites'
@@ -71,6 +75,27 @@ const loadError = ref<string | null>(null)
 const isCooking = computed(() => route.name === 'cooking')
 const isShopping = computed(() => route.name === 'shop')
 const isFullscreenMode = computed(() => isCooking.value || isShopping.value)
+
+/**
+ * The global alarm banner (ADR-0093 change note 2026-10-19): while any
+ * timer is RINGING, the shell shows one Stop affordance no matter which
+ * surface the user is on — ADR-0093's stop verbs live on the cooking
+ * strip, and a cook who finished (post-cook Done lands on /history) or
+ * is anywhere else must still be able to stop the alarm without finding
+ * the recipe and re-entering cooking mode. The banner is a REACH route
+ * for the timer's own verbs, not a new alarm state: Stop performs the
+ * chip's Clear (cancel) on every ringing timer, which the host observes
+ * exactly like a tap on the strip. Hidden on the fullscreen focus modes
+ * (cooking carries the full strip with every stop verb; shopping is a
+ * modal flow the banner would cover) — the alarm itself is unaffected.
+ */
+const alarmRinging = computed(() => !isFullscreenMode.value && alarmingTimers.value.length > 0)
+const alarmNames = computed(() =>
+  alarmingTimers.value.map((t: AlarmingTimer) => `“${t.label}”`).join(', '),
+)
+function stopAlarms(): void {
+  for (const t of alarmingTimers.value) ui.clearTimer(t.variantId, t.timerId)
+}
 
 /**
  * The header room chip: a status DOT and its WORD (ADR-0049 addenda).
@@ -637,6 +662,33 @@ onBeforeUnmount(() => {
   >
   {{ action.label }}
   </button>
+  </div>
+  </Transition>
+
+  <!-- The global alarm banner (ADR-0093 change note 2026-10-19): one
+       Stop affordance while a timer RINGS, on every non-fullscreen
+       surface. role="alert" — a ringing alarm is assertive, unlike the
+       polite toast status. Sits in the toast's slot but yields upward
+       (bottom-40) while a toast is showing, so the two never stack.
+       Stop = the timer's own Clear verb, observed by the host exactly
+       like a strip tap — no new alarm state (ADR-0093 §1). -->
+  <Transition name="toast">
+  <div
+  v-if="alarmRinging"
+  role="alert"
+  data-test="alarm-banner"
+  class="fixed left-1/2 z-30 flex max-w-[min(28rem,calc(100vw-2.5rem))] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-3xl border border-border bg-popover px-5 py-3 text-sm font-medium leading-snug text-text shadow-popover"
+  :class="ui.toast ? 'bottom-40' : 'bottom-24'"
+  >
+  <span data-test="alarm-banner-text">Time's up — still ringing: {{ alarmNames }}</span>
+  <button
+  type="button"
+  data-test="alarm-banner-stop"
+  class="rounded-full bg-brand px-3 py-1 text-xs font-bold uppercase tracking-wide text-on-brand"
+  :aria-label="`Stop the alarm for ${alarmNames}`"
+  @click="stopAlarms()"
+  >Stop</button
+  >
   </div>
   </Transition>
 
