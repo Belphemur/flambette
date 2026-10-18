@@ -9,6 +9,8 @@ import { extraCheckedKey } from '../lib/extraCheckedKeys'
 import { aisleIcon, aisleNumber } from '../lib/aisleRole'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
 import IngredientAutocomplete from './IngredientAutocomplete.vue'
+import PullClearIndicator from './PullClearIndicator.vue'
+import { usePullToClear } from '../composables/usePullToClear'
 
 const router = useRouter()
 const customIngredients = useCustomIngredientsStore()
@@ -21,8 +23,22 @@ const {
   sections,
   ensureDocs,
   plan,
-  confirmAndClearGrocery,
+  clearButtonLabel,
+  handleClearClick,
 } = useGroceryList()
+
+/* ---------- Pull-to-clear gesture (ADR-0092) ---------- */
+
+/** The ONE shared composable, wired to the SAME clear handler as the
+ * button — parity with the Grocery tab by construction. */
+const {
+  bindRoot: pullBindRoot,
+  phase: pullPhase,
+  contentStyle: pullContentStyle,
+} = usePullToClear({
+  enabled: computed(() => checkedCount.value > 0),
+  onTrigger: () => handleClearClick(),
+})
 
 /* ---------- Auto-collapse of completed categories (ADR-0008 addendum) ---------- */
 
@@ -238,14 +254,14 @@ function exitShopping() {
   </div>
   </div>
   <button
-  v-if="checkedCount > 0"
+  v-if="totalCount > 0"
   class="flex h-11 shrink-0 items-center gap-1 rounded-xl border border-border-strong bg-surface-raised px-3 text-sm font-medium text-text active:bg-surface-sunken"
-  data-test="clear-list"
-  aria-label="Clear grocery list"
-  @click="confirmAndClearGrocery()"
+  data-test="grocery-clear"
+  :aria-label="clearButtonLabel"
+  @click="handleClearClick"
   >
   <Eraser :size="16" aria-hidden="true" class="mr-1 inline" />
-  Clear list
+  {{ clearButtonLabel }}
   </button>
   </div>
   </div>
@@ -267,6 +283,17 @@ function exitShopping() {
   </div>
 
   <template v-else>
+  <!-- Pull-to-clear region (ADR-0092): the ONE shared composable owns
+  every piece of gesture logic; this is only the element binding — see
+  GroceryTab. The add-item flow below stays outside: only the list
+  translates with the finger. -->
+  <div
+  :ref="pullBindRoot"
+  class="relative"
+  data-test="pull-clear-region"
+  >
+  <PullClearIndicator :phase="pullPhase" />
+  <div :style="pullContentStyle">
   <!-- The outer "Extra items" GROUP header stays manual-only (it is a
   group label, not a section). Its sub-sections now follow the SAME
   done→collapse rule as the store sections below (ADR-0050 addendum:
@@ -481,6 +508,8 @@ function exitShopping() {
   : 'The list is empty'
   }}</span>
   </p>
+  </div>
+  </div>
 
   <!-- Add-item flow (ADR-0012): same autocomplete as the Grocery tab
   — picking a suggestion defaults the category, Enter keeps raw. -->

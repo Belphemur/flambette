@@ -3,6 +3,8 @@ import { catalog, getRecipe } from './catalog'
 import {
   aggregateGroceries,
   aggregateRowKeys,
+  lineKeyIdentity,
+  mealSurvivingLines,
   type GroceryItemView,
 } from './grocery'
 import { localizeQuantity } from './units'
@@ -10,6 +12,7 @@ import { STORE_SECTIONS } from './sections'
 import { extraCheckedKey } from './extraCheckedKeys'
 import type { RecipeDoc, VariantMeta } from './types'
 import {
+  clearCheckedItems,
   confirmAndClearGrocery,
   registerClearSnapshotProvider,
 } from '../composables/useConfirm'
@@ -106,14 +109,18 @@ export function useGroceryList() {
    */
   const mealSummaries = computed<MealLineSummary[]>(() => {
     if (aggregateInputs.value.length !== plannedMetas.value.length) return []
+    // The merged render's per-group SURVIVING line identities — the same
+    // pass `items` runs, so the card and the list share one derivation.
+    const visibleIdentitiesByGroup = new Map(
+      items.value.map(
+        (item) => [item.normalized, new Set(item.lines.map((line) => lineKeyIdentity(line.key)))] as const,
+      ),
+    )
     return aggregateInputs.value.map((input) => {
-      // The SAME keys `aggregateGroceries` walks (the shared
-      // aggregateRowKeys derivation), matched with the SAME cleared set —
-      // the count cannot disagree with the list by construction.
-      const keys = aggregateRowKeys(input)
-      const lines = input.cleared
-        ? keys.filter((key) => !input.cleared!.has(key)).length
-        : keys.length
+      // The lines THIS meal contributes that survive the merged render's
+      // visibility (the bare-nameKey skip plus the line-granular clears)
+      // — the count cannot disagree with the list by construction.
+      const lines = mealSurvivingLines(input, visibleIdentitiesByGroup)
       return {
         id: input.doc.id,
         name: input.recipeName,
@@ -207,8 +214,13 @@ export function useGroceryList() {
   /* ---------- Clear-grocery workflow ---------- */
 
   /**
-   * Per-meal ingredient snapshot taken at clear time: variantId ->
-   * nameKey-normalized keys, from the already-loaded recipe docs.
+   * Clear-time snapshot (ADR-0092): per-meal row nameKeys PLUS the
+   * currently-rendered line keys per ingredient group, both from the ONE
+   * aggregation pass. The line keys are what makes clear-checked
+   * line-granular (PR #94 round 1): a checked key not in the rendered
+   * set is stale residue (a servings change re-spelled it) and is wiped
+   * rather than allowed to hide a current line; a nameKey whose group
+   * still has unchecked lines stays visible.
    */
   registerClearSnapshotProvider(() => {
     const byVariant: Record<number, string[]> = {}
@@ -222,7 +234,11 @@ export function useGroceryList() {
       const keys = aggregateRowKeys({ doc, displayLines })
       byVariant[doc.id] = keys.filter((key) => key.length > 0)
     }
-    return byVariant
+    const lineKeysByGroup: Record<string, string[]> = {}
+    for (const item of items.value) {
+      lineKeysByGroup[item.normalized] = item.lines.map((line) => line.key)
+    }
+    return { nameKeysByVariant: byVariant, lineKeysByGroup }
   })
 
   /**
@@ -250,6 +266,30 @@ export function useGroceryList() {
     { deep: true },
   )
 
+  /* ---------- Adaptive clear button (ADR-0092) ---------- */
+
+  /**
+   * The ONE clear button, shared by GroceryTab and ShopView, adapts to
+   * the checked state: with something checked it reads "Clear checked"
+   * and removes only those lines (direct, toast-reported); with nothing
+   * checked but a non-empty list it reads "Clear list" and keeps the
+   * ADR-0005 confirm-modal clear-everything flow — forced past the old
+   * `!anythingChecked()` no-op guard, because a button that reads
+   * "Clear list" must actually clear.
+   *
+   * The label text IS the distinguishable state the e2e asserts on.
+   * Both views consume this one implementation; never a view copy.
+   */
+  const clearCheckedActive = computed(() => checkedCount.value > 0)
+  const clearButtonLabel = computed(() =>
+    clearCheckedActive.value ? 'Clear checked' : 'Clear list',
+  )
+
+  function handleClearClick(): void {
+    if (clearCheckedActive.value) clearCheckedItems()
+    else void confirmAndClearGrocery(undefined, { force: true })
+  }
+
   return {
     plan,
     checked,
@@ -264,5 +304,8 @@ export function useGroceryList() {
     sections,
     ensureDocs,
     confirmAndClearGrocery,
+    clearCheckedActive,
+    clearButtonLabel,
+    handleClearClick,
   }
 }

@@ -388,6 +388,14 @@
 
 html {
   -webkit-tap-highlight-color: transparent;
+  /* ADR-0092 (PR #94 round 1, qodo finding 4 / kody): the document is the
+     app's ONLY scroll container, so the browser's native pull-to-refresh
+     belongs to `html` — the gesture region is a plain div, where
+     `overscroll-behavior` is inert. Containing it here keeps Chrome
+     Android's reload gesture out of the pull-to-clear drag (the
+     composable additionally preventDefaults downward touchmoves while a
+     pull is armed) without touching scrolling inside the app. */
+  overscroll-behavior-y: contain;
 }
 
 body {

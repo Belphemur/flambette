@@ -227,6 +227,45 @@ describe('cook provenance (ADR-0034)', () => {
   })
 })
 
+describe('clear-checked merge (ADR-0092)', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  test('merging preserves pre-existing cleared entries for the SAME variant', () => {
+    const plan = usePlanStore()
+    plan.addToPlan(meta(1), 4)
+    // Already cleared on an earlier pass.
+    plan.clearIngredientsForCurrentMeals({ 1: ['flour', 'salt'] })
+    plan.mergeIngredientsForCurrentMeals({ 1: ['salt', 'butter'] })
+    expect(plan.clearedIngredients[1]).toEqual(['flour', 'salt', 'butter'])
+  })
+
+  test('merging preserves pre-existing cleared entries for OTHER variants', () => {
+    const plan = usePlanStore()
+    plan.addToPlan(meta(1), 4)
+    plan.addToPlan(meta(2), 2)
+    plan.clearIngredientsForCurrentMeals({ 2: ['rice'] })
+    // Only variant 1's checked keys arrive.
+    plan.mergeIngredientsForCurrentMeals({ 1: ['flour'] })
+    expect(plan.clearedIngredients[1]).toEqual(['flour'])
+    expect(plan.clearedIngredients[2]).toEqual(['rice'])
+  })
+
+  test('variants not planned are not touched', () => {
+    const plan = usePlanStore()
+    plan.addToPlan(meta(1), 4)
+    plan.mergeIngredientsForCurrentMeals({ 99: ['ghost'] })
+    expect(plan.clearedIngredients[99]).toBeUndefined()
+  })
+
+  test('the replace primitive still REPLACES each variant set', () => {
+    const plan = usePlanStore()
+    plan.addToPlan(meta(1), 4)
+    plan.clearIngredientsForCurrentMeals({ 1: ['flour'] })
+    plan.clearIngredientsForCurrentMeals({ 1: ['salt'] })
+    expect(plan.clearedIngredients[1]).toEqual(['salt'])
+  })
+})
+
 describe('undoing a cook (ADR-0034)', () => {
   beforeEach(() => setActivePinia(createPinia()))
 

@@ -140,7 +140,12 @@ export interface AggregateInput {
   factor: number
   /** Display name of the planned meal (for provenance). */
   recipeName: string
-  /** nameKey-normalized ingredient keys hidden for THIS meal only. */
+  /**
+   * Per-meal cleared/hidden keys for THIS meal: bare nameKeys hide the
+   * whole ingredient (row-level skip); full line keys
+   * (`nameKey||basis`, ADR-0092's line-granular clear-checked) hide
+   * exactly that rendered line — `aggregateGroceries` unions them.
+   */
   cleared?: Set<string>
   /**
    * The restriction's display rows (the restriction ADR): when present, the
@@ -227,8 +232,101 @@ export function onlyTrueKeys(map: Record<string, boolean>): Record<string, boole
   return out
 }
 
+/**
+ * A rendered line key's COMPOSITION-STABLE identity (PR #94 round 2,
+ * kody K1): the nameKey plus the basis's UNIT identity — the normalized
+ * container key (`pkg|142 g`) for container quantities, otherwise
+ * `unitKey` of the PARSED unit (amount-free and plural-collapsed:
+ * `2 cups` and `1 cup` share `cup`; a unitless `2` and `4` share the
+ * empty unit), and the trailing raw token only when the basis parses as
+ * neither. `raw||`-namespace keys (a raw row whose key source could not
+ * parse) carry no stable unit, so they are their own identity —
+ * exact-match only, the pre-round-2 behaviour.
+ *
+ * Why an identity at all: a cleared entry persists the RENDER-summed
+ * basis (`soy sauce||3 tbsp`), which stops matching the moment a
+ * co-contributing meal is cooked/unplanned or the servings change (the
+ * line re-sums to `2 tbsp`) — the cleared line would reappear even
+ * though the household never re-planned. The unit does not change with
+ * composition, so matching on (nameKey, unit) keeps the line hidden
+ * across composition changes while structurally never over-hiding: a
+ * by-unit line is unique per unit identity and a container line unique
+ * per (noun, annotation) inside its group, so one identity can match at
+ * most one rendered line and an unchecked sibling line (a DIFFERENT
+ * unit) can never be swallowed.
+ */
+export function lineKeyIdentity(key: string): string {
+  const sep = key.indexOf('||')
+  if (sep < 0) return key
+  const nameKey = key.slice(0, sep)
+  const basis = key.slice(sep + 2)
+  if (basis.startsWith('raw||')) return key
+  const container = parseContainerQuantity(basis)
+  if (container) return `${nameKey}||${containerKey(container.container, container.annotation)}`
+  const parsed = parseQuantity(basis)
+  if (parsed) return `${nameKey}||${unitKey(parsed.unit)}`
+  const tokens = basis.trim().split(/\s+/)
+  return `${nameKey}||${(tokens[tokens.length - 1] ?? '').toLowerCase()}`
+}
+
+/**
+ * The Contributing Meals card's line count for ONE meal (kody PR #94
+ * round 2, K2 + round-2 follow-up): the lines THIS meal contributes
+ * that SURVIVE in the merged render — the meal's own rendered line
+ * identities (a single-input aggregation of the same input, so a meal
+ * using soy sauce in tbsp while another uses ml attributes only its own
+ * unit line) intersected with its groups' surviving identities from the
+ * merged pass, and rows bare-cleared for THIS meal skipped (its own
+ * contribution stays hidden even when the merged group survives on
+ * other meals).
+ *
+ * `visibleIdentitiesByGroup` is the merged render's per-group surviving
+ * line identities (`item.normalized` → the set of
+ * `lineKeyIdentity(line.key)` over its visible lines), so the card
+ * cannot disagree with the list by construction. Identities are counted
+ * once each (a degenerate same-identity raw pair cannot double-count).
+ */
+export function mealSurvivingLines(
+  input: AggregateInput,
+  visibleIdentitiesByGroup: ReadonlyMap<string, ReadonlySet<string>>,
+): number {
+  const own = aggregateGroceries([{ ...input, cleared: undefined }])
+  let lines = 0
+  for (const group of own) {
+    if (input.cleared?.has(group.normalized)) continue
+    const surviving = visibleIdentitiesByGroup.get(group.normalized)
+    if (!surviving) continue
+    for (const id of new Set(group.lines.map((line) => lineKeyIdentity(line.key)))) {
+      if (surviving.has(id)) lines += 1
+    }
+  }
+  return lines
+}
+
 export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   const groups = new Map<string, Group>()
+
+  // Line-granular clears (ADR-0092, PR #94): a cleared entry that is a
+  // FULL checkbox key (`nameKey||basis`) hides exactly that rendered
+  // line; a bare nameKey keeps the row-level whole-ingredient skip
+  // below. The union runs over every input because the checkbox keys are
+  // the MERGED render's keys — one meal's cleared line key names the
+  // line all its contributors share.
+  //
+  // Round 2 (kody K1): the EXACT keys are joined by the cleared keys'
+  // composition-stable identities (lineKeyIdentity), so a persisted
+  // `soy sauce||3 tbsp` still hides the line after a co-contributor
+  // leaves the plan and the render re-sums to `2 tbsp`.
+  const lineCleared = new Set<string>()
+  const lineIdentityCleared = new Set<string>()
+  for (const { cleared } of inputs) {
+    if (!cleared) continue
+    for (const key of cleared) {
+      if (!key.includes('||')) continue
+      lineCleared.add(key)
+      lineIdentityCleared.add(lineKeyIdentity(key))
+    }
+  }
 
   for (const { doc, factor, recipeName, cleared, displayLines } of inputs) {
     // ADR-0009: seasonings scale sub-linearly against the recipe's own
@@ -423,12 +521,24 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
     // stay merged (splitting by name would re-key checked state on
     // toggle); the section still buckets on the first-seen name.
     const name = group.names.size > 1 ? [...group.names].join(' / ') : group.name
+    // Line-granular clears: drop every rendered line whose full key is in
+    // a variant's cleared set — exactly, or by unit identity (the
+    // composition-stale case above). The raw-dedup above ran against the
+    // UNfiltered list (dedup semantics unchanged); the filter only hides.
+    const visible = lineCleared.size
+      ? lines.filter(
+          (l) => !lineCleared.has(l.key) && !lineIdentityCleared.has(lineKeyIdentity(l.key)),
+        )
+      : lines
+    // A group whose every line is cleared disappears entirely — an
+    // ingredient header with zero lines would otherwise linger.
+    if (visible.length === 0) continue
     items.push({
       normalized,
       name,
       section: bucketFor(group.name),
       recipes: [...group.recipes],
-      lines,
+      lines: visible,
     })
   }
 

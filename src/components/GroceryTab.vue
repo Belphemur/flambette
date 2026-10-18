@@ -24,6 +24,8 @@ import { usePlanStore } from '../stores/plan'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
 import { useRoomStore } from '../stores/room'
 import IngredientAutocomplete from './IngredientAutocomplete.vue'
+import PullClearIndicator from './PullClearIndicator.vue'
+import { usePullToClear } from '../composables/usePullToClear'
 
 const plan = usePlanStore()
 const router = useRouter()
@@ -39,8 +41,26 @@ const {
   mealSummaries,
   sections,
   ensureDocs,
-  confirmAndClearGrocery,
+  clearButtonLabel,
+  handleClearClick,
 } = useGroceryList()
+
+/* ---------- Pull-to-clear gesture (ADR-0092) ---------- */
+
+/**
+ * The gesture is the ONE shared `usePullToClear` composable wired to the
+ * SAME clear handler the adaptive button uses — no view copy. `enabled`
+ * follows the checked state, so the gesture can never arm on an empty
+ * checked set and never blocks scrolling when there is nothing to clear.
+ */
+const {
+  bindRoot: pullBindRoot,
+  phase: pullPhase,
+  contentStyle: pullContentStyle,
+} = usePullToClear({
+  enabled: computed(() => checkedCount.value > 0),
+  onTrigger: () => handleClearClick(),
+})
 
 /* ---------- Custom (free-form) grocery items ---------- */
 
@@ -337,14 +357,13 @@ const shopperCount = computed(() => room.peers)
   data-test="grocery-progress-percent"
   >{{ progressPct }}%</span>
   <button
-  v-if="checkedCount > 0"
   class="flex h-11 shrink-0 items-center gap-1 rounded-lg px-2 text-label-sm font-medium text-text-muted hover:text-text"
-  data-test="clear-list"
-  aria-label="Clear grocery list"
-  @click="confirmAndClearGrocery()"
+  data-test="grocery-clear"
+  :aria-label="clearButtonLabel"
+  @click="handleClearClick"
   >
   <Eraser :size="16" aria-hidden="true" class="mr-1 inline" />
-  Clear list
+  {{ clearButtonLabel }}
   </button>
   </div>
 
@@ -403,6 +422,18 @@ const shopperCount = computed(() => room.peers)
   A sub-section is NEVER a move (ADR-0015 2, still in force): an extra
   tagged Produce lives in the extras group's Produce sub-section and must
   not appear in the recipe-derived Produce store section below. -->
+  <!-- Pull-to-clear region (ADR-0092): the LIST (extras + store
+  sections) sits inside the gesture region — the shared composable owns
+  every piece of gesture logic, this is only the element binding. The
+  sticky progress card above deliberately stays OUTSIDE it — it must
+  not translate with the finger. -->
+  <div
+  :ref="pullBindRoot"
+  class="relative"
+  data-test="pull-clear-region"
+  >
+  <PullClearIndicator :phase="pullPhase" />
+  <div class="space-y-4" :style="pullContentStyle">
   <div v-if="plan.customItems.length > 0" class="space-y-1.5" data-test="extra-section">
   <!-- The extras GROUP header is a group label, not an aisle: no
   `(Aisle N)`, no hue glyph (ADR-0071 / ADR-0050 §2). It is a static
@@ -634,6 +665,8 @@ const shopperCount = computed(() => room.peers)
   </div>
   </li>
   </ul>
+  </div>
+  </div>
   </div>
   </div>
 

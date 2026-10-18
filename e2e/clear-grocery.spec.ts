@@ -20,6 +20,13 @@ test.beforeEach(async ({ page }) => {
  * grocery list (persisted per meal until cooked or re-planned fresh).
  * The checkbox map and custom items are wiped as before; planned meals
  * stay in the plan, and the list renders empty until ingredients return.
+ *
+ * ADR-0092: the ONE adaptive clear button (`grocery-clear`) reads
+ * "Clear checked" with something checked (direct, no modal — removes
+ * ONLY the checked lines, merging them into `clearedIngredients`) and
+ * "Clear list" with nothing checked (the ADR-0005 confirm-modal
+ * clear-everything flow, forced past the old empty guard). The
+ * pull-to-clear gesture drives the SAME clear-checked action.
  */
 
 /** Plan the first catalog recipe (returns its display name). */
@@ -107,19 +114,20 @@ test('checking the last item prompts to clear; Cancel aborts, then Clear works',
   ).toBeVisible()
 })
 
-test('the Clear-list button works from the Grocery tab', async ({ page }) => {
+test('the adaptive clear button: "Clear list" with nothing checked, modal full clear (Grocery)', async ({
+  page,
+}) => {
   await planFirstRecipe(page)
   await gotoTab(page, 'Grocery')
+  await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
 
-  // Hidden while nothing is checked.
-  await expect(page.locator('[data-test=clear-list]')).toHaveCount(0)
-  await page.locator('main input[type=checkbox]').first().click()
-  const total = Number(
-    (await page.getByText(/(\d+) \/ (\d+) items/).textContent())!.match(/(\d+) \/ (\d+)/)![2],
-  )
-  await expect(page.locator('[data-test=clear-list]')).toBeVisible()
+  // ADR-0092: visible whenever the list has items — even with NOTHING
+  // checked — and reads "Clear list" then.
+  const clearButton = page.locator('[data-test=grocery-clear]')
+  await expect(clearButton).toBeVisible()
+  await expect(clearButton).toHaveText(/Clear list/)
 
-  await page.locator('[data-test=clear-list]').click()
+  await clearButton.click()
   const modal = confirmModal(page)
   await expect(modal).toContainText(
     'Clear the grocery list? Ingredients stay hidden until you cook the meals.',
@@ -127,28 +135,46 @@ test('the Clear-list button works from the Grocery tab', async ({ page }) => {
   await modal.locator('[data-test=confirm-action]').click()
   // Ingredients removed: the list empties (cleared state), meals stay planned.
   await expect(page.getByTestId('cleared-empty')).toBeVisible()
-  await expect(page.locator('[data-test=clear-list]')).toHaveCount(0)
+  await expect(page.locator('[data-test=grocery-clear]')).toHaveCount(0)
 })
 
-test('the Clear-list button works from shopping mode', async ({ page }) => {
+test('the adaptive clear button flips to "Clear checked" and skips the modal (Grocery)', async ({
+  page,
+}) => {
+  await planFirstRecipe(page)
+  await gotoTab(page, 'Grocery')
+  await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+
+  // Checking one line flips the label; the label text IS the state.
+  await page.locator('main input[type=checkbox]').first().click()
+  const clearButton = page.locator('[data-test=grocery-clear]')
+  await expect(clearButton).toHaveText(/Clear checked/)
+
+  // Direct action, NO confirm modal.
+  await clearButton.click()
+  await expect(confirmModal(page)).toHaveCount(0)
+  await expect(
+    page.getByText(/Cleared 1 checked item — unchecked items remain/),
+  ).toBeVisible()
+  // The checked line is gone; the button falls back to "Clear list".
+  await expect(clearButton).toHaveText(/Clear list/)
+})
+
+test('the adaptive clear button: "Clear list" with nothing checked, modal full clear (Shop)', async ({
+  page,
+}) => {
   await planFirstRecipe(page)
   await gotoTab(page, 'Grocery')
   await page.locator('[data-test=start-shopping]').click()
   await expect(page).toHaveURL(/\/shop$/)
+  await expect(page.locator('[data-test=shop-row]').first()).toBeVisible({ timeout: 10_000 })
 
-  // Hidden while nothing is checked.
-  await expect(page.locator('[data-test=clear-list]')).toHaveCount(0)
-  // Click a row from a MULTI-line section: a one-line section auto-collapses
-  // the moment it is checked (ADR-0008 addendum), detaching the row
-  // mid-click.
-  const multiLine = page
-    .locator('[data-test=shop-section]')
-    .filter({ has: page.locator('[data-test=shop-section-rows] li:nth-child(2)') })
-  await expect(multiLine.first()).toBeVisible()
-  await multiLine.first().locator('[data-test=shop-row]').first().click()
-  await expect(page.locator('[data-test=clear-list]')).toBeVisible()
+  // ADR-0092: visible with nothing checked, reading "Clear list".
+  const clearButton = page.locator('[data-test=grocery-clear]')
+  await expect(clearButton).toBeVisible()
+  await expect(clearButton).toHaveText(/Clear list/)
 
-  await page.locator('[data-test=clear-list]').click()
+  await clearButton.click()
   const modal = confirmModal(page)
   await expect(modal).toContainText('Clear the grocery list?')
   await modal.locator('[data-test=confirm-action]').click()
@@ -159,6 +185,40 @@ test('the Clear-list button works from shopping mode', async ({ page }) => {
   await expect(
     page.getByText('Grocery list cleared — ingredients return when you plan again'),
   ).toBeVisible()
+})
+
+test('the adaptive clear button clears only checked rows in shopping mode (Shop)', async ({
+  page,
+}) => {
+  await planFirstRecipe(page)
+  await gotoTab(page, 'Grocery')
+  await page.locator('[data-test=start-shopping]').click()
+  await expect(page).toHaveURL(/\/shop$/)
+  await expect(page.locator('[data-test=shop-row]').first()).toBeVisible({ timeout: 10_000 })
+
+  const total = Number(
+    (await page.getByTestId('shopping-progress').textContent())!.match(/(\d+) \/ (\d+)/)![2],
+  )
+  expect(total).toBeGreaterThan(1)
+
+  // Click a row from a MULTI-line section: a one-line section auto-collapses
+  // the moment it is checked (ADR-0008 addendum), detaching the row
+  // mid-click.
+  const multiLine = page
+    .locator('[data-test=shop-section]')
+    .filter({ has: page.locator('[data-test=shop-section-rows] li:nth-child(2)') })
+  await expect(multiLine.first()).toBeVisible()
+  await multiLine.first().locator('[data-test=shop-row]').first().click()
+
+  // One checked row → "Clear checked"; direct action, no modal; ONLY the
+  // checked row goes — the unchecked rest stay, still unchecked.
+  const clearButton = page.locator('[data-test=grocery-clear]')
+  await expect(clearButton).toHaveText(/Clear checked/)
+  await clearButton.click()
+  await expect(confirmModal(page)).toHaveCount(0)
+  await expect(page.getByText(/Cleared 1 checked item — unchecked items remain/)).toBeVisible()
+  await expect(page.getByTestId('shopping-progress')).toHaveText(`0 / ${total - 1}`)
+  await expect(page.getByTestId('shop-row')).toHaveCount(total - 1)
 })
 
 test('clearing removes custom items but keeps the planned meals', async ({ page }) => {
@@ -288,9 +348,9 @@ test('clear removes planned ingredients: list empties, plan keeps the meals', as
   await gotoTab(page, 'Grocery')
   await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
 
-  // Check one item so the Clear-list button appears, then clear.
-  await page.locator('main input[type=checkbox]').first().click()
-  await page.locator('[data-test=clear-list]').click()
+  // ADR-0092: with NOTHING checked the button reads "Clear list" — the
+  // confirm-modal full clear, forced past the old empty guard.
+  await page.locator('[data-test=grocery-clear]').click()
   await confirmModal(page).locator('[data-test=confirm-action]').click()
 
   // 0 lines despite the meal still being planned.
@@ -316,8 +376,9 @@ test('re-adding the same recipe returns its ingredients', async ({ page }) => {
   await gotoTab(page, 'Grocery')
   await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
 
-  await page.locator('main input[type=checkbox]').first().click()
-  await page.locator('[data-test=clear-list]').click()
+  // ADR-0092: with NOTHING checked the button reads "Clear list" — the
+  // confirm-modal full clear, forced past the old empty guard.
+  await page.locator('[data-test=grocery-clear]').click()
   await confirmModal(page).locator('[data-test=confirm-action]').click()
   await expect(page.getByTestId('cleared-empty')).toBeVisible()
 
@@ -343,8 +404,9 @@ test('shared ingredient cleared by one meal still appears from the other after r
   // Clear: BOTH meals' ingredients (including the shared garlic) hidden.
   await gotoTab(page, 'Grocery')
   await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
-  await page.locator('main input[type=checkbox]').first().click()
-  await page.locator('[data-test=clear-list]').click()
+  // ADR-0092: with NOTHING checked the button reads "Clear list" — the
+  // confirm-modal full clear, forced past the old empty guard.
+  await page.locator('[data-test=grocery-clear]').click()
   await confirmModal(page).locator('[data-test=confirm-action]').click()
   await expect(page.getByTestId('cleared-empty')).toBeVisible()
 
@@ -365,8 +427,9 @@ test('marking a cleared meal cooked forgets its cleared snapshot', async ({ page
   await gotoTab(page, 'Grocery')
   await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
 
-  await page.locator('main input[type=checkbox]').first().click()
-  await page.locator('[data-test=clear-list]').click()
+  // ADR-0092: with NOTHING checked the button reads "Clear list" — the
+  // confirm-modal full clear, forced past the old empty guard.
+  await page.locator('[data-test=grocery-clear]').click()
   await confirmModal(page).locator('[data-test=confirm-action]').click()
   await expect(page.getByTestId('cleared-empty')).toBeVisible()
 
@@ -384,4 +447,220 @@ test('marking a cleared meal cooked forgets its cleared snapshot', async ({ page
   await gotoTab(page, 'Grocery')
   await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
   await expect(page.getByTestId('cleared-empty')).toHaveCount(0)
+})
+
+/* ---------- ADR-0092: clear-checked semantics ---------- */
+
+test('Clear checked removes ONLY checked lines: unchecked remain, unchecked state kept', async ({
+  page,
+}) => {
+  await planFirstRecipe(page)
+  await gotoTab(page, 'Grocery')
+  await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+
+  const total = Number(
+    (await page.getByText(/(\d+) \/ (\d+) items/).textContent())!.match(/(\d+) \/ (\d+)/)![2],
+  )
+  expect(total).toBeGreaterThan(2)
+
+  // Check exactly two lines.
+  await page.locator('main input[type=checkbox]').first().click()
+  await page.locator('main input[type=checkbox]:not(:checked)').first().click()
+  await expect(page.getByText(/(\d+) \/ (\d+) items/)).toHaveText(`2 / ${total} items`)
+
+  // Direct action — no confirm modal — with an honest toast.
+  await page.locator('[data-test=grocery-clear]').click()
+  await expect(confirmModal(page)).toHaveCount(0)
+  await expect(page.getByText(/Cleared 2 checked items — unchecked items remain/)).toBeVisible()
+
+  // Two lines gone, the rest stay UNCHECKED: `0 / total-2`.
+  await expect(page.getByText(/(\d+) \/ (\d+) items/)).toHaveText(`0 / ${total - 2} items`)
+  await expect(page.locator('main input[type=checkbox]:checked')).toHaveCount(0)
+
+  // The button falls back to "Clear list" (list still non-empty).
+  await expect(page.locator('[data-test=grocery-clear]')).toHaveText(/Clear list/)
+
+  // The cleared lines are HIDDEN (ADR-0005 lifecycle): they do not come
+  // back on reload — the merge wrote the cleared snapshot.
+  await page.reload()
+  await gotoTab(page, 'Grocery')
+  await expect(page.getByText(/(\d+) \/ (\d+) items/)).toHaveText(`0 / ${total - 2} items`, {
+    timeout: 10_000,
+  })
+})
+
+test('Clear checked removes a checked custom item but keeps the autocomplete memory', async ({
+  page,
+}) => {
+  await planFirstRecipe(page)
+  await gotoTab(page, 'Grocery')
+  await addCustomItem(page, 'Olive oil')
+
+  // Check the custom item only.
+  await page.locator('[data-test=extra-row] input[type=checkbox]').first().click()
+
+  await page.locator('[data-test=grocery-clear]').click()
+  await expect(confirmModal(page)).toHaveCount(0)
+  await expect(page.getByText(/Cleared 1 checked item — unchecked items remain/)).toBeVisible()
+
+  // The extra row is GONE; the planned meal's lines remain.
+  await expect(page.locator('[data-test=extra-row]')).toHaveCount(0)
+  await expect(page.locator('main input[type=checkbox]:checked')).toHaveCount(0)
+
+  // The autocomplete memory SURVIVES (device-local customIngredients,
+  // ADR-0012): the remembered entry is still persisted after the clear —
+  // clear-checked removes the extra, never the typed-name memory.
+  const memory = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('mealime-planner:v1:customIngredients') ?? '{}'),
+  )
+  expect(JSON.stringify(memory)).toContain('Olive oil')
+})
+
+/* ---------- ADR-0092: pull-to-clear gesture ---------- */
+
+/**
+ * Drive the gesture with synthetic touch PointerEvents on the shared
+ * region (the composable listens on the region element itself; the
+ * events are synchronous, so mid-drag states are assertable between
+ * dispatches).
+ */
+async function pullDragTo(page: Page, dy: number): Promise<void> {
+  await page.evaluate((distance) => {
+    const region = document.querySelector('[data-test=pull-clear-region]')
+    if (!region) throw new Error('pull-clear-region not mounted')
+    const rect = region.getBoundingClientRect()
+    const base = rect.top + 10
+    const init = (y: number): PointerEventInit => ({
+      pointerType: 'touch',
+      pointerId: 7,
+      isPrimary: true,
+      bubbles: true,
+      clientX: rect.left + rect.width / 2,
+      clientY: y,
+    })
+    region.dispatchEvent(new PointerEvent('pointerdown', init(base)))
+    const steps = 5
+    for (let i = 1; i <= steps; i++) {
+      region.dispatchEvent(
+        new PointerEvent('pointermove', init(base + (distance * i) / steps)),
+      )
+    }
+  }, dy)
+}
+
+async function releasePull(page: Page, dy: number): Promise<void> {
+  await page.evaluate((distance) => {
+    const region = document.querySelector('[data-test=pull-clear-region]')
+    if (!region) throw new Error('pull-clear-region not mounted')
+    const rect = region.getBoundingClientRect()
+    region.dispatchEvent(
+      new PointerEvent('pointerup', {
+        pointerType: 'touch',
+        pointerId: 7,
+        isPrimary: true,
+        bubbles: true,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + 10 + distance,
+      }),
+    )
+  }, dy)
+}
+
+test('pull-to-clear past the threshold runs the same clear-checked action', async ({ page }) => {
+  await planFirstRecipe(page)
+  await gotoTab(page, 'Grocery')
+  await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+
+  const total = Number(
+    (await page.getByText(/(\d+) \/ (\d+) items/).textContent())!.match(/(\d+) \/ (\d+)/)![2],
+  )
+  await page.locator('main input[type=checkbox]').first().click()
+
+  // Engage: below the threshold the indicator reads "pull".
+  await pullDragTo(page, 40)
+  const indicator = page.getByTestId('pull-clear-indicator')
+  await expect(indicator).toBeVisible()
+  await expect(indicator).toHaveAttribute('data-state', 'pull')
+  await expect(indicator).toHaveText('Pull to clear checked')
+
+  // Past the ~80px threshold it arms.
+  await pullDragTo(page, 120)
+  await expect(indicator).toHaveAttribute('data-state', 'armed')
+  await expect(indicator).toHaveText('Release to clear checked')
+
+  // Release runs the SHARED clear-checked action (no modal, toast).
+  await releasePull(page, 120)
+  await expect(confirmModal(page)).toHaveCount(0)
+  await expect(page.getByText(/Cleared 1 checked item — unchecked items remain/)).toBeVisible()
+  await expect(page.getByText(/(\d+) \/ (\d+) items/)).toHaveText(`0 / ${total - 1} items`)
+  // The indicator is gone (back to idle).
+  await expect(indicator).toHaveCount(0)
+})
+
+test('pull-to-clear below the threshold cancels and leaves everything checked', async ({
+  page,
+}) => {
+  await planFirstRecipe(page)
+  await gotoTab(page, 'Grocery')
+  await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+
+  const total = Number(
+    (await page.getByText(/(\d+) \/ (\d+) items/).textContent())!.match(/(\d+) \/ (\d+)/)![2],
+  )
+  await page.locator('main input[type=checkbox]').first().click()
+
+  // Short drag: the indicator shows, but releasing does NOTHING.
+  await pullDragTo(page, 40)
+  const indicator = page.getByTestId('pull-clear-indicator')
+  await expect(indicator).toHaveAttribute('data-state', 'pull')
+
+  await releasePull(page, 40)
+  await expect(indicator).toHaveCount(0)
+  // No toast, no modal, nothing cleared.
+  await expect(confirmModal(page)).toHaveCount(0)
+  await expect(page.getByTestId('toast')).toHaveCount(0)
+  await expect(page.getByText(/(\d+) \/ (\d+) items/)).toHaveText(`1 / ${total} items`)
+  await expect(page.locator('main input[type=checkbox]:checked')).toHaveCount(1)
+})
+
+test('pull-to-clear never arms once the page has scrolled (PR #94 round-1 regression)', async ({
+  page,
+}) => {
+  await planFirstRecipe(page)
+  await gotoTab(page, 'Grocery')
+  await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+  await page.locator('main input[type=checkbox]').first().click()
+
+  // A small viewport guarantees the document is scrollable, so the
+  // scrollTo below is a real offset rather than a no-op on a short list.
+  await page.setViewportSize({ width: 375, height: 400 })
+  // A page scrolled past the arm tolerance is a SCROLL surface, not a
+  // pull surface: the drag must stand down quietly (no indicator, no
+  // clear) — the guard qodo finding 4 hangs off.
+  await page.evaluate(() => window.scrollTo(0, 60))
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+  await pullDragTo(page, 120)
+  await expect(page.getByTestId('pull-clear-indicator')).toHaveCount(0)
+  await releasePull(page, 120)
+  await expect(page.getByTestId('toast')).toHaveCount(0)
+  await expect(page.locator('main input[type=checkbox]:checked')).toHaveCount(1)
+})
+
+test('pull-to-clear arms within the small mobile scroll-top tolerance', async ({ page }) => {
+  await planFirstRecipe(page)
+  await gotoTab(page, 'Grocery')
+  await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+  await page.locator('main input[type=checkbox]').first().click()
+
+  // Real mobile browsers sit a few px off scrollTop 0 at the visual top
+  // (URL-bar / visual-viewport offsets) — the strict `scrollY === 0` the
+  // first cut used refused to arm there and only the emulated Pixel 7
+  // (no URL bar) passed. The tolerance keeps those devices working.
+  await page.evaluate(() => window.scrollTo(0, 2))
+  await pullDragTo(page, 120)
+  const indicator = page.getByTestId('pull-clear-indicator')
+  await expect(indicator).toBeVisible()
+  await expect(indicator).toHaveAttribute('data-state', 'armed')
+  await releasePull(page, 120)
+  await expect(page.getByText(/Cleared 1 checked item — unchecked items remain/)).toBeVisible()
 })

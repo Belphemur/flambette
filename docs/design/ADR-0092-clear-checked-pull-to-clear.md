@@ -1,6 +1,6 @@
 # ADR-0092: Clear-checked removes only checked items; pull-to-clear gesture
 
-- **Status:** accepted
+- **Status:** accepted (2026-10-18) — implemented in PR #94
 - **Date:** 2026-10-18
 - **Decides:** the semantics of clearing only the checked items, the
   pull-to-clear gesture, and the single adaptive clear button
@@ -91,3 +91,87 @@ composable), never duplicated view logic — same rule as ADR-0003's
   (the exact ADR-0005 bug class).
 - **Gesture without a button** — rejected: desktop and accessibility
   need a visible affordance; the gesture is additive on touch devices.
+
+## Change note — 2026-10-18, review round 1 (PR #94)
+
+Three amendments from review + real-device testing; Status stays
+`accepted`.
+
+1. **Clear-checked is line-granular.** The original decision merged the
+   checked keys' nameKey halves into `clearedIngredients[variantId]`,
+   which hid EVERY line of an ingredient when the shopper checked only
+   one of its sibling unit lines (`2 tbsp` vs `30 ml`) — contradicting
+   this ADR's own "unchecked items remain". Amended: the snapshot the
+   grocery engine registers now also carries the currently-rendered
+   full line keys per group; a checked LINE key hides only that
+   rendered line (`aggregateGroceries` filters rendered lines by full
+   key), and the bare nameKey joins the whole-ingredient ledger only
+   when every sibling line is checked. Both grammars share the one
+   per-variant cleared set (bare nameKey vs `nameKey||basis`), so
+   nothing new rides the room payload — a pre-#94 peer's nameKey-only
+   skip rule is unaffected by entries containing `||`. A checked key
+   the current render does not contain (stale residue from a servings
+   change) is wiped with the checkbox map, never allowed to hide a
+   current line. The toast counts distinct cleared lines, not
+   per-variant snapshot rows.
+2. **The gesture owns the touch while it is a candidate.** Real
+   Firefox Mobile and Brave fired `pointercancel` from the native pan
+   before `pointerup`, so the armed pull snapped back without clearing
+   — invisible to the emulated Pixel 7 e2e, whose synthetic
+   PointerEvents no scroller can cancel. The composable now listens
+   `touchmove` non-passively on the region and `preventDefault()`s
+   DOWNWARD travel while a touch armed at the top is pending or
+   engaged; upward travel is left to the browser so the list still
+   scrolls from its top. `overscroll-behavior-y: contain` moved from
+   the (non-scrolling) region divs — where it was inert — to `html`,
+   the actual scroll container, suppressing the browser's native
+   pull-to-refresh. The arm check reads `document.scrollingElement`
+   with a 4px tolerance (mobile visual-viewport offsets sit a few px
+   off 0), a second finger is rejected while a pull is pending, and
+   `pointercancel` only ends the pull when it names the active pointer.
+3. **Shop view's adaptive button is guarded by `totalCount > 0`** like
+   the Grocery tab's — an empty list no longer offers a "Clear list"
+   modal that clears nothing.
+
+## Change note — 2026-10-18, review round 2 (PR #94)
+
+One amendment from kody's round-2 pass on the round-1 code; Status stays
+`accepted`.
+
+**Cleared line keys survive composition changes (unit-identity
+matching).** Round 1 persisted the RENDER-summed basis
+(`soy sauce||3 tbsp`) into every contributing variant's
+`clearedIngredients`. That key was valid only for the plan composition
+it was cleared under: cooking or unplanning ONE co-contributing meal
+(`restoreIngredients` forgets only that variant's row) re-summed the
+shared line to a different basis (`2 tbsp`), the persisted key stopped
+matching, and the cleared line reappeared unchecked even though the
+household never re-planned. Amended: `aggregateGroceries` now matches a
+persisted full key against the current render by COMPOSITION-STABLE
+unit identity — the nameKey plus the basis's unit (the normalized
+container key `pkg|142 g` for container quantities, the trailing unit
+token otherwise; `raw||`-namespace keys stay exact-match-only). The
+unit survives composition changes, so the cleared line stays hidden
+across co-contributor cooks/unplans and serving bumps, while the
+sibling guarantee is structural: a by-unit line is unique per unit and
+a container line unique per (noun, annotation) inside its group, so one
+identity can hide at most the line it was cleared from and an unchecked
+sibling line (a different unit) can never be swallowed. The persisted
+structure is unchanged — same per-variant cleared set, same two
+grammars, no new room payload field; ADR-0005's replace paths are
+untouched.
+
+The Contributing Meals card's line count now derives from the SAME
+visibility (kody round 2, K2): a meal's row counts its group's
+surviving rendered lines (`mealSurvivingLines`), so a partially cleared
+two-line ingredient reports one line and the card tracks the list
+line-for-line instead of filtering bare nameKeys only.
+
+Follow-up (same day, kody's round-2 re-review): the count is attributed
+PER MEAL — `mealSurvivingLines` aggregates the meal's input alone and
+intersects its own rendered line identities with the merged group's
+surviving identities, so two meals using the same ingredient in
+different units each count only the line they actually contribute (a
+shared tbsp+ml group is 1 line per meal, not 2), and a meal whose own
+unit line was cleared counts zero even while the merged group survives
+on the other meal's contribution.
