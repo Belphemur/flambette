@@ -1,6 +1,6 @@
 # ADR-0092: Clear-checked removes only checked items; pull-to-clear gesture
 
-- **Status:** accepted
+- **Status:** accepted (2026-10-18) — implemented in PR #94
 - **Date:** 2026-10-18
 - **Decides:** the semantics of clearing only the checked items, the
   pull-to-clear gesture, and the single adaptive clear button
