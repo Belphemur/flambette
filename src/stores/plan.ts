@@ -240,6 +240,28 @@ export const usePlanStore = defineStore(
       }
     }
 
+    /**
+     * Clear-checked workflow (ADR-0092): MERGE each currently planned
+     * meal's newly checked ingredient name keys INTO its existing cleared
+     * set instead of replacing it. A clear of one shopper's checked lines
+     * must not resurrect ingredients that were already cleared on another
+     * day (the variant's cleared set is a running "we have these" ledger
+     * until the meal is re-planned or cooked) — which is exactly what
+     * `clearIngredientsForCurrentMeals`'s replace would do.
+     *
+     * Only variants that are still planned are touched, matching the
+     * replace primitive's scope; unknown variants' keys are dropped.
+     */
+    function mergeIngredientsForCurrentMeals(keysByVariant: Record<number, string[]>): void {
+      for (const entry of plan.value) {
+        const keys = keysByVariant[entry.variantId]
+        if (keys?.length) {
+          const existing = clearedIngredients.value[entry.variantId]
+          clearedIngredients.value[entry.variantId] = [...new Set([...(existing ?? []), ...keys])]
+        }
+      }
+    }
+
     /** Forget a meal's cleared snapshot (meal re-planned or cooked). */
     function restoreIngredients(variantId: number): void {
       delete clearedIngredients.value[variantId]
@@ -493,6 +515,7 @@ export const usePlanStore = defineStore(
       removeCustomItem,
       clearCustomItems,
       clearIngredientsForCurrentMeals,
+      mergeIngredientsForCurrentMeals,
       restoreIngredients,
       setClearedIngredients,
       replaceCookedHistory,
