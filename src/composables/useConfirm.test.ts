@@ -12,6 +12,7 @@ import { useCustomIngredientsStore } from '../stores/customIngredients'
 import { extraCheckedKey } from '../lib/extraCheckedKeys'
 import { useUiStore, type ConfirmPrompt } from '../stores/ui'
 import type { VariantMeta } from '../lib/types'
+import type { ClearSnapshot } from './useConfirm'
 
 /**
  * ADR-0084's funnel contracts, pinned at the unit level:
@@ -30,6 +31,11 @@ import type { VariantMeta } from '../lib/types'
 /** Convenience: the store's open prompt, typed. */
 function openPrompt(): ConfirmPrompt | null {
   return useUiStore().confirm
+}
+
+/** Snapshot literal with the line-key half defaulted (nameKeys-only callers). */
+function snap(nameKeysByVariant: Record<number, string[]>, lineKeysByGroup: Record<string, string[]> = {}): ClearSnapshot {
+  return { nameKeysByVariant, lineKeysByGroup }
 }
 
 beforeEach(() => {
@@ -200,14 +206,22 @@ describe('clearCheckedItems (ADR-0092)', () => {
     const plan = usePlanStore()
     plan.addToPlan(meta(7), 4)
     // The snapshot the grocery engine registers (its loaded-docs walk).
-    registerClearSnapshotProvider(() => ({ 7: ['flour', 'salt', 'butter'] }))
+    registerClearSnapshotProvider(
+      () => snap({ 7: ['flour', 'salt', 'butter'] }, { flour: ['flour||67.5 ml'], salt: ['salt||1 tsp'] }),
+    )
     grocery.toggleChecked('flour||67.5 ml')
     grocery.toggleChecked('salt||1 tsp')
     grocery.toggleChecked('pepper||1 pinch')
 
     expect(clearCheckedItems()).toBe(true)
-    // Checked gone (hidden via the MERGE).
-    expect(plan.clearedIngredients[7]).toEqual(['flour', 'salt'])
+    // Checked gone (hidden via the MERGE): whole-ingredient nameKeys plus
+    // the line keys (line-granular hiding rides the SAME cleared set).
+    expect(plan.clearedIngredients[7]).toEqual([
+      'flour',
+      'salt',
+      'flour||67.5 ml',
+      'salt||1 tsp',
+    ])
     // Unchecked remain and stay unchecked: the map was wiped (only
     // checked keys ever lived there) and pepper is NOT cleared.
     expect(grocery.map).toEqual({})
@@ -216,16 +230,85 @@ describe('clearCheckedItems (ADR-0092)', () => {
     expect(useUiStore().toast?.message).toBe('Cleared 2 checked items — unchecked items remain')
   })
 
+  test('checking ONE line of a multi-line ingredient never hides its unchecked siblings', () => {
+    const grocery = useGroceryStore()
+    const plan = usePlanStore()
+    plan.addToPlan(meta(7), 4)
+    // One ingredient, two rendered unit lines (qodo/kody finding 1).
+    registerClearSnapshotProvider(
+      () => snap({ 7: ['soy sauce', 'soy sauce'] }, { 'soy sauce': ['soy sauce||2 tbsp', 'soy sauce||30 ml'] }),
+    )
+    grocery.toggleChecked('soy sauce||2 tbsp')
+
+    expect(clearCheckedItems()).toBe(true)
+    // The cleared set holds the checked LINE key, never the bare nameKey:
+    // `aggregateGroceries` filters the rendered line by full key, and the
+    // `30 ml` sibling stays visible and unchecked.
+    expect(plan.clearedIngredients[7]).toEqual(['soy sauce||2 tbsp'])
+    expect(plan.clearedIngredients[7]).not.toContain('soy sauce')
+    expect(grocery.map).toEqual({})
+  })
+
+  test('a nameKey joins the whole-ingredient ledger only when EVERY sibling line is checked', () => {
+    const grocery = useGroceryStore()
+    const plan = usePlanStore()
+    plan.addToPlan(meta(7), 4)
+    registerClearSnapshotProvider(
+      () => snap({ 7: ['soy sauce', 'soy sauce'] }, { 'soy sauce': ['soy sauce||2 tbsp', 'soy sauce||30 ml'] }),
+    )
+    grocery.toggleChecked('soy sauce||2 tbsp')
+    grocery.toggleChecked('soy sauce||30 ml')
+
+    clearCheckedItems()
+    // Fully checked: the row-level whole-ingredient skip takes over, so
+    // the ingredient stays hidden across servings changes too.
+    expect(plan.clearedIngredients[7]).toContain('soy sauce')
+    expect(plan.clearedIngredients[7]).toContain('soy sauce||2 tbsp')
+  })
+
+  test('a checked key the current render does not contain is wiped, never cleared (stale residue)', () => {
+    const grocery = useGroceryStore()
+    const plan = usePlanStore()
+    plan.addToPlan(meta(7), 4)
+    // `salt||1 g` was checked before a servings change re-summed the line
+    // to `salt||3 g`; the stale key must not hide the CURRENT line.
+    registerClearSnapshotProvider(() => snap({ 7: ['salt'] }, { salt: ['salt||3 g'] }))
+    grocery.toggleChecked('salt||1 g')
+
+    expect(clearCheckedItems()).toBe(true)
+    expect(plan.clearedIngredients[7]).toBeUndefined()
+    expect(grocery.map).toEqual({})
+  })
+
+  test('the toast counts distinct cleared lines, not per-variant snapshot rows', () => {
+    const grocery = useGroceryStore()
+    const plan = usePlanStore()
+    plan.addToPlan(meta(7), 4)
+    plan.addToPlan(meta(8), 2)
+    // `salt` is planned in TWO meals but renders as ONE checked line
+    // (coderabbit finding 6): the old `removed += hits.length` per
+    // variant reported "Cleared 2" for one ticked row.
+    registerClearSnapshotProvider(() => snap({ 7: ['salt'], 8: ['salt'] }, { salt: ['salt||3 g'] }))
+    grocery.toggleChecked('salt||3 g')
+
+    clearCheckedItems()
+    // Both variants carry the cleared nameKey (the line is shared), but
+    // the toast counts the ONE line the shopper ticked.
+    expect(plan.clearedIngredients[7]).toContain('salt')
+    expect(plan.clearedIngredients[8]).toContain('salt')
+    expect(useUiStore().toast?.message).toBe('Cleared 1 checked item — unchecked items remain')
+  })
+
   test('merging preserves pre-existing cleared entries (replace would resurrect them)', () => {
     const grocery = useGroceryStore()
     const plan = usePlanStore()
     plan.addToPlan(meta(7), 4)
     plan.clearIngredientsForCurrentMeals({ 7: ['eggs'] })
-    registerClearSnapshotProvider(() => ({ 7: ['flour', 'eggs'] }))
+    registerClearSnapshotProvider(() => snap({ 7: ['flour', 'eggs'] }, { flour: ['flour||500 g'] }))
     grocery.toggleChecked('flour||500 g')
 
     clearCheckedItems()
-    expect(plan.clearedIngredients[7]).toEqual(['eggs', 'flour'])
+    expect(plan.clearedIngredients[7]).toEqual(['eggs', 'flour', 'flour||500 g'])
   })
 
   test('checked custom items are removed individually; the autocomplete memory survives', () => {
@@ -235,7 +318,7 @@ describe('clearCheckedItems (ADR-0092)', () => {
     grocery.toggleChecked(extraCheckedKey('Olive oil'))
     // Typed-name memory from an earlier add — must survive the clear.
     useCustomIngredientsStore().remember('Olive oil')
-    registerClearSnapshotProvider(() => ({}))
+    registerClearSnapshotProvider(() => snap({}))
 
     expect(clearCheckedItems()).toBe(true)
     expect(plan.customItems).toEqual(['Paprika'])
@@ -245,7 +328,7 @@ describe('clearCheckedItems (ADR-0092)', () => {
   })
 
   test('nothing checked: no-op, no toast', () => {
-    registerClearSnapshotProvider(() => ({}))
+    registerClearSnapshotProvider(() => snap({}))
     expect(clearCheckedItems()).toBe(false)
     expect(useUiStore().toast).toBeNull()
   })
@@ -254,7 +337,7 @@ describe('clearCheckedItems (ADR-0092)', () => {
     const grocery = useGroceryStore()
     const plan = usePlanStore()
     plan.addToPlan(meta(7), 4)
-    registerClearSnapshotProvider(() => ({ 7: ['flour'] }))
+    registerClearSnapshotProvider(() => snap({ 7: ['flour'] }))
     grocery.toggleChecked('ghost||1 x')
 
     clearCheckedItems()
@@ -267,7 +350,7 @@ describe('clearCheckedItems (ADR-0092)', () => {
     // "Clear list" label must actually clear (force option).
     const plan = usePlanStore()
     plan.addToPlan(meta(7), 4)
-    registerClearSnapshotProvider(() => ({ 7: ['flour'] }))
+    registerClearSnapshotProvider(() => snap({ 7: ['flour'] }))
     const pending = confirmAndClearGrocery(undefined, { force: true })
     expect(openPrompt()?.message).toBe(
       'Clear the grocery list? Ingredients stay hidden until you cook the meals.',

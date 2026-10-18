@@ -208,8 +208,13 @@ export function useGroceryList() {
   /* ---------- Clear-grocery workflow ---------- */
 
   /**
-   * Per-meal ingredient snapshot taken at clear time: variantId ->
-   * nameKey-normalized keys, from the already-loaded recipe docs.
+   * Clear-time snapshot (ADR-0092): per-meal row nameKeys PLUS the
+   * currently-rendered line keys per ingredient group, both from the ONE
+   * aggregation pass. The line keys are what makes clear-checked
+   * line-granular (PR #94 round 1): a checked key not in the rendered
+   * set is stale residue (a servings change re-spelled it) and is wiped
+   * rather than allowed to hide a current line; a nameKey whose group
+   * still has unchecked lines stays visible.
    */
   registerClearSnapshotProvider(() => {
     const byVariant: Record<number, string[]> = {}
@@ -223,7 +228,11 @@ export function useGroceryList() {
       const keys = aggregateRowKeys({ doc, displayLines })
       byVariant[doc.id] = keys.filter((key) => key.length > 0)
     }
-    return byVariant
+    const lineKeysByGroup: Record<string, string[]> = {}
+    for (const item of items.value) {
+      lineKeysByGroup[item.normalized] = item.lines.map((line) => line.key)
+    }
+    return { nameKeysByVariant: byVariant, lineKeysByGroup }
   })
 
   /**

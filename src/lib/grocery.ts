@@ -140,7 +140,12 @@ export interface AggregateInput {
   factor: number
   /** Display name of the planned meal (for provenance). */
   recipeName: string
-  /** nameKey-normalized ingredient keys hidden for THIS meal only. */
+  /**
+   * Per-meal cleared/hidden keys for THIS meal: bare nameKeys hide the
+   * whole ingredient (row-level skip); full line keys
+   * (`nameKey||basis`, ADR-0092's line-granular clear-checked) hide
+   * exactly that rendered line — `aggregateGroceries` unions them.
+   */
   cleared?: Set<string>
   /**
    * The restriction's display rows (the restriction ADR): when present, the
@@ -229,6 +234,18 @@ export function onlyTrueKeys(map: Record<string, boolean>): Record<string, boole
 
 export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   const groups = new Map<string, Group>()
+
+  // Line-granular clears (ADR-0092, PR #94 round 1): a cleared entry that
+  // is a FULL checkbox key (`nameKey||basis`) hides exactly that rendered
+  // line; a bare nameKey keeps the row-level whole-ingredient skip below.
+  // The union runs over every input because the checkbox keys are the
+  // MERGED render's keys — one meal's cleared line key names the line all
+  // its contributors share.
+  const lineCleared = new Set<string>()
+  for (const { cleared } of inputs) {
+    if (!cleared) continue
+    for (const key of cleared) if (key.includes('||')) lineCleared.add(key)
+  }
 
   for (const { doc, factor, recipeName, cleared, displayLines } of inputs) {
     // ADR-0009: seasonings scale sub-linearly against the recipe's own
@@ -423,12 +440,19 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
     // stay merged (splitting by name would re-key checked state on
     // toggle); the section still buckets on the first-seen name.
     const name = group.names.size > 1 ? [...group.names].join(' / ') : group.name
+    // Line-granular clears: drop every rendered line whose full key is in
+    // a variant's cleared set. The raw-dedup above ran against the
+    // UNfiltered list (dedup semantics unchanged); the filter only hides.
+    const visible = lineCleared.size ? lines.filter((l) => !lineCleared.has(l.key)) : lines
+    // A group whose every line is cleared disappears entirely — an
+    // ingredient header with zero lines would otherwise linger.
+    if (visible.length === 0) continue
     items.push({
       normalized,
       name,
       section: bucketFor(group.name),
       recipes: [...group.recipes],
-      lines,
+      lines: visible,
     })
   }
 

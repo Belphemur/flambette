@@ -254,6 +254,7 @@ function exitShopping() {
   </div>
   </div>
   <button
+  v-if="totalCount > 0"
   class="flex h-11 shrink-0 items-center gap-1 rounded-xl border border-border-strong bg-surface-raised px-3 text-sm font-medium text-text active:bg-surface-sunken"
   data-test="grocery-clear"
   :aria-label="clearButtonLabel"
@@ -289,7 +290,6 @@ function exitShopping() {
   <div
   :ref="pullBindRoot"
   class="relative"
-  style="overscroll-behavior-y: contain"
   data-test="pull-clear-region"
   >
   <PullClearIndicator :phase="pullPhase" />

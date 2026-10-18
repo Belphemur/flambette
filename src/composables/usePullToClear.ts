@@ -15,12 +15,20 @@ import {
  * Contract:
  * - TOUCH pointers only. A mouse drag must never engage (the button is
  *   the desktop affordance).
- * - Engages only while the page is scrolled to the top (`window.scrollY
- *   === 0`) and `enabled` is true (checkedCount > 0). Native scrolling
- *   is never blocked: touch-action stays default, and at scrollTop 0 a
- *   downward drag has nothing to scroll anyway — `overscroll-behavior`
- *   on the region keeps the browser's own pull-to-refresh out of the
- *   way.
+ * - Engages only while the page is scrolled to (about) the top and
+ *   `enabled` is true (checkedCount > 0).
+ * - The gesture OWNS the touch while it is a candidate: a non-passive
+ *   `touchmove` listener prevents the browser from turning a downward
+ *   drag at the top into a scroll or the native pull-to-refresh. This
+ *   is the fix for the real-mobile failure the emulated Pixel 7 e2e
+ *   could not see (qodo finding 4 / kody finding, PR #94 round 1): on
+ *   Firefox Mobile and Brave the native pan fired `pointercancel`
+ *   before `pointerup`, so the armed pull snapped back without
+ *   clearing. Only DOWNWARD travel is claimed — an upward drag at the
+ *   top must still scroll the list, so `touch-action` stays default and
+ *   `overscroll-behavior` on the scrolling root (`html`, style.css)
+ *   keeps the browser's own pull-to-refresh out of the way without
+ *   breaking scrolling.
  * - The content translates with the finger through the rubber-band
  *   curve; releasing at/over the threshold fires `onTrigger` (the SHARED
  *   clear-checked action), releasing below it only animates back.
@@ -36,6 +44,14 @@ export interface PullToClearOptions {
 
 /** Transition (ms) for the snap-back after a release. */
 const SETTLE_MS = 200
+
+/**
+ * Scroll-top tolerance (px) for the arm decision. Mobile browsers sit a
+ * few px off `scrollTop === 0` at the visual list-top (URL-bar / visual
+ * viewport offsets), and a strict `=== 0` refused to arm there — the
+ * same emulation gap that hid finding 4 from the Pixel 7 e2e.
+ */
+const SCROLL_TOP_TOLERANCE = 4
 
 export function usePullToClear(options: PullToClearOptions) {
   const threshold = options.threshold ?? PULL_CLEAR_THRESHOLD
@@ -55,11 +71,16 @@ export function usePullToClear(options: PullToClearOptions) {
   let settleTimer: ReturnType<typeof setTimeout> | undefined
 
   function atTop(): boolean {
-    return window.scrollY <= 0
+    const scroller = document.scrollingElement
+    const top = scroller ? scroller.scrollTop : window.scrollY
+    return top <= SCROLL_TOP_TOLERANCE
   }
 
   function onPointerDown(e: PointerEvent): void {
     if (e.pointerType !== 'touch') return
+    // One gesture at a time (qodo finding 3): a second finger while a
+    // pull is pending or engaged must not hijack or reset the first.
+    if (activePointerId !== null) return
     if (!options.enabled.value || !atTop()) return
     activePointerId = e.pointerId
     startY = e.clientY
@@ -110,17 +131,45 @@ export function usePullToClear(options: PullToClearOptions) {
     if (armed) options.onTrigger()
   }
 
-  function onPointerCancel(): void {
-    if (activePointerId === null) return
+  function onPointerCancel(e: PointerEvent): void {
+    // Only the ACTIVE pointer's cancel may end the pull (qodo finding 3):
+    // a second finger's cancel must not abort the first finger's gesture.
+    if (activePointerId === null || e.pointerId !== activePointerId) return
     release()
   }
 
+  /**
+   * The gesture's claim on the touch (the finding-4 fix): while a touch
+   * that ARMED at the top is pending or engaged, any DOWNWARD travel is
+   * prevented from becoming a native scroll / pull-to-refresh, so the
+   * pointer stream survives to `pointerup` instead of dying in a
+   * `pointercancel`. Upward travel is left to the browser — scrolling
+   * the list from the top must keep working whenever nothing is pulled.
+   */
+  function onTouchMove(e: TouchEvent): void {
+    if (activePointerId === null) return
+    if (e.touches.length !== 1) return
+    if (e.touches[0]!.clientY - startY > 0) e.preventDefault()
+  }
+
   function attach(el: HTMLElement | null, prev: HTMLElement | null | undefined): void {
+    // Detach EVERY listener from the previous element (qodo finding 6 /
+    // kody): `pointermove`/`pointerup`/`pointercancel`/`touchmove` left
+    // behind kept three-to-four closures — and the composable's state —
+    // alive on a replaced or unmounted region.
     prev?.removeEventListener('pointerdown', onPointerDown)
+    prev?.removeEventListener('pointermove', onPointerMove)
+    prev?.removeEventListener('pointerup', onPointerUp)
+    prev?.removeEventListener('pointercancel', onPointerCancel)
+    prev?.removeEventListener('touchmove', onTouchMove)
     el?.addEventListener('pointerdown', onPointerDown)
     el?.addEventListener('pointermove', onPointerMove)
     el?.addEventListener('pointerup', onPointerUp)
     el?.addEventListener('pointercancel', onPointerCancel)
+    // Non-passive BY CONTRACT: the handler calls preventDefault() to
+    // claim downward drags (the finding-4 fix). Passive would make the
+    // preventDefault a silent no-op.
+    el?.addEventListener('touchmove', onTouchMove, { passive: false })
   }
 
   /**

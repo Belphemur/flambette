@@ -622,3 +622,45 @@ test('pull-to-clear below the threshold cancels and leaves everything checked', 
   await expect(page.getByText(/(\d+) \/ (\d+) items/)).toHaveText(`1 / ${total} items`)
   await expect(page.locator('main input[type=checkbox]:checked')).toHaveCount(1)
 })
+
+test('pull-to-clear never arms once the page has scrolled (PR #94 round-1 regression)', async ({
+  page,
+}) => {
+  await planFirstRecipe(page)
+  await gotoTab(page, 'Grocery')
+  await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+  await page.locator('main input[type=checkbox]').first().click()
+
+  // A small viewport guarantees the document is scrollable, so the
+  // scrollTo below is a real offset rather than a no-op on a short list.
+  await page.setViewportSize({ width: 375, height: 400 })
+  // A page scrolled past the arm tolerance is a SCROLL surface, not a
+  // pull surface: the drag must stand down quietly (no indicator, no
+  // clear) — the guard qodo finding 4 hangs off.
+  await page.evaluate(() => window.scrollTo(0, 60))
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+  await pullDragTo(page, 120)
+  await expect(page.getByTestId('pull-clear-indicator')).toHaveCount(0)
+  await releasePull(page, 120)
+  await expect(page.getByTestId('toast')).toHaveCount(0)
+  await expect(page.locator('main input[type=checkbox]:checked')).toHaveCount(1)
+})
+
+test('pull-to-clear arms within the small mobile scroll-top tolerance', async ({ page }) => {
+  await planFirstRecipe(page)
+  await gotoTab(page, 'Grocery')
+  await expect(page.locator('main label').first()).toBeVisible({ timeout: 10_000 })
+  await page.locator('main input[type=checkbox]').first().click()
+
+  // Real mobile browsers sit a few px off scrollTop 0 at the visual top
+  // (URL-bar / visual-viewport offsets) — the strict `scrollY === 0` the
+  // first cut used refused to arm there and only the emulated Pixel 7
+  // (no URL bar) passed. The tolerance keeps those devices working.
+  await page.evaluate(() => window.scrollTo(0, 2))
+  await pullDragTo(page, 120)
+  const indicator = page.getByTestId('pull-clear-indicator')
+  await expect(indicator).toBeVisible()
+  await expect(indicator).toHaveAttribute('data-state', 'armed')
+  await releasePull(page, 120)
+  await expect(page.getByText(/Cleared 1 checked item — unchecked items remain/)).toBeVisible()
+})

@@ -23,13 +23,29 @@ import { extraCheckedKey, EXTRA_KEY_PREFIX } from '../lib/extraCheckedKeys'
 let prompting = false
 
 /**
- * Provider for the per-meal ingredient snapshots taken at clear time:
- * variantId -> nameKey-normalized ingredient keys. Registered by
- * useGroceryList(), which owns the loaded recipe docs the snapshot needs.
+ * Provider for the per-meal ingredient snapshots taken at clear time.
+ * Registered by useGroceryList(), which owns the loaded recipe docs and
+ * the ONE aggregation pass both halves come from:
+ *
+ * - `nameKeysByVariant`: variantId -> the variant's row nameKeys (the
+ *   same keys `aggregateGroceries` groups on) — the whole-ingredient
+ *   ledger input for the Clear-list flow and for the clear-checked
+ *   merge when EVERY line of the ingredient is checked.
+ * - `lineKeysByGroup`: nameKey -> the FULL checkbox keys currently
+ *   rendered for that group. This is the line-granularity seam
+ *   (PR #94 round 1, qodo/kody finding 1): a checked LINE key hides
+ *   only its own line; a nameKey merges into the whole-ingredient
+ *   ledger only when every sibling line is checked too, so checking
+ *   `2 tbsp` can never hide the unchecked `30 ml` sibling.
  */
-let snapshotProvider: (() => Record<number, string[]>) | null = null
+export interface ClearSnapshot {
+  nameKeysByVariant: Record<number, string[]>
+  lineKeysByGroup: Record<string, string[]>
+}
 
-export function registerClearSnapshotProvider(fn: () => Record<number, string[]>): void {
+let snapshotProvider: (() => ClearSnapshot) | null = null
+
+export function registerClearSnapshotProvider(fn: () => ClearSnapshot): void {
   snapshotProvider = fn
 }
 
@@ -80,7 +96,7 @@ function anythingChecked(): boolean {
 function performClear(): void {
   const planStore = usePlanStore()
   if (snapshotProvider) {
-    planStore.clearIngredientsForCurrentMeals(snapshotProvider())
+    planStore.clearIngredientsForCurrentMeals(snapshotProvider().nameKeysByVariant)
   }
   useGroceryStore().clearAll()
   planStore.clearCustomItems()
@@ -95,13 +111,20 @@ function performClear(): void {
  * - checked custom items are removed from `plan.customItems`
  *   individually and their checked keys forgotten; the autocomplete
  *   memory in `customIngredients` SURVIVES (it is a separate store).
- * - checked recipe-derived nameKeys are MERGED into
+ * - checked recipe-derived lines are merged into
  *   `clearedIngredients[variantId]` (via the plan store's merge
- *   primitive) for every planned meal that uses them — already-cleared
- *   entries survive (merge, not the replace primitive).
+ *   primitive) at LINE granularity (PR #94 round 1, qodo/kody finding
+ *   1): a checked line's FULL key hides only that rendered line; the
+ *   ingredient's nameKey joins the whole-ingredient ledger only when
+ *   EVERY rendered sibling line is checked, so checking `2 tbsp` never
+ *   hides an unchecked `30 ml`. Already-cleared entries survive (merge,
+ *   not the replace primitive).
  * - the checkbox map is wiped afterwards: it only ever held checked
  *   keys, and the surviving unchecked items must stay UNCHECKED.
- * - reports via the status toast; no modal.
+ * - reports via the status toast; no modal. The count is the number of
+ *   DISTINCT checked lines cleared (custom items + rendered recipe
+ *   line keys), never the per-variant row tally (coderabbit/qodo
+ *   finding 5).
  *
  * Returns whether anything was cleared, so callers can skip a no-op.
  */
@@ -125,24 +148,69 @@ export function clearCheckedItems(): boolean {
     }
   }
 
-  // (b) checked recipe-derived lines: intersect the checked map's
-  // nameKey segments with the snapshot's per-variant nameKey lists, and
-  // MERGE the hits into each variant's cleared set.
-  const checkedNameKeys = new Set(
-    checkedKeys
-      .filter((k) => !k.startsWith(EXTRA_KEY_PREFIX))
-      .map((k) => k.slice(0, k.indexOf('||'))),
+  // (b) checked recipe-derived lines, at LINE granularity (qodo/kody
+  // finding 1): the checked keys are matched against the snapshot's
+  // currently-rendered line keys, so
+  //
+  // - a checked line hides ONLY its own line (its full key is merged
+  //   into the variant's cleared set, where `aggregateGroceries`
+  //   filters rendered lines by full key) — an unchecked sibling line
+  //   (`2 tbsp` vs `30 ml`) stays visible;
+  // - a nameKey joins the whole-ingredient ledger (the row-level skip)
+  //   ONLY when every currently-rendered line of that group is checked;
+  // - a checked key the current render does not contain (stale residue
+  //   from a servings change) is simply wiped with the checkbox map —
+  //   it can never hide a line that exists now.
+  const snapshot = snapshotProvider?.() ?? { nameKeysByVariant: {}, lineKeysByGroup: {} }
+  const renderedLineKeys = new Set(Object.values(snapshot.lineKeysByGroup).flat())
+  const checkedLineKeys = checkedKeys.filter(
+    (k) => !k.startsWith(EXTRA_KEY_PREFIX) && renderedLineKeys.has(k),
   )
-  const snapshot = snapshotProvider?.() ?? {}
-  const mergedByVariant: Record<number, string[]> = {}
-  for (const [rawId, nameKeys] of Object.entries(snapshot)) {
-    const hits = nameKeys.filter((nk) => checkedNameKeys.has(nk))
-    if (hits.length) {
-      mergedByVariant[Number(rawId)] = hits
-      removed += hits.length
+  // Group the checked line keys by their nameKey half.
+  const checkedByNameKey = new Map<string, string[]>()
+  for (const key of checkedLineKeys) {
+    const nk = key.slice(0, key.indexOf('||'))
+    const list = checkedByNameKey.get(nk)
+    if (list) list.push(key)
+    else checkedByNameKey.set(nk, [key])
+  }
+
+  const mergedNameKeys: Record<number, string[]> = {}
+  const mergedLineKeys: Record<number, string[]> = {}
+  for (const [rawId, nameKeys] of Object.entries(snapshot.nameKeysByVariant)) {
+    for (const nk of new Set(nameKeys)) {
+      const groupLines = snapshot.lineKeysByGroup[nk]
+      const checkedForGroup = checkedByNameKey.get(nk)
+      if (!groupLines?.length || !checkedForGroup) continue
+      ;(mergedLineKeys[Number(rawId)] ??= []).push(...checkedForGroup)
+      // The whole-ingredient ledger only ever takes FULLY checked
+      // ingredients — the guard that keeps unchecked siblings visible.
+      const fullyChecked = groupLines.every((line) => checkedForGroup.includes(line))
+      if (fullyChecked) {
+        const list = mergedNameKeys[Number(rawId)] ?? (mergedNameKeys[Number(rawId)] = [])
+        if (!list.includes(nk)) list.push(nk)
+      }
     }
   }
+  // Both ledgers land in the SAME per-variant cleared set: bare nameKeys
+  // (whole-ingredient, the Clear-list grammar) and full line keys
+  // (`nameKey||basis`, line-granular). `aggregateGroceries` reads one
+  // `cleared` set per meal and skips rows by nameKey while filtering
+  // rendered lines by full key — one persisted, room-synced structure,
+  // no new payload field (a pre-#94 peer's nameKey-only skip rule is
+  // unaffected by entries containing `||`, which never equal a nameKey).
+  const mergedByVariant: Record<number, string[]> = {}
+  for (const rawId of new Set([
+    ...Object.keys(mergedNameKeys),
+    ...Object.keys(mergedLineKeys),
+  ])) {
+    const id = Number(rawId)
+    mergedByVariant[id] = [
+      ...new Set([...(mergedNameKeys[id] ?? []), ...(mergedLineKeys[id] ?? [])]),
+    ]
+  }
   plan.mergeIngredientsForCurrentMeals(mergedByVariant)
+  removed += checkedLineKeys.length
 
   // (c) wipe the checkbox map — only checked keys ever live there.
   grocery.clearAll()

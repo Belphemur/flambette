@@ -91,3 +91,44 @@ composable), never duplicated view logic — same rule as ADR-0003's
   (the exact ADR-0005 bug class).
 - **Gesture without a button** — rejected: desktop and accessibility
   need a visible affordance; the gesture is additive on touch devices.
+
+## Change note — 2026-10-18, review round 1 (PR #94)
+
+Three amendments from review + real-device testing; Status stays
+`accepted`.
+
+1. **Clear-checked is line-granular.** The original decision merged the
+   checked keys' nameKey halves into `clearedIngredients[variantId]`,
+   which hid EVERY line of an ingredient when the shopper checked only
+   one of its sibling unit lines (`2 tbsp` vs `30 ml`) — contradicting
+   this ADR's own "unchecked items remain". Amended: the snapshot the
+   grocery engine registers now also carries the currently-rendered
+   full line keys per group; a checked LINE key hides only that
+   rendered line (`aggregateGroceries` filters rendered lines by full
+   key), and the bare nameKey joins the whole-ingredient ledger only
+   when every sibling line is checked. Both grammars share the one
+   per-variant cleared set (bare nameKey vs `nameKey||basis`), so
+   nothing new rides the room payload — a pre-#94 peer's nameKey-only
+   skip rule is unaffected by entries containing `||`. A checked key
+   the current render does not contain (stale residue from a servings
+   change) is wiped with the checkbox map, never allowed to hide a
+   current line. The toast counts distinct cleared lines, not
+   per-variant snapshot rows.
+2. **The gesture owns the touch while it is a candidate.** Real
+   Firefox Mobile and Brave fired `pointercancel` from the native pan
+   before `pointerup`, so the armed pull snapped back without clearing
+   — invisible to the emulated Pixel 7 e2e, whose synthetic
+   PointerEvents no scroller can cancel. The composable now listens
+   `touchmove` non-passively on the region and `preventDefault()`s
+   DOWNWARD travel while a touch armed at the top is pending or
+   engaged; upward travel is left to the browser so the list still
+   scrolls from its top. `overscroll-behavior-y: contain` moved from
+   the (non-scrolling) region divs — where it was inert — to `html`,
+   the actual scroll container, suppressing the browser's native
+   pull-to-refresh. The arm check reads `document.scrollingElement`
+   with a 4px tolerance (mobile visual-viewport offsets sit a few px
+   off 0), a second finger is rejected while a pull is pending, and
+   `pointercancel` only ends the pull when it names the active pointer.
+3. **Shop view's adaptive button is guarded by `totalCount > 0`** like
+   the Grocery tab's — an empty list no longer offers a "Clear list"
+   modal that clears nothing.

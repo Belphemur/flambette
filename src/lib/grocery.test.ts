@@ -357,3 +357,43 @@ describe('aggregateGroceries displayLines (the restriction ADR)', () => {
     expect(soy.lines.map((l) => l.display)).toEqual(['4 tbsp'])
   })
 })
+
+describe('aggregateGroceries line-granular clears (ADR-0092, PR #94)', () => {
+  const clearedInput = (d: RecipeDoc, factor: number, cleared: string[]): AggregateInput => ({
+    ...input(d, factor),
+    cleared: new Set(cleared),
+  })
+
+  test('a cleared FULL line key hides only that rendered line', () => {
+    const d = doc('A', 4, [['2 tbsp', 'soy sauce'], ['30 ml', 'soy sauce']])
+    const docs = [clearedInput(d, 1, ['soy sauce||2 tbsp'])]
+    // The checked `2 tbsp` line is gone; the unchecked `30 ml` sibling stays.
+    expect(displays(docs, 'soy sauce')).toEqual(['30 ml'])
+  })
+
+  test('a cleared bare nameKey keeps the whole-ingredient row-level skip', () => {
+    const d = doc('A', 4, [['2 tbsp', 'soy sauce'], ['30 ml', 'soy sauce']])
+    const docs = [clearedInput(d, 1, ['soy sauce'])]
+    expect(displays(docs, 'soy sauce')).toEqual([])
+  })
+
+  test('a group whose every line is cleared disappears entirely', () => {
+    const d = doc('A', 4, [['2 tbsp', 'soy sauce'], ['30 ml', 'soy sauce']])
+    const docs = [
+      clearedInput(d, 1, ['soy sauce||2 tbsp', 'soy sauce||30 ml']),
+    ]
+    expect(aggregateGroceries(docs).find((i) => i.normalized === 'soy sauce')).toBeUndefined()
+  })
+
+  test('the cleared line key names the MERGED render — other meals share the hide', () => {
+    const a = doc('A', 4, [['1 tbsp', 'soy sauce']])
+    const b = doc('B', 4, [['2 tbsp', 'soy sauce'], ['30 ml', 'soy sauce']])
+    const docs = [
+      clearedInput(a, 1, []),
+      clearedInput(b, 1, ['soy sauce||3 tbsp']),
+    ]
+    // The merged `3 tbsp` line (A's 1 + B's 2) is the checked line; the
+    // `30 ml` sibling stays. The key is global — no per-variant spelling.
+    expect(displays(docs, 'soy sauce')).toEqual(['30 ml'])
+  })
+})

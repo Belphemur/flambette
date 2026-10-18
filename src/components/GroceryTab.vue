@@ -430,7 +430,6 @@ const shopperCount = computed(() => room.peers)
   <div
   :ref="pullBindRoot"
   class="relative"
-  style="overscroll-behavior-y: contain"
   data-test="pull-clear-region"
   >
   <PullClearIndicator :phase="pullPhase" />
