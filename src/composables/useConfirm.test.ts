@@ -1,9 +1,17 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { createPinia, setActivePinia } from 'pinia'
-import { confirmAndClearGrocery, confirmModal } from './useConfirm'
+import {
+  confirmAndClearGrocery,
+  clearCheckedItems,
+  confirmModal,
+  registerClearSnapshotProvider,
+} from './useConfirm'
 import { useGroceryStore } from '../stores/grocery'
 import { usePlanStore } from '../stores/plan'
+import { useCustomIngredientsStore } from '../stores/customIngredients'
+import { extraCheckedKey } from '../lib/extraCheckedKeys'
 import { useUiStore, type ConfirmPrompt } from '../stores/ui'
+import type { VariantMeta } from '../lib/types'
 
 /**
  * ADR-0084's funnel contracts, pinned at the unit level:
@@ -177,5 +185,96 @@ describe('confirmAndClearGrocery (prompting guard)', () => {
     expect(openPrompt()).not.toBeNull()
     useUiStore().settleConfirm(false)
     await retry
+  })
+})
+
+function meta(id: number): VariantMeta {
+  return { id, serving_count: 4 } as VariantMeta
+}
+
+describe('clearCheckedItems (ADR-0092)', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  test('checked recipe lines merge into clearedIngredients; unchecked stay unchecked', () => {
+    const grocery = useGroceryStore()
+    const plan = usePlanStore()
+    plan.addToPlan(meta(7), 4)
+    // The snapshot the grocery engine registers (its loaded-docs walk).
+    registerClearSnapshotProvider(() => ({ 7: ['flour', 'salt', 'butter'] }))
+    grocery.toggleChecked('flour||67.5 ml')
+    grocery.toggleChecked('salt||1 tsp')
+    grocery.toggleChecked('pepper||1 pinch')
+
+    expect(clearCheckedItems()).toBe(true)
+    // Checked gone (hidden via the MERGE).
+    expect(plan.clearedIngredients[7]).toEqual(['flour', 'salt'])
+    // Unchecked remain and stay unchecked: the map was wiped (only
+    // checked keys ever lived there) and pepper is NOT cleared.
+    expect(grocery.map).toEqual({})
+    expect(plan.clearedIngredients[7]).not.toContain('pepper')
+    // Toast reports what happened.
+    expect(useUiStore().toast?.message).toBe('Cleared 2 checked items — unchecked items remain')
+  })
+
+  test('merging preserves pre-existing cleared entries (replace would resurrect them)', () => {
+    const grocery = useGroceryStore()
+    const plan = usePlanStore()
+    plan.addToPlan(meta(7), 4)
+    plan.clearIngredientsForCurrentMeals({ 7: ['eggs'] })
+    registerClearSnapshotProvider(() => ({ 7: ['flour', 'eggs'] }))
+    grocery.toggleChecked('flour||500 g')
+
+    clearCheckedItems()
+    expect(plan.clearedIngredients[7]).toEqual(['eggs', 'flour'])
+  })
+
+  test('checked custom items are removed individually; the autocomplete memory survives', () => {
+    const grocery = useGroceryStore()
+    const plan = usePlanStore()
+    plan.customItems = ['Olive oil', 'Paprika']
+    grocery.toggleChecked(extraCheckedKey('Olive oil'))
+    // Typed-name memory from an earlier add — must survive the clear.
+    useCustomIngredientsStore().remember('Olive oil')
+    registerClearSnapshotProvider(() => ({}))
+
+    expect(clearCheckedItems()).toBe(true)
+    expect(plan.customItems).toEqual(['Paprika'])
+    expect(grocery.map).toEqual({})
+    expect(useUiStore().toast?.message).toBe('Cleared 1 checked item — unchecked items remain')
+    expect(useCustomIngredientsStore().find('Olive oil')).toBeDefined()
+  })
+
+  test('nothing checked: no-op, no toast', () => {
+    registerClearSnapshotProvider(() => ({}))
+    expect(clearCheckedItems()).toBe(false)
+    expect(useUiStore().toast).toBeNull()
+  })
+
+  test('a checked nameKey no planned meal uses is wiped, never cleared', () => {
+    const grocery = useGroceryStore()
+    const plan = usePlanStore()
+    plan.addToPlan(meta(7), 4)
+    registerClearSnapshotProvider(() => ({ 7: ['flour'] }))
+    grocery.toggleChecked('ghost||1 x')
+
+    clearCheckedItems()
+    expect(plan.clearedIngredients[7]).toBeUndefined()
+    expect(grocery.map).toEqual({})
+  })
+
+  test('the zero-checked "Clear list" branch forces the confirm past the empty guard', async () => {
+    // The old guard no-opped when nothing was checked; ADR-0092's
+    // "Clear list" label must actually clear (force option).
+    const plan = usePlanStore()
+    plan.addToPlan(meta(7), 4)
+    registerClearSnapshotProvider(() => ({ 7: ['flour'] }))
+    const pending = confirmAndClearGrocery(undefined, { force: true })
+    expect(openPrompt()?.message).toBe(
+      'Clear the grocery list? Ingredients stay hidden until you cook the meals.',
+    )
+    useUiStore().settleConfirm(true)
+    await pending
+    expect(plan.clearedIngredients[7]).toEqual(['flour'])
+    expect(plan.customItems).toEqual([])
   })
 })

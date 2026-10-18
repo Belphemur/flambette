@@ -1,6 +1,7 @@
 import { useGroceryStore } from '../stores/grocery'
 import { usePlanStore } from '../stores/plan'
 import { useUiStore, type ConfirmTone } from '../stores/ui'
+import { extraCheckedKey, EXTRA_KEY_PREFIX } from '../lib/extraCheckedKeys'
 
 /**
  * Clear-grocery confirmation workflow, shared by the Grocery tab and
@@ -86,9 +87,79 @@ function performClear(): void {
 }
 
 /**
+ * ADR-0092's clear-checked: remove ONLY the checked lines, no confirm
+ * modal. One shared implementation for BOTH the adaptive button and the
+ * pull-to-clear gesture (Grocery tab and Shop view call this — never a
+ * view copy).
+ *
+ * - checked custom items are removed from `plan.customItems`
+ *   individually and their checked keys forgotten; the autocomplete
+ *   memory in `customIngredients` SURVIVES (it is a separate store).
+ * - checked recipe-derived nameKeys are MERGED into
+ *   `clearedIngredients[variantId]` (via the plan store's merge
+ *   primitive) for every planned meal that uses them — already-cleared
+ *   entries survive (merge, not the replace primitive).
+ * - the checkbox map is wiped afterwards: it only ever held checked
+ *   keys, and the surviving unchecked items must stay UNCHECKED.
+ * - reports via the status toast; no modal.
+ *
+ * Returns whether anything was cleared, so callers can skip a no-op.
+ */
+export function clearCheckedItems(): boolean {
+  const grocery = useGroceryStore()
+  const plan = usePlanStore()
+  const ui = useUiStore()
+  const checkedKeys = Object.keys(grocery.map).filter((k) => grocery.map[k] === true)
+  if (checkedKeys.length === 0) return false
+
+  let removed = 0
+
+  // (a) checked custom items, individually. `[...plan.customItems]` so
+  // the iteration is over a snapshot while removeCustomItem splices.
+  for (const item of [...plan.customItems]) {
+    const key = extraCheckedKey(item)
+    if (grocery.map[key]) {
+      plan.removeCustomItem(item)
+      grocery.forget(key)
+      removed += 1
+    }
+  }
+
+  // (b) checked recipe-derived lines: intersect the checked map's
+  // nameKey segments with the snapshot's per-variant nameKey lists, and
+  // MERGE the hits into each variant's cleared set.
+  const checkedNameKeys = new Set(
+    checkedKeys
+      .filter((k) => !k.startsWith(EXTRA_KEY_PREFIX))
+      .map((k) => k.slice(0, k.indexOf('||'))),
+  )
+  const snapshot = snapshotProvider?.() ?? {}
+  const mergedByVariant: Record<number, string[]> = {}
+  for (const [rawId, nameKeys] of Object.entries(snapshot)) {
+    const hits = nameKeys.filter((nk) => checkedNameKeys.has(nk))
+    if (hits.length) {
+      mergedByVariant[Number(rawId)] = hits
+      removed += hits.length
+    }
+  }
+  plan.mergeIngredientsForCurrentMeals(mergedByVariant)
+
+  // (c) wipe the checkbox map — only checked keys ever live there.
+  grocery.clearAll()
+
+  ui.showToast(
+    `Cleared ${removed} checked item${removed === 1 ? '' : 's'} — unchecked items remain`,
+  )
+  return true
+}
+
+/**
  * Ask "Clear the grocery list?" with Clear / Cancel in the confirm modal
  * (no auto-dismiss — a modal waits) and clear on confirmation.
- * No-op (no prompt) when nothing is checked. Resolves once settled.
+ * No-op (no prompt) when nothing is checked, unless `options.force` —
+ * ADR-0092's zero-checked "Clear list" branch (the button is visible
+ * whenever the list has items, so its clear must clear). Resolves once
+ * settled.
  *
  * The prompting guard is reset by the prompt's onDismiss, which the ui
  * store fires on EVERY end path — Confirm, Cancel, Escape, scrim, or
@@ -97,11 +168,16 @@ function performClear(): void {
  */
 export function confirmAndClearGrocery(
   message = 'Clear the grocery list? Ingredients stay hidden until you cook the meals.',
+  options: { force?: boolean } = {},
 ): Promise<void> {
   return new Promise((resolve) => {
     const ui = useUiStore()
 
-    if (prompting || !anythingChecked()) {
+    // ADR-0092: the adaptive button's zero-checked "Clear list" branch
+    // passes `force` — the button is visible whenever the list has items,
+    // so its clear must actually clear even with nothing checked (the
+    // old `!anythingChecked()` no-op would make the button lie).
+    if (prompting || (!options.force && !anythingChecked())) {
       resolve()
       return
     }
