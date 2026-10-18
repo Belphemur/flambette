@@ -50,6 +50,30 @@
   In ShopView the collapse watcher is `flush: 'post'`, so the collapse
   is the LAST step after the checked-sink re-sort. ShopView's extras
   group stays manual-collapse-only.
+- **Clearing is ONE adaptive button + the pull-to-clear gesture
+  (ADR-0092)**: the button (`data-test="grocery-clear"`, replacing the
+  old `clear-list`) lives in the sticky progress card on BOTH surfaces
+  and is visible whenever the list has items — the LABEL is its state:
+  `checkedCount > 0` → **"Clear checked"**, a direct no-modal action
+  that removes ONLY the checked lines (shared `clearCheckedItems()` in
+  `src/composables/useConfirm.ts`): checked custom items are removed
+  individually (the device-local `customIngredients` autocomplete
+  memory SURVIVES), checked recipe-derived nameKeys are MERGED into
+  `clearedIngredients[variantId]` via the plan store's
+  `mergeIngredientsForCurrentMeals` (merge, NEVER the replace
+  primitive — already-cleared entries must survive), the checkbox map
+  is wiped, and a status toast reports what happened. With nothing
+  checked the button reads **"Clear list"** — the ADR-0005
+  confirm-modal clear-everything flow, `force`d past the old
+  `!anythingChecked()` no-op guard because a button that reads "Clear
+  list" must actually clear. The pull-to-clear gesture (touch pointers
+  only, scrollTop 0, armed at `PULL_CLEAR_THRESHOLD` = 80px, rubber-band
+  curve in `src/lib/pullToClear.ts`) is wired through the ONE shared
+  `usePullToClear` composable and releases into the SAME
+  `clearCheckedItems()` action, with `data-test="pull-clear-indicator"`
+  states `pull` → `armed` ("Release to clear checked"); a short drag
+  cancels and does nothing. Both views bind the shared composable —
+  never a view copy. The all-checked auto-prompt modal is unchanged.
 - The grocery provenance pill must stay a flex sibling OUTSIDE the
   truncating name span (inside = tooltip clipped by `overflow-hidden`),
   and it stays `cursor-help` (a tooltip target).
