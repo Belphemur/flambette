@@ -20,13 +20,49 @@
  * reasoning, recorded in the ADR so nobody "fixes" this into the room
  * payload): sound and vibration are per-device capabilities, and one
  * household member must not configure another phone's alerts.
+ *
+ * ADR-0093 amends the one-shot alert into a RECURRING, ESCALATING alarm
+ * driven by the host (rounds + growing pauses — see timerAlertHost.ts)
+ * and pitches the chime per timer: `chime`/`fire` take the timer's
+ * 0-based ORDINAL among its recipe's timers (see the per-timer pitch
+ * section below); the engine itself stays stateless about rounds.
  */
+
+import { MAX_CONCURRENT_TIMERS } from './stepTimer'
 
 /** The completion buzz: three short pulses with gaps, ends on a long one. */
 export const TIMER_VIBRATE_PATTERN: number[] = [200, 140, 200, 140, 400]
 
 /** The two-tone chime's pitches (Hz): A5 → D6, a rising "done". */
 export const CHIME_TONES_HZ: readonly [number, number] = [880, 1174.66]
+
+/* ---------- Per-timer pitch (ADR-0093) ----------
+ *
+ * With ADR-0041's concurrent named timers, the oven and the rice expired
+ * to identical tones — the cook could not tell WHICH work finished by
+ * ear. Each timer's ORDINAL among its recipe's timers (the strip's
+ * order, oldest id first) transposes BOTH tones of the pair by the same
+ * semitone offset so the rising interval is preserved:
+ * `freq = base * 2 ** (semitones / 12)`. Offsets 0/+2/+4/+7 for timers
+ * 1–4; the list is bounded by `MAX_CONCURRENT_TIMERS` so the two stay in
+ * lockstep if the cap ever changes, and ordinal 0 is today's A5→D6
+ * exactly.
+ */
+
+/** Semitone offset for the timer at ordinal 0, 1, 2, 3… (clamped at the end). */
+const CHIME_SEMITONES: readonly number[] = [0, 2, 4, 7].slice(0, MAX_CONCURRENT_TIMERS)
+
+/**
+ * The chime pair for a timer at 0-based `ordinal` among its recipe's
+ * timers. Out-of-range ordinals clamp to the last offset (the host
+ * already bounds by `MAX_CONCURRENT_TIMERS`; this is a second net).
+ */
+export function chimeTonesForOrdinal(ordinal: number): readonly [number, number] {
+  const i = Math.min(Math.max(Math.trunc(ordinal), 0), CHIME_SEMITONES.length - 1)
+  const st = CHIME_SEMITONES[i]
+  const shift = (base: number): number => base * 2 ** (st / 12)
+  return [shift(CHIME_TONES_HZ[0]), shift(CHIME_TONES_HZ[1])]
+}
 
 export interface TimerAlertPrefs {
   sound: boolean
@@ -47,9 +83,11 @@ export interface ChimeContext {
 
 export type AudioContextFactory = () => ChimeContext | null
 
-/** Two rising sine tones with a click-free gain envelope. */
-function playTwoTone(ctx: ChimeContext): void {
+/** Two rising sine tones with a click-free gain envelope, transposed by
+ * the timer's ordinal semitone offset (ADR-0093 per-timer pitch). */
+function playTwoTone(ctx: ChimeContext, ordinal = 0): void {
   const t0 = ctx.currentTime
+  const [lo, hi] = chimeTonesForOrdinal(ordinal)
   const tone = (freq: number, start: number, dur: number) => {
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
@@ -63,8 +101,8 @@ function playTwoTone(ctx: ChimeContext): void {
     osc.start(t0 + start)
     osc.stop(t0 + start + dur)
   }
-  tone(CHIME_TONES_HZ[0], 0, 0.18)
-  tone(CHIME_TONES_HZ[1], 0.22, 0.32)
+  tone(lo, 0, 0.18)
+  tone(hi, 0.22, 0.32)
 }
 
 /**
@@ -121,20 +159,22 @@ export function createTimerAlerts(
     }
   }
 
-  /** The chime: silent degradation when there is no runnable context. */
-  function chime(): void {
+  /** The chime: silent degradation when there is no runnable context.
+   * `ordinal` is the timer's 0-based position among its recipe's timers
+   * (ADR-0093 per-timer pitch); the default 0 is the original A5→D6. */
+  function chime(ordinal = 0): void {
     if (!getPrefs().sound) return
     if (!ctx || ctx.state !== 'running') return
     try {
-      playTwoTone(ctx)
+      playTwoTone(ctx, ordinal)
     } catch {
       // Never surface an audio failure to a cook holding a knife.
     }
   }
 
   /** Fire BOTH channels (each honours its own toggle). */
-  function fire(): void {
-    chime()
+  function fire(ordinal = 0): void {
+    chime(ordinal)
     vibrate()
   }
 

@@ -80,6 +80,20 @@ const room = useRoomStore()
 const identity = useIdentityStore()
 const { shareRoomLink, shareableCode } = useShareRoomLink()
 
+/* ---------- Timer alerts (ADR-0081 amendment, ADR-0093) ----------
+ *
+ * Honest vibration capability: Firefox disabled the Vibration API in 79
+ * (Bugzilla 1653318 — exposed but inert) and REMOVED Navigator.vibrate()
+ * entirely in 129 (Bugzilla 1900037); no iOS browser ever exposed it. Where
+ * the API is absent the Vibration row says so and the toggle is disabled in
+ * place — the stored preference is KEPT (a device that later runs a capable
+ * browser keeps its choice), we never fake vibration. Feature-detected at
+ * render time; `typeof navigator` guarded so tests/SSR never crash.
+ */
+const canVibrate =
+  typeof navigator !== 'undefined' &&
+  typeof (navigator as Navigator & { vibrate?: unknown }).vibrate === 'function'
+
 /* ---------- Card grammar (ADR-0077) ----------
  *
  * The Settings tab is the render's 12-column CARD GRID: every existing
@@ -828,12 +842,18 @@ async function importMealimeFavourites(): Promise<void> {
   class="check-box mt-0.5"
   aria-label="Vibrate when a step timer finishes"
   data-test="timer-alert-vibrate"
+  :disabled="!canVibrate"
   />
   <span>
   <strong>Vibration</strong> — a buzz pattern when a timer reaches zero, where the device supports it.
   <span class="block">
   Desktops without a vibration motor simply skip it. These settings stay on this device — they are never synced to the household room.
   </span>
+  <span
+  v-if="!canVibrate"
+  class="block text-body-sm text-text-muted"
+  data-test="timer-alert-vibrate-unsupported"
+  >This browser cannot vibrate — the buzz pattern is skipped (the chime still sounds).</span>
   </span>
   </label>
   </div>

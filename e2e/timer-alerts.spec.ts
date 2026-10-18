@@ -100,6 +100,46 @@ test('both toggles default ON, persist a reload, and travel through a backup', a
   await expectZeroMealimeRequests(page)
 })
 
+test('a browser without navigator.vibrate says so and disables the toggle in place (ADR-0093)', async ({ page }) => {
+  // The beforeEach patch defines vibrate; this init script is registered
+  // AFTER it, so it runs later and removes the API — Firefox ≥ 129
+  // removed Navigator.vibrate() entirely (Bugzilla 1900037) and no iOS
+  // browser ever exposed it.
+  await page.addInitScript(() => {
+    // Shadowing (not deleting) is required: the patched own property sits
+    // OVER Chromium's native Navigator.prototype.vibrate, and deleting the
+    // own property would fall through to the prototype's function.
+    Object.defineProperty(navigator, 'vibrate', {
+      configurable: true,
+      get: () => undefined,
+    })
+  })
+  await gotoSettings(page)
+  const note = page.getByTestId('timer-alert-vibrate-unsupported')
+  await expect(note).toBeVisible()
+  await expect(note).toContainText('cannot vibrate')
+  const vibrate = page.getByTestId('timer-alert-vibrate')
+  await expect(vibrate).toBeDisabled()
+  // The stored preference is kept untouched — default ON, nothing wrote it.
+  await expect(vibrate).toBeChecked()
+  // A sound-toggle flip persists the whole ui slice: the vibrate pref
+  // travels as true — an incapable browser never silently rewrites it.
+  await page.getByTestId('timer-alert-sound').click()
+  await page.reload()
+  await expect(page.getByTestId('timer-alert-vibrate-unsupported')).toBeVisible()
+  await expect(page.getByTestId('timer-alert-vibrate')).toBeDisabled()
+  await expect(page.getByTestId('timer-alert-vibrate')).toBeChecked()
+  const uiBlob = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('mealime-planner:v1:ui') ?? '{}'),
+  )
+  expect(uiBlob.timerAlertVibrate).toBe(true)
+  // The sound row is unaffected — still enabled (the chime carries the
+  // alarm), and its own flip survived the reload alongside the vibrate pref.
+  await expect(page.getByTestId('timer-alert-sound')).toBeEnabled()
+  await expect(page.getByTestId('timer-alert-sound')).not.toBeChecked()
+  await expectZeroMealimeRequests(page)
+})
+
 test('a finished timer buzzes when vibration is ON and stays silent when OFF — the announcement always runs', async ({ page }) => {
   test.setTimeout(240_000)
   const cooking = await startCooking(page)
@@ -149,6 +189,47 @@ test('a finished timer buzzes when vibration is ON and stays silent when OFF —
     )
     .toBeGreaterThan(0)
   expect(calls[0]).toEqual([200, 140, 200, 140, 400])
+  await expectZeroMealimeRequests(page)
+})
+
+test('a ringing alarm is stoppable from ANY surface — the shell banner (ADR-0093 change note)', async ({ page }) => {
+  test.setTimeout(240_000)
+  const cooking = await startCooking(page)
+  await armPreset1(page)
+  await expectCompletion(page)
+
+  // Finish the cook: the prompt's Done lands on /history — a surface with
+  // NO timer controls. ADR-0093 keeps "only the user stops the alarm", so
+  // the alarm keeps ringing there — but a stop must be REACHABLE: the
+  // shell shows the banner for the ringing timer (the preset label is the
+  // normalized default). The host fires round 1 on its own 1 s cadence,
+  // so visibility is polled.
+  // Finish only renders on the LAST step (v-else on the Next button) —
+  // walk there first, exactly like cooking.spec's gotoLastStep.
+  const progress = await cooking.getByText(/Step 1 \/ (\d+)/).textContent()
+  const total = Number(progress!.match(/Step 1 \/ (\d+)/)![1])
+  const next = cooking.getByRole('button', { name: /Next/ })
+  for (let i = 1; i < total; i++) await next.click()
+  await cooking.getByTestId('finish').click()
+  await page.getByTestId('post-cook-done').click()
+  await expect(page).toHaveURL(/\/history/)
+  const banner = page.getByTestId('alarm-banner')
+  await expect(banner).toBeVisible({ timeout: 15_000 })
+  await expect(banner.getByTestId('alarm-banner-text')).toContainText("Time's up — still ringing: “Step”")
+
+  // Stop = the timer's own Clear verb: the record is removed, the host
+  // observes the vanished key, the banner and the alarm both end — and
+  // the strip (if the cook ever returns) carries no ghost chip.
+  await banner.getByTestId('alarm-banner-stop').click()
+  await expect(banner).toBeHidden()
+  const uiBlob = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('mealime-planner:v1:ui') ?? '{}'),
+  )
+  expect(uiBlob.stepTimers?.['10085'] ?? {}).toEqual({})
+  // And the alarm really stopped: no further vibration rounds arrive.
+  const callsAfter = await vibrateCalls(page)
+  await page.waitForTimeout(2_500)
+  expect(await vibrateCalls(page)).toEqual(callsAfter)
   await expectZeroMealimeRequests(page)
 })
 
