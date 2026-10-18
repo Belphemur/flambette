@@ -5,6 +5,7 @@ import {
   lineKeyIdentity,
   mealSurvivingLines,
   type AggregateInput,
+  type RestrictedDisplayLine,
 } from './grocery'
 import type { LineItem, RecipeDoc } from './types'
 
@@ -37,6 +38,10 @@ function input(d: RecipeDoc, factor: number): AggregateInput {
 function displays(docs: AggregateInput[], ingredient: string): string[] {
   const item = aggregateGroceries(docs).find((i) => i.normalized === ingredient)
   return item ? item.lines.map((l) => l.display) : []
+}
+
+function inputDisplay(d: RecipeDoc, factor: number, rows: RestrictedDisplayLine[], cleared?: string[]): AggregateInput {
+  return { doc: d, factor, recipeName: 'A', displayLines: rows, cleared: cleared ? new Set(cleared) : undefined }
 }
 
 describe('aggregateGroceries container units (ADR-0017)', () => {
@@ -448,6 +453,30 @@ describe('cleared line keys survive composition changes (ADR-0092 round 2, kody 
     // Cleared `egg||2` at the authored servings; doubling re-sums to `4`
     // — the amount-free unit identity (`egg||`) keeps the line hidden.
     const docs = [clearedInput(d, 2, ['egg||2'])]
+    expect(displays(docs, 'egg')).toEqual([])
+  })
+
+  test('a raw row and a by-unit line share one identity: clearing one leaves the sibling visible (kody round-3, K5)', () => {
+    // The restriction overlay can render TWO lines of one ingredient in a
+    // single meal: a by-unit row (`egg||4`) beside a raw row whose key
+    // basis parses unitless (`egg||6`, display `to taste`). Both reduce to
+    // the identity `egg||` — hiding every line that shares an identity
+    // would swallow the unchecked sibling, so the shared identity falls
+    // back to exact-key matching and only the cleared line disappears.
+    const base = doc('A', 4, [])
+    const rows: RestrictedDisplayLine[] = [
+      { keyName: 'egg', name: 'egg', quantity: '4' },
+      { keyName: 'egg', name: 'egg (to taste)', quantity: 'to taste', keyQuantity: '6' },
+    ]
+    expect(displays([inputDisplay(base, 1, rows, ['egg||6'])], 'egg')).toEqual(['4'])
+    expect(displays([inputDisplay(base, 1, rows, ['egg||4'])], 'egg')).toEqual(['to taste'])
+    expect(displays([inputDisplay(base, 1, rows)], 'egg')).toEqual(['4', 'to taste'])
+  })
+
+  test('a singleton identity still hides composition-stale re-sums (K1 unchanged by the K5 guard)', () => {
+    // The guard must not weaken K1: one rendered line whose identity
+    // matches the stale cleared key is still hidden.
+    const docs = [clearedInput(doc('A', 4, [['2', 'egg']]), 2, ['egg||2'])]
     expect(displays(docs, 'egg')).toEqual([])
   })
 
