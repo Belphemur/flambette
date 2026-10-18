@@ -132,3 +132,37 @@ Three amendments from review + real-device testing; Status stays
 3. **Shop view's adaptive button is guarded by `totalCount > 0`** like
    the Grocery tab's — an empty list no longer offers a "Clear list"
    modal that clears nothing.
+
+## Change note — 2026-10-18, review round 2 (PR #94)
+
+One amendment from kody's round-2 pass on the round-1 code; Status stays
+`accepted`.
+
+**Cleared line keys survive composition changes (unit-identity
+matching).** Round 1 persisted the RENDER-summed basis
+(`soy sauce||3 tbsp`) into every contributing variant's
+`clearedIngredients`. That key was valid only for the plan composition
+it was cleared under: cooking or unplanning ONE co-contributing meal
+(`restoreIngredients` forgets only that variant's row) re-summed the
+shared line to a different basis (`2 tbsp`), the persisted key stopped
+matching, and the cleared line reappeared unchecked even though the
+household never re-planned. Amended: `aggregateGroceries` now matches a
+persisted full key against the current render by COMPOSITION-STABLE
+unit identity — the nameKey plus the basis's unit (the normalized
+container key `pkg|142 g` for container quantities, the trailing unit
+token otherwise; `raw||`-namespace keys stay exact-match-only). The
+unit survives composition changes, so the cleared line stays hidden
+across co-contributor cooks/unplans and serving bumps, while the
+sibling guarantee is structural: a by-unit line is unique per unit and
+a container line unique per (noun, annotation) inside its group, so one
+identity can hide at most the line it was cleared from and an unchecked
+sibling line (a different unit) can never be swallowed. The persisted
+structure is unchanged — same per-variant cleared set, same two
+grammars, no new room payload field; ADR-0005's replace paths are
+untouched.
+
+The Contributing Meals card's line count now derives from the SAME
+visibility (kody round 2, K2): a meal's row counts its group's
+surviving rendered lines (`mealSurvivingLines`), so a partially cleared
+two-line ingredient reports one line and the card tracks the list
+line-for-line instead of filtering bare nameKeys only.

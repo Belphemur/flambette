@@ -3,6 +3,7 @@ import { catalog, getRecipe } from './catalog'
 import {
   aggregateGroceries,
   aggregateRowKeys,
+  mealSurvivingLines,
   type GroceryItemView,
 } from './grocery'
 import { localizeQuantity } from './units'
@@ -107,14 +108,22 @@ export function useGroceryList() {
    */
   const mealSummaries = computed<MealLineSummary[]>(() => {
     if (aggregateInputs.value.length !== plannedMetas.value.length) return []
+    // The merged render's per-group SURVIVING line counts — the same
+    // pass `items` runs, so the card and the list share one derivation.
+    const visibleLinesByGroup = new Map(
+      items.value.map((item) => [item.normalized, item.lines.length]),
+    )
     return aggregateInputs.value.map((input) => {
-      // The SAME keys `aggregateGroceries` walks (the shared
-      // aggregateRowKeys derivation), matched with the SAME cleared set —
-      // the count cannot disagree with the list by construction.
-      const keys = aggregateRowKeys(input)
-      const lines = input.cleared
-        ? keys.filter((key) => !input.cleared!.has(key)).length
-        : keys.length
+      // The SAME rows `aggregateGroceries` walks (the shared
+      // aggregateRowKeys derivation) matched with the SAME visibility
+      // rules (the bare-nameKey skip plus the line-granular clears
+      // through the merged render's surviving lines) — the count cannot
+      // disagree with the list by construction.
+      const lines = mealSurvivingLines(
+        aggregateRowKeys(input),
+        input.cleared,
+        visibleLinesByGroup,
+      )
       return {
         id: input.doc.id,
         name: input.recipeName,

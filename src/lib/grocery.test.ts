@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { aggregateGroceries, type AggregateInput } from './grocery'
+import {
+  aggregateGroceries,
+  aggregateRowKeys,
+  mealSurvivingLines,
+  type AggregateInput,
+} from './grocery'
 import type { LineItem, RecipeDoc } from './types'
 
 function doc(name: string, servingCount: number, lines: [string, string][]): RecipeDoc {
@@ -395,5 +400,82 @@ describe('aggregateGroceries line-granular clears (ADR-0092, PR #94)', () => {
     // The merged `3 tbsp` line (A's 1 + B's 2) is the checked line; the
     // `30 ml` sibling stays. The key is global — no per-variant spelling.
     expect(displays(docs, 'soy sauce')).toEqual(['30 ml'])
+  })
+})
+
+describe('cleared line keys survive composition changes (ADR-0092 round 2, kody K1)', () => {
+  const clearedInput = (d: RecipeDoc, factor: number, cleared: string[]): AggregateInput => ({
+    ...input(d, factor),
+    cleared: new Set(cleared),
+  })
+
+  test('a STALE cleared line key still hides the re-summed line after a co-contributor leaves', () => {
+    // A and B both contributed to the summed `3 tbsp` line; the household
+    // cleared it; A was cooked (its cleared row is forgotten) and B's
+    // persisted `soy sauce||3 tbsp` no longer matches the re-summed
+    // `2 tbsp` — the line must STAY hidden (unit-identity match).
+    const b = doc('B', 4, [['2 tbsp', 'soy sauce']])
+    const docs = [clearedInput(b, 1, ['soy sauce||3 tbsp'])]
+    expect(displays(docs, 'soy sauce')).toEqual([])
+  })
+
+  test('the stale-key hide is UNIT-scoped: an unchecked sibling line survives a serving bump', () => {
+    const d = doc('A', 4, [['2 tbsp', 'soy sauce'], ['30 ml', 'soy sauce']])
+    // `2 tbsp` was cleared at the authored servings; doubling the plan
+    // re-sums to `4 tbsp` + `60 ml`. Only the tbsp line stays hidden.
+    const docs = [clearedInput(d, 2, ['soy sauce||2 tbsp'])]
+    expect(displays(docs, 'soy sauce')).toEqual(['60 ml'])
+  })
+
+  test('a container line stays hidden across a serving bump (container identity)', () => {
+    const d = doc('A', 6, [['½ (142 g) pkg', 'spinach']])
+    // Cleared at the authored render (`½ (142 g) pkg`); doubling re-sums
+    // to `1 (142 g) pkg` — a different basis, the same (pkg, 142 g) line.
+    const docs = [clearedInput(d, 2, ['spinach||½ (142 g) pkg'])]
+    expect(displays(docs, 'spinach')).toEqual([])
+  })
+
+  test('a stale container key with a DIFFERENT annotation never hides the other line', () => {
+    const docs = [
+      clearedInput(doc('A', 6, [['½ (142 g) pkg', 'cheese']]), 1, ['cheese||½ (227 g) pkg']),
+    ]
+    expect(displays(docs, 'cheese')).toEqual(['½ (142 g) pkg'])
+  })
+})
+
+describe('mealSurvivingLines (Contributing Meals card, ADR-0092 round 2, kody K2)', () => {
+  const clearedInput = (d: RecipeDoc, factor: number, cleared: string[]): AggregateInput => ({
+    ...input(d, factor),
+    cleared: new Set(cleared),
+  })
+
+  /** The merged render's per-group surviving line counts, from one pass. */
+  function visibleLines(docs: AggregateInput[]): Map<string, number> {
+    return new Map(aggregateGroceries(docs).map((i) => [i.normalized, i.lines.length]))
+  }
+
+  test('a two-line ingredient counts its surviving lines: partial clear drops the count by exactly 1', () => {
+    const d = doc('A', 4, [['2 tbsp', 'soy sauce'], ['30 ml', 'soy sauce']])
+    const keys = aggregateRowKeys(input(d, 1))
+    expect(mealSurvivingLines(keys, undefined, visibleLines([input(d, 1)]))).toBe(2)
+    const cleared = [clearedInput(d, 1, ['soy sauce||2 tbsp'])]
+    expect(mealSurvivingLines(keys, cleared[0].cleared, visibleLines(cleared))).toBe(1)
+  })
+
+  test('a fully cleared group is gone from the render and counts zero', () => {
+    const d = doc('A', 4, [['2 tbsp', 'soy sauce']])
+    const cleared = [clearedInput(d, 1, ['soy sauce||2 tbsp'])]
+    expect(mealSurvivingLines(aggregateRowKeys(input(d, 1)), cleared[0].cleared, visibleLines(cleared))).toBe(0)
+  })
+
+  test('a bare-cleared row counts zero even when the merged group survives on other meals', () => {
+    const a = doc('A', 4, [['1 tbsp', 'soy sauce']])
+    const b = doc('B', 4, [['2 tbsp', 'soy sauce']])
+    // A bare-cleared soy sauce for A; B's contribution keeps the group alive.
+    const docs = [clearedInput(a, 1, ['soy sauce']), input(b, 1)]
+    expect(
+      mealSurvivingLines(aggregateRowKeys(input(a, 1)), docs[0].cleared, visibleLines(docs)),
+    ).toBe(0)
+    expect(mealSurvivingLines(aggregateRowKeys(input(b, 1)), undefined, visibleLines(docs))).toBe(1)
   })
 })

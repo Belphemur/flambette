@@ -155,12 +155,19 @@ export function clearCheckedItems(): boolean {
   // - a checked line hides ONLY its own line (its full key is merged
   //   into the variant's cleared set, where `aggregateGroceries`
   //   filters rendered lines by full key) — an unchecked sibling line
-  //   (`2 tbsp` vs `30 ml`) stays visible;
+  //   (`2 tbsp` vs `30 ml`) stays visible, and so does any LATER
+  //   re-sum of that line: the persisted full key matches the current
+  //   render by unit identity (grocery.ts's lineKeyIdentity — the unit
+  //   survives composition changes even when the summed basis does
+  //   not), so cooking one co-contributing meal never resurrects the
+  //   cleared line (kody round 2, K1);
   // - a nameKey joins the whole-ingredient ledger (the row-level skip)
   //   ONLY when every currently-rendered line of that group is checked;
   // - a checked key the current render does not contain (stale residue
   //   from a servings change) is simply wiped with the checkbox map —
-  //   it can never hide a line that exists now.
+  //   it can never hide a line that exists now. (A key merged at clear
+  //   time is by construction current; it only goes stale LATER, and
+  //   the unit-identity match above is what keeps it hiding.)
   const snapshot = snapshotProvider?.() ?? { nameKeysByVariant: {}, lineKeysByGroup: {} }
   const renderedLineKeys = new Set(Object.values(snapshot.lineKeysByGroup).flat())
   const checkedLineKeys = checkedKeys.filter(
