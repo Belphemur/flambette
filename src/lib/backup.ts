@@ -22,7 +22,7 @@ import { pantryKeyOf } from './pantry'
 import { DIET_IDS, type DietId } from './dietFilter'
 import { normalizeQuickFilters, type QuickFilters } from './quickFilters'
 import { isServings, FALLBACK_SERVINGS, MAX_SERVINGS, MIN_SERVINGS } from './servings'
-import { onlyTrueKeys } from './grocery'
+import { onlyTrueKeys, isClearedIngredient } from './grocery'
 import { isStepTimer } from './stepTimer'
 import { isUnitSystem, UNIT_SYSTEMS } from './units'
 import { zipStore, unzipStore, type ZipEntry } from './zip'
@@ -678,16 +678,12 @@ function isClearedMap(value: unknown): boolean {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   // ADR-0094: a cleared map's per-variant arrays may hold the legacy
   // `nameKey||basis` strings OR the object grammar — both are accepted so
-  // a backup written by either build restores.
+  // a backup written by either build restores. Object entries must be a
+  // FULLY valid ClearedIngredient (validation-first: a malformed entry
+  // rejects the backup here rather than being silently dropped at apply).
   return Object.entries(value).every(([k, v]) => {
-    if (!/^\d+$/.test(k) || !Array.isArray(v) || v.length === 0) return false
-    return v.every(
-      (item) =>
-        typeof item === 'string' ||
-        (typeof item === 'object' &&
-          item !== null &&
-          typeof (item as { keyName?: unknown }).keyName === 'string'),
-    )
+    if (!/^\d+$/.test(k) || !Array.isArray(v)) return false
+    return v.every((item) => typeof item === 'string' || isClearedIngredient(item))
   })
 }
 

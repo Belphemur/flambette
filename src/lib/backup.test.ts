@@ -723,3 +723,78 @@ describe('pantry import validation (ADR-0087, qodo round 2)', () => {
     expect(slice.validate([{ name: ' Basil ', nameKey: 'basil' }])).toBeNull()
   })
 })
+
+/**
+ * ADR-0094 — the plan slice's cleared-ingredients map accepts BOTH shapes
+ * (the legacy `nameKey||basis` strings a pre-object build wrote, and the
+ * object grammar), and a legacy map restores as objects with the clear
+ * context stamped from the restored plan's servings.
+ */
+describe('plan slice cleared-ingredients (ADR-0094 registry)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    ;(globalThis as Record<string, unknown>).localStorage = memoryStorage()
+  })
+
+  const planSlice = () => {
+    const slice = STORE_SLICES.find((s) => s.file === 'plan.json')
+    if (!slice) throw new Error('plan.json slice missing from STORE_SLICES')
+    return slice
+  }
+
+  const entry = (keyName: string, unit: Record<string, unknown>, scope: string, servingsAtClear = 4) => ({
+    keyName,
+    unit,
+    factor: 1,
+    servingsAtClear,
+    scope,
+  })
+
+  test('a legacy string-keyed map validates and restores as objects', () => {
+    const slice = planSlice()
+    const legacy = {
+      entries: [{ variantId: 7, servings: 4 }],
+      clearedIngredients: {
+        7: ['flour', 'flour||67.5 ml', 'soy sauce||1 (142 g) pkg', 'salt||raw||to taste'],
+      },
+    }
+    expect(slice.validate(legacy)).toBeNull()
+
+    slice.write(legacy)
+    const plan = usePlanStore()
+    expect(plan.clearedIngredients[7]).toEqual([
+      entry('flour', { kind: 'row' }, 'ingredient'),
+      entry('flour', { kind: 'byUnit', unit: 'ml', amount: 67.5 }, 'line'),
+      entry('soy sauce', { kind: 'container', noun: 'pkg', annotation: '(142 g)', count: 1 }, 'line'),
+      entry('salt', { kind: 'raw', basis: 'to taste' }, 'line'),
+    ])
+  })
+
+  test('an object-keyed map validates and restores as-is (no re-stamping)', () => {
+    const slice = planSlice()
+    const modern = {
+      entries: [{ variantId: 7, servings: 4 }],
+      clearedIngredients: {
+        7: [entry('egg', { kind: 'byUnit', unit: '', amount: 4 }, 'line', 6)],
+      },
+    }
+    expect(slice.validate(modern)).toBeNull()
+    slice.write(modern)
+    // The clear-time context is the CLEAR-TIME one (6), never the
+    // restored plan's current servings (4) — re-stamping would break the
+    // successor derivation the same way the stale string basis did.
+    expect(usePlanStore().clearedIngredients[7]).toEqual([
+      entry('egg', { kind: 'byUnit', unit: '', amount: 4 }, 'line', 6),
+    ])
+  })
+
+  test('a malformed entry rejects the whole backup at validate', () => {
+    const slice = planSlice()
+    expect(
+      slice.validate({ entries: [], clearedIngredients: { 7: [{ keyName: 'egg' }] } }),
+    ).toContain('must map ids to cleared entries')
+    expect(slice.validate({ entries: [], clearedIngredients: { 7: [42] } })).toContain(
+      'must map ids to cleared entries',
+    )
+  })
+})
