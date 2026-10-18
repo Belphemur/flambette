@@ -442,6 +442,29 @@ describe('cleared line keys survive composition changes (ADR-0092 round 2, kody 
     ]
     expect(displays(docs, 'cheese')).toEqual(['½ (142 g) pkg'])
   })
+
+  test('a UNITLESS cleared amount stays hidden across a re-sum (kody round-2 re-review)', () => {
+    const d = doc('A', 4, [['2', 'egg']])
+    // Cleared `egg||2` at the authored servings; doubling re-sums to `4`
+    // — the amount-free unit identity (`egg||`) keeps the line hidden.
+    const docs = [clearedInput(d, 2, ['egg||2'])]
+    expect(displays(docs, 'egg')).toEqual([])
+  })
+
+  test('a singular/plural unit spelling does not split the identity (kody round-2 re-review)', () => {
+    // B is aggregated FIRST, so the merged line spells the plural `cups`
+    // while A's own render spells `1 cup` — the parsed-unit identity
+    // collapses both to `cup`, so A's contribution is still counted.
+    const a = doc('A', 4, [['1 cup', 'milk']])
+    const b = doc('B', 4, [['2 cups', 'milk']])
+    const docs = [input(b, 1), input(a, 1)]
+    const merged = aggregateGroceries(docs).find((i) => i.normalized === 'milk')!
+    expect(merged.lines.map((l) => l.key)).toEqual(['milk||3 cups'])
+    const visible = new Map([
+      ['milk', new Set(merged.lines.map((l) => lineKeyIdentity(l.key)))],
+    ])
+    expect(mealSurvivingLines(input(a, 1), visible)).toBe(1)
+  })
 })
 
 describe('mealSurvivingLines (Contributing Meals card, ADR-0092 round 2, kody K2)', () => {

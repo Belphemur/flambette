@@ -235,10 +235,13 @@ export function onlyTrueKeys(map: Record<string, boolean>): Record<string, boole
 /**
  * A rendered line key's COMPOSITION-STABLE identity (PR #94 round 2,
  * kody K1): the nameKey plus the basis's UNIT identity — the normalized
- * container key (`pkg|142 g`) for container quantities, the trailing
- * unit token otherwise. `raw||`-namespace keys (a raw row whose key
- * source could not parse) carry no stable unit, so they are their own
- * identity — exact-match only, the pre-round-2 behaviour.
+ * container key (`pkg|142 g`) for container quantities, otherwise
+ * `unitKey` of the PARSED unit (amount-free and plural-collapsed:
+ * `2 cups` and `1 cup` share `cup`; a unitless `2` and `4` share the
+ * empty unit), and the trailing raw token only when the basis parses as
+ * neither. `raw||`-namespace keys (a raw row whose key source could not
+ * parse) carry no stable unit, so they are their own identity —
+ * exact-match only, the pre-round-2 behaviour.
  *
  * Why an identity at all: a cleared entry persists the RENDER-summed
  * basis (`soy sauce||3 tbsp`), which stops matching the moment a
@@ -247,8 +250,8 @@ export function onlyTrueKeys(map: Record<string, boolean>): Record<string, boole
  * though the household never re-planned. The unit does not change with
  * composition, so matching on (nameKey, unit) keeps the line hidden
  * across composition changes while structurally never over-hiding: a
- * by-unit line is unique per unit and a container line unique per
- * (noun, annotation) inside its group, so one identity can match at
+ * by-unit line is unique per unit identity and a container line unique
+ * per (noun, annotation) inside its group, so one identity can match at
  * most one rendered line and an unchecked sibling line (a DIFFERENT
  * unit) can never be swallowed.
  */
@@ -260,6 +263,8 @@ export function lineKeyIdentity(key: string): string {
   if (basis.startsWith('raw||')) return key
   const container = parseContainerQuantity(basis)
   if (container) return `${nameKey}||${containerKey(container.container, container.annotation)}`
+  const parsed = parseQuantity(basis)
+  if (parsed) return `${nameKey}||${unitKey(parsed.unit)}`
   const tokens = basis.trim().split(/\s+/)
   return `${nameKey}||${(tokens[tokens.length - 1] ?? '').toLowerCase()}`
 }
