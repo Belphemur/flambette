@@ -473,6 +473,33 @@ describe('cleared line keys survive composition changes (ADR-0092 round 2, kody 
     expect(displays([inputDisplay(base, 1, rows)], 'egg')).toEqual(['4', 'to taste'])
   })
 
+  test('a cleared shared-identity line stays hidden after a servings re-sum (kody+qodo K5 follow-up)', () => {
+    // Two lines of one ingredient share the identity `egg||` (by-unit
+    // `egg||4` beside a raw row keying to `6`, display `to taste`). Clear
+    // `egg||4`, then BUMP servings so the render re-sums BOTH keys to
+    // `egg||8` + the to-taste row — the cleared identity must still hide the
+    // egg group (matched by identity, not the now-rotated exact key), while
+    // an unchecked SIBLING of a different ingredient survives.
+    const base = doc('A', 4, [])
+    const egg: RestrictedDisplayLine[] = [
+      { keyName: 'egg', name: 'egg', quantity: '4' },
+      { keyName: 'egg', name: 'egg (to taste)', quantity: 'to taste', keyQuantity: '6' },
+    ]
+    // `egg||4` was cleared at the authored render; servings doubled so both
+    // rendered egg keys rotate — the stale exact key no longer matches.
+    const docs = [
+      inputDisplay(
+        base,
+        2,
+        [...egg, { keyName: 'milk', name: 'milk', quantity: '2 tbsp' }],
+        ['egg||4'],
+      ),
+    ]
+    expect(displays(docs, 'egg')).toEqual([])
+    // A different, unchecked ingredient is untouched by the egg clear.
+    expect(displays(docs, 'milk').length).toBeGreaterThan(0)
+  })
+
   test('a singleton identity still hides composition-stale re-sums (K1 unchanged by the K5 guard)', () => {
     // The guard must not weaken K1: one rendered line whose identity
     // matches the stale cleared key is still hidden.

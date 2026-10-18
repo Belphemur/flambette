@@ -528,19 +528,25 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
     const visible = lineCleared.size
       ? lines.filter((l) => {
           if (lineCleared.has(l.key)) return false
-          // kody round-3 (K5): an identity may name MORE than one rendered
-          // line in the same group (a raw row beside a by-unit line —
-          // `egg||4` and `egg||6` both reduce to `egg||`; singular/plural
-          // spellings collapse too). Hiding every line that shares an
-          // identity would swallow an unchecked sibling, so identity
-          // hiding applies only when it names exactly ONE line here —
-          // shared identities fall back to exact-key matching above.
+          // kody round-3 K5 follow-up (qodo serving-stale): an identity may
+          // name MORE than one rendered line in the same group (a raw row
+          // beside a by-unit line — `egg||4` and `egg||6` both reduce to
+          // `egg||`; singular/plural spellings collapse too).
+          //  - If a SAME-identity rendered line was cleared by its EXACT key,
+          //    the clear is line-specific: that line is already hidden by the
+          //    exact match above, so `l` is an unchecked sibling and must
+          //    survive (K5 — clearing `egg||4` never hides the `egg||6`
+          //    sibling).
+          //  - Otherwise no same-identity line is exact-cleared, so the
+          //    cleared identity is composition-stale (a servings re-sum
+          //    rotated the exact keys) and we fall back to identity hiding so
+          //    the checked line cannot reappear after a re-sum.
           const id = lineKeyIdentity(l.key)
           if (!lineIdentityCleared.has(id)) return true
-          // hide ONLY when this identity names exactly one rendered line;
-          // a shared identity (>= 2 lines) falls back to exact-key matching.
-          const shared = lines.filter((other) => lineKeyIdentity(other.key) === id).length !== 1
-          return shared
+          const lineSpecific = lines.some(
+            (other) => lineCleared.has(other.key) && lineKeyIdentity(other.key) === id,
+          )
+          return lineSpecific
         })
       : lines
     // A group whose every line is cleared disappears entirely — an
