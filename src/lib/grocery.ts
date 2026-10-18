@@ -200,6 +200,136 @@ export function migrateClearedMap(
 }
 
 /**
+ * True when the variant's cleared entries claim the WHOLE ingredient group
+ * (a `row` entry or a scope-'ingredient' claim) — the whole-ingredient
+ * skip that used to be a bare nameKey in the cleared set.
+ */
+export function clearedIngredientHidden(
+  cleared: readonly ClearedIngredient[] | undefined,
+  keyName: string,
+): boolean {
+  return (
+    cleared?.some(
+      (e) => e.keyName === keyName && (e.scope === 'ingredient' || e.unit.kind === 'row'),
+    ) ?? false
+  )
+}
+
+/** One rendered snapshot line: the full checkbox key plus its display text. */
+export interface ClearedSnapshotLine {
+  key: string
+  display: string
+}
+
+/** The grammar branch a rendered line belongs to, read off its display —
+ *  the same string the render branched on (container parse first, then the
+ *  linear quantity parse, else the raw row). */
+function clearedBranchOfDisplay(display: string): 'container' | 'byUnit' | 'raw' {
+  if (parseContainerQuantity(display)) return 'container'
+  if (parseQuantity(display)) return 'byUnit'
+  return 'raw'
+}
+
+/** The branch inferred from a line KEY alone (no display available): the
+ *  raw|| namespace is raw; a parseable container basis is container;
+ *  everything else parses as a linear quantity. Ambiguous ONLY for a raw
+ *  row whose key source parsed (the restriction seam's key/display split)
+ *  — callers holding the display pass it and skip the guess. */
+function clearedBranchOfKey(key: string): 'container' | 'byUnit' | 'raw' {
+  const sep = key.indexOf('||')
+  const basis = sep < 0 ? '' : key.slice(sep + 2)
+  if (basis.startsWith('raw||')) return 'raw'
+  if (parseContainerQuantity(basis)) return 'container'
+  if (parseQuantity(basis)) return 'byUnit'
+  return 'raw'
+}
+
+/**
+ * The cleared entry ONE variant's claim on ONE checked line produces
+ * (ADR-0094): the variant's OWN share of the merged line — parsed from
+ * the variant's own rendered line in the same grammar branch — plus the
+ * clear-time serving context. Returns null when the variant does not
+ * contribute to that line (it holds the ingredient's nameKey but renders
+ * a DIFFERENT grammar branch beside it), so a claim is never minted for a
+ * line the variant cannot own — the structural guard that keeps a
+ * sibling's line independent.
+ *
+ * Without the snapshot's own-line view (legacy callers), the merged
+ * checked key's basis stands in for the own share: exact for a
+ * sole-contributor line (the common case) and the pre-object model's
+ * behaviour otherwise.
+ */
+export function clearedEntryForCheckedLine(
+  keyName: string,
+  checked: { key: string; display?: string },
+  ownLines: readonly ClearedSnapshotLine[] | undefined,
+  ctx: { servings: number; factor: number },
+): ClearedIngredient | null {
+  const branch = checked.display
+    ? clearedBranchOfDisplay(checked.display)
+    : clearedBranchOfKey(checked.key)
+  let basis: string | null = null
+  if (ownLines) {
+    const identity = lineKeyIdentity(checked.key)
+    const own = ownLines.find((l) => {
+      if (clearedBranchOfDisplay(l.display) !== branch) return false
+      // Raw-branch lines are per-DISPLAY (the render's raw map is keyed
+      // by the display text): the merged raw line is the contributor
+      // whose display IS this one.
+      if (branch === 'raw') return l.display === checked.display
+      return lineKeyIdentity(l.key) === identity
+    })
+    if (!own) return null
+    basis = own.key.slice(own.key.indexOf('||') + 2)
+  } else {
+    const sep = checked.key.indexOf('||')
+    if (sep < 0) return null
+    basis = checked.key.slice(sep + 2)
+  }
+  if (branch === 'raw') {
+    // The display says raw row — the kind follows the branch even when the
+    // key source parsed (the restriction seam's key/display split): the
+    // basis is preserved verbatim and the filter's raw matching re-parses
+    // it for the scaled successor.
+    const content = basis.startsWith('raw||') ? basis.slice('raw||'.length) : basis
+    return {
+      keyName,
+      unit: { kind: 'raw', basis: content },
+      factor: ctx.factor,
+      servingsAtClear: ctx.servings,
+      scope: 'line',
+    }
+  }
+  const container = parseContainerQuantity(basis)
+  if (container) {
+    return {
+      keyName,
+      unit: { kind: 'container', noun: container.container, annotation: container.annotation, count: container.count },
+      factor: ctx.factor,
+      servingsAtClear: ctx.servings,
+      scope: 'line',
+    }
+  }
+  const parsed = parseQuantity(basis)
+  if (parsed) {
+    return {
+      keyName,
+      unit: { kind: 'byUnit', unit: parsed.unit, amount: parsed.amount },
+      factor: ctx.factor,
+      servingsAtClear: ctx.servings,
+      scope: 'line',
+    }
+  }
+  return {
+    keyName,
+    unit: { kind: 'raw', basis },
+    factor: ctx.factor,
+    servingsAtClear: ctx.servings,
+    scope: 'line',
+  }
+}
+
+/**
  * The legacy `nameKey||basis` spelling of a cleared entry — the shape the
  * string model persisted and the render filter still consumes. Used as
  * the Task-1 bridge at the `useGroceryList` seam until the successor-key
@@ -351,12 +481,13 @@ export interface AggregateInput {
   /** Display name of the planned meal (for provenance). */
   recipeName: string
   /**
-   * Per-meal cleared/hidden keys for THIS meal: bare nameKeys hide the
-   * whole ingredient (row-level skip); full line keys
-   * (`nameKey||basis`, ADR-0092's line-granular clear-checked) hide
-   * exactly that rendered line — `aggregateGroceries` unions them.
+   * Per-meal cleared entries for THIS meal (ADR-0094): a whole-ingredient
+   * claim (`row` kind / `ingredient` scope) hides the variant's whole
+   * contribution to an ingredient group; a `line` claim hides exactly the
+   * rendered line its successor derivation predicts —
+   * `aggregateGroceries` unions the claims.
    */
-  cleared?: Set<string>
+  cleared?: readonly ClearedIngredient[]
   /**
    * The restriction's display rows (the restriction ADR): when present, the
    * grocery displays THESE instead of `doc.line_items` — each row's (name,
@@ -503,7 +634,7 @@ export function mealSurvivingLines(
   const own = aggregateGroceries([{ ...input, cleared: undefined }])
   let lines = 0
   for (const group of own) {
-    if (input.cleared?.has(group.normalized)) continue
+    if (clearedIngredientHidden(input.cleared, group.normalized)) continue
     const surviving = visibleIdentitiesByGroup.get(group.normalized)
     if (!surviving) continue
     for (const id of new Set(group.lines.map((line) => lineKeyIdentity(line.key)))) {
@@ -516,25 +647,82 @@ export function mealSurvivingLines(
 export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   const groups = new Map<string, Group>()
 
-  // Line-granular clears (ADR-0092, PR #94): a cleared entry that is a
-  // FULL checkbox key (`nameKey||basis`) hides exactly that rendered
-  // line; a bare nameKey keeps the row-level whole-ingredient skip
-  // below. The union runs over every input because the checkbox keys are
-  // the MERGED render's keys — one meal's cleared line key names the
-  // line all its contributors share.
+  // ADR-0094: the cleared state is the OBJECT grammar — per-variant claims
+  // carrying the variant's OWN clear-time share and the clear-time serving
+  // context. Each claim predicts the SUCCESSOR contribution its variant's
+  // line makes at the CURRENT servings: the clear-time own share re-scaled
+  // by the servings ratio (the recipe's base servings cancels out of the
+  // ratio, so a legacy entry's factor-1 placeholder never distorts it).
+  // Because each claim re-derives with the render's own grammar, the sum
+  // of the claims in a bucket equals exactly what the render will produce
+  // for the claimed contributors — no stale strings, no identity
+  // guessing, no display-shape heuristics:
   //
-  // Round 2 (kody K1): the EXACT keys are joined by the cleared keys'
-  // composition-stable identities (lineKeyIdentity), so a persisted
-  // `soy sauce||3 tbsp` still hides the line after a co-contributor
-  // leaves the plan and the render re-sums to `2 tbsp`.
-  const lineCleared = new Set<string>()
-  const lineIdentityCleared = new Set<string>()
-  for (const { cleared } of inputs) {
-    if (!cleared) continue
-    for (const key of cleared) {
-      if (!key.includes('||')) continue
-      lineCleared.add(key)
-      lineIdentityCleared.add(lineKeyIdentity(key))
+  // - byUnit claims SUM per unit bucket (the render's byUnit map sums its
+  //   contributors the same way) and hide the line whose parsed amount
+  //   spelling equals the claimed sum;
+  // - container claims sum per container bucket (the ADR-0017 ceil rule
+  //   reapplied at the ratio);
+  // - raw claims are ANY-match on the successor basis (the render's raw
+  //   map keeps ONE first-seen key basis per display, so the claim that
+  //   named the line is the one that scales it);
+  // - a whole-ingredient (row / scope ingredient) claim skips the
+  //   variant's contribution at ingestion, exactly like the old
+  //   bare-nameKey skip.
+  //
+  // The BRANCH discrimination (read off the rendered line's display — the
+  // same string the render branched on) is what kills the K5 sibling
+  // swallow structurally: a by-unit claim can never hide a raw row beside
+  // it, and vice versa — the collapse the old lineKeyIdentity fallback
+  // suffered (`egg||4` and a raw `egg||6` both reducing to `egg||`).
+  interface SuccessorSum {
+    sum: number
+    claims: number
+  }
+  const successorByUnit = new Map<string, SuccessorSum>()
+  const successorContainers = new Map<string, SuccessorSum>()
+  const successorRawParsed = new Set<string>()
+  const successorRawVerbatim = new Set<string>()
+  let hasLineClaims = false
+  for (const { doc, factor, cleared } of inputs) {
+    if (!cleared?.length) continue
+    const base = doc.serving_count
+    const servingsNow = factor * base
+    for (const entry of cleared) {
+      if (entry.scope === 'ingredient' || entry.unit.kind === 'row') continue
+      // Guard a corrupt context: a non-positive servingsAtClear cannot be
+      // scaled from, so the claim applies verbatim (ratio 1).
+      const ratio =
+        entry.servingsAtClear > 0 && Number.isFinite(entry.servingsAtClear)
+          ? servingsNow / entry.servingsAtClear
+          : 1
+      const u = entry.unit
+      if (u.kind === 'byUnit') {
+        hasLineClaims = true
+        const bucket = `u:${unitKey(u.unit)}`
+        const cur = successorByUnit.get(bucket) ?? { sum: 0, claims: 0 }
+        cur.sum += u.amount * ratio
+        cur.claims += 1
+        successorByUnit.set(bucket, cur)
+      } else if (u.kind === 'container') {
+        hasLineClaims = true
+        const bucket = `c:${containerKey(u.noun, u.annotation)}`
+        const cur = successorContainers.get(bucket) ?? { sum: 0, claims: 0 }
+        cur.sum += containerContribution(u.count, ratio)
+        cur.claims += 1
+        successorContainers.set(bucket, cur)
+      } else if (u.kind === 'raw') {
+        hasLineClaims = true
+        const parsed = parseQuantity(u.basis)
+        if (parsed) {
+          // A raw row whose key source parsed (the restriction seam's
+          // key/display split): the key basis is the parsed grammar and
+          // re-sums with the servings, so the successor re-spells it.
+          successorRawParsed.add(lineKeyBasis(parsed.amount * ratio, parsed.unit))
+        } else {
+          successorRawVerbatim.add(u.basis)
+        }
+      }
     }
   }
 
@@ -556,7 +744,7 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       if (!normalized) continue
       // Hidden for this meal (cleared from the grocery list) — skipped
       // entirely, other meals' contributions are aggregated separately.
-      if (cleared?.has(normalized)) continue
+      if (clearedIngredientHidden(cleared, normalized)) continue
       let group = groups.get(normalized)
       if (!group) {
         group = {
@@ -670,6 +858,38 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
     }
   }
 
+  // ADR-0094: does one of the successor claims predict THIS rendered line?
+  // The line's grammar BRANCH is read off its display (the same string the
+  // render branched on), never guessed from the key; the AMOUNT comes off
+  // the KEY basis (what the claims' own shares were spelled from — the
+  // key/display split can differ).
+  const lineClaimed = (l: GroceryLine): boolean => {
+    const sep = l.key.indexOf('||')
+    const basis = sep < 0 ? '' : l.key.slice(sep + 2)
+    const branchContainer = parseContainerQuantity(l.display)
+    if (branchContainer) {
+      const keyParsed = parseContainerQuantity(basis)
+      if (!keyParsed) return false
+      const claim = successorContainers.get(
+        `c:${containerKey(branchContainer.container, branchContainer.annotation)}`,
+      )
+      return claim !== undefined && Math.abs(keyParsed.count - claim.sum) < 1e-6
+    }
+    const branchParsed = parseQuantity(l.display)
+    if (branchParsed) {
+      const keyParsed = parseQuantity(basis)
+      if (!keyParsed) return false
+      const claim = successorByUnit.get(`u:${unitKey(branchParsed.unit)}`)
+      return claim !== undefined && formatAmount(claim.sum) === formatAmount(keyParsed.amount)
+    }
+    // Raw branch: the display never parses. The line's key basis is the
+    // parsed-grammar spelling when the key source parsed (possibly
+    // re-namespaced under `raw||` after a dedup collision), else the
+    // verbatim `raw||` content — either spelling matches its claim.
+    const content = basis.startsWith('raw||') ? basis.slice('raw||'.length) : basis
+    return successorRawParsed.has(content) || successorRawVerbatim.has(content)
+  }
+
   const items: GroceryItem[] = []
   for (const [normalized, group] of groups) {
     const lines: GroceryLine[] = []
@@ -731,27 +951,11 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
     // stay merged (splitting by name would re-key checked state on
     // toggle); the section still buckets on the first-seen name.
     const name = group.names.size > 1 ? [...group.names].join(' / ') : group.name
-    // Line-granular clears: drop every rendered line whose full key is in
-    // a variant's cleared set — exactly, or by unit identity (the
-    // composition-stale case above). The raw-dedup above ran against the
-    // UNfiltered list (dedup semantics unchanged); the filter only hides.
-    const visible = lineCleared.size
-      ? lines.filter((l) => {
-          if (lineCleared.has(l.key)) return false
-          // kody round-3 (K5): an identity may name MORE than one rendered
-          // line in the same group (a raw row beside a by-unit line —
-          // `egg||4` and `egg||6` both reduce to `egg||`; singular/plural
-          // spellings collapse too). Hiding every line that shares an
-          // identity would swallow an unchecked sibling, so identity
-          // hiding applies only when it names exactly ONE line here —
-          // shared identities fall back to exact-key matching above.
-          const id = lineKeyIdentity(l.key)
-          if (!lineIdentityCleared.has(id)) return true
-          // hide ONLY when this identity names exactly one rendered line;
-          // a shared identity (>= 2 lines) falls back to exact-key matching.
-          const shared = lines.filter((other) => lineKeyIdentity(other.key) === id).length !== 1
-          return shared
-        })
+    // ADR-0094 line filter: hide every rendered line one of the successor
+    // claims predicts. The raw-dedup above ran against the UNfiltered list
+    // (dedup semantics unchanged); the filter only hides.
+    const visible = hasLineClaims
+      ? lines.filter((l) => !lineClaimed(l))
       : lines
     // A group whose every line is cleared disappears entirely — an
     // ingredient header with zero lines would otherwise linger.
