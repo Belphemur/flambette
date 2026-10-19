@@ -59,8 +59,8 @@ export interface ClearedIngredient {
   keyName: string
   /** Grammar class of the cleared line; discriminates the identity bucket. */
   unit:
-    | { kind: 'byUnit'; unit: string }                 // parsed quantity, e.g. `tbsp`, `ml`
-    | { kind: 'container'; noun: string; annotation: string } // container noun, e.g. `pkg`, `142 g`
+    | { kind: 'byUnit'; unit: string; amount: number }                 // parsed quantity + its captured basis, e.g. `tbsp`, 2
+    | { kind: 'container'; noun: string; annotation: string; count: number } // container noun + captured count, e.g. `pkg`, ½
     | { kind: 'raw'; basis: string }                   // unparseable `raw||` row, e.g. `to taste`; basis preserved verbatim
     | { kind: 'row' }                                  // whole-ingredient clear (bare nameKey)
   /** Clear-time factor = entryServings / recipe.baseServings. */
@@ -69,8 +69,15 @@ export interface ClearedIngredient {
   servingsAtClear: number
   /** `line` = hide one line; `ingredient` = clear the whole ingredient group. */
   scope: 'line' | 'ingredient'
+  /** Legacy string migrations only: identity-presence claim, amount advisory. */
+  approx?: true
 }
 ```
+
+The `amount`/`count` payloads and the context fields are INFORMATIONAL
+(review addendum below): they spell what was cleared and feed the legacy
+`nameKey||basis` wire spelling, but the line filter never matches against
+them — the successor comes from the claiming variant's own current render.
 
 Render consumption (`aggregateGroceries`, via `useGroceryList.ts`): for each
 entry, compute the *successor key* the render will produce by scaling
