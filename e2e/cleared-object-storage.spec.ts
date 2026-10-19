@@ -29,7 +29,7 @@ import {
 
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
-  await page.goto('/')
+  await page.goto('/recipes')
   await waitForCatalog(page)
 })
 
@@ -51,10 +51,10 @@ async function removeMealFromPlan(page: Page, prefix: string): Promise<void> {
   await page.getByRole('button', { name: remove }).click()
 }
 
-/** The egg grocery line rendering quantity `qty` (its label carries name + qty). */
+/** The egg grocery line rendering quantity `qty` (the row carries name + qty badge). */
 function eggLine(page: Page, qty: RegExp) {
   return page
-    .locator('main label')
+    .getByTestId('grocery-row')
     .filter({ hasText: /egg/i })
     .filter({ has: page.getByTestId('grocery-qty').filter({ hasText: qty }) })
 }
