@@ -208,12 +208,22 @@ plan's CURRENT servings as the clear context (wrong the moment the plan had
 moved since the clear) and minted a full byUnit claim per contributor — N
 contributors summed to N × the merged line and the line reappeared. The
 migration now stamps `factor: 1, servingsAtClear: 0` ("unknown", never
-invented) and `approx: true`: an approx claim matches by IDENTITY PRESENCE —
-the rendered line whose unit identity (`nameKey` + `unitKey`/`containerKey`)
-equals the claim's is hidden at any re-sum. That is the pre-ADR identity
-semantics made robust: the identity survives servings and composition changes
-(finding 4), N duplicate legacy claims never sum (finding 5), and one identity
-can match at most one rendered line per group, so no sibling is swallowed.
+invented) and `approx: true`. Approx matching has two tiers. Unitless
+claims (`egg||`) and raw/row claims match by IDENTITY PRESENCE — the
+rendered line whose identity equals the claim's is hidden at any re-sum
+(the pre-ADR identity semantics made robust: the identity survives
+servings and composition changes, finding 4, and N duplicate legacy
+claims never sum, finding 5). Unit-bearing approx claims carry their
+advisory amount and OR-match it against the merged re-sum over a Set
+(Kody #2: a stale partial clear can never overwrite a whole-line
+clear), so a legacy `milk||1cup` no longer hides a `3 cup` merge; on
+AMOUNT MISMATCH the line hides only when the identity's approx claims
+are COMPLETE — one per contributing variant (the pre-ADR-0092 string
+model pushed the merged key to every contributor), so a fully-cleared
+identity stays hidden after a serving change rotates the stored amounts
+past any match, while a partial clear keeps the line visible (kody
+critical). Either way one identity matches at most one rendered line
+per group, so no sibling is swallowed.
 Raw `approx` claims keep verbatim matching (raw rows pass through unscaled);
 a raw row whose key source parsed (the restriction seam) takes its successor
 from the shadow's re-summed raw basis, matched by unit identity inside the

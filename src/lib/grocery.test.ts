@@ -863,6 +863,34 @@ describe('legacy migration mints approx identity claims (ADR-0094 review)', () =
     ]
     expect(displays(docs, 'milk')).toEqual([])
   })
+
+  test('a fully-cleared unit-bearing identity stays hidden after servings rotate the amount (milk, CodeRabbit #2)', () => {
+    // Legacy V1 pushed the MERGED key (`milk||3 cups`) to BOTH contributors.
+    // After the plan moved servings the merged render spells `4 ½ cups`
+    // (3 × 1.5) — no stored amount matches, but one approx claim per
+    // contributing variant proves the whole identity was cleared: the line
+    // must NOT resurrect (pre-fix: it reappeared).
+    const a = doc('A', 4, [['1 cup', 'milk']])
+    const b = doc('B', 4, [['2 cups', 'milk']])
+    const docs = [
+      migratedInput(a, 1, ['milk||3 cups']),
+      migratedInput(b, 1, ['milk||3 cups']),
+    ]
+    expect(displays(docs, 'milk')).toEqual([])
+  })
+
+  test('a fully-cleared container identity stays hidden after the merged count rotates (cabbage, CodeRabbit #2)', () => {
+    // Both contributors carry `cabbage||4 medium heads` (the whole merged
+    // line at the old servings); at factor 2 the render spells `8 medium
+    // heads`. The completeness rule keeps it hidden.
+    const a = doc('A', 4, [['1.5 medium head', 'cabbage']])
+    const b = doc('B', 4, [['2.5 medium head', 'cabbage']])
+    const docs = [
+      migratedInput(a, 2, ['cabbage||4 medium heads']),
+      migratedInput(b, 2, ['cabbage||4 medium heads']),
+    ]
+    expect(displays(docs, 'cabbage')).toEqual([])
+  })
 })
 
 describe('clearedSpellingsDiverge (mixed-household freshness, ADR-0094 review)', () => {

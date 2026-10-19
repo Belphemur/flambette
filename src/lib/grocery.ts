@@ -907,8 +907,23 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   // same identity (e.g. `cabbage||4` + `cabbage||1.5 medium head`) must not
   // overwrite one another (Kody #2); the line hides when ANY stored amount
   // matches the merged key amount. Unitless/row/raw claims leave this unset
-  // and fall back to identity-only (`egg||`, tests 513/764/786).
+  // and fall back to identity-only (`egg||`, tests 513/764/786). When NO
+  // stored amount matches (the plan moved servings since the clear), the
+  // line hides iff the identity's approx claims are COMPLETE — one per
+  // contributing variant (the completeness maps below).
   const successorAmounts = new Map<string, Set<number>>()
+  // Approx-claim completeness (CodeRabbit, PR #98): legacy V1 pushed the
+  // MERGED key into EVERY contributor's array, so a fully-cleared identity
+  // carries one approx claim per contributing variant. Count both sides
+  // per identity: claims minted above vs contributors seen in each
+  // variant's own shadow render. When the stored amounts no longer match
+  // the merged re-sum (servings moved), `claims >= contributors` still
+  // proves the whole line was cleared — otherwise a `milk||1 cup` clear
+  // REAPPEARS at `1.5 cup` (the serving-stale class this ADR kills). A
+  // partial clear carries fewer claims than contributors and keeps the
+  // line visible (the kody-critical guard is untouched).
+  const approxClaimCount = new Map<string, number>()
+  const approxContributorCount = new Map<string, number>()
   let hasLineClaims = false
   const rawSetFor = (map: Map<string, Set<string>>, name: string): Set<string> => {
     let set = map.get(name)
@@ -945,6 +960,7 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
             let s = successorAmounts.get(id)
             if (!s) { s = new Set(); successorAmounts.set(id, s) }
             s.add(u.amount) // Set: multiple legacy clears per identity coexist (Kody #2)
+            approxClaimCount.set(id, (approxClaimCount.get(id) ?? 0) + 1)
           }
         } else if (u.kind === 'container') {
           const id = `${name}||c:${containerKey(u.noun, u.annotation)}`
@@ -952,6 +968,7 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
           let s = successorAmounts.get(id)
           if (!s) { s = new Set(); successorAmounts.set(id, s) }
           s.add(u.count) // Set: whole-line + partial legacy clears coexist (Kody #2)
+          approxClaimCount.set(id, (approxClaimCount.get(id) ?? 0) + 1)
         } else if (u.kind === 'raw') {
           rawSetFor(successorRawVerbatim, name).add(u.basis)
         }
@@ -1003,6 +1020,29 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       }
     }
   }
+  // Approx-claim completeness pass (CodeRabbit, PR #98): runs ONLY when a
+  // legacy amount-bearing approx claim exists. Legacy V1 pushed the MERGED
+  // key into EVERY contributor's array, so a fully-cleared identity carries
+  // one approx claim per contributing variant; counting the contributors
+  // per identity from each variant's OWN shadow render (the same ingestion
+  // the merged pass runs) lets `lineClaimed` hide the line when the claims
+  // are complete even after a serving change rotated the stored amounts
+  // past any match. A variant merges its own same-identity lines, so the
+  // per-identity contributor count is at most one per variant.
+  if (approxClaimCount.size > 0) {
+    for (const input of inputs) {
+      for (const [gName, group] of buildGroups([{ ...input, cleared: undefined }])) {
+        for (const unit of group.byUnit.keys()) {
+          const id = `${gName}||u:${unit}`
+          approxContributorCount.set(id, (approxContributorCount.get(id) ?? 0) + 1)
+        }
+        for (const cKey of group.containers.keys()) {
+          const id = `${gName}||c:${cKey}`
+          approxContributorCount.set(id, (approxContributorCount.get(id) ?? 0) + 1)
+        }
+      }
+    }
+  }
   const groups = buildGroups(inputs)
 
 
@@ -1047,7 +1087,16 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
         // Legacy amounts are OR-matched over the Set (Kody #2): any claimed
         // amount equal to the merged key amount hides the line, so a stale
         // partial clear can never overwrite a whole-line clear.
-        return [...approxSet].some((a) => Math.abs(a - target) < 0.02 + 1e-9)
+        if ([...approxSet].some((a) => Math.abs(a - target) < 0.02 + 1e-9)) return true
+        // Amount mismatch: the line hides only when the identity's approx
+        // claims are COMPLETE — legacy V1 pushed the merged key to every
+        // contributor, so claims >= contributors proves the whole line was
+        // cleared and a serving change that re-summed the amounts must not
+        // resurrect it. A partial clear (fewer claims) stays visible.
+        const claims = approxClaimCount.get(`${name}||c:${cKey}`) ?? 0
+        const contributors = approxContributorCount.get(`${name}||c:${cKey}`) ?? 0
+        if (claims > 0 && claims >= contributors) return true
+        return false
       }
       return successorIdentities.has(`${name}||c:${cKey}`)
     }
@@ -1088,7 +1137,17 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
         // Legacy amounts are OR-matched over the Set (Kody #2): any claimed
         // amount equal to the merged key amount hides the line, so a stale
         // partial clear can never overwrite a whole-line clear.
-        return [...approxSet].some((a) => formatAmount(a) === formatAmount(target))
+        if ([...approxSet].some((a) => formatAmount(a) === formatAmount(target))) return true
+        // Amount mismatch: hide only when the approx claims are COMPLETE
+        // (one per contributing variant — legacy V1 pushed the merged key
+        // to every contributor), so a serving change that re-summed the
+        // stored amounts past any match cannot resurrect a fully-cleared
+        // line. A partial clear keeps the line visible.
+        const id = `${name}||u:${unitKey(branchParsed.unit)}`
+        const claims = approxClaimCount.get(id) ?? 0
+        const contributors = approxContributorCount.get(id) ?? 0
+        if (claims > 0 && claims >= contributors) return true
+        return false
       }
       return successorIdentities.has(`${name}||u:${unitKey(branchParsed.unit)}`)
     }

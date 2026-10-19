@@ -1,6 +1,6 @@
 # ADR-0071: Grocery tab is a reading surface — checked rows stay in place
 
-Status: accepted (2026-10-09)
+Status: accepted (superseded in part by ADR-0095) (2026-10-09) — delta 1's checked-in-place on Grocery moved to checked-rows-sink on both surfaces (ADR-0095, PR #98)
 
 ## Context
 
