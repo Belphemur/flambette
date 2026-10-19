@@ -42,6 +42,7 @@ import {
 } from '../lib/timerAlertHost'
 import type { RecipeDoc } from '../lib/types'
 import { usePlanStore, type CookedEntry, type PlanEntry, type PlanIdentity } from '../stores/plan'
+import type { ClearedIngredient } from '../stores/grocery'
 import { planServingsFor } from '../composables/usePlanServings'
 import { useUiStore } from '../stores/ui'
 
@@ -611,7 +612,7 @@ const sessionRecorded = computed(() => sessionCooked.value !== null)
  * prompt's Undo (ADR-0083) needs it long after the toast's Undo would
  * have used it, and two cook sessions must never share one snapshot.
  */
-type SessionPrior = { entry: PlanEntry | null; cleared: string[] | null }
+type SessionPrior = { entry: PlanEntry | null; cleared: ClearedIngredient[] | string[] | null }
 const sessionPrior = ref<SessionPrior | null>(null)
 
 /**

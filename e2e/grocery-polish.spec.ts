@@ -122,3 +122,33 @@ test('provenance pill sits beside the checkbox, never on top of it', async ({ pa
   await expect(garlicLabel.getByText('Used by 2 planned meals:')).toBeVisible()
   await expectZeroMealimeRequests(page)
 })
+
+test('checking a row sinks it to the end of its category; unchecking restores it (ADR-0071 delta-1 superseded)', async ({
+  page,
+}) => {
+  await planFirstRecipe(page)
+  await gotoTab(page, 'Grocery')
+  const produce = sectionByName(page, /produce/i)
+  const rows = produce.locator('[data-test="grocery-row"]')
+  await expect(rows.first()).toBeVisible({ timeout: 10_000 })
+  const total = await rows.count()
+  expect(total).toBeGreaterThan(1)
+
+  const names = async (): Promise<(string | null)[]> =>
+    rows.evaluateAll((els) => els.map((el) => el.querySelector('span')?.textContent?.trim() ?? null))
+
+  const before = await names()
+  // Check the FIRST row: it sinks below every open row of the category,
+  // and the untouched rows keep their relative order (stable partition).
+  await rows.first().locator('input[type=checkbox]').click()
+  const afterCheck = await names()
+  expect(afterCheck[afterCheck.length - 1]).toBe(before[0])
+  expect(afterCheck.slice(0, -1)).toEqual(before.slice(1))
+
+  // Uncheck it again: the row returns to the open partition, in its
+  // original position (the sink is stable, never a full re-sort).
+  await rows.last().locator('input[type=checkbox]').click()
+  expect(await names()).toEqual(before)
+
+  await expectZeroMealimeRequests(page)
+})

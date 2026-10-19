@@ -49,8 +49,10 @@ function confirmModal(page: Page) {
 
 /**
  * Check every grocery checkbox (recipe lines + custom items) by repeatedly
- * clicking the first unchecked one. Checked rows stay in place on the
- * Grocery tab, so the unchecked pool shrinks monotonically.
+ * clicking the first unchecked one. Checked rows SINK below the open ones
+ * (ADR-0071 delta-1 superseded, 2026-10-19), so the first unchecked row
+ * stays at the top of its category and the unchecked pool shrinks
+ * monotonically.
  */
 async function checkAllGroceryItems(page: Page): Promise<void> {
   for (let guard = 0; guard < 60; guard++) {

@@ -35,6 +35,7 @@ import {
 import type { RecipeDoc, VariantMeta } from '../lib/types'
 import { macroGrams } from '../lib/nutrition'
 import { usePlanStore, type CookedEntry, type PlanEntry } from '../stores/plan'
+import type { ClearedIngredient } from '../stores/grocery'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 import { displayRating, ratingNoScoreCorner, useRatingStore } from '../stores/rating'
@@ -695,7 +696,7 @@ onUnmounted(() => {
  */
 const pillPromptOpen = ref(false)
 const pillEvent = ref<CookedEntry | null>(null)
-const pillPrior = ref<{ entry: PlanEntry | null; cleared: string[] | null } | null>(null)
+const pillPrior = ref<{ entry: PlanEntry | null; cleared: ClearedIngredient[] | string[] | null } | null>(null)
 
 /**
  * FLICK-ANY-DIRECTION DISMISS (owner ruling 2026-10-13: "going left

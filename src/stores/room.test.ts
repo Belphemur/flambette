@@ -1195,3 +1195,123 @@ describe('room identity rides the join/create dial (ADR-0063)', () => {
     room.leave()
   })
 })
+
+/**
+ * ADR-0094 — the cleared state rides the room wire in BOTH spellings: the
+ * legacy `nameKey||basis` strings (so an older peer always receives a
+ * payload it can parse and apply) and the object arrays (`clearedV2`) a
+ * new peer prefers. Key presence decides for genuinely-absent keys; when
+ * BOTH are present they agree unless the last writer predates `clearedV2`
+ * (a legacy peer writes only `cleared`), in which case the legacy
+ * spelling is the newer write and wins (ADR-0094 review addendum).
+ */
+describe('cleared-state wire versioning (ADR-0094)', () => {
+  const meta = (id: number, servingCount = 4) => ({ id, serving_count: servingCount }) as never
+
+  const byUnitEntry = {
+    keyName: 'flour',
+    unit: { kind: 'byUnit', unit: 'ml', amount: 67.5 },
+    factor: 1,
+    servingsAtClear: 0,
+    scope: 'line',
+    approx: true,
+  }
+
+  test('the payload emits clearedV2 (objects) ALONGSIDE the legacy cleared strings', async () => {
+    const plan = usePlanStore()
+    const { socket } = await startRoom()
+    plan.addToPlan(meta(7), 4)
+    plan.mergeIngredientsForCurrentMeals({ 7: ['flour||67.5 ml'] })
+    await sleep(500) // debounce
+    const pushed = socket.frames('state').at(-1)!.state as Record<string, unknown>
+    expect(pushed.clearedV2).toEqual({ 7: [byUnitEntry] })
+    // The legacy spelling derives from the same objects: an older peer
+    // keeps a payload whose shape it knows.
+    expect(pushed.cleared).toEqual({ 7: ['flour||67.5 ml'] })
+  })
+
+  test('a LEGACY peer snapshot (string cleared) still reconciles — migrated to objects', async () => {
+    const plan = usePlanStore()
+    const { socket } = await startRoom()
+    plan.addToPlan(meta(7), 4)
+    await sleep(500) // let the debounced push flush — a queued edit withholds inbound content
+    socket.receive({
+      type: 'state',
+      rev: 3,
+      state: {
+        plan: [{ variantId: 7, servings: 4 }],
+        customItems: [],
+        checked: {},
+        cleared: { 7: ['flour||67.5 ml'] },
+      },
+    })
+    expect(plan.clearedIngredients[7]).toEqual([byUnitEntry])
+  })
+
+  test('a snapshot carrying AGREEING spellings applies clearedV2 (the precise shape)', async () => {
+    const plan = usePlanStore()
+    const { socket } = await startRoom()
+    plan.addToPlan(meta(7), 4)
+    await sleep(500) // let the debounced push flush — a queued edit withholds inbound content
+    socket.receive({
+      type: 'state',
+      rev: 4,
+      state: {
+        plan: [{ variantId: 7, servings: 4 }],
+        customItems: [],
+        checked: {},
+        cleared: { 7: ['flour||67.5 ml'] },
+        clearedV2: { 7: [byUnitEntry] },
+      },
+    })
+    expect(plan.clearedIngredients[7]).toEqual([byUnitEntry])
+  })
+
+  test('a snapshot carrying DISAGREEING spellings applies the legacy one (the newer write)', async () => {
+    const plan = usePlanStore()
+    const { socket } = await startRoom()
+    plan.addToPlan(meta(7), 4)
+    await sleep(500) // let the debounced push flush — a queued edit withholds inbound content
+    socket.receive({
+      type: 'state',
+      rev: 4,
+      state: {
+        plan: [{ variantId: 7, servings: 4 }],
+        customItems: [],
+        checked: {},
+        // A legacy peer's newer push: only `cleared` moved, so the
+        // persisted `clearedV2` row beside it is STALE. Disagreement
+        // proves the legacy spelling is the newer write.
+        cleared: { 7: ['fresh-key||1 cup'] },
+        clearedV2: { 7: [byUnitEntry] },
+      },
+    })
+    expect(plan.clearedIngredients[7]).toEqual([
+      {
+        keyName: 'fresh-key',
+        unit: { kind: 'byUnit', unit: 'cup', amount: 1 },
+        factor: 1,
+        servingsAtClear: 0,
+        scope: 'line',
+        approx: true,
+      },
+    ])
+  })
+
+  test('a snapshot carrying NEITHER key behaves as before (empty replace)', async () => {
+    const plan = usePlanStore()
+    const { socket } = await startRoom()
+    plan.addToPlan(meta(7), 4)
+    plan.mergeIngredientsForCurrentMeals({ 7: ['flour||67.5 ml'] })
+    await sleep(500) // let the debounced push flush — a queued edit withholds inbound content
+    socket.receive({
+      type: 'state',
+      rev: 5,
+      state: { plan: [{ variantId: 7, servings: 4 }], customItems: [], checked: {} },
+    })
+    // The pre-ADR-0094 whole-state semantics: an absent cleared key is the
+    // household saying "nothing is cleared" (a really old peer has no
+    // cleared key at all), so the local map empties.
+    expect(plan.clearedIngredients[7]).toBeUndefined()
+  })
+})

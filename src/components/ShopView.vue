@@ -3,8 +3,8 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Check, ChevronDown, ChevronRight, Eraser, ShoppingCart, X } from '@lucide/vue'
 import { useGroceryList } from '../lib/useGroceryList'
-import { extraCollapseKey, groupExtras, storeCollapseKey, type ExtraGroup } from '../lib/extraSections'
-import { sinkChecked } from '../lib/sink'
+import { extraCollapseKey, groupExtras, storeCollapseKey } from '../lib/extraSections'
+import { sinkedExtraRows, sinkedStoreRows } from '../lib/sink'
 import { extraCheckedKey } from '../lib/extraCheckedKeys'
 import { aisleIcon, aisleNumber } from '../lib/aisleRole'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
@@ -196,20 +196,11 @@ function sectionDoneCount(section: { items: { lines: { key: string }[] }[] }): n
 /**
  * Rendered row order: checked items sink to the bottom, stable within
  * each group (ADR-0008) — ONE sink helper for both kinds of group, so
- * store sections and extras sub-sections cannot drift apart.
+ * store sections and extras sub-sections cannot drift apart. The
+ * projections live in `src/lib/sink.ts` (shared with the Grocery tab's
+ * sink since the ADR-0071 delta-1 supersession); the template calls them
+ * with this device's done-map.
  */
-function sinkedStoreRows(section: {
-  items: { name: string; lines: { key: string; text?: string }[] }[]
-}) {
-  return sinkChecked(
-    section.items.flatMap((item) => item.lines.map((line) => ({ item, line }))),
-    (e) => !!checked.map[e.line.key],
-  )
-}
-
-function sinkedExtraRows(group: ExtraGroup) {
-  return sinkChecked(group.items, (i) => !!checked.map[extraCheckedKey(i.name)])
-}
 
 function sectionTotalCount(section: { items: { lines: unknown[] }[] }): number {
   return section.items.reduce((n, i) => n + i.lines.length, 0)
@@ -379,7 +370,7 @@ function exitShopping() {
   >
   <!-- Checked items sink, stable within the sub-section — the same
   sink the store sections render through. -->
-  <li v-for="item in sinkedExtraRows(group)" :key="item.name">
+  <li v-for="item in sinkedExtraRows(group, checked.map)" :key="item.name">
   <button
   class="flex min-h-16 w-full items-center gap-3 px-3 py-2 text-left text-body-md"
   :class="checked.map[extraCheckedKey(item.name)] ? 'opacity-40' : ''"
@@ -464,7 +455,7 @@ function exitShopping() {
   <!-- Unchecked first (checked items sink), stable within each group;
   the ordering lives once in src/lib/sink.ts, shared with the extras
   sub-sections above. -->
-  <li v-for="entry in sinkedStoreRows(section)" :key="entry.line.key">
+  <li v-for="entry in sinkedStoreRows(section, checked.map)" :key="entry.line.key">
   <button
   class="flex min-h-16 w-full items-center gap-3 px-3 py-2 text-left text-body-md"
   :class="checked.map[entry.line.key] ? 'opacity-40' : ''"

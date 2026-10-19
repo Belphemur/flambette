@@ -16,6 +16,7 @@ import {
 import { useGroceryList } from '../lib/useGroceryList'
 import { extraCollapseKey, groupExtras, storeCollapseKey } from '../lib/extraSections'
 import { extraCheckedKey } from '../lib/extraCheckedKeys'
+import { sinkedExtraRows, sinkedStoreRows } from '../lib/sink'
 import type { GroceryItem } from '../lib/grocery'
 import { aisleIcon, aisleNumber } from '../lib/aisleRole'
 import { imageSrc, onImgError } from '../lib/images'
@@ -507,8 +508,14 @@ const shopperCount = computed(() => room.peers)
   class="divide-y divide-border"
   data-test="extra-subsection-rows"
   >
+  <!-- Extras sub-sections SINK like every other category (ADR-0008 via
+  the shared `sinkedExtraRows`): the owner's 2026-10-19 sink ruling
+  covers the Grocery tab's categories, and an extras sub-section IS a
+  category on this surface (ADR-0050) — sinking it keeps ONE row
+  behaviour per surface instead of a store/extras split.
+  -->
   <li
-  v-for="item in group.items"
+  v-for="item in sinkedExtraRows(group, checked.map)"
   :key="item.name"
   class="flex min-h-11 items-center gap-3 px-3 py-2"
   data-test="extra-row"
@@ -602,13 +609,15 @@ const shopperCount = computed(() => room.peers)
   </button>
   </h3>
   <ul v-if="!isCollapsed(sectionKey(section.name))" class="divide-y divide-border" data-test="grocery-section-rows">
-  <li v-for="item in section.items" :key="item.normalized">
-  <!-- READING, not a task queue: a checked row stays exactly where it
-  was checked, struck through and muted (ADR-0071 delta 1). The sink
-  lives on in ShopView, where "next tap at the top" is the point. -->
+  <!-- Checked rows SINK to the end of their category, stable within the
+  group (ADR-0008) — the owner's 2026-10-19 ruling SUPERSEDES ADR-0071
+  delta 1's checked-in-place reading: "checking an item needs to make it
+  go to the end of its category automatically." The row projection is
+  the SAME `sinkedStoreRows` helper ShopView renders with (src/lib/sink.ts,
+  DRY) — one ordering rule for both surfaces, never a second inline sort.
+  -->
+  <li v-for="entry in sinkedStoreRows(section, checked.map)" :key="entry.line.key">
   <div
-  v-for="line in item.lines"
-  :key="line.key"
   class="flex min-h-11 items-center gap-3 px-3 py-2"
   data-test="grocery-row"
   >
@@ -616,24 +625,24 @@ const shopperCount = computed(() => room.peers)
   <input
   type="checkbox"
   class="check-box done"
-  :checked="!!checked.map[line.key]"
-  :aria-label="line.text ? `${line.text} ${item.name}` : item.name"
-  @change="checked.toggleChecked(line.key)"
+  :checked="!!checked.map[entry.line.key]"
+  :aria-label="entry.line.text ? `${entry.line.text} ${entry.item.name}` : entry.item.name"
+  @change="checked.toggleChecked(entry.line.key)"
   />
   <span
   class="min-w-0 flex-1 truncate text-body-sm"
-  :class="checked.map[line.key] ? 'text-text-muted line-through' : 'text-text'"
+  :class="checked.map[entry.line.key] ? 'text-text-muted line-through' : 'text-text'"
   >
   <!-- No quantity prefix (ADR-0071 delta 4): the amount is the row's
   right-aligned mono badge below, not a bold run-on in the name. -->
-  <span>{{ item.name }}</span>
+  <span>{{ entry.item.name }}</span>
   </span>
   <!-- Provenance pill: a shrink-0 flex sibling OUTSIDE the
   truncating span, so the tooltip is never clipped by the
   name's overflow and the pill can never crowd the text
   (or the checkbox, which sits at the row's far left). -->
   <span
-  v-if="item.recipes.length > 1"
+  v-if="entry.item.recipes.length > 1"
   class="group/pill relative inline-flex shrink-0"
   data-test="provenance-pill"
   @click.stop
@@ -641,27 +650,27 @@ const shopperCount = computed(() => room.peers)
   <span
   tabindex="0"
   role="note"
-  :aria-label="`Used by ${item.recipes.length} planned meals: ${item.recipes.join(', ')}`"
+  :aria-label="`Used by ${entry.item.recipes.length} planned meals: ${entry.item.recipes.join(', ')}`"
   class="cursor-help whitespace-nowrap rounded-full bg-brand/10 px-2 py-0.5 text-label-sm font-semibold text-brand-text outline-none focus-visible:ring-2 focus-visible:ring-brand"
-  >{{ item.recipes.length }} recipes</span>
+  >{{ entry.item.recipes.length }} recipes</span>
   <span
   class="pointer-events-none absolute bottom-full right-0 z-20 mb-1.5 hidden w-56 rounded-lg bg-surface-dark px-2.5 py-1.5 text-[11px] leading-snug text-on-brand shadow-popover group-hover/pill:block group-focus-within/pill:block"
   >
-  <span class="block font-semibold">Used by {{ item.recipes.length }} planned meal{{ item.recipes.length === 1 ? '' : 's' }}:</span>
-  {{ item.recipes.join(', ') }}
+  <span class="block font-semibold">Used by {{ entry.item.recipes.length }} planned meal{{ entry.item.recipes.length === 1 ? '' : 's' }}:</span>
+  {{ entry.item.recipes.join(', ') }}
   </span>
   </span>
   </label>
-  <!-- Data voice: the merged amount, re-rendered from `line.text` — the
+  <!-- Data voice: the merged amount, re-rendered from `entry.line.text` — the
   SAME string the unit system already produces (ADR-0047), never a new
   parser, and always the canonical metric basis so a checked key can
   never orphan itself. -->
   <span
-  v-if="line.text"
+  v-if="entry.line.text"
   class="shrink-0 rounded-md bg-surface-sunken px-2 py-1 font-mono-data text-label-sm tabular-nums"
-  :class="checked.map[line.key] ? 'text-text-muted' : 'text-text'"
+  :class="checked.map[entry.line.key] ? 'text-text-muted' : 'text-text'"
   data-test="grocery-qty"
-  >{{ line.text }}</span>
+  >{{ entry.line.text }}</span>
   </div>
   </li>
   </ul>

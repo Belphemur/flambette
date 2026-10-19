@@ -33,6 +33,7 @@ export const SYNCED_STORES = [
   'customItems',
   'checked',
   'cleared',
+  'clearedV2',
   'customs',
   'pantry',
   'cookedHistory',

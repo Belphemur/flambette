@@ -15,13 +15,14 @@
  * file rejects the whole backup with no partial application.
  */
 import type { PlanEntry, CookedEntry } from '../stores/plan'
+import type { ClearedIngredient } from '../stores/grocery'
 import type { CustomIngredient } from '../stores/customIngredients'
 import type { PantryIngredient } from '../stores/pantry'
 import { pantryKeyOf } from './pantry'
 import { DIET_IDS, type DietId } from './dietFilter'
 import { normalizeQuickFilters, type QuickFilters } from './quickFilters'
 import { isServings, FALLBACK_SERVINGS, MAX_SERVINGS, MIN_SERVINGS } from './servings'
-import { onlyTrueKeys } from './grocery'
+import { onlyTrueKeys, isClearedIngredient } from './grocery'
 import { isStepTimer } from './stepTimer'
 import { isUnitSystem, UNIT_SYSTEMS } from './units'
 import { zipStore, unzipStore, type ZipEntry } from './zip'
@@ -120,7 +121,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
         }
       }
       if (v.clearedIngredients !== undefined && !isClearedMap(v.clearedIngredients)) {
-        return 'plan.json clearedIngredients must map ids to string arrays'
+        return 'plan.json clearedIngredients must map ids to cleared entries'
       }
       if (v.planIdentity !== undefined) {
         const id = v.planIdentity as { planId?: unknown; planCreatedAt?: unknown }
@@ -139,7 +140,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
       const v = value as {
         entries: PlanEntry[]
         customItems?: string[]
-        clearedIngredients?: Record<number, string[]>
+        clearedIngredients?: Record<number, (string | ClearedIngredient)[]>
         planIdentity?: { planId: string; planCreatedAt: number } | null
       }
       plan.clearPlan()
@@ -675,9 +676,15 @@ function isQuickFilters(value: unknown): value is QuickFilters {
 
 function isClearedMap(value: unknown): boolean {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
-  return Object.entries(value).every(
-    ([k, v]) => /^\d+$/.test(k) && Array.isArray(v) && v.every((s) => typeof s === 'string'),
-  )
+  // ADR-0094: a cleared map's per-variant arrays may hold the legacy
+  // `nameKey||basis` strings OR the object grammar — both are accepted so
+  // a backup written by either build restores. Object entries must be a
+  // FULLY valid ClearedIngredient (validation-first: a malformed entry
+  // rejects the backup here rather than being silently dropped at apply).
+  return Object.entries(value).every(([k, v]) => {
+    if (!/^\d+$/.test(k) || !Array.isArray(v)) return false
+    return v.every((item) => typeof item === 'string' || isClearedIngredient(item))
+  })
 }
 
 /* ------------------------------------------------------------------ *
