@@ -1,6 +1,39 @@
 {
-  "generatedAt": "2026-10-14T22:38:41Z",
+  "generatedAt": "2026-10-19T14:45:38Z",
   "versions": [
+    {
+      "version": "v2.12.0",
+      "date": "2026-10-19",
+      "title": "Smarter grocery list management \u2014 checked lines stay cleared",
+      "features": [
+        {
+          "text": "smarter grocery list management \u2014 checked lines stay cleared",
+          "scope": null,
+          "pr": 98,
+          "adr": null
+        },
+        {
+          "text": "recursive escalating timer alarm + per-timer pitch + honest Firefox vibration",
+          "scope": "cooking",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "easier grocery clearing - clear checked via button or pull gesture",
+          "scope": "grocery",
+          "pr": null,
+          "adr": null
+        }
+      ],
+      "fixes": [
+        {
+          "text": "hide clear-checked line only when identity maps 1:1 (K5)",
+          "scope": "grocery",
+          "pr": 96,
+          "adr": null
+        }
+      ]
+    },
     {
       "version": "v2.11.0",
       "date": "2026-10-14",
