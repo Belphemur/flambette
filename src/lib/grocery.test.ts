@@ -872,9 +872,12 @@ describe('legacy migration mints approx identity claims (ADR-0094 review)', () =
     // must NOT resurrect (pre-fix: it reappeared).
     const a = doc('A', 4, [['1 cup', 'milk']])
     const b = doc('B', 4, [['2 cups', 'milk']])
+    // Sanity: at factor 1.5 the merge rotated past every stored amount
+    // (3 —> 4 ½ cup), so the amount OR-match cannot short-circuit.
+    expect(displays([input(a, 1.5), input(b, 1.5)], 'milk')).toEqual(['4 ½ cup'])
     const docs = [
-      migratedInput(a, 1, ['milk||3 cups']),
-      migratedInput(b, 1, ['milk||3 cups']),
+      migratedInput(a, 1.5, ['milk||3 cups']),
+      migratedInput(b, 1.5, ['milk||3 cups']),
     ]
     expect(displays(docs, 'milk')).toEqual([])
   })
@@ -889,6 +892,27 @@ describe('legacy migration mints approx identity claims (ADR-0094 review)', () =
       migratedInput(a, 2, ['cabbage||4 medium heads']),
       migratedInput(b, 2, ['cabbage||4 medium heads']),
     ]
+    expect(displays(docs, 'cabbage')).toEqual([])
+  })
+
+  test('a whole-ingredient-cleared sibling does not inflate the approx contributor count (per-meal completeness)', () => {
+    // A and B carry the SAME legacy whole-line clear; at factor 2 the merged
+    // render rotates to 8 heads, so the stored `4 medium heads` amount does not
+    // OR-match and the completeness rule applies. C is whole-ingredient
+    // cleared, so C's head contribution is dropped at ingestion — under the
+    // old global claims>=contributors gate C still counted as a contributor
+    // (3 vs claims 2) and the fully-cleared line resurrected; the per-meal
+    // claimed===contributors rule drops C and hides the line.
+    const a = doc('A', 4, [['1.5 medium head', 'cabbage']])
+    const b = doc('B', 4, [['2.5 medium head', 'cabbage']])
+    const c = doc('C', 4, [['2 medium head', 'cabbage']])
+    const docs = [
+      migratedInput(a, 2, ['cabbage||4 medium heads']),
+      migratedInput(b, 2, ['cabbage||4 medium heads']),
+      migratedInput(c, 2, ['cabbage']),
+    ]
+    // Sanity: with no whole-ingredient wipe A+B+C render 12 heads at factor 2.
+    expect(displays([input(a, 2), input(b, 2), input(c, 2)], 'cabbage')).toEqual(['12 medium heads'])
     expect(displays(docs, 'cabbage')).toEqual([])
   })
 })

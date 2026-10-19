@@ -923,7 +923,13 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   // partial clear carries fewer claims than contributors and keeps the
   // line visible (the kody-critical guard is untouched).
   const approxClaimCount = new Map<string, number>()
+  // CodeRabbit completeness model (per-meal): for each identity, count the
+  // variants that STILL RENDER the identity (after their own whole-ingredient
+  // / row claims drop it at ingestion) as contributors, and increment the
+  // claimed-contributor count ONLY for those same variants that also hold an
+  // amount-bearing approx claim for it. Hide iff claims>0 && claims===contributors.
   const approxContributorCount = new Map<string, number>()
+  const approxClaimedContributors = new Map<string, number>()
   let hasLineClaims = false
   const rawSetFor = (map: Map<string, Set<string>>, name: string): Set<string> => {
     let set = map.get(name)
@@ -1031,14 +1037,41 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   // per-identity contributor count is at most one per variant.
   if (approxClaimCount.size > 0) {
     for (const input of inputs) {
-      for (const [gName, group] of buildGroups([{ ...input, cleared: undefined }])) {
+      // This variant's own amount-bearing approx identities (unit-bearing
+      // / container). Unitless, row, raw and whole-ingredient claims carry no
+      // amount and are handled elsewhere (identity fallback / ingestion skip);
+      // they don't enter the completeness equation.
+      const own = new Set<string>()
+      for (const e of input.cleared ?? []) {
+        if (!e.approx) continue
+        if (e.scope === 'ingredient' || e.unit.kind === 'row') continue
+        if (e.unit.kind === 'raw') continue
+        if (e.unit.kind === 'byUnit' && e.unit.unit) {
+          own.add(`${e.keyName}||u:${unitKey(e.unit.unit)}`)
+        } else if (e.unit.kind === 'container') {
+          own.add(`${e.keyName}||c:${containerKey(e.unit.noun, e.unit.annotation)}`)
+        }
+      }
+      // Render with the variant's cleared state INTACT so a whole-ingredient
+      // / row claim hides this variant's contribution — a hidden variant is
+      // neither a contributor nor a claimant for the identity (its shadow
+      // line is dropped by clearedIngredientHidden at ingestion, so the group
+      // for that ingredient won't even appear here). A partial-line variant
+      // whose other rows survive still counts for those identities.
+      for (const [gName, group] of buildGroups([input])) {
         for (const unit of group.byUnit.keys()) {
           const id = `${gName}||u:${unit}`
           approxContributorCount.set(id, (approxContributorCount.get(id) ?? 0) + 1)
+          if (own.has(id)) {
+            approxClaimedContributors.set(id, (approxClaimedContributors.get(id) ?? 0) + 1)
+          }
         }
         for (const cKey of group.containers.keys()) {
           const id = `${gName}||c:${cKey}`
           approxContributorCount.set(id, (approxContributorCount.get(id) ?? 0) + 1)
+          if (own.has(id)) {
+            approxClaimedContributors.set(id, (approxClaimedContributors.get(id) ?? 0) + 1)
+          }
         }
       }
     }
@@ -1088,14 +1121,15 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
         // amount equal to the merged key amount hides the line, so a stale
         // partial clear can never overwrite a whole-line clear.
         if ([...approxSet].some((a) => Math.abs(a - target) < 0.02 + 1e-9)) return true
-        // Amount mismatch: the line hides only when the identity's approx
-        // claims are COMPLETE — legacy V1 pushed the merged key to every
-        // contributor, so claims >= contributors proves the whole line was
-        // cleared and a serving change that re-summed the amounts must not
-        // resurrect it. A partial clear (fewer claims) stays visible.
-        const claims = approxClaimCount.get(`${name}||c:${cKey}`) ?? 0
+        // Amount mismatch: hide only when the approx claims are COMPLETE
+        // per-meal — a claimed contributor count equal to the contributor
+        // count proves every variant that still renders this identity also
+        // holds a legacy amount claim for it, i.e. the whole line was
+        // cleared and a serving change that re-summed the stored amounts
+        // must not resurrect it. claims>0 guards against a spurious 0===0.
+        const claims = approxClaimedContributors.get(`${name}||c:${cKey}`) ?? 0
         const contributors = approxContributorCount.get(`${name}||c:${cKey}`) ?? 0
-        if (claims > 0 && claims >= contributors) return true
+        if (claims > 0 && claims === contributors) return true
         return false
       }
       return successorIdentities.has(`${name}||c:${cKey}`)
@@ -1139,14 +1173,11 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
         // partial clear can never overwrite a whole-line clear.
         if ([...approxSet].some((a) => formatAmount(a) === formatAmount(target))) return true
         // Amount mismatch: hide only when the approx claims are COMPLETE
-        // (one per contributing variant — legacy V1 pushed the merged key
-        // to every contributor), so a serving change that re-summed the
-        // stored amounts past any match cannot resurrect a fully-cleared
-        // line. A partial clear keeps the line visible.
+        // per-meal (claims === contributors) — see the container branch above.
         const id = `${name}||u:${unitKey(branchParsed.unit)}`
-        const claims = approxClaimCount.get(id) ?? 0
+        const claims = approxClaimedContributors.get(id) ?? 0
         const contributors = approxContributorCount.get(id) ?? 0
-        if (claims > 0 && claims >= contributors) return true
+        if (claims > 0 && claims === contributors) return true
         return false
       }
       return successorIdentities.has(`${name}||u:${unitKey(branchParsed.unit)}`)
