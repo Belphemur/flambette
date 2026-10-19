@@ -793,6 +793,47 @@ describe('legacy migration mints approx identity claims (ADR-0094 review)', () =
     expect(displays(docs, 'cornstarch')).toEqual([])
     expect(displays(docs, 'flour')).toEqual(['1 cup'])
   })
+
+  test('a legacy approx container claim does NOT hide a merged partial line (kody critical)', () => {
+    // A stale `cabbage||1.5 medium head` (legacy string → approx) when B's
+    // 2.5-head contribution keeps the merged line at 4 heads: the stale amount
+    // must not silence the unclaimed 2.5 (pre-fix: hidden by the identity
+    // short-circuit at lineClaimed's container branch).
+    const a = doc('A', 4, [['1.5 medium head', 'cabbage']])
+    const b = doc('B', 4, [['2.5 medium head', 'cabbage']])
+    const docs = [
+      migratedInput(a, 1, ['cabbage||1.5 medium head']),
+      input(b, 1),
+    ]
+    const shown = displays(docs, 'cabbage')
+    expect(shown).not.toEqual([])
+    expect(shown.some((d) => /4 medium head/i.test(d))).toBe(true)
+  })
+
+  test('a legacy approx container claim still hides when it matches the merged amount', () => {
+    // The household's single legacy clear named the whole merged 4-head line
+    // — it must still hide the merged render (guard against over-correcting).
+    const a = doc('A', 4, [['1.5 medium head', 'cabbage']])
+    const b = doc('B', 4, [['2.5 medium head', 'cabbage']])
+    const docs = [
+      migratedInput(a, 1, ['cabbage||4 medium heads']),
+      input(b, 1),
+    ]
+    expect(displays(docs, 'cabbage')).toEqual([])
+  })
+
+  test('a legacy approx unit-bearing claim does NOT hide a merged partial line (milk)', () => {
+    // `milk||1cup` (approx) when B's 2 cups keeps the merged line at 3 cups.
+    const a = doc('A', 4, [['1 cup', 'milk']])
+    const b = doc('B', 4, [['2 cups', 'milk']])
+    const docs = [
+      migratedInput(a, 1, ['milk||1cup']),
+      input(b, 1),
+    ]
+    const shown = displays(docs, 'milk')
+    expect(shown).not.toEqual([])
+    expect(shown.some((d) => /^3 cup/i.test(d))).toBe(true)
+  })
 })
 
 describe('clearedSpellingsDiverge (mixed-household freshness, ADR-0094 review)', () => {

@@ -179,9 +179,12 @@ export function isClearedIngredient(value: unknown): value is ClearedIngredient 
  * Legacy strings become `approx` claims (ADR-0094 review addendum): the
  * string model persisted the MERGED line key — one identity, no
  * per-variant share, no serving context — so each distinct migrated
- * identity mints ONE identity-presence claim whose amount is advisory and
- * whose serving context is stamped "unknown", never invented from the
- * plan's current state. The same merged string arriving through several
+ * identity mints ONE identity-presence claim whose serving context is stamped
+ * "unknown", never invented from the plan's current state. The claim's amount
+ * is advisory — consulted for UNIT-BEARING claims in `lineClaimed` (so a
+ * legacy `cabbage||1.5 medium head` cannot hide a `4 medium heads` line, but
+ * unitless claims like `egg||` still hide across re-sums regardless of amount),
+ * never used to invent serving context. The same merged string arriving through several
  * contributing variants' arrays therefore still yields one claim per
  * identity per variant, and identity claims never sum, so N contributors
  * can never multiply the claimed amount (the pre-review migration turned
@@ -896,6 +899,12 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   const successorRawVerbatim = new Map<string, Set<string>>()
   // Identity-presence claims (`approx`), keyed `${keyName}||${identity}`.
   const successorIdentities = new Set<string>()
+  // Approx (legacy) entries carry an advisory amount (clearedEntryFromKey
+  // 119-123); for unit-bearing claims we compare it against the merged key
+  // amount so a legacy `cabbage||1.5 medium head` no longer hides a
+  // `4 medium heads` line with an unclaimed portion (Kody critical).
+  // Unitless/row/raw claims leave this unset and fall back to identity.
+  const successorAmounts = new Map<string, number>()
   let hasLineClaims = false
   const rawSetFor = (map: Map<string, Set<string>>, name: string): Set<string> => {
     let set = map.get(name)
@@ -923,9 +932,16 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       const u = entry.unit
       if (entry.approx) {
         if (u.kind === 'byUnit') {
-          successorIdentities.add(`${name}||u:${unitKey(u.unit)}`)
+          const id = `${name}||u:${unitKey(u.unit)}`
+          successorIdentities.add(id)
+          // Unit-bearing amount is meaningful; unitless (`egg||`) keeps no
+          // amount — its identity must hide across re-sums (test 513), so it
+          // stays amount-free and falls back to identity below.
+          if (u.unit) successorAmounts.set(id, u.amount)
         } else if (u.kind === 'container') {
-          successorIdentities.add(`${name}||c:${containerKey(u.noun, u.annotation)}`)
+          const id = `${name}||c:${containerKey(u.noun, u.annotation)}`
+          successorIdentities.add(id)
+          successorAmounts.set(id, u.count) // container count is always meaningful
         } else if (u.kind === 'raw') {
           rawSetFor(successorRawVerbatim, name).add(u.basis)
         }
@@ -995,23 +1011,68 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
     const branchContainer = parseContainerQuantity(l.display)
     if (branchContainer) {
       const cKey = containerKey(branchContainer.container, branchContainer.annotation)
-      if (successorIdentities.has(`${name}||c:${cKey}`)) return true
       const keyParsed = parseContainerQuantity(basis)
-      if (!keyParsed) return false
+      // ADR-0094 fix (Kody critical): the pre-review code short-circuited to
+      // `return true` on identity presence alone, so a legacy approx
+      // `cabbage||1.5 medium head` claim hid a merged PARTIAL line (4 medium
+      // heads with one contributor unclaimed). The shadow (non-approx) claim
+      // is authoritative when present; an approx claim carrying an amount is
+      // compared and, on mismatch, must NOT defer to identity presence —
+      // amount-free claims (raw/row/unitless) keep the identity fallback.
       const claim = successorContainers.get(`${name}||c:${cKey}`)
-      // The rendered basis is spelled through formatFraction's glyph
-      // grammar (⅓, 2 ¼), so the comparison tolerates the fraction snap
-      // (0.02, containers.ts's FRACTION_TOLERANCE) rather than demanding
-      // bit-equality against the exact summed key amount.
-      return claim !== undefined && Math.abs(keyParsed.count - claim.sum) < 0.02 + 1e-9
+      if (claim !== undefined && keyParsed) {
+        // The rendered basis is spelled through formatFraction's glyph
+        // grammar (⅓, 2 ¼), so the comparison tolerates the fraction snap
+        // (0.02, containers.ts's FRACTION_TOLERANCE) rather than demanding
+        // bit-equality against the exact summed key amount.
+        return Math.abs(keyParsed.count - claim.sum) < 0.02 + 1e-9
+      }
+      const approx = successorAmounts.get(`${name}||c:${cKey}`)
+      if (approx !== undefined) {
+        const target = keyParsed ? keyParsed.count : branchContainer.count
+        return Math.abs(target - approx) < 0.02 + 1e-9
+      }
+      return successorIdentities.has(`${name}||c:${cKey}`)
     }
     const branchParsed = parseQuantity(l.display)
     if (branchParsed) {
-      if (successorIdentities.has(`${name}||u:${unitKey(branchParsed.unit)}`)) return true
+      // ADR-0094 fix point (Kody critical): do not short-circuit on identity
+      // presence. The shadow `successorByUnit` holds the variant's OWN
+      // current contribution for this keyName+unit; a legacy amount-bearing
+      // clear (e.g. `cabbage||1.5 medium head`) must not hide a merged line
+      // that includes an unclaimed portion (4 medium heads). Prefer the
+      // amount check, and fall back to identity presence only when no shadow
+      // claim exists (the legacy/legacy-V1 shape has no shadow amount).
       const keyParsed = parseQuantity(basis)
-      if (!keyParsed) return false
-      const claim = successorByUnit.get(`${name}||u:${unitKey(keyParsed.unit)}`)
-      return claim !== undefined && formatAmount(claim.sum) === formatAmount(keyParsed.amount)
+      // The lookup key prefers the line's own unit (the clear-time basis),
+      // because the shadow bucket is indexed by the contributor's keyName+unit
+      // — which is the line's unit when the claim is fully matched.
+      const claim = successorByUnit.get(`${name}||u:${unitKey(branchParsed.unit)}`)
+      if (claim !== undefined) {
+        return (
+          formatAmount(claim.sum) === formatAmount(keyParsed ? keyParsed.amount : branchParsed.amount) &&
+          claim.claims >= 1
+        )
+      }
+      // No shadow claim for this unit (exact legacy shape or approx-only):
+      // fall back to identity presence. Kody's residual is resolved here —
+      // the short-circuit above is unreachable when a shadow line exists.
+      if (keyParsed) {
+        const claimByBasis = successorByUnit.get(`${name}||u:${unitKey(keyParsed.unit)}`)
+        if (claimByBasis !== undefined) {
+          return formatAmount(claimByBasis.sum) === formatAmount(keyParsed.amount)
+        }
+      }
+      // Approx (legacy) unit-bearing claims carry an advisory amount; compare
+      // it against the merged key amount instead of matching by identity
+      // alone (a legacy `milk||1cup` must not hide a `3 cup` merge). Unitless
+      // claims leave successorAmounts unset and fall through to identity.
+      const approx = successorAmounts.get(`${name}||u:${unitKey(branchParsed.unit)}`)
+      if (approx !== undefined) {
+        const target = keyParsed ? keyParsed.amount : branchParsed.amount
+        return formatAmount(approx) === formatAmount(target)
+      }
+      return successorIdentities.has(`${name}||u:${unitKey(branchParsed.unit)}`)
     }
     // Raw branch: the display never parses. The line's key basis is the
     // parsed-grammar spelling when the key source parsed (possibly
