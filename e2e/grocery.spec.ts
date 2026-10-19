@@ -43,7 +43,10 @@ test('checking an item updates the progress count, reload keeps it', async ({ pa
   const total = (await progress.textContent())!.match(/(\d+) items/)![1]
   await expect(progress).toHaveText(`0 / ${total} items`)
 
-  // Check the first grocery line
+  // Check the first grocery line. With the sink (ADR-0071 delta-1
+  // superseded) the checked row moves to the END of its category, so the
+  // reload assertion below cannot assume the FIRST checkbox is the
+  // checked one — it counts checked boxes instead.
   const firstCheckbox = page.locator('main input[type="checkbox"]').first()
   await firstCheckbox.check()
   await expect(progress).toHaveText(`1 / ${total} items`)
@@ -53,6 +56,6 @@ test('checking an item updates the progress count, reload keeps it', async ({ pa
   await expect(page.locator('main').getByText(/\d+ \/ \d+ items/)).toHaveText(`1 / ${total} items`, {
     timeout: 10_000,
   })
-  await expect(page.locator('main input[type="checkbox"]').first()).toBeChecked()
+  await expect(page.locator('main input[type="checkbox"]:checked')).toHaveCount(1)
   await expectZeroMealimeRequests(page)
 })

@@ -139,3 +139,16 @@ Dated change note; Status stays Accepted.
   mins" (no data), per-item flavour sublines ("Pre-washed clamshell
   packaging" — invented), "Custom Note" pills, per-row "Cook Again"
   (re-cook is detail/cooking's flow), gamification of any kind.
+
+## Change note (2026-10-19, PR #98) — delta 1 superseded: the Grocery tab sinks checked rows
+
+The owner reversed the checked-in-place ruling: **"checking an item needs to
+make it go to the end of its category automatically."** Delta 1's
+"READING, not a task queue" framing is the regression being corrected, not the
+record of a live behaviour. The Grocery tab's store sections and its extras
+sub-sections (an extras sub-section IS a category on this surface, ADR-0050)
+now sink checked rows with the SAME `sinkChecked`/`sinkedStoreRows`/
+`sinkedExtraRows` helpers ShopView renders with (`src/lib/sink.ts` — one
+ordering rule, no second inline sort). Shop mode is unchanged. The rest of
+this ADR — the reading-surface composition, the index-card sections, the
+right-aligned quantity voice, the desktop sidebar — stands.
