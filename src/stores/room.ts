@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
-import { clearedMapToLegacy, onlyTrueKeys } from '../lib/grocery'
+import { clearedMapToLegacy, clearedSpellingsDiverge, onlyTrueKeys } from '../lib/grocery'
 import type { ClearedIngredient } from './grocery'
 import { describeRelayError } from '../lib/relayErrors'
 import {
@@ -469,8 +469,24 @@ export const useRoomStore = defineStore('room', () => {
       // decides, never shape guessing: a peer that predates `clearedV2`
       // never sends it (and one that predates `cleared` sends neither),
       // so the additive key can never wipe a legacy peer's state.
+      //
+      // MIXED-HOUSEHOLD FRESHNESS (review addendum): when BOTH keys are
+      // present they can disagree — a legacy peer writes only `cleared`,
+      // and the relay's per-store persistence keeps the older `clearedV2`
+      // row beside it (an absent key is silence, ADR-0088). A V2 sender
+      // derives both spellings from ONE state, so disagreement PROVES the
+      // legacy spelling is the newer write: apply it (migrated), never
+      // the stale object arrays. Agreeing spellings (or a genuinely
+      // absent key) keep the presence-decides contract above.
       if (state.clearedV2 !== undefined) {
-        plan.setClearedIngredients(state.clearedV2)
+        if (
+          state.cleared !== undefined &&
+          clearedSpellingsDiverge(state.cleared, state.clearedV2)
+        ) {
+          plan.setClearedIngredients(state.cleared)
+        } else {
+          plan.setClearedIngredients(state.clearedV2)
+        }
       } else {
         plan.setClearedIngredients(state.cleared ?? {})
       }

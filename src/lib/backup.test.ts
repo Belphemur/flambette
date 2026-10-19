@@ -727,8 +727,9 @@ describe('pantry import validation (ADR-0087, qodo round 2)', () => {
 /**
  * ADR-0094 — the plan slice's cleared-ingredients map accepts BOTH shapes
  * (the legacy `nameKey||basis` strings a pre-object build wrote, and the
- * object grammar), and a legacy map restores as objects with the clear
- * context stamped from the restored plan's servings.
+ * object grammar). A legacy map restores as approx object claims: no
+ * serving context exists to restore, so the context is stamped "unknown"
+ * and matching is by identity presence (ADR-0094 review addendum).
  */
 describe('plan slice cleared-ingredients (ADR-0094 registry)', () => {
   beforeEach(() => {
@@ -750,6 +751,13 @@ describe('plan slice cleared-ingredients (ADR-0094 registry)', () => {
     scope,
   })
 
+  /** The approx claim a legacy STRING mints at migration (no context exists). */
+  const legacyEntry = (keyName: string, unit: Record<string, unknown>, scope: string) => ({
+    ...entry(keyName, unit, scope),
+    servingsAtClear: 0,
+    approx: true,
+  })
+
   test('a legacy string-keyed map validates and restores as objects', () => {
     const slice = planSlice()
     const legacy = {
@@ -763,10 +771,10 @@ describe('plan slice cleared-ingredients (ADR-0094 registry)', () => {
     slice.write(legacy)
     const plan = usePlanStore()
     expect(plan.clearedIngredients[7]).toEqual([
-      entry('flour', { kind: 'row' }, 'ingredient'),
-      entry('flour', { kind: 'byUnit', unit: 'ml', amount: 67.5 }, 'line'),
-      entry('soy sauce', { kind: 'container', noun: 'pkg', annotation: '(142 g)', count: 1 }, 'line'),
-      entry('salt', { kind: 'raw', basis: 'to taste' }, 'line'),
+      legacyEntry('flour', { kind: 'row' }, 'ingredient'),
+      legacyEntry('flour', { kind: 'byUnit', unit: 'ml', amount: 67.5 }, 'line'),
+      legacyEntry('soy sauce', { kind: 'container', noun: 'pkg', annotation: '(142 g)', count: 1 }, 'line'),
+      legacyEntry('salt', { kind: 'raw', basis: 'to taste' }, 'line'),
     ])
   })
 

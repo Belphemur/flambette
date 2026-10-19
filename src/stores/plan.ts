@@ -146,12 +146,6 @@ export const usePlanStore = defineStore(
      *  cooked or re-planned fresh. Part of the shared room state. */
     const clearedIngredients = ref<Record<number, ClearedIngredient[]>>({})
 
-    /** The plan servings a migrated legacy entry stamps as its clear-time
-     *  context (the ADR-0094 approximation: current state is the best
-     *  available proxy for a blob that predates the object model). */
-    const servingsFor = (variantId: number): number =>
-      plan.value.find((e) => e.variantId === variantId)?.servings ?? 1
-
     function planContains(variantId: number): boolean {
       return plan.value.some((e) => e.variantId === variantId)
     }
@@ -284,7 +278,7 @@ export const usePlanStore = defineStore(
     function clearIngredientsForCurrentMeals(
       keysByVariant: Record<number, readonly (string | ClearedIngredient)[]>,
     ): void {
-      const normalized = migrateClearedMap(keysByVariant, servingsFor)
+      const normalized = migrateClearedMap(keysByVariant)
       for (const entry of plan.value) {
         const keys = normalized[entry.variantId]
         if (keys?.length) {
@@ -308,7 +302,7 @@ export const usePlanStore = defineStore(
     function mergeIngredientsForCurrentMeals(
       keysByVariant: Record<number, readonly (string | ClearedIngredient)[]>,
     ): void {
-      const normalized = migrateClearedMap(keysByVariant, servingsFor)
+      const normalized = migrateClearedMap(keysByVariant)
       for (const entry of plan.value) {
         const add = normalized[entry.variantId]
         if (!add?.length) continue
@@ -329,7 +323,7 @@ export const usePlanStore = defineStore(
     function setClearedIngredients(
       value: Record<number, readonly (string | ClearedIngredient)[]>,
     ): void {
-      clearedIngredients.value = migrateClearedMap(value, servingsFor)
+      clearedIngredients.value = migrateClearedMap(value)
     }
 
     /**
@@ -481,10 +475,7 @@ export const usePlanStore = defineStore(
         planCreatedAt.value = event.planCreatedAt ?? 0
       }
       if (prior.cleared) {
-        const restored = migrateClearedMap(
-          { [prior.entry.variantId]: prior.cleared },
-          servingsFor,
-        )
+        const restored = migrateClearedMap({ [prior.entry.variantId]: prior.cleared })
         clearedIngredients.value[prior.entry.variantId] = restored[prior.entry.variantId] ?? []
       }
     }
@@ -535,10 +526,7 @@ export const usePlanStore = defineStore(
         if (needsMigration) break
       }
       if (needsMigration) {
-        clearedIngredients.value = migrateClearedMap(
-          raw as Record<number, readonly unknown[]>,
-          servingsFor,
-        )
+        clearedIngredients.value = migrateClearedMap(raw as Record<number, readonly unknown[]>)
       }
     }
 

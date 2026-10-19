@@ -5,15 +5,23 @@ import { usePlanStore } from './plan'
 
 /**
  * One cleared-ingredient entry (ADR-0094): the stable, discriminated
- * identity of a grocery clear plus the clear-time serving context, so the
- * render re-derives the successor line key deterministically instead of
- * string-matching a stale rendered basis (`egg||4` -> `egg||8`).
+ * identity of a grocery clear. The render's line filter re-derives the
+ * successor claim from the IDENTITY alone — it maps the claim onto the
+ * claiming variant's own CURRENT render of that identity (the shadow
+ * aggregation, ADR-0094 review addendum) — so the stored kind payloads
+ * and the clear-time serving context are informational (they spell what
+ * was cleared and when, and feed the legacy `nameKey||basis` wire
+ * spelling), never matched against.
  *
- * The kind payloads carry the clear-time basis data the successor
- * derivation re-scales — the ADR's "clear-time amount" lives here (a
- * by-unit line without its amount could not predict the re-summed basis,
- * and a container line without its count could not re-derive the
- * ceil-merged package count).
+ * `approx` marks a claim whose stored amount carries NO trustworthy
+ * clear-time context — every entry minted from a legacy `nameKey||basis`
+ * string (the string model persisted the MERGED line key with no
+ * per-variant share and no serving context). An approx claim matches by
+ * identity PRESENCE (the rendered line whose unit identity equals the
+ * claim's), which is exactly the pre-ADR-0094 identity semantics made
+ * robust: the identity survives any re-sum, and one identity can match
+ * at most one rendered line per group, so a sibling can never be
+ * swallowed.
  */
 export interface ClearedIngredient {
   /** BASE doc nameKey, e.g. `egg`, `soy sauce` (never the rendered `||basis`). */
@@ -30,6 +38,8 @@ export interface ClearedIngredient {
   servingsAtClear: number
   /** `line` = hide one rendered line; `ingredient` = clear the whole ingredient group. */
   scope: 'line' | 'ingredient'
+  /** Identity-presence claim (legacy string migration): amount advisory, never matched. */
+  approx?: true
 }
 
 /**

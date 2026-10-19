@@ -154,3 +154,74 @@ snapshot time (`room.ts:376`); apply `state.cleared` by running the
 string→object migration at `room.ts:450`. All three bugs fixed locally; older
 peers unaffected because the wire never changes. Acceptable only if the full
 `clearedV2` versioning is deferred.
+
+## Addendum (2026-10-19, PR #98 review round) — successor = the render itself; legacy = identity claims; wire freshness by disagreement
+
+The review round surfaced six defects in the first implementation. Three of
+them shared one root cause — the successor prediction re-implemented the
+render's math instead of reusing it — and the fixes replace that math with the
+render itself.
+
+**1. The successor is the claiming variant's OWN CURRENT RENDER (the shadow
+aggregation).** The first implementation predicted the successor as
+`capturedAmount × (servingsNow / servingsAtClear)` — a linear ratio applied to
+an already-rendered value. That diverges from the render three ways: the
+ADR-0017 container ceiling was re-applied to a CEILED count (clear at factor 3
+of a ½-pkg row captured 2 pkgs; back at factor 2 the render produces
+`ceil(½×2) = 1` but the prediction produced `ceil(2×⅔) = 2` — the cleared line
+reappeared); seasonings scale sub-linearly (ADR-0009) and metric amounts
+quantize (ADR-0057's `scaleMetricAmount`), so `2129 ml ×⅔` renders `1420 ml`
+while the ratio spelled `1419.3`; and per-row sums cannot be recovered from a
+summed basis. The fix: `aggregateGroceries` extracts its ingestion half into
+`buildGroups`, and for every variant holding exact claims runs the SAME
+ingestion on that variant alone at the CURRENT factor — the shadow. A claim
+contributes its shadow line's key amount (the numeric sum, not a re-parsed
+spelling) to a `(keyName, identity)` bucket; the merged line hides iff the
+claimed shares sum to exactly what the merged render spelled. The stored
+clear-time amount/context (`unit.amount`, `factor`, `servingsAtClear`) becomes
+informational — it feeds the legacy wire spelling and describes the clear, but
+is never matched against.
+
+**2. Every bucket is scoped by the claim's `keyName`.** The first buckets
+keyed by unit/container/raw basis alone, so clearing cornstarch-1-cup hid
+flour-1-cup (a regression of the sibling-vanish class this ADR exists to kill,
+and a violation of the owner contract). Buckets are now
+`keyName||u:<unitKey>` / `keyName||c:<containerKey>` / per-keyName raw sets,
+and `lineClaimed` resolves each rendered line's group from the line's own key.
+The owner contract is preserved: same-nameKey same-kind claims still aggregate,
+so a full merged clear ("4 medium heads" across contributors) sums to the
+merged line and hides it, while a partial clear sums short and keeps the line
+visible.
+
+**3. Legacy strings migrate to `approx` identity claims — one claim per merged
+identity, no invented serving context.** The pre-ADR-0092 string model pushed
+the MERGED line key into every contributing variant's array, and it carries no
+per-variant share and no serving snapshot. The first migration stamped the
+plan's CURRENT servings as the clear context (wrong the moment the plan had
+moved since the clear) and minted a full byUnit claim per contributor — N
+contributors summed to N × the merged line and the line reappeared. The
+migration now stamps `factor: 1, servingsAtClear: 0` ("unknown", never
+invented) and `approx: true`: an approx claim matches by IDENTITY PRESENCE —
+the rendered line whose unit identity (`nameKey` + `unitKey`/`containerKey`)
+equals the claim's is hidden at any re-sum. That is the pre-ADR identity
+semantics made robust: the identity survives servings and composition changes
+(finding 4), N duplicate legacy claims never sum (finding 5), and one identity
+can match at most one rendered line per group, so no sibling is swallowed.
+Raw `approx` claims keep verbatim matching (raw rows pass through unscaled);
+a raw row whose key source parsed (the restriction seam) takes its successor
+from the shadow's re-summed raw basis, matched by unit identity inside the
+group, falling back to verbatim when the group is ambiguous.
+
+**4. Mixed-household wire freshness is decided by DISAGREEMENT, not presence.**
+`applyRemote` used to prefer `clearedV2` whenever present. But a peer that
+predates `clearedV2` writes only `cleared`, and the relay's per-store
+persistence (ADR-0088) treats an absent key as silence — so a legacy peer's
+newer push left the older `clearedV2` row persisted, and a joining peer applied
+the stale object arrays. Carrying per-store `updated_at` to the client would be
+a cross-runtime protocol change; instead the client exploits an emission
+invariant: a V2-capable sender derives BOTH spellings from ONE state at
+snapshot time, so its two keys always agree. Disagreement between
+`clearedSpellingsDiverge(cleared, clearedV2)` therefore PROVES the last writer
+predates V2 emission, and the legacy spelling (migrated) is applied. Absent
+keys keep the presence-decides contract; agreeing spellings apply `clearedV2`
+(the precise shape).

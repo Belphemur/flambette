@@ -39,25 +39,34 @@ function snap(nameKeysByVariant: Record<number, string[]>, lineKeysByGroup: Reco
 }
 
 /**
- * The migrated whole-ingredient (row) entry a bare nameKey stamps
- * (ADR-0094): the clear-time context is the plan's current servings for
- * the variant, factor 1 (a legacy ingress cannot know the recipe's base
- * servings — the successor math uses the servings ratio).
+ * The migrated whole-ingredient (row) entry a bare nameKey stamps (ADR-0094
+ * review addendum): an approx claim — legacy strings carry no serving
+ * context, so the context is stamped "unknown" (factor 1, servingsAtClear
+ * 0), never invented from the plan's current state.
  */
-function rowE(keyName: string, servingsAtClear: number) {
-  return { keyName, unit: { kind: 'row' }, factor: 1, servingsAtClear, scope: 'ingredient' }
-}
-
-/** The migrated by-unit line entry a `nameKey||basis` key stamps (ADR-0094). */
-function byUnitE(keyName: string, unit: string, amount: number, servingsAtClear: number) {
+function rowE(keyName: string) {
   return {
     keyName,
-    unit: { kind: 'byUnit', unit, amount },
+    unit: { kind: 'row' },
     factor: 1,
-    servingsAtClear,
-    scope: 'line',
+    servingsAtClear: 0,
+    scope: 'ingredient',
+    approx: true,
   }
 }
+
+/**
+ * The entry `clearCheckedItems` CAPTURES at clear time (ADR-0094): a real
+ * object claim with the snapshot's serving context — not approx, not
+ * migrated (the mock snapshot provides no servingsByVariant, so the
+ * context falls back to the plan entry's servings with factor 1).
+ */
+function captured(keyName: string, unit: Record<string, unknown>, scope: string, servingsAtClear = 4) {
+  return { keyName, unit, factor: 1, servingsAtClear, scope }
+}
+
+const capturedRow = (keyName: string, servingsAtClear = 4) =>
+  captured(keyName, { kind: 'row' }, 'ingredient', servingsAtClear)
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -239,7 +248,7 @@ describe('clearCheckedItems (ADR-0092)', () => {
     // line was checked, so its nameKey joined the whole-ingredient ledger
     // — and under ADR-0094 the row claim SUBSUMES the line claims of the
     // same ingredient, so two row entries survive the merge.
-    expect(plan.clearedIngredients[7]).toEqual([rowE('flour', 4), rowE('salt', 4)])
+    expect(plan.clearedIngredients[7]).toEqual([capturedRow('flour'), capturedRow('salt')])
     // Unchecked remain and stay unchecked: the map was wiped (only
     // checked keys ever lived there) and pepper is NOT cleared.
     expect(grocery.map).toEqual({})
@@ -263,7 +272,7 @@ describe('clearCheckedItems (ADR-0092)', () => {
     // `aggregateGroceries` filters the rendered line by full key, and the
     // `30 ml` sibling stays visible and unchecked. (Migrated to the
     // ADR-0094 byUnit grammar on apply.)
-    expect(plan.clearedIngredients[7]).toEqual([byUnitE('soy sauce', 'tbsp', 2, 4)])
+    expect(plan.clearedIngredients[7]).toEqual([captured('soy sauce', { kind: 'byUnit', unit: 'tbsp', amount: 2 }, 'line')])
     expect(plan.clearedIngredients[7]).not.toContain('soy sauce')
     expect(grocery.map).toEqual({})
   })
@@ -284,7 +293,7 @@ describe('clearCheckedItems (ADR-0092)', () => {
     // ADR-0094 grammar the row claim SUBSUMES the line claims of the same
     // ingredient (a whole-ingredient clear supersedes a line clear), so
     // only the row entry survives.
-    expect(plan.clearedIngredients[7]).toEqual([rowE('soy sauce', 4)])
+    expect(plan.clearedIngredients[7]).toEqual([capturedRow('soy sauce')])
   })
 
   test('a checked key the current render does not contain is wiped, never cleared (stale residue)', () => {
@@ -315,8 +324,8 @@ describe('clearCheckedItems (ADR-0092)', () => {
     clearCheckedItems()
     // Both variants carry the cleared nameKey (the line is shared), but
     // the toast counts the ONE line the shopper ticked.
-    expect(plan.clearedIngredients[7]).toEqual([rowE('salt', 4)])
-    expect(plan.clearedIngredients[8]).toEqual([rowE('salt', 2)])
+    expect(plan.clearedIngredients[7]).toEqual([capturedRow('salt')])
+    expect(plan.clearedIngredients[8]).toEqual([capturedRow('salt', 2)])
     expect(useUiStore().toast?.message).toBe('Cleared 1 checked item — unchecked items remain')
   })
 
@@ -331,7 +340,7 @@ describe('clearCheckedItems (ADR-0092)', () => {
     clearCheckedItems()
     // The row claims survive; the flour line claim is subsumed by the
     // flour row claim (a whole-ingredient clear supersedes a line clear).
-    expect(plan.clearedIngredients[7]).toEqual([rowE('eggs', 4), rowE('flour', 4)])
+    expect(plan.clearedIngredients[7]).toEqual([rowE('eggs'), capturedRow('flour')])
   })
 
   test('checked custom items are removed individually; the autocomplete memory survives', () => {
@@ -380,7 +389,7 @@ describe('clearCheckedItems (ADR-0092)', () => {
     )
     useUiStore().settleConfirm(true)
     await pending
-    expect(plan.clearedIngredients[7]).toEqual([rowE('flour', 4)])
+    expect(plan.clearedIngredients[7]).toEqual([rowE('flour')])
     expect(plan.customItems).toEqual([])
   })
 })

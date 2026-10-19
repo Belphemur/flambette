@@ -1200,8 +1200,10 @@ describe('room identity rides the join/create dial (ADR-0063)', () => {
  * ADR-0094 — the cleared state rides the room wire in BOTH spellings: the
  * legacy `nameKey||basis` strings (so an older peer always receives a
  * payload it can parse and apply) and the object arrays (`clearedV2`) a
- * new peer prefers. The apply side chooses by KEY PRESENCE, never shape
- * guessing.
+ * new peer prefers. Key presence decides for genuinely-absent keys; when
+ * BOTH are present they agree unless the last writer predates `clearedV2`
+ * (a legacy peer writes only `cleared`), in which case the legacy
+ * spelling is the newer write and wins (ADR-0094 review addendum).
  */
 describe('cleared-state wire versioning (ADR-0094)', () => {
   const meta = (id: number, servingCount = 4) => ({ id, serving_count: servingCount }) as never
@@ -1210,8 +1212,9 @@ describe('cleared-state wire versioning (ADR-0094)', () => {
     keyName: 'flour',
     unit: { kind: 'byUnit', unit: 'ml', amount: 67.5 },
     factor: 1,
-    servingsAtClear: 4,
+    servingsAtClear: 0,
     scope: 'line',
+    approx: true,
   }
 
   test('the payload emits clearedV2 (objects) ALONGSIDE the legacy cleared strings', async () => {
@@ -1245,7 +1248,7 @@ describe('cleared-state wire versioning (ADR-0094)', () => {
     expect(plan.clearedIngredients[7]).toEqual([byUnitEntry])
   })
 
-  test('a snapshot carrying clearedV2 applies it and ignores the stale legacy spelling', async () => {
+  test('a snapshot carrying AGREEING spellings applies clearedV2 (the precise shape)', async () => {
     const plan = usePlanStore()
     const { socket } = await startRoom()
     plan.addToPlan(meta(7), 4)
@@ -1257,11 +1260,42 @@ describe('cleared-state wire versioning (ADR-0094)', () => {
         plan: [{ variantId: 7, servings: 4 }],
         customItems: [],
         checked: {},
-        cleared: { 7: ['stale-key||1 cup'] },
+        cleared: { 7: ['flour||67.5 ml'] },
         clearedV2: { 7: [byUnitEntry] },
       },
     })
     expect(plan.clearedIngredients[7]).toEqual([byUnitEntry])
+  })
+
+  test('a snapshot carrying DISAGREEING spellings applies the legacy one (the newer write)', async () => {
+    const plan = usePlanStore()
+    const { socket } = await startRoom()
+    plan.addToPlan(meta(7), 4)
+    await sleep(500) // let the debounced push flush — a queued edit withholds inbound content
+    socket.receive({
+      type: 'state',
+      rev: 4,
+      state: {
+        plan: [{ variantId: 7, servings: 4 }],
+        customItems: [],
+        checked: {},
+        // A legacy peer's newer push: only `cleared` moved, so the
+        // persisted `clearedV2` row beside it is STALE. Disagreement
+        // proves the legacy spelling is the newer write.
+        cleared: { 7: ['fresh-key||1 cup'] },
+        clearedV2: { 7: [byUnitEntry] },
+      },
+    })
+    expect(plan.clearedIngredients[7]).toEqual([
+      {
+        keyName: 'fresh-key',
+        unit: { kind: 'byUnit', unit: 'cup', amount: 1 },
+        factor: 1,
+        servingsAtClear: 0,
+        scope: 'line',
+        approx: true,
+      },
+    ])
   })
 
   test('a snapshot carrying NEITHER key behaves as before (empty replace)', async () => {

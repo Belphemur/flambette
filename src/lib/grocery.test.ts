@@ -4,8 +4,10 @@ import {
   aggregateRowKeys,
   clearedEntryForCheckedLine,
   clearedEntryFromKey,
+  clearedSpellingsDiverge,
   lineKeyIdentity,
   mealSurvivingLines,
+  migrateClearedMap,
   type AggregateInput,
   type ClearedIngredient,
   type RestrictedDisplayLine,
@@ -49,20 +51,19 @@ function rowCleared(d: RecipeDoc, keyName: string): ClearedIngredient {
 }
 
 /**
- * The ADR-0094 cleared entries for a legacy string list, stamped with the
- * clear-time context: the clear happened at `clearFactor` servings of the
- * doc (the authored render by default), so a serving bump to `factor`
- * re-derives the successor exactly the way the render does.
+ * The ADR-0094 cleared entries for a rendered line list, carrying the
+ * clear-time context a REAL capture stamps (non-approx): the clear
+ * happened at `clearFactor` servings of the doc, so the entries mirror
+ * what `clearedEntryForCheckedLine` mints from a snapshot's own lines.
  */
 function clearedEntries(d: RecipeDoc, cleared: string[], clearFactor = 1): ClearedIngredient[] {
   return cleared
-    .map((key) =>
-      clearedEntryFromKey(key, {
-        factor: clearFactor,
-        servingsAtClear: d.serving_count * clearFactor,
-      }),
-    )
+    .map((key) => clearedEntryFromKey(key))
     .filter((e): e is ClearedIngredient => e !== null)
+    .map((e) => {
+      const { approx: _approx, ...rest } = e
+      return { ...rest, factor: clearFactor, servingsAtClear: d.serving_count * clearFactor }
+    })
 }
 
 function inputDisplay(d: RecipeDoc, factor: number, rows: RestrictedDisplayLine[], cleared?: string[]): AggregateInput {
@@ -638,5 +639,182 @@ describe('mealSurvivingLines (Contributing Meals card, ADR-0092 round 2, kody K2
     const docs = [clearedInput(a, 1, ['soy sauce']), input(b, 1)]
     expect(mealSurvivingLines(docs[0], visibleIdentities(docs))).toBe(0)
     expect(mealSurvivingLines(docs[1], visibleIdentities(docs))).toBe(1)
+  })
+})
+
+describe('cleared successors re-derive through the render itself (ADR-0094 review)', () => {
+  /** A captured (non-approx) claim exactly as clearCheckedItems mints it. */
+  const claim = (entry: ClearedIngredient): ClearedIngredient => entry
+
+  test('a container claim re-derives the CEIL from the authored count, never rescales the captured render (#1)', () => {
+    // Authored ½ pkg; at factor 3 the render ceils to 2 pkgs and the
+    // household clears that line. Back at factor 2 the render produces
+    // ceil(½×2) = 1 pkg. Rescaling the CAPTURED 2 by ⅔ would predict 2 and
+    // leave the line visible; the shadow render predicts 1 and hides it.
+    const d = doc('A', 6, [['½ (142 g) pkg', 'spinach']])
+    const capturedAt3 = claim({
+      keyName: 'spinach',
+      unit: { kind: 'container', noun: 'pkg', annotation: '(142 g)', count: 2 },
+      factor: 3,
+      servingsAtClear: 18,
+      scope: 'line',
+    })
+    expect(displays([{ ...input(d, 3), cleared: [capturedAt3] }], 'spinach')).toEqual([])
+    expect(displays([{ ...input(d, 2), cleared: [capturedAt3] }], 'spinach')).toEqual([])
+    expect(displays([{ ...input(d, 2) }], 'spinach')).toEqual(['1 (142 g) pkg'])
+  })
+
+  test('claims are SCOPED to their ingredient: clearing cornstarch never hides flour (#2)', () => {
+    // Two ingredients sharing the unit basis `1 cup`. The pre-review
+    // buckets keyed by unit alone, so one claim hid (or unsummed) both
+    // lines. Bucket keys carry the claim's keyName now.
+    const flour = doc('A', 4, [['1 cup', 'flour']])
+    const starch = doc('B', 4, [['1 cup', 'cornstarch']])
+    const docs = [
+      input(flour, 1),
+      { ...input(starch, 1), cleared: clearedEntries(starch, ['cornstarch||1 cup']) },
+    ]
+    expect(displays(docs, 'cornstarch')).toEqual([])
+    expect(displays(docs, 'flour')).toEqual(['1 cup'])
+  })
+
+  test('raw-branch claims are scoped too: clearing one `to taste` row leaves the sibling visible (#2)', () => {
+    const a = doc('A', 4, [['to taste', 'salt']])
+    const b = doc('B', 4, [['to taste', 'pepper']])
+    const docs = [
+      input(a, 1),
+      { ...input(b, 1), cleared: clearedEntries(b, ['pepper||raw||to taste']) },
+    ]
+    expect(displays(docs, 'pepper')).toEqual([])
+    expect(displays(docs, 'salt')).toEqual(['to taste'])
+  })
+
+  test('a cleared seasoning stays hidden after a servings change: the successor IS the shadow render (#3)', () => {
+    // ADR-0009 scales seasonings sub-linearly — a linear ratio of the
+    // captured amount predicts a key the render never spells.
+    const d = doc('A', 2, [['2 tsp', 'salt']])
+    const at2 = displays([input(d, 2)], 'salt')
+    expect(at2).not.toEqual(['2 tsp'])
+    const docs = [{ ...input(d, 2), cleared: clearedEntries(d, [`salt||${at2[0]}`], 2) }]
+    expect(displays(docs, 'salt')).toEqual([])
+    // The claim persists: at a DIFFERENT servings the sub-linear rule may
+    // land on the same spoon count — the cleared line stays hidden either
+    // way, because the successor is the shadow render, never a ratio.
+    const docs3 = [{ ...input(d, 3), cleared: clearedEntries(d, [`salt||${at2[0]}`], 2) }]
+    expect(displays(docs3, 'salt')).toEqual([])
+  })
+
+  test('a cleared metric quantity survives quantization: 2129 ml ×⅔ renders 1420 ml on BOTH sides (#3)', () => {
+    const d = doc('A', 3, [['2129 ml', 'water']])
+    // Cleared at the authored render; shrinking to ⅔ re-quantizes through
+    // scaleMetricAmount's cup/fl-oz grid (1420, not the linear 1419.3).
+    const docs = [{ ...input(d, 2 / 3), cleared: clearedEntries(d, ['water||2129 ml']) }]
+    expect(displays([input(d, 2 / 3)], 'water')).toEqual(['1420 ml'])
+    expect(displays(docs, 'water')).toEqual([])
+  })
+
+  test('the owner contract: a merged clear hides every contributor, a partial clear keeps the line', () => {
+    // "1.5 medium head + 2.5 medium head shows 4 medium heads; checking
+    // off 4 checks off everything" — container claims sum per bucket.
+    const a = doc('A', 4, [['1.5 medium head', 'cabbage']])
+    const b = doc('B', 4, [['2.5 medium head', 'cabbage']])
+    const full = [
+      { ...input(a, 1), cleared: clearedEntries(a, ['cabbage||1.5 medium head']) },
+      { ...input(b, 1), cleared: clearedEntries(b, ['cabbage||2.5 medium head']) },
+    ]
+    expect(displays(full, 'cabbage')).toEqual([])
+    // A partial clear (one contributor) sums to less than the merged
+    // line — the line stays visible.
+    const partial = [
+      { ...input(a, 1), cleared: clearedEntries(a, ['cabbage||1.5 medium head']) },
+      input(b, 1),
+    ]
+    expect(displays(partial, 'cabbage')).toEqual(['4 medium heads'])
+  })
+})
+
+describe('legacy migration mints approx identity claims (ADR-0094 review)', () => {
+  const migratedInput = (d: RecipeDoc, factor: number, cleared: string[]): AggregateInput => ({
+    ...input(d, factor),
+    cleared: migrateClearedMap({ 1: cleared })[1],
+  })
+
+  test('legacy keys migrate to approx claims: no serving context is invented (#4)', () => {
+    const out = migrateClearedMap({ 7: ['egg||4', 'flour'] })
+    expect(out[7]).toEqual([
+      {
+        keyName: 'egg',
+        unit: { kind: 'byUnit', unit: '', amount: 4 },
+        factor: 1,
+        servingsAtClear: 0,
+        scope: 'line',
+        approx: true,
+      },
+      {
+        keyName: 'flour',
+        unit: { kind: 'row' },
+        factor: 1,
+        servingsAtClear: 0,
+        scope: 'ingredient',
+        approx: true,
+      },
+    ])
+  })
+
+  test('a migrated claim hides its line at ANY servings — the identity never rotates (#4)', () => {
+    // `egg||4` was persisted under the string model at unknown servings;
+    // the plan has since moved. The pre-review migration stamped the
+    // CURRENT servings as the clear context and mispredicted; the approx
+    // claim matches by unit identity, which no re-sum can rotate.
+    const d = doc('A', 4, [['2', 'egg']])
+    expect(displays([migratedInput(d, 1, ['egg||4'])], 'egg')).toEqual([])
+    expect(displays([migratedInput(d, 2, ['egg||4'])], 'egg')).toEqual([])
+    expect(displays([migratedInput(d, 3, ['egg||4'])], 'egg')).toEqual([])
+  })
+
+  test('the same merged string in N contributor variants mints identity claims that never sum (#5)', () => {
+    // Pre-ADR-0092 clearCheckedItems pushed the MERGED key into every
+    // contributor's array. Two variants each carrying `soy sauce||3 tbsp`
+    // must hide the 3 tbsp line once — the pre-review migration turned
+    // each into a full byUnit claim and the two summed to 6.
+    const a = doc('A', 4, [['1 tbsp', 'soy sauce']])
+    const b = doc('B', 4, [['2 tbsp', 'soy sauce']])
+    const docs = [
+      migratedInput(a, 1, ['soy sauce||3 tbsp']),
+      migratedInput(b, 1, ['soy sauce||3 tbsp']),
+    ]
+    expect(displays(docs, 'soy sauce')).toEqual([])
+  })
+
+  test('a migrated claim stays scoped to its ingredient (#2/#5)', () => {
+    const flour = doc('A', 4, [['1 cup', 'flour']])
+    const starch = doc('B', 4, [['1 cup', 'cornstarch']])
+    const docs = [input(flour, 1), migratedInput(starch, 1, ['cornstarch||1 cup'])]
+    expect(displays(docs, 'cornstarch')).toEqual([])
+    expect(displays(docs, 'flour')).toEqual(['1 cup'])
+  })
+})
+
+describe('clearedSpellingsDiverge (mixed-household freshness, ADR-0094 review)', () => {
+  const v2 = { 7: [{ keyName: 'flour', unit: { kind: 'byUnit', unit: 'ml', amount: 67.5 }, factor: 1, servingsAtClear: 4, scope: 'line' }] }
+  const legacy = { 7: ['flour||67.5 ml'] }
+
+  test('a V2 sender\'s two spellings agree (both derive from one state)', () => {
+    expect(clearedSpellingsDiverge(legacy, v2)).toBe(false)
+  })
+
+  test('a legacy peer\'s newer write disagrees with the stale V2 row', () => {
+    expect(clearedSpellingsDiverge({ 7: ['fresh-key||1 cup'] }, v2)).toBe(true)
+    expect(clearedSpellingsDiverge({ 7: [] }, v2)).toBe(true)
+  })
+
+  test('absent keys never diverge (the presence-decides contract stays intact)', () => {
+    expect(clearedSpellingsDiverge(undefined, v2)).toBe(false)
+    expect(clearedSpellingsDiverge(legacy, undefined)).toBe(false)
+    expect(clearedSpellingsDiverge(undefined, undefined)).toBe(false)
+  })
+
+  test('the comparison is order-stable', () => {
+    expect(clearedSpellingsDiverge({ 7: ['a||1', 'b||2'] }, { 7: [{ keyName: 'b', unit: { kind: 'byUnit', unit: '', amount: 2 }, factor: 1, servingsAtClear: 4, scope: 'line' }, { keyName: 'a', unit: { kind: 'byUnit', unit: '', amount: 1 }, factor: 1, servingsAtClear: 4, scope: 'line' }] })).toBe(false)
   })
 })
