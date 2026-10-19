@@ -1,6 +1,6 @@
 # ADR-0094: Object-JSON cleared-ingredient storage (serving-safe clear-checked)
 
-Status: accepted (2026-10-18)
+Status: accepted (2026-10-18) — implemented in https://github.com/Belphemur/flambette/pull/98
 
 ## Context
 
