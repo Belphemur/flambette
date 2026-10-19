@@ -900,11 +900,15 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
   // Identity-presence claims (`approx`), keyed `${keyName}||${identity}`.
   const successorIdentities = new Set<string>()
   // Approx (legacy) entries carry an advisory amount (clearedEntryFromKey
-  // 119-123); for unit-bearing claims we compare it against the merged key
+  // 119-123); for unit-bearing claims we OR-match it against the merged key
   // amount so a legacy `cabbage||1.5 medium head` no longer hides a
-  // `4 medium heads` line with an unclaimed portion (Kody critical).
-  // Unitless/row/raw claims leave this unset and fall back to identity.
-  const successorAmounts = new Map<string, number>()
+  // `4 medium heads` line with an unclaimed portion (Kody critical). The
+  // Set keeps EVERY claimed amount per identity — two legacy clears for the
+  // same identity (e.g. `cabbage||4` + `cabbage||1.5 medium head`) must not
+  // overwrite one another (Kody #2); the line hides when ANY stored amount
+  // matches the merged key amount. Unitless/row/raw claims leave this unset
+  // and fall back to identity-only (`egg||`, tests 513/764/786).
+  const successorAmounts = new Map<string, Set<number>>()
   let hasLineClaims = false
   const rawSetFor = (map: Map<string, Set<string>>, name: string): Set<string> => {
     let set = map.get(name)
@@ -937,11 +941,17 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
           // Unit-bearing amount is meaningful; unitless (`egg||`) keeps no
           // amount — its identity must hide across re-sums (test 513), so it
           // stays amount-free and falls back to identity below.
-          if (u.unit) successorAmounts.set(id, u.amount)
+          if (u.unit) {
+            let s = successorAmounts.get(id)
+            if (!s) { s = new Set(); successorAmounts.set(id, s) }
+            s.add(u.amount) // Set: multiple legacy clears per identity coexist (Kody #2)
+          }
         } else if (u.kind === 'container') {
           const id = `${name}||c:${containerKey(u.noun, u.annotation)}`
           successorIdentities.add(id)
-          successorAmounts.set(id, u.count) // container count is always meaningful
+          let s = successorAmounts.get(id)
+          if (!s) { s = new Set(); successorAmounts.set(id, s) }
+          s.add(u.count) // Set: whole-line + partial legacy clears coexist (Kody #2)
         } else if (u.kind === 'raw') {
           rawSetFor(successorRawVerbatim, name).add(u.basis)
         }
@@ -1020,17 +1030,24 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       // compared and, on mismatch, must NOT defer to identity presence —
       // amount-free claims (raw/row/unitless) keep the identity fallback.
       const claim = successorContainers.get(`${name}||c:${cKey}`)
-      if (claim !== undefined && keyParsed) {
+      const approxSet = successorAmounts.get(`${name}||c:${cKey}`)
+      // Exact shadow match hides the line. A non-matching shadow does NOT
+      // short-circuit: a legacy whole-line clear (e.g. `cabbage||4 medium
+      // heads`) matching the merged basis must still hide the line even when
+      // a sibling variant's partial exact claim sums differently (Kody #1).
+      if (claim !== undefined && keyParsed && Math.abs(keyParsed.count - claim.sum) < 0.02 + 1e-9) {
         // The rendered basis is spelled through formatFraction's glyph
         // grammar (⅓, 2 ¼), so the comparison tolerates the fraction snap
         // (0.02, containers.ts's FRACTION_TOLERANCE) rather than demanding
         // bit-equality against the exact summed key amount.
-        return Math.abs(keyParsed.count - claim.sum) < 0.02 + 1e-9
+        return true
       }
-      const approx = successorAmounts.get(`${name}||c:${cKey}`)
-      if (approx !== undefined) {
+      if (approxSet !== undefined) {
         const target = keyParsed ? keyParsed.count : branchContainer.count
-        return Math.abs(target - approx) < 0.02 + 1e-9
+        // Legacy amounts are OR-matched over the Set (Kody #2): any claimed
+        // amount equal to the merged key amount hides the line, so a stale
+        // partial clear can never overwrite a whole-line clear.
+        return [...approxSet].some((a) => Math.abs(a - target) < 0.02 + 1e-9)
       }
       return successorIdentities.has(`${name}||c:${cKey}`)
     }
@@ -1048,29 +1065,30 @@ export function aggregateGroceries(inputs: AggregateInput[]): GroceryItem[] {
       // because the shadow bucket is indexed by the contributor's keyName+unit
       // — which is the line's unit when the claim is fully matched.
       const claim = successorByUnit.get(`${name}||u:${unitKey(branchParsed.unit)}`)
-      if (claim !== undefined) {
-        return (
-          formatAmount(claim.sum) === formatAmount(keyParsed ? keyParsed.amount : branchParsed.amount) &&
-          claim.claims >= 1
-        )
+      // An exact (captured) shadow claim is authoritative when it matches the
+      // merged line — but a MISMATCH does NOT short-circuit here (kody #2):
+      // a legacy approx amount may still claim the whole merged line, so fall
+      // through to the approx/identity checks instead of returning false.
+      if (claim !== undefined && claim.claims >= 1 && formatAmount(claim.sum) === formatAmount(keyParsed ? keyParsed.amount : branchParsed.amount)) {
+        return true
       }
-      // No shadow claim for this unit (exact legacy shape or approx-only):
-      // fall back to identity presence. Kody's residual is resolved here —
-      // the short-circuit above is unreachable when a shadow line exists.
       if (keyParsed) {
         const claimByBasis = successorByUnit.get(`${name}||u:${unitKey(keyParsed.unit)}`)
-        if (claimByBasis !== undefined) {
-          return formatAmount(claimByBasis.sum) === formatAmount(keyParsed.amount)
+        if (claimByBasis !== undefined && claimByBasis.claims >= 1 && formatAmount(claimByBasis.sum) === formatAmount(keyParsed.amount)) {
+          return true
         }
       }
       // Approx (legacy) unit-bearing claims carry an advisory amount; compare
       // it against the merged key amount instead of matching by identity
       // alone (a legacy `milk||1cup` must not hide a `3 cup` merge). Unitless
       // claims leave successorAmounts unset and fall through to identity.
-      const approx = successorAmounts.get(`${name}||u:${unitKey(branchParsed.unit)}`)
-      if (approx !== undefined) {
+      const approxSet = successorAmounts.get(`${name}||u:${unitKey(branchParsed.unit)}`)
+      if (approxSet !== undefined) {
         const target = keyParsed ? keyParsed.amount : branchParsed.amount
-        return formatAmount(approx) === formatAmount(target)
+        // Legacy amounts are OR-matched over the Set (Kody #2): any claimed
+        // amount equal to the merged key amount hides the line, so a stale
+        // partial clear can never overwrite a whole-line clear.
+        return [...approxSet].some((a) => formatAmount(a) === formatAmount(target))
       }
       return successorIdentities.has(`${name}||u:${unitKey(branchParsed.unit)}`)
     }

@@ -834,6 +834,35 @@ describe('legacy migration mints approx identity claims (ADR-0094 review)', () =
     expect(shown).not.toEqual([])
     expect(shown.some((d) => /^3 cup/i.test(d))).toBe(true)
   })
+  test('two legacy clears for one container identity keep both amounts (Set), hiding the matched line (kody #2)', () => {
+    // `cabbage||4 medium heads` (whole-line) and `cabbage||1.5 medium head`
+    // (partial) both clear the SAME container identity, carried by TWO
+    // variants so the per-variant migration dedup doesn't collapse them.
+    // The Map-overwrite model dropped the earlier amount; the merged `4
+    // medium heads` line must still hide because the `4` clear survives in
+    // the Set (kody #2, container OR-combine).
+    const a = doc('A', 4, [['1.5 medium head', 'cabbage']])
+    const b = doc('B', 4, [['2.5 medium head', 'cabbage']])
+    const docs = [
+      migratedInput(a, 1, ['cabbage||4 medium heads']),
+      migratedInput(b, 1, ['cabbage||1.5 medium head']),
+    ]
+    expect(displays(docs, 'cabbage')).toEqual([])
+  })
+  test('an exact shadow that does not match must not discard a matching legacy approx amount (milk, kody #2)', () => {
+    // A's captured clear (`milk||1 cup`) sums to 1; the merged line is 3 cups
+    // (A 1 + B 2). A legacy approx `milk||3 cups` (B, migrated) claims the
+    // whole merged total. The exact shadow must NOT short-circuit the approx
+    // amount — the line hides. (Pre-fix: the byUnit `if (claim) return false`
+    // discarded the matching approx and left the line visible.)
+    const a = doc('A', 4, [['1 cup', 'milk']])
+    const b = doc('B', 4, [['2 cups', 'milk']])
+    const docs = [
+      { ...input(a, 1), cleared: clearedEntries(a, ['milk||1 cup']) },
+      migratedInput(b, 1, ['milk||3 cups']),
+    ]
+    expect(displays(docs, 'milk')).toEqual([])
+  })
 })
 
 describe('clearedSpellingsDiverge (mixed-household freshness, ADR-0094 review)', () => {
