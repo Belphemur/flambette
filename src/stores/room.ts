@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { generateRoomCode, normalizeRoomCode } from '../lib/roomWords'
-import { onlyTrueKeys } from '../lib/grocery'
+import { clearedMapToLegacy, clearedSpellingsDiverge, onlyTrueKeys } from '../lib/grocery'
+import type { ClearedIngredient } from './grocery'
 import { describeRelayError } from '../lib/relayErrors'
 import {
   mergeSharedFilters,
@@ -40,8 +41,16 @@ interface SharedState {
   plan: { variantId: number; servings: number }[]
   customItems: string[]
   checked: Record<string, boolean>
-  /** variantId -> nameKey-normalized ingredient keys cleared per meal. */
+  /** variantId -> nameKey-normalized ingredient keys cleared per meal.
+   *  The LEGACY wire spelling (ADR-0094): `nameKey||basis` strings, always
+   *  emitted so an older peer's snapshot stays one it can parse and apply. */
   cleared?: Record<number, string[]>
+  /** ADR-0094: the SAME cleared state in the object grammar — per-variant
+   *  ClearedIngredient arrays. A peer applies whichever key the snapshot
+   *  carries (a peer that predates the key ignores it entirely; its
+   *  SharedState has no such field), so the additive field can never wipe
+   *  an older peer's state. */
+  clearedV2?: Record<number, ClearedIngredient[]>
   /** Remembered custom-ingredient names — HOUSEHOLD state (ADR-0012:
    *  device-local → household, 2026 policy change). */
   customs?: CustomIngredient[]
@@ -373,7 +382,14 @@ export const useRoomStore = defineStore('room', () => {
       plan: plan.plan.map((e) => ({ variantId: e.variantId, servings: e.servings })),
       customItems: [...plan.customItems],
       checked,
-      cleared: { ...plan.clearedIngredients },
+      // ADR-0094 wire versioning: the cleared state rides BOTH spellings —
+      // the legacy `nameKey||basis` strings (an older peer keeps a payload
+      // it can parse and apply) and the object arrays (`clearedV2`) a new
+      // peer prefers. Same logical store, two spellings; the DO persists
+      // both per-store rows and a joining peer reconciles whichever its
+      // binary knows.
+      cleared: clearedMapToLegacy(plan.clearedIngredients),
+      clearedV2: { ...plan.clearedIngredients },
       // Household state (ADR-0012): remembered custom-ingredient names.
       customs: customIngredients.list.map((c) => ({ ...c })),
       // Household state (ADR-0087 Decision 7 superseded): the kitchen
@@ -447,7 +463,33 @@ export const useRoomStore = defineStore('room', () => {
       // peer is missing state because of it (ADR-0028's reconciliation is
       // about rows the room LACKS, and this key is not one).
       grocery.reconcileExtras(state.customItems ?? [])
-      plan.setClearedIngredients(state.cleared ?? {})
+      // ADR-0094: apply whichever cleared spelling the snapshot carries —
+      // a new peer's `clearedV2` object arrays, else a legacy peer's
+      // `nameKey||basis` strings (migrated at apply). Key PRESENCE
+      // decides, never shape guessing: a peer that predates `clearedV2`
+      // never sends it (and one that predates `cleared` sends neither),
+      // so the additive key can never wipe a legacy peer's state.
+      //
+      // MIXED-HOUSEHOLD FRESHNESS (review addendum): when BOTH keys are
+      // present they can disagree — a legacy peer writes only `cleared`,
+      // and the relay's per-store persistence keeps the older `clearedV2`
+      // row beside it (an absent key is silence, ADR-0088). A V2 sender
+      // derives both spellings from ONE state, so disagreement PROVES the
+      // legacy spelling is the newer write: apply it (migrated), never
+      // the stale object arrays. Agreeing spellings (or a genuinely
+      // absent key) keep the presence-decides contract above.
+      if (state.clearedV2 !== undefined) {
+        if (
+          state.cleared !== undefined &&
+          clearedSpellingsDiverge(state.cleared, state.clearedV2)
+        ) {
+          plan.setClearedIngredients(state.cleared)
+        } else {
+          plan.setClearedIngredients(state.clearedV2)
+        }
+      } else {
+        plan.setClearedIngredients(state.cleared ?? {})
+      }
       // Household custom-ingredient memory (ADR-0012); absent on old
       // payloads → treated as "nothing shared yet", NOT as "wipe local".
       if (state.customs) customIngredients.replaceAll(state.customs)

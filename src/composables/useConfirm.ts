@@ -1,3 +1,9 @@
+import {
+  clearedEntryForCheckedLine,
+  clearedEntryIdentity,
+  type ClearedSnapshotLine,
+} from '../lib/grocery'
+import type { ClearedIngredient } from '../stores/grocery'
 import { useGroceryStore } from '../stores/grocery'
 import { usePlanStore } from '../stores/plan'
 import { useUiStore, type ConfirmTone } from '../stores/ui'
@@ -41,6 +47,16 @@ let prompting = false
 export interface ClearSnapshot {
   nameKeysByVariant: Record<number, string[]>
   lineKeysByGroup: Record<string, string[]>
+  /** ADR-0094: the merged render's lines per group — key plus display (the
+   *  display is what classifies a checked line's grammar branch; the key
+   *  alone cannot: a raw row whose key source parsed spells a
+   *  parsed-grammar key). Optional so test/legacy providers omit it. */
+  linesByGroup?: Record<string, ClearedSnapshotLine[]>
+  /** ADR-0094: per-variant OWN rendered lines per group (the variant's
+   *  single-input aggregation) — the own-share source for line claims. */
+  ownLinesByVariant?: Record<number, Record<string, ClearedSnapshotLine[]>>
+  /** ADR-0094: per-variant clear-time serving context. */
+  servingsByVariant?: Record<number, { servings: number; factor: number }>
 }
 
 let snapshotProvider: (() => ClearSnapshot) | null = null
@@ -182,39 +198,50 @@ export function clearCheckedItems(): boolean {
     else checkedByNameKey.set(nk, [key])
   }
 
-  const mergedNameKeys: Record<number, string[]> = {}
-  const mergedLineKeys: Record<number, string[]> = {}
+  // ADR-0094: both ledgers land in the SAME per-variant cleared list as
+  // OBJECT entries — line claims carrying the variant's OWN share of the
+  // merged line (from the snapshot's own-line view) plus the clear-time
+  // serving context, and whole-ingredient (row) claims for fully checked
+  // groups. `aggregateGroceries` skips a claimed ingredient's row at
+  // ingestion and hides claimed lines by successor match — one persisted,
+  // room-synced structure (the legacy `cleared` wire spelling is derived
+  // from these objects at snapshot time, so an older peer's payload stays
+  // one it can parse).
+  const mergedByVariant: Record<number, ClearedIngredient[]> = {}
+  const pushEntry = (variantId: number, entry: ClearedIngredient): void => {
+    const list = mergedByVariant[variantId] ?? (mergedByVariant[variantId] = [])
+    if (!list.some((e) => clearedEntryIdentity(e) === clearedEntryIdentity(entry))) list.push(entry)
+  }
   for (const [rawId, nameKeys] of Object.entries(snapshot.nameKeysByVariant)) {
+    const variantId = Number(rawId)
+    const ctx =
+      snapshot.servingsByVariant?.[variantId] ?? {
+        servings: plan.plan.find((e) => e.variantId === variantId)?.servings ?? 1,
+        factor: 1,
+      }
+    const ownByGroup = snapshot.ownLinesByVariant?.[variantId]
     for (const nk of new Set(nameKeys)) {
       const groupLines = snapshot.lineKeysByGroup[nk]
       const checkedForGroup = checkedByNameKey.get(nk)
       if (!groupLines?.length || !checkedForGroup) continue
-      ;(mergedLineKeys[Number(rawId)] ??= []).push(...checkedForGroup)
+      for (const key of checkedForGroup) {
+        const display = snapshot.linesByGroup?.[nk]?.find((l) => l.key === key)?.display
+        const entry = clearedEntryForCheckedLine(nk, { key, display }, ownByGroup?.[nk], ctx)
+        if (entry) pushEntry(variantId, entry)
+      }
       // The whole-ingredient ledger only ever takes FULLY checked
       // ingredients — the guard that keeps unchecked siblings visible.
       const fullyChecked = groupLines.every((line) => checkedForGroup.includes(line))
       if (fullyChecked) {
-        const list = mergedNameKeys[Number(rawId)] ?? (mergedNameKeys[Number(rawId)] = [])
-        if (!list.includes(nk)) list.push(nk)
+        pushEntry(variantId, {
+          keyName: nk,
+          unit: { kind: 'row' },
+          factor: ctx.factor,
+          servingsAtClear: ctx.servings,
+          scope: 'ingredient',
+        })
       }
     }
-  }
-  // Both ledgers land in the SAME per-variant cleared set: bare nameKeys
-  // (whole-ingredient, the Clear-list grammar) and full line keys
-  // (`nameKey||basis`, line-granular). `aggregateGroceries` reads one
-  // `cleared` set per meal and skips rows by nameKey while filtering
-  // rendered lines by full key — one persisted, room-synced structure,
-  // no new payload field (a pre-#94 peer's nameKey-only skip rule is
-  // unaffected by entries containing `||`, which never equal a nameKey).
-  const mergedByVariant: Record<number, string[]> = {}
-  for (const rawId of new Set([
-    ...Object.keys(mergedNameKeys),
-    ...Object.keys(mergedLineKeys),
-  ])) {
-    const id = Number(rawId)
-    mergedByVariant[id] = [
-      ...new Set([...(mergedNameKeys[id] ?? []), ...(mergedLineKeys[id] ?? [])]),
-    ]
   }
   plan.mergeIngredientsForCurrentMeals(mergedByVariant)
   removed += checkedLineKeys.length

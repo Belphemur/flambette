@@ -5,6 +5,7 @@ import {
   aggregateRowKeys,
   lineKeyIdentity,
   mealSurvivingLines,
+  type ClearedSnapshotLine,
   type GroceryItemView,
 } from './grocery'
 import { localizeQuantity } from './units'
@@ -78,7 +79,10 @@ export function useGroceryList() {
           doc,
           factor: entryServings(meta.id) / doc.serving_count,
           recipeName: meta.name,
-          cleared: cleared?.length ? new Set(cleared) : undefined,
+          // ADR-0094: the cleared entries ride the input as objects — the
+          // filter re-derives each claim's successor at the current
+          // servings.
+          cleared: cleared?.length ? cleared : undefined,
           displayLines:
             eventsDisplayLines(doc, restrictionPrefs.index.value, restrictionPrefs.activeIds.value) ??
             groceryDisplayLines(doc, restrictionPrefs.index.value,
@@ -224,7 +228,9 @@ export function useGroceryList() {
    */
   registerClearSnapshotProvider(() => {
     const byVariant: Record<number, string[]> = {}
-    for (const { doc, displayLines } of aggregateInputs.value) {
+    const ownLinesByVariant: Record<number, Record<string, ClearedSnapshotLine[]>> = {}
+    const servingsByVariant: Record<number, { servings: number; factor: number }> = {}
+    for (const { doc, displayLines, factor } of aggregateInputs.value) {
       // The snapshot keys are the SAME keys the aggregation groups on —
       // the shared aggregateRowKeys derivation. A substituted-extra row
       // (an overlay line with no base counterpart, e.g. GF rid 1292's
@@ -233,12 +239,46 @@ export function useGroceryList() {
       // the rest of the meal hides.
       const keys = aggregateRowKeys({ doc, displayLines })
       byVariant[doc.id] = keys.filter((key) => key.length > 0)
+      // ADR-0094: the variant's OWN rendered lines per group (its
+      // single-input aggregation) — the own-share source for its line
+      // claims: a merged line's basis spans contributors, and the
+      // successor sum only tracks the render when each claim carries its
+      // own variant's share.
+      const own: Record<string, ClearedSnapshotLine[]> = {}
+      for (const item of aggregateGroceries([
+        { doc, factor, recipeName: '', cleared: undefined, displayLines },
+      ])) {
+        own[item.normalized] = item.lines.map((line) => ({
+          key: line.key,
+          display: line.display,
+        }))
+      }
+      ownLinesByVariant[doc.id] = own
+      const servings = entryServings(doc.id)
+      servingsByVariant[doc.id] = { servings, factor }
+    }
+    // The merged render's lines per group — key plus display (the display
+    // is what classifies a checked line's grammar branch; the key alone
+    // cannot: a raw row whose key source parsed spells a parsed-grammar
+    // key).
+    const linesByGroup: Record<string, ClearedSnapshotLine[]> = {}
+    for (const item of items.value) {
+      linesByGroup[item.normalized] = item.lines.map((line) => ({
+        key: line.key,
+        display: line.display,
+      }))
     }
     const lineKeysByGroup: Record<string, string[]> = {}
-    for (const item of items.value) {
-      lineKeysByGroup[item.normalized] = item.lines.map((line) => line.key)
+    for (const [group, lines] of Object.entries(linesByGroup)) {
+      lineKeysByGroup[group] = lines.map((line) => line.key)
     }
-    return { nameKeysByVariant: byVariant, lineKeysByGroup }
+    return {
+      nameKeysByVariant: byVariant,
+      lineKeysByGroup,
+      linesByGroup,
+      ownLinesByVariant,
+      servingsByVariant,
+    }
   })
 
   /**

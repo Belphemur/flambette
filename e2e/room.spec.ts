@@ -177,13 +177,28 @@ test('room sync: A clears the grocery list and B sees it empty', async ({ browse
   // A clears the list from the Grocery tab…
   await a.goto('/grocery')
   await expect(a.locator('main label').first()).toBeVisible({ timeout: 10_000 })
-  await a.locator('main input[type=checkbox]').first().click()
+  // Locate the FIRST row by its name text, not by re-querying "first
+  // checkbox": with the sink (ADR-0071 delta-1 superseded) a checked row
+  // moves to the end of its category, so a second `first()` click would
+  // land on a DIFFERENT row. The text locator follows the row when it
+  // sinks.
+  const firstRowLabel = a
+    .locator('main label')
+    .filter({ has: a.locator('input[type=checkbox]') })
+    .first()
+  const firstRowName = (await firstRowLabel.textContent())!.trim()
+  const firstRowBox = a
+    .locator('main label')
+    .filter({ hasText: firstRowName })
+    .first()
+    .locator('input[type=checkbox]')
+  await firstRowBox.click()
   // ADR-0092: with a checked item the button reads "Clear checked"; A
   // wants the FULL clear, so A unchecks first — with NOTHING checked the
   // button reads "Clear list" and the confirm-modal clear-everything
   // (forced past the old empty guard) hides every line for the room.
   await expect(a.locator('[data-test=grocery-clear]')).toHaveText(/Clear checked/)
-  await a.locator('main input[type=checkbox]').first().click()
+  await firstRowBox.click()
   await a.locator('[data-test=grocery-clear]').click()
   await a.getByTestId('confirm-action').click()
   await expect(a.getByTestId('cleared-empty')).toBeVisible()

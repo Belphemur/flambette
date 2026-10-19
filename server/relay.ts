@@ -199,7 +199,7 @@ function registryFor(code: string): RoomRegistry {
  * dies with the room, the floor timer outlives it.
  */
 function armRoom(code: string, deadline: number): void {
-  const delay = Math.max(0, deadline - Date.now())
+  const delay = clampTimerDelay(deadline - Date.now())
   const room = rooms.get(code)
   if (room) {
     if (room.timer) clearTimeout(room.timer)
@@ -234,6 +234,20 @@ function armRoom(code: string, deadline: number): void {
       registryFor(code).tick()
     }, delay),
   )
+}
+
+/**
+ * Node/Bun cap `setTimeout` at the 32-bit signed limit (~24.8 days) and
+ * SILENTLY CLAMP anything longer to 1ms — which would turn the room-TTL
+ * wake-up (30 days, `ROOM_TTL_MS`) into a 1ms fire → `tick()` sees an
+ * early wake → re-arm → 1ms fire … a hot loop with a clamp warning per
+ * iteration. Capping the delay here makes the wake-up fire EARLY instead;
+ * the core's early-wake path (`tick` re-arms when `t < deadline`) then
+ * schedules the remaining time through this same clamp, so expiry still
+ * lands on the true deadline after a few legitimate wake-ups.
+ */
+function clampTimerDelay(ms: number): number {
+  return Math.min(Math.max(0, ms), 2_147_483_647)
 }
 
 function roomFor(code: string): Room {
@@ -518,7 +532,7 @@ try {
       setTimeout(() => {
         floorTimers.delete(code)
         registryFor(code).tick()
-      }, Math.max(0, deadline - Date.now())),
+      }, clampTimerDelay(deadline - Date.now())),
     )
   }
 } catch (err) {

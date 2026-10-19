@@ -4,6 +4,45 @@ import { reconcileCheckedExtras, LEGACY_EXTRA_KEY_PREFIX } from '../lib/extraChe
 import { usePlanStore } from './plan'
 
 /**
+ * One cleared-ingredient entry (ADR-0094): the stable, discriminated
+ * identity of a grocery clear. The render's line filter re-derives the
+ * successor claim from the IDENTITY alone — it maps the claim onto the
+ * claiming variant's own CURRENT render of that identity (the shadow
+ * aggregation, ADR-0094 review addendum) — so the stored kind payloads
+ * and the clear-time serving context are informational (they spell what
+ * was cleared and when, and feed the legacy `nameKey||basis` wire
+ * spelling), never matched against.
+ *
+ * `approx` marks a claim whose stored amount carries NO trustworthy
+ * clear-time context — every entry minted from a legacy `nameKey||basis`
+ * string (the string model persisted the MERGED line key with no
+ * per-variant share and no serving context). An approx claim matches by
+ * identity PRESENCE (the rendered line whose unit identity equals the
+ * claim's), which is exactly the pre-ADR-0094 identity semantics made
+ * robust: the identity survives any re-sum, and one identity can match
+ * at most one rendered line per group, so a sibling can never be
+ * swallowed.
+ */
+export interface ClearedIngredient {
+  /** BASE doc nameKey, e.g. `egg`, `soy sauce` (never the rendered `||basis`). */
+  keyName: string
+  /** Grammar class of the cleared line; discriminates the identity bucket. */
+  unit:
+    | { kind: 'byUnit'; unit: string; amount: number } // parsed quantity, e.g. `tbsp`, `ml`
+    | { kind: 'container'; noun: string; annotation: string; count: number } // container phrase, e.g. `pkg`, `small bunch`
+    | { kind: 'raw'; basis: string } // unparseable `raw||` row, e.g. `to taste`; basis verbatim
+    | { kind: 'row' } // whole-ingredient clear (bare nameKey)
+  /** Clear-time plan factor = entryServings / recipe.baseServings. */
+  factor: number
+  /** Serving count the plan held at clear time. */
+  servingsAtClear: number
+  /** `line` = hide one rendered line; `ingredient` = clear the whole ingredient group. */
+  scope: 'line' | 'ingredient'
+  /** Identity-presence claim (legacy string migration): amount advisory, never matched. */
+  approx?: true
+}
+
+/**
  * Grocery checkbox state, keyed by grocery line key. Persisted to localStorage
  * under the `mealime-planner:v1:checked` key by pinia-plugin-persistedstate.
  */

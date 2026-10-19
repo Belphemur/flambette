@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { sinkChecked } from './sink'
+import { extraCheckedKey } from './extraCheckedKeys'
+import { sinkChecked, sinkedExtraRows, sinkedStoreRows } from './sink'
 
 describe('sinkChecked', () => {
   const isHot = (row: { name: string; hot?: boolean }) => !!row.hot
@@ -52,5 +53,27 @@ describe('sinkChecked', () => {
     const before = rows.map((r) => r.name)
     sinkChecked(rows, isHot)
     expect(rows.map((r) => r.name)).toEqual(before)
+  })
+})
+describe('sinkedStoreRows / sinkedExtraRows — the shared row projections', () => {
+  const section = {
+    items: [
+      { name: 'Carrots', normalized: 'carrot', recipes: ['A'], lines: [{ key: 'carrot||2' }, { key: 'carrot||3' }] },
+      { name: 'Kale', normalized: 'kale', recipes: ['B'], lines: [{ key: 'kale||1 bunch' }] },
+    ],
+  }
+
+  test('store rows flatten item+line pairs and sink checked lines last, stable', () => {
+    const rows = sinkedStoreRows(section, { 'carrot||3': true })
+    expect(rows.map((r) => r.line.key)).toEqual(['carrot||2', 'kale||1 bunch', 'carrot||3'])
+    // The item rides beside its line (the row's name/provenance source).
+    expect(rows[2].item.name).toBe('Carrots')
+    expect(rows[2].item.recipes).toEqual(['A'])
+  })
+
+  test('extra rows sink by their derived name key', () => {
+    const group = { name: 'Produce', items: [{ name: 'Basil' }, { name: 'Lime' }] }
+    const rows = sinkedExtraRows(group, { [extraCheckedKey('Lime')]: true })
+    expect(rows.map((r) => r.name)).toEqual(['Basil', 'Lime'])
   })
 })

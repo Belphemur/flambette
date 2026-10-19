@@ -23,6 +23,7 @@ export const SHARED_STATE_KEYS = [
   'customItems',
   'checked',
   'cleared',
+  'clearedV2',
   'customs',
   'pantry',
   'cookedHistory',
