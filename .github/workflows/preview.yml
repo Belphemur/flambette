@@ -44,7 +44,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4.151.2"
+          wranglerVersion: "4.151.3"
           # NO `gitHubToken` on purpose (ADR-0091): the relay preview must NOT
           # create a GitHub deployment — that right belongs to the web job
           # alone, so each PR owns ONE environment (`pr-<N>`) with ONE
@@ -105,7 +105,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4.151.2"
+          wranglerVersion: "4.151.3"
           # The ONLY step that creates the PR's GitHub deployment (ADR-0091):
           # the relay job passes no gitHubToken. The action uses the wrangler
           # preview name (`pr-<N>`) verbatim as the GitHub environment.
