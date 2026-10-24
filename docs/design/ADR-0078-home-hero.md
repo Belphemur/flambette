@@ -1,6 +1,8 @@
 # ADR-0078: The home page is a hero page
 
-Status: accepted (2026-10-10)
+Status: accepted (superseded in part by ADR-0096) (2026-10-10) — the hero's
+exclusivity of `/` moved: ADR-0096 routes returning users from `/` to
+`/recipes` and gives the hero the always-accessible `/welcome`
 
 ## Context
 
