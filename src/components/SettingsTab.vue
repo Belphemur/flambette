@@ -5,12 +5,14 @@ import {
   CircleDot,
   ClipboardPaste,
   CheckCircle2,
+  Check,
   Database,
   Download,
   Dices,
   Egg,
   ExternalLink,
   Fish,
+  Flame,
   FlaskConical,
   Info,
   Link,
@@ -61,6 +63,7 @@ import { useFavouritesStore } from '../stores/favourites'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 import { useIdentityStore } from '../stores/identity'
+import { useOnboardingStore, ONBOARDING_STEPS, STAMP_LABELS } from '../stores/onboarding'
 import PersonAvatar from './PersonAvatar.vue'
 import MealimeImportModal from './MealimeImportModal.vue'
 
@@ -79,6 +82,8 @@ const room = useRoomStore()
 // ADR-0063: this device's room identity — the Settings card's name field
 // and avatar preview, and the rename push while connected.
 const identity = useIdentityStore()
+// ADR-0097: onboarding tour — restart + stamp state from Settings.
+const onboarding = useOnboardingStore()
 const { shareRoomLink, shareableCode } = useShareRoomLink()
 
 /* ---------- Timer alerts (ADR-0081 amendment, ADR-0093) ----------
@@ -623,6 +628,14 @@ async function importMealimeFavourites(): Promise<void> {
     mealimeReport.value = { ...result, added: 0, removed: 0 }
   }
 }
+
+/* ---------- Onboarding tour (ADR-0097) ---------- */
+
+/** Restart the tour: clears stamps + rewinds to welcome. */
+function restartOnboarding(): void {
+  onboarding.restart()
+  ui.showToast('Onboarding tour restarted — welcome back!')
+}
 </script>
 
 <template>
@@ -1010,6 +1023,70 @@ async function importMealimeFavourites(): Promise<void> {
   @click="confirmLeaveHousehold()"
   >
   Leave
+  </button>
+  </div>
+  </div>
+
+  <!-- Getting started (ADR-0097): the onboarding tour. Device-local — the
+  tour is personal state (stamps, dismissal), never household-synced. Shows the
+  current stamp state and a restart affordance; dismissal is permanent until
+  restarted. Placed full-width so the passport strip has room. -->
+  <div :class="CARD" class="space-y-2.5 lg:col-span-12" data-test="onboarding-card">
+  <div class="flex items-start justify-between gap-3">
+  <div class="min-w-0">
+  <h2 class="text-headline-sm">Getting started</h2>
+  <p class="mt-0.5 text-body-sm text-text-muted">
+    The guided tour of search, planning, and groceries. It's dismissible and
+    restartable — your stamps are saved.
+  </p>
+  </div>
+  <span :class="TILE"><Flame :size="16" aria-hidden="true" /></span>
+  </div>
+
+  <!-- Stamp passport strip -->
+  <div class="flex items-center justify-start gap-2 pt-1">
+  <div
+  v-for="(_, i) in ONBOARDING_STEPS"
+  :key="i"
+  class="flex flex-col items-center gap-0.5"
+  >
+  <span
+  class="flex size-8 items-center justify-center rounded-full border text-[10px] font-mono font-bold"
+  :class="
+  onboarding.completedSteps.includes(i)
+    ? 'border-saffron bg-brand text-on-brand'
+    : 'border-border bg-surface text-text-muted'
+  "
+  :aria-label="onboarding.completedSteps.includes(i) ? `${onboarding.currentStep >= 0 ? '' : ''}Step ${i + 1} complete` : `Step ${i + 1} not started`"
+  >
+  <Check v-if="onboarding.completedSteps.includes(i)" :size="12" aria-hidden="true" />
+  <span v-else>{{ i + 1 }}</span>
+  </span>
+  <span class="text-[10px] font-mono text-text-muted">
+  {{ STAMP_LABELS[ONBOARDING_STEPS[i].stamp!] }}
+  </span>
+  </div>
+  </div>
+
+  <!-- Status + action -->
+  <div class="flex items-center justify-between pt-2">
+  <p class="text-body-sm" :class="onboarding.dismissedForever ? 'text-danger' : 'text-success'">
+  <template v-if="onboarding.dismissedForever">
+  Tour dismissed — stamps are kept, restart to resume.
+  </template>
+  <template v-else-if="onboarding.isComplete">
+  All stamps earned!
+  </template>
+  <template v-else>
+  {{ 5 - onboarding.rewards.length }} stamp{{ onboarding.rewards.length === 4 ? 's' : '' }} left to earn.
+  </template>
+  </p>
+  <button
+  class="h-9 rounded-lg border border-border-strong bg-surface-raised px-3 text-xs font-semibold text-text active:bg-surface-sunken"
+  data-test="onboarding-restart"
+  @click="restartOnboarding"
+  >
+  {{ onboarding.dismissedForever ? 'Restart tour' : onboarding.isComplete ? 'Replay tour' : 'Restart tour' }}
   </button>
   </div>
   </div>

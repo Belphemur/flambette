@@ -25,6 +25,8 @@ import RosterSheet from './components/RosterSheet.vue'
 import TooltipBubble from './components/TooltipBubble.vue'
 import { useIdentityStore } from './stores/identity'
 import RecipeSearchField from './components/RecipeSearchField.vue'
+import OnboardingOverlay from './components/OnboardingOverlay.vue'
+import { useOnboardingStore } from './stores/onboarding'
 
 /**
  * The app-level head (ADR-0048), ONE owner for the two indexable
@@ -53,6 +55,8 @@ const room = useRoomStore()
 // ADR-0063: instantiating here runs the identity store's hydration-time
 // migration (generate when absent while a household room is saved).
 const identity = useIdentityStore()
+// ADR-0097: onboarding tour store — session-scoped overlay, device-local stamps.
+const onboarding = useOnboardingStore()
 
 /** The app-level head (ADR-0048): see the block comment above — ONE
  *  owner, the hero and the recipes list, homepage head everywhere else. */
@@ -166,6 +170,11 @@ const roomChip = computed(() => {
     code,
   }
 })
+
+/** ADR-0097: the onboarding overlay shows only on non-fullscreen surfaces
+ * (cooking/shopping own the entire viewport) and only once the catalog
+ * has loaded so the search field target is real. */
+const showOnboarding = computed(() => onboarding.active && !isFullscreenMode && !loading)
 
 /** The recipe detail view is full-bleed (edge-to-edge hero image). */
 const isRecipe = computed(() => route.name === 'recipe')
@@ -466,6 +475,10 @@ onMounted(async () => {
   // Config is loaded: re-join the household room unless this launch is
   // already in one (session resume / ?room= link).
   autoJoinHousehold()
+  // ADR-0097: begin the onboarding tour once the catalog is available — the
+  // search step spotlights the recipe search field, which needs the catalog
+  // to be populated. start() is a no-op when dismissed or already complete.
+  onboarding.start()
   // Stale-version banner: one check after mount, then on a schedule.
   startBannerChecks()
   void checkBannerVersion()
@@ -771,4 +784,7 @@ onBeforeUnmount(() => {
        slot in the ui store keeps one-mount == one-open (AppModal's
        assumption); every end path funnels back into settleConfirm. -->
   <ConfirmModal v-if="ui.confirm" :prompt="ui.confirm" @close="ui.settleConfirm" />
+  <!-- ADR-0097: the getting-started tour — v-if-gated on active state +
+       non-fullscreen surfaces so it never covers cooking/shopping. -->
+  <OnboardingOverlay v-if="showOnboarding" />
 </template>

@@ -264,6 +264,7 @@ onUnmounted(() => {
   enterkeyhint="search"
   placeholder="Search recipes or ingredients…"
   class="field field-search w-full pr-20"
+  data-test="recipe-search-field"
   aria-label="Search recipes or ingredients"
   :aria-expanded="suggestions.length > 0"
   :aria-controls="'search-suggest'"

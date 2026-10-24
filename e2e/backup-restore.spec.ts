@@ -160,6 +160,7 @@ test('full round-trip: seed, export, fresh context, import — everything is res
     'favourites.json',
     'identity.json',
     'meta.json',
+    'onboarding.json',
     'pantry.json',
     'plan.json',
     'rating_tombstones.json',
@@ -183,6 +184,12 @@ test('full round-trip: seed, export, fresh context, import — everything is res
   expect(json('rating_tombstones.json')).toEqual({})
   // ADR-0087: the pantry rides along, empty for the seed (device-local).
   expect(json('pantry.json')).toEqual([])
+  // ADR-0097: onboarding stamps ride along, empty for the seed (device-local).
+  expect(json('onboarding.json')).toEqual({
+    completedSteps: [],
+    dismissedForever: false,
+    rewards: [],
+  })
   // ADR-0063: the identity travels too — the seed joined a household, so
   // this device HAS one (a UUID-shaped id + its safe-word name).
   const identity = json('identity.json')

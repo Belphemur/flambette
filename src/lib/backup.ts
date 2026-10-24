@@ -49,6 +49,7 @@ export interface BackupCounts {
   favourites: number
   ratings: number
   pantry: number
+  onboarding: number
 }
 
 export interface ApplyResult {
@@ -652,6 +653,61 @@ export const STORE_SLICES: SliceDef<any>[] = [
       useRoomStore().announceProfile()
     },
   },
+  /* ADR-0097 — onboarding tour state (onboarding store). Device-local
+     stamps + dismissal state. Persisted like every other device-local
+     preference so a backup/restore cycle preserves the user's progress
+     and dismissal choice. */
+  {
+    file: 'onboarding.json',
+    label: 'onboarding tour progress and stamps',
+    persistKeys: ['mealime-planner:v1:onboarding'],
+    read: () => {
+      const onboarding = useOnboardingStore()
+      return {
+        completedSteps: [...onboarding.completedSteps],
+        dismissedForever: onboarding.dismissedForever,
+        rewards: [...onboarding.rewards],
+      }
+    },
+    validate(value) {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return 'onboarding.json must be an object'
+      }
+      const v = value as Record<string, unknown>
+      if (v.completedSteps !== undefined) {
+        if (!Array.isArray(v.completedSteps) || v.completedSteps.some((x) => typeof x !== 'number' || !Number.isInteger(x))) {
+          return 'onboarding.json completedSteps must be an array of integers'
+        }
+      }
+      if (v.dismissedForever !== undefined && typeof v.dismissedForever !== 'boolean') {
+        return 'onboarding.json dismissedForever must be a boolean'
+      }
+      if (v.rewards !== undefined) {
+        if (!Array.isArray(v.rewards) || v.rewards.some((x) => typeof x !== 'string')) {
+          return 'onboarding.json rewards must be an array of strings'
+        }
+      }
+      return null
+    },
+    write(value) {
+      const onboarding = useOnboardingStore()
+      const v = value as {
+        completedSteps?: number[]
+        dismissedForever?: boolean
+        rewards?: string[]
+      }
+      // Replace-on-apply (ADR-0013) — a backup's onboarding state overwrites
+      // the live store. Only the persisted fields are restored; active and
+      // currentStep stay session-scoped (the overlay mounts fresh).
+      if (v.dismissedForever !== undefined) onboarding.dismissedForever = v.dismissedForever
+      if (v.completedSteps !== undefined) onboarding.completedSteps = [...v.completedSteps]
+      if (v.rewards !== undefined) onboarding.rewards = [...(v.rewards as StampName[])]
+      // active/currentStep are NOT restored — a fresh mount calls start()
+      // which rewinds to the first incomplete step from the restored stamps.
+      onboarding.active = false
+      onboarding.currentStep = -1
+    },
+  },
 ]
 
 function isStepTimersMap(value: unknown): boolean {  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
@@ -840,6 +896,7 @@ export function applyBackup(zipBytes: Uint8Array): ApplyResult {
     favourites: (byFile.get('favourites.json') as number[] | undefined)?.length ?? 0,
     ratings: ((byFile.get('ratings.json') as unknown[]) ?? []).length,
     pantry: (byFile.get('pantry.json') as PantryIngredient[] | undefined)?.length ?? 0,
+    onboarding: (byFile.get('onboarding.json') as { completedSteps?: number[] } | undefined)?.completedSteps?.length ?? 0,
   }
   return { ok: true, counts }
 }
@@ -856,3 +913,5 @@ import { useIdentityStore } from '../stores/identity'
 import { useRoomStore } from '../stores/room'
 import { MAX_NAME_CHARS, isUuidShape, sanitizeDisplayName } from './profileName'
 import { usePantryStore } from '../stores/pantry'
+import { useOnboardingStore } from '../stores/onboarding'
+import type { StampName } from '../stores/onboarding'
