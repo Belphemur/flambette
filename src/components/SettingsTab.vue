@@ -9,6 +9,7 @@ import {
   Download,
   Dices,
   Egg,
+  ExternalLink,
   Fish,
   FlaskConical,
   Info,
@@ -1154,12 +1155,12 @@ async function importMealimeFavourites(): Promise<void> {
   only way to move it.
   </p>
 
-  <!-- About (the render's closing section, reconciled to the REPO's
-       real data): the build's version (ADR-0039), the offline-first
-       guarantee and the catalog's real size. The version chip is a
-       LABEL, not a control — the changelog lives on the header's
-       version button (ADR-0060), which this card points to in words
-       rather than faking a second trigger. -->
+  <!-- About (ADR-0078 + ADR-0096): the build's version (ADR-0039), the
+       offline-first guarantee, the changelog trigger and the repo link.
+       The version chip is a LABEL; the changelog is opened from the
+       header's version button AND this card's info tile (both set the
+       same ui-store slot), and the hero is always reachable from here via
+       the quiet "What is Flambette?" link. -->
   <div :class="CARD" class="space-y-2.5 lg:col-span-12" data-test="about-card">
   <div class="flex items-start justify-between gap-3">
   <div class="flex flex-wrap items-center gap-2">
@@ -1169,14 +1170,42 @@ async function importMealimeFavourites(): Promise<void> {
   data-test="about-version"
   >{{ appVersion }}</span>
   </div>
-  <span :class="TILE"><Info :size="16" aria-hidden="true" /></span>
+  <!-- The info tile and the GitHub tile keep the card's quiet outlined
+       styling (DESIGN.md): no filled button here, the welcome link below
+       is the only brand-filled affordance in this card. -->
+  <div class="flex items-center gap-1.5">
+  <button
+  type="button"
+  data-test="about-changelog"
+  :class="TILE"
+  aria-label="Open the changelog"
+  @click="ui.changelogOpen = true"
+  ><Info :size="16" aria-hidden="true" /></button>
+  <a
+  href="https://github.com/Belphemur/flambette"
+  target="_blank"
+  rel="noreferrer"
+  data-test="about-github"
+  :class="TILE"
+  aria-label="Flambette on GitHub"
+  ><ExternalLink :size="16" aria-hidden="true" /></a>
+  </div>
   </div>
   <p class="text-body-sm text-text-muted">
   100% offline-first — the whole catalog, its photos and this device's settings stay on this
   device and never reach a server. Household sync is the one exception you choose: joining a room
   shares your plan, grocery list and preferences through the room relay so the other devices see
-  them. The header's version tells you what is running; tapping it opens the changelog.
+  them. Tap the version above or the info tile here to open the changelog; the repo link opens
+  the project on GitHub in a new tab.
   </p>
+  <!-- ADR-0096: the hero has an always-accessible URL (`/welcome`) even
+       though it is retired from `/`; this quiet brand link is the one
+       brand-filled affordance in the card (ADR-0072 one-filled-intent). -->
+  <RouterLink
+  to="/welcome"
+  data-test="about-welcome"
+  class="inline-flex self-start text-sm font-medium text-brand hover:text-brand-strong"
+  >What is Flambette?</RouterLink>
   </div>
   </div>
 
