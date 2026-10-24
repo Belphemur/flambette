@@ -137,9 +137,11 @@ export const useOnboardingStore = defineStore('onboarding', {
       if (state.currentStep < 0 || state.currentStep >= ONBOARDING_STEPS.length) return null
       return ONBOARDING_STEPS[state.currentStep].stamp
     },
-    /** True when every step has been completed via real interaction. */
+    /** True when every TOUR step (0–4) has been completed via real interaction.
+     * The completion step (5) is never in completedSteps — it's reached
+     * by completing step 4, not by a step-5 interaction. */
     isComplete: (state): boolean => {
-      return ONBOARDING_STEPS.every((_, i) => state.completedSteps.includes(i))
+      return ONBOARDING_STEPS.slice(0, COMPLETION_STEP).every((_, i) => state.completedSteps.includes(i))
     },
     /** Human-readable "Step N of 5" for the card footer. */
     stepNumber: (state): number => {

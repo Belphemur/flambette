@@ -274,19 +274,24 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body">
-    <!-- ===== Spotlight scrim: dim frame with a hole at the target ===== -->
-    <div v-if="targetRect" :style="dimFrameStyle" />
-
-    <!-- ===== Target highlight ring (halo pulse, suppressed for reduced motion) ===== -->
     <div
-      v-if="targetRect"
-      class="pointer-events-none fixed z-41 rounded-xl"
-      :class="prefersReducedMotion ? '' : 'animate-pulse'"
-      :style="ringStyle"
-    />
+      data-test="onboarding-overlay"
+      :data-test-step="isCompletion ? 'completion' : (stepData?.key ?? 'welcome')"
+    >
+      <!-- ===== Spotlight scrim: dim frame with a hole at the target ===== -->
+      <div v-if="targetRect" :style="dimFrameStyle" />
 
-    <!-- ===== Full-screen scrim for non-spotlight steps ===== -->
-    <div
+      <!-- ===== Target highlight ring (halo pulse, suppressed for reduced motion) ===== -->
+      <div
+        v-if="targetRect"
+        data-test="spotlight-ring"
+        class="pointer-events-none fixed z-41 rounded-xl"
+        :class="prefersReducedMotion ? '' : 'animate-pulse'"
+        :style="ringStyle"
+      />
+
+      <!-- ===== Full-screen scrim for non-spotlight steps ===== -->
+      <div
       v-if="currentStepIdx >= 0 && !targetRect"
       class="fixed inset-0 z-40 bg-espresso/75"
     />
@@ -320,10 +325,12 @@ onBeforeUnmount(() => {
           </p>
 
           <!-- Journey passport stamp strip -->
-          <div class="my-8 flex items-center justify-center gap-3">
+          <div data-test="passport" class="my-8 flex items-center justify-center gap-3">
             <div
-              v-for="(step, i) in ONBOARDING_STEPS"
+              v-for="(step, i) in ONBOARDING_STEPS.slice(0, COMPLETION_STEP)"
               :key="step.stamp || step.key"
+              :data-test="`onboarding-stamp`"
+              :data-stamp="step.stamp"
               class="flex flex-col items-center gap-1"
             >
               <span
@@ -380,7 +387,7 @@ onBeforeUnmount(() => {
             <button
               class="h-12 w-full rounded-xl bg-brand px-4 text-base font-semibold text-on-brand transition-colors hover:bg-brand-strong active:scale-[0.98]"
               data-test="onboarding-start-tour"
-              @click="onboarding.next"
+              @click="onboarding.next()"
             >
               Start tour
             </button>
@@ -492,6 +499,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
+    </div>
     </div>
   </Teleport>
 </template>
