@@ -43,4 +43,16 @@ describe('hasUsedApp', () => {
     // must NOT count as use. Only a populated plan crosses the threshold.
     expect(hasUsedApp(0, false, '')).toBe(false)
   })
+
+  test('a resumable session-only room code is returning', () => {
+    // ADR-0096: the root guard reads a room code saved to session storage
+    // by a previous page load BEFORE resume() runs, so a device that
+    // holds only a session-only room (no plan, no persisted household
+    // room, not yet live) lands on /recipes, not the hero.
+    expect(hasUsedApp(0, false, '', 'quartz-lantern-otter')).toBe(true)
+  })
+
+  test('an absent resumable code is not by itself a returning signal', () => {
+    expect(hasUsedApp(0, false, '', '')).toBe(false)
+  })
 })

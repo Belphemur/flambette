@@ -57,7 +57,7 @@ export const router = createRouter({
         const ui = useUiStore()
         const plan = usePlanStore()
         const room = useRoomStore()
-        if (hasUsedApp(plan.plan.length, room.inRoom, ui.householdRoom)) {
+        if (hasUsedApp(plan.plan.length, room.inRoom, ui.householdRoom, room.resumableRoomCode)) {
           return { name: 'recipes', query: to.query, replace: true }
         }
       },

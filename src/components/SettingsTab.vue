@@ -1195,7 +1195,7 @@ async function importMealimeFavourites(): Promise<void> {
   100% offline-first — the whole catalog, its photos and this device's settings stay on this
   device and never reach a server. Household sync is the one exception you choose: joining a room
   shares your plan, grocery list and preferences through the room relay so the other devices see
-  them. Tap the version above or the info tile here to open the changelog; the repo link opens
+  them. Tap the version button in the header or the info tile here to open the changelog; the repo link opens
   the project on GitHub in a new tab.
   </p>
   <!-- ADR-0096: the hero has an always-accessible URL (`/welcome`) even

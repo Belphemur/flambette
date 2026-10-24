@@ -314,4 +314,24 @@ test.describe('redirect: a returning device lands on /recipes (ADR-0096)', () =>
     await waitForCatalog(page)
     await expect(page.getByTestId('home-hero')).toHaveCount(0)
   })
+
+  test('a session-only room code (no plan, no household setting) redirects away from the hero', async ({
+    page,
+  }) => {
+    // ADR-0096 regression: a device whose ONLY signal of use is a room code
+    // saved to session storage by a previous page load. The root guard must
+    // read that session code BEFORE resume() runs in App.vue's onMounted
+    // (which is what actually opens the relay socket) — otherwise the
+    // guard treats the device as brand-new and leaves it on the hero, where
+    // the later resume never re-runs the guard. No plan, no persisted
+    // household room here — the session code is the sole signal.
+    await page.addInitScript(
+      ([key, value]) => sessionStorage.setItem(key!, value!),
+      ['mealime-planner:v1:room-code', 'quartz-lantern-otter'] as const,
+    )
+    await page.goto('/')
+    // Replace-redirect: the / entry is consumed, the honest surface wins.
+    await expect(page).toHaveURL(/\/recipes$/)
+    await expect(page.getByTestId('home-hero')).toHaveCount(0)
+  })
 })
