@@ -267,6 +267,16 @@ export const useUiStore = defineStore(
     let confirmOnDismiss: (() => void) | undefined
 
     /**
+     * The changelog modal (ADR-0060/0096): opened from the header's
+     * version button and the Settings About card's info tile. A NON-
+     * persisted transient slot — exactly like `toast` and `confirm` — so
+     * the header and Settings share ONE modal through ONE slot, with no
+     * STORE_SLICES entry and no persisted slice (a closed modal never
+     * survives a reload). Deliberately NOT in the persist `pick` list.
+     */
+    const changelogOpen = ref(false)
+
+    /**
      * Open the ONE confirm modal. A SECOND call while a question is up is
      * a REPLACEMENT (same as a toast): the previous prompt ends through
      * its own settle path (its onDismiss fires) before the new question
@@ -796,6 +806,7 @@ export const useUiStore = defineStore(
       stepTimers,
       toast,
       confirm,
+      changelogOpen,
       showConfirm,
       settleConfirm,
       autoPlanRuleset,

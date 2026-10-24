@@ -360,6 +360,17 @@ export const useRoomStore = defineStore('room', () => {
 
   const inRoom = computed(() => code.value !== null)
 
+  /**
+   * A room code saved to session storage by a previous page load, available
+   * WITHOUT resuming (which opens the relay socket). The root guard
+   * (router.ts) reads this so a direct visit to `/` while a session-only
+   * room code exists is still treated as a returning device, even though
+   * `resume()` -- which dials the relay -- has not run yet (it fires in
+   * App.vue's onMounted, after route resolution, never a duplicate
+   * connection). ADR-0096.
+   */
+  const resumableRoomCode = computed<string>(() => sessionStorage.getItem(ROOM_CODE_KEY) ?? '')
+
   /** Live room link for this client's room (null when not in a room). */
   function roomLink(): string | null {
     return code.value ? roomLinkFor(code.value) : null
@@ -1194,6 +1205,7 @@ export const useRoomStore = defineStore('room', () => {
     freshJoin,
     // computed
     inRoom,
+    resumableRoomCode,
     // actions
     roomLink,
     roomLinkFor,
