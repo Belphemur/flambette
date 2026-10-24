@@ -170,10 +170,12 @@ const roomChip = computed(() => {
 /** The recipe detail view is full-bleed (edge-to-edge hero image). */
 const isRecipe = computed(() => route.name === 'recipe')
 
-/** ADR-0078: `/` is the home hero — the bottom nav is hidden there (the
- *  header STAYS per Q2) and the hero owns its own padding, like the
- *  fullscreen modes do. */
-const isHome = computed(() => route.name === 'home')
+/** ADR-0078 + ADR-0096: the hero lives at `/` (home) for new visitors and at
+ *  `/welcome` (welcome) for always-accessible reach — both hide the bottom
+ *  nav (the header STAYS per Q2) and the hero owns its own padding, like
+ *  the fullscreen modes do. A returning device is replace-redirected to
+ *  `/recipes` by the router guard, so it never renders either hero route. */
+const isHome = computed(() => route.name === 'home' || route.name === 'welcome')
 
 /** ADR-0070 (Addendum 2): the search well is PERSISTENT — it renders in
  *  the header band on EVERY tab at lg+, not only on Recipes. The media
@@ -190,13 +192,19 @@ const showHeaderSearch = computed(() => isDesktop.value && !isFullscreenMode.val
  */
 const rosterOpen = ref(false)
 
-/** Clicking the header logo goes home (ADR-0078 Q3): on `/recipes` it
- *  keeps the scroll-to-top behaviour (the list is the destination from
- *  the hero already — a no-op push would discard the reader's scroll);
- *  the hero IS the destination everywhere else. From a tab it navigates
- *  to `/`; from `/` itself it scrolls to top. */
+/**
+ * Clicking the header logo goes home (ADR-0078 Q3 + ADR-0096): on the
+ * recipes list or either hero route a no-op push would discard the
+ * reader's scroll, so scroll to top instead; `welcome` joins that
+ * same-page branch (the logo from the always-accessible hero is a
+ * scroll-to-top). From any other tab the push goes to `home` — and the
+ * router guard decides the destination: `/recipes` for a returning device
+ * (their home IS the recipes list) and the hero for a new one; the
+ * `?room=` query is not forwarded from a logo press (it is handled by
+ * `joinRoomFromLink` on whatever route the device lands on).
+ */
 function goHome() {
-  if (route.name === 'recipes' || route.name === 'home') {
+  if (route.name === 'recipes' || route.name === 'home' || route.name === 'welcome') {
     // Same page: scroll to top instead of a no-op navigation.
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
   } else {
@@ -320,10 +328,10 @@ watch(
     if (plan.plan.length > 0) return
     if (isFullscreenMode.value) return
     if (route.name === 'recipes' || route.name === 'settings') return
-    // ADR-0078 Decision 7: a create or join made FROM the hero must not
-    // navigate away while the household modal is open — the modal IS the
-    // confirmation surface.
-    if (route.name === 'home') return
+    // ADR-0096 Decision 5: a create or join made FROM either hero route
+    // must not navigate away while the household modal is open — the modal
+    // IS the confirmation surface.
+    if (route.name === 'home' || route.name === 'welcome') return
     void router.push({ name: 'recipes' })
   },
 )
@@ -373,14 +381,13 @@ watch(
 )
 
 /**
- * The changelog modal (ADR-0060): opened from the header version button.
- * State lives here, NOT in a store — it's a transient UI surface, not
- * household data (no STORE_SLICES entry, no persisted slice).
+ * The changelog modal (ADR-0060/0096): opened from the header's version
+ * button and the Settings About card's info tile. Its open state lives in
+ * the ui store as a NON-persisted transient slot (like `toast`/`confirm`)
+ * — Settings and the header now share ONE modal through ONE slot, with no
+ * STORE_SLICES entry and no persisted slice (a closed modal never survives
+ * a reload).
  */
-const changelogOpen = ref(false)
-function openChangelog() {
-  changelogOpen.value = true
-}
 
 /**
  * Stale-version banner (ADR-0061): shown when a newer bundle is deployed.
@@ -534,7 +541,7 @@ onBeforeUnmount(() => {
   data-test="app-version"
   class="group relative max-w-28 min-w-0"
   :aria-label="`What's new in version ${appVersion}`"
-  @click="openChangelog()"
+  @click="ui.changelogOpen = true"
   ><span class="block truncate text-xs text-text-muted">{{ appVersion }}</span>
   <!-- ADR-0055: the OS `title` becomes the one bubble; a span is not
   focusable, so this reveals on hover only — the parity native `title`
@@ -747,7 +754,7 @@ onBeforeUnmount(() => {
   :peers="congratsPeers"
   @dismiss="congratsCode = null"
   />
-  <ChangelogModal v-if="changelogOpen" @close="changelogOpen = false" />
+  <ChangelogModal v-if="ui.changelogOpen" @close="ui.changelogOpen = false" />
   <!-- ADR-0063: tap the chip, meet the room. `count` is the relay's live
        headcount (the badge's number); `members` is the PEOPLE list (null
        = an old relay has not told us — degrade to the plain count, never
