@@ -7,7 +7,7 @@ import { waitForCatalog, gotoTab } from './helpers'
 
 test.describe('Onboarding tour (ADR-0097)', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/recipes')
     await page.evaluate(() => localStorage.removeItem('mealime-planner:v1:onboarding'))
     await page.reload()
     await waitForCatalog(page)
