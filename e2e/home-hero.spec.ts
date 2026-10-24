@@ -149,8 +149,11 @@ test('the create button re-joins a SAVED household instead of rolling a new code
   // Back on the hero: the button now READS "Join your household" — the
   // label and the press share ONE source of truth — and the press
   // reconnects: the code in the modal is the SAVED one, byte for byte,
-  // not a fresh roll.
-  await page.goto('/')
+  // not a fresh roll. Under ADR-0096 this saved-household device is a
+  // returning user, so it is re-pinned to the always-accessible /welcome
+  // (the redirect that would otherwise retire the hero from / stays out of
+  // this seeded-state assertion).
+  await page.goto('/welcome')
   await expect(page.getByTestId('hero-create-household')).toHaveAccessibleName(
     'Join your household',
   )
@@ -173,7 +176,9 @@ test('a device LIVE in a room reopens THAT room — never a re-roll', async ({ p
     ([key, value]) => sessionStorage.setItem(key!, value!),
     ['mealime-planner:v1:room-code', code] as const,
   )
-  await page.goto('/')
+  // This device seeded a live room, so under ADR-0096 it is a returning
+  // user — re-pinned to the always-accessible /welcome hero.
+  await page.goto('/welcome')
 
   // LIVE in the room (the chip's aria-label names it, ADR-0049), and the
   // saved household setting is still empty.
@@ -273,5 +278,40 @@ test.describe('mobile hero (Stitch "Home Page Hero (Mobile)")', () => {
     // fake-live badge).
     await expect(card).not.toContainText(/\blive\b/i)
     await expect(card).toContainText('Your household')
+  })
+})
+
+test.describe('redirect: a returning device lands on /recipes (ADR-0096)', () => {
+  // ADR-0096: a device with any signal of use — a plan, a saved household
+  // room — is replace-redirected from `/` onto `/recipes`. The `/` entry
+  // is consumed by the `replace`, so Back never bounces off the redirect.
+  // Seeds land in the pinia-plugin-persistedstate key straight from
+  // addInitScript (before the page loads), so the router guard sees the
+  // hydrated stores at first navigation.
+
+  test('a seeded plan redirects away from the hero', async ({ page }) => {
+    await page.addInitScript(
+      ([key, value]) => localStorage.setItem(key!, value!),
+      ['mealime-planner:v1:plan', JSON.stringify({ plan: [{ variantId: 10, servings: 6 }] })] as const,
+    )
+    await page.goto('/')
+    // The replace consumes the / entry; the URL reads the honest surface.
+    await expect(page).toHaveURL(/\/recipes$/)
+    await waitForCatalog(page)
+    // The hero must not have rendered.
+    await expect(page.getByTestId('home-hero')).toHaveCount(0)
+  })
+
+  test('a saved household room redirects away from the hero', async ({ page }) => {
+    // The household setting is the persistent signal that covers a room
+    // whose session has not resumed at first-navigation time.
+    await page.addInitScript(
+      ([key, value]) => localStorage.setItem(key!, value!),
+      ['mealime-planner:v1:ui', JSON.stringify({ householdRoom: 'quartz-lantern-otter' })] as const,
+    )
+    await page.goto('/')
+    await expect(page).toHaveURL(/\/recipes$/)
+    await waitForCatalog(page)
+    await expect(page.getByTestId('home-hero')).toHaveCount(0)
   })
 })
