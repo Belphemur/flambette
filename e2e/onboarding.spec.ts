@@ -124,11 +124,12 @@ test.describe('Onboarding tour (ADR-0097)', () => {
     // Earn a stamp first.
     await page.getByTestId('onboarding-start-tour').click()
     await page.getByTestId('recipe-search-field').focus()
-    // Restart from Settings.
+    // Mid-tour navigation leaves the tour's surface → the tour ends
+    // (stamps kept), which is what frees the nav bar to reach Settings.
     await gotoTab(page, 'Settings')
     await page.getByTestId('onboarding-restart').click()
-    // Back on Recipes — welcome card appears.
-    await gotoTab(page, 'Recipes')
+    // Restart lands the tour on its home surface with a fresh welcome card.
+    await expect(page).toHaveURL(/\/recipes$/)
     await expect(page.getByTestId('onboarding-overlay')).toHaveAttribute('data-test-step', 'welcome')
     // Stamps are cleared in localStorage.
     const ls = await page.evaluate(() => localStorage.getItem('mealime-planner:v1:onboarding'))

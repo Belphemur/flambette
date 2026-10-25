@@ -26,6 +26,7 @@ import TooltipBubble from './components/TooltipBubble.vue'
 import { useIdentityStore } from './stores/identity'
 import RecipeSearchField from './components/RecipeSearchField.vue'
 import OnboardingOverlay from './components/OnboardingOverlay.vue'
+import { appModalsOpen } from './components/AppModal.vue'
 import { useOnboardingStore } from './stores/onboarding'
 
 /**
@@ -458,6 +459,11 @@ function stopBannerChecks() {
 
 onMounted(async () => {
   await router.isReady()
+  // ADR-0097: the boot route, captured BEFORE any await — the ?room= join
+  // flow redirects to /recipes while the catalog loads, and reading
+  // route.name after those awaits would open the tour over a fresh
+  // joiner's congrats modal. The tour is for the DIRECT recipes landing.
+  const bootRoute = route.name
   // The device-level timer-completion host (ADR-0081 amendment): watches
   // the persisted step timers for the whole app session, so a timer that
   // reaches zero outside the cooking route still alerts. Starting here
@@ -477,11 +483,11 @@ onMounted(async () => {
   // already in one (session resume / ?room= link).
   autoJoinHousehold()
   // ADR-0097: begin the onboarding tour once the catalog is available, and
-  // ONLY on the recipes page — the showcase starts here, not on the hero/welcome
-  // page (ADR-0078) or any other surface. Non-recipe tests are left alone so the
-  // overlay never blocks their clicks. start() is a no-op when dismissed or
-  // already complete.
-  if (route.name === 'recipes') {
+  // ONLY when the device BOOTED on the recipes page — the showcase starts
+  // there, not on the hero/welcome page (ADR-0078) or any other surface, and
+  // never over a modal that a ?room= join opened in the meantime. start() is
+  // a no-op when dismissed or already complete.
+  if (bootRoute === 'recipes' && !appModalsOpen()) {
     onboarding.start()
   }
   // Stale-version banner: one check after mount, then on a schedule.

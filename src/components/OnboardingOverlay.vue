@@ -8,7 +8,7 @@ import {
   watch,
   type CSSProperties,
 } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useMediaQuery } from '@vueuse/core'
 import {
   Check,
@@ -35,6 +35,7 @@ import {
 } from '../stores/onboarding'
 
 const router = useRouter()
+const route = useRoute()
 const ui = useUiStore()
 const onboarding = useOnboardingStore()
 
@@ -249,7 +250,6 @@ function measureAndListen(stepIdx: number, el: HTMLElement): void {
   }
 }
 
-/** Re-run spotlight setup whenever the active step changes. */
 watch(
   () => onboarding.currentStep,
   async (stepIdx) => {
@@ -272,6 +272,19 @@ watch(
     }
   },
   { immediate: true, flush: 'post' },
+)
+
+/** Navigating away from the tour's surface mid-spotlight ENDS the tour
+ *  (ADR-0097 §5 "dismissible anywhere"): the user signalled they'll explore
+ *  alone, so dismiss — stamps are kept, Settings can restart. Tour-driven
+ *  navigation is exempt: it always lands INSIDE the step's routePrefix. */
+watch(
+  () => route.path,
+  (p) => {
+    const step = onboarding.step
+    if (!step?.target || !step.routePrefix) return
+    if (!p.startsWith(step.routePrefix)) onboarding.dismiss()
+  },
 )
 
 /* ---------- Actions ---------- */
@@ -327,7 +340,7 @@ onBeforeUnmount(() => {
     <div
       data-test="onboarding-overlay"
       :data-test-step="isCompletion ? 'completion' : (stepData?.key ?? 'welcome')"
-      class="fixed inset-0 pointer-events-none"
+      class="fixed inset-0 z-50 pointer-events-none"
     >
       <!-- ===== Spotlight scrim: dim frame with a hole at the target ===== -->
       <div v-if="targetRect" :style="dimFrameStyle" />
@@ -341,12 +354,14 @@ onBeforeUnmount(() => {
         :style="ringStyle"
       />
 
-      <!-- ===== Full-screen scrim for non-spotlight steps — click to
-      dismiss (ADR-0097 §5; the spotlight steps' scrim is the
-      pointer-events-none dim frame instead, so the highlighted target
-      stays interactive) ===== -->
-      <div
-      v-if="currentStepIdx >= 0 && !targetRect"
+    <!-- ===== Full-screen scrim — ONLY the modal-like steps (welcome /
+    completion). Spotlight steps never block: while their target has not
+    been found yet the card floats non-modally so the user can perform the
+    interaction the step is asking for (e.g. tap a recipe card); the
+    spotlight steps' found-target scrim is the pointer-events-none dim
+    frame instead. ===== -->
+    <div
+      v-if="currentStepIdx >= 0 && !isSpotlight"
       class="pointer-events-auto fixed inset-0 z-40 bg-espresso/75"
       data-test="onboarding-scrim"
       @click="dismiss"
@@ -357,17 +372,16 @@ onBeforeUnmount(() => {
       v-if="currentStepIdx >= 0"
       class="fixed z-50"
       :class="
-        isSpotlight
+        targetRect
           ? 'pointer-events-auto'
           : 'inset-0 flex items-center justify-center px-4 pointer-events-none'
       "
-      :style="isSpotlight ? anchoredCardStyle : null"
+      :style="targetRect ? anchoredCardStyle : null"
       :data-test="isCompletion ? 'onboarding-complete' : `onboarding-step-${stepData?.key}`"
     >
-      <!-- Full-screen centered card (welcome / completion) — height-constrained
-           so the Skip control never falls below the fold on short viewports -->
+      <!-- Welcome / completion (steps without a spotlight target) -->
       <div
-        v-if="isCompletion || !isSpotlight"
+        v-if="!stepData?.target"
         class="pointer-events-auto mx-auto w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl bg-surface-raised p-8 ring-1 ring-border shadow-warm"
       >
         <!-- ===== Completion card ===== -->
@@ -490,10 +504,11 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <!-- ===== Anchored step card (spotlight steps 1–4) ===== -->
+      <!-- ===== Step card — anchored when the target is found (wrapper
+           positions it), centered while the target has not appeared yet ===== -->
       <div
         v-else
-        class="w-full max-w-sm rounded-3xl bg-surface-raised p-5 ring-1 ring-border shadow-warm"
+        class="pointer-events-auto w-full max-w-sm rounded-3xl bg-surface-raised p-5 ring-1 ring-border shadow-warm"
       >
         <!-- Top meta: Step N of 5 + stamp preview -->
         <div class="mb-4 flex items-center justify-between">

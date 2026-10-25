@@ -63,6 +63,7 @@ import { useFavouritesStore } from '../stores/favourites'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 import { useIdentityStore } from '../stores/identity'
+import { useRouter } from 'vue-router'
 import { useOnboardingStore, ONBOARDING_STEPS, STAMP_LABELS } from '../stores/onboarding'
 import PersonAvatar from './PersonAvatar.vue'
 import MealimeImportModal from './MealimeImportModal.vue'
@@ -631,9 +632,15 @@ async function importMealimeFavourites(): Promise<void> {
 
 /* ---------- Onboarding tour (ADR-0097) ---------- */
 
-/** Restart the tour: clears stamps + rewinds to welcome. */
+const router = useRouter()
+
+/** Restart the tour: clears stamps + rewinds to welcome, and lands the tour
+ *  on its home surface (/recipes — the search step lives there). Without the
+ *  push the welcome card would open as a modal over Settings and its scrim
+ *  would strand the user mid-tour on the wrong surface. */
 function restartOnboarding(): void {
   onboarding.restart()
+  if (router.currentRoute.value.path !== '/recipes') void router.push('/recipes')
   ui.showToast('Onboarding tour restarted — welcome back!')
 }
 </script>

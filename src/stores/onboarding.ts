@@ -24,6 +24,10 @@ export interface OnboardingStep {
   target: string | null
   /** The route the target lives on, for auto-navigation. */
   route: string | null
+  /** Route PREFIX that hosts this step's target — while a spotlight step
+   *  is active, a user navigation to a path outside this prefix leaves the
+   *  tour's surface and ends the tour (dismiss, stamps kept). */
+  routePrefix: string | null
   /** Step heading. */
   title: string
   /** Step body text. */
@@ -39,6 +43,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     stamp: 'first-taste',
     target: null,
     route: null,
+    routePrefix: null,
     title: 'Welcome to Flambette',
     body: 'Your kitchen companion for planning meals from the frozen catalog. This quick tour shows you how to search, plan, and shop — all offline, all yours.',
     hint: '',
@@ -48,6 +53,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     stamp: 'sharp-eye',
     target: 'recipe-search-field',
     route: '/recipes',
+    routePrefix: '/recipes',
     title: 'Search for a recipe',
     body: 'Type a recipe name or an ingredient and Flambette finds what\'s in your frozen catalog instantly — no internet required.',
     hint: '',
@@ -57,6 +63,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     stamp: 'curious-cook',
     target: 'recipe-detail',
     route: null,
+    routePrefix: '/recipe/',
     title: 'Open a recipe',
     body: 'Tap any recipe card to open its details — ingredients, nutrition, and the photo that made you hungry.',
     hint: 'Tap a recipe card to open its details',
@@ -66,6 +73,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     stamp: 'planner',
     target: 'add-to-plan',
     route: null,
+    routePrefix: '/recipe/',
     title: 'Add it to your plan',
     body: 'Add this recipe to your unscheduled meal queue. It shows up in your Plan and drops its ingredients into your grocery list.',
     hint: '',
@@ -75,6 +83,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     stamp: 'provisioner',
     target: 'grocery-list',
     route: '/grocery',
+    routePrefix: '/grocery',
     body: 'Your grocery list is derived from your planned meals — no double-entry, no waste. Check items off as you shop.',
     title: 'See your groceries',
     hint: '',
