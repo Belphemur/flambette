@@ -49,6 +49,12 @@ async function exportBackup(page: Page): Promise<{ filename: string; bytes: Uint
  *  item, remember a custom ingredient, favourite, dark theme. Returns
  *  names of { planned, cooked, custom } for the assertions. */
 async function backupSeed(page: Page): Promise<{ planned: string; cooked: string; custom: string; checkedKeys: string[] }> {
+  // ADR-0097: pre-seed onboarding as dismissed so the overlay scim doesn't
+  // block interactions in backup-restore flows. The store reads persisted
+  // state on init, so dismissedForever=true prevents start() from firing.
+  await page.addInitScript(() =>
+    localStorage.setItem('mealime-planner:v1:onboarding', JSON.stringify({ completedSteps: [], dismissedForever: true, rewards: [] })),
+  )
   await page.goto('/recipes')
   await waitForCatalog(page)
 
@@ -184,10 +190,12 @@ test('full round-trip: seed, export, fresh context, import — everything is res
   expect(json('rating_tombstones.json')).toEqual({})
   // ADR-0087: the pantry rides along, empty for the seed (device-local).
   expect(json('pantry.json')).toEqual([])
-  // ADR-0097: onboarding stamps ride along, empty for the seed (device-local).
+  // ADR-0097: onboarding stamps ride along, dismissed for the seed (the
+  // backupSeed helper clicks Skip tour to unblank the page; the slice is
+  // still structurally present and round-trips correctly).
   expect(json('onboarding.json')).toEqual({
     completedSteps: [],
-    dismissedForever: false,
+    dismissedForever: true,
     rewards: [],
   })
   // ADR-0063: the identity travels too — the seed joined a household, so
@@ -203,6 +211,11 @@ test('full round-trip: seed, export, fresh context, import — everything is res
   const ctxB = await browser.newContext()
   const b = await ctxB.newPage()
   await blockExternalRequests(b)
+  // ADR-0097: pre-dismiss onboarding so the overlay scim doesn't block
+  // the settings controls needed for the import flow.
+  await b.addInitScript(() =>
+    localStorage.setItem('mealime-planner:v1:onboarding', JSON.stringify({ completedSteps: [], dismissedForever: true, rewards: [] })),
+  )
   await b.goto('/plan')
   await expect(b.getByText('Your meal plan is empty')).toBeVisible()
 
@@ -268,6 +281,9 @@ test('imported backup round-trips a second time (stable re-export)', async ({ br
   const ctxB = await browser.newContext()
   const b = await ctxB.newPage()
   await blockExternalRequests(b)
+  await b.addInitScript(() =>
+    localStorage.setItem('mealime-planner:v1:onboarding', JSON.stringify({ completedSteps: [], dismissedForever: true, rewards: [] })),
+  )
   await b.goto('/')
   await openBackup(b)
   await b.setInputFiles('[data-test=import-settings-input]', {
@@ -295,6 +311,9 @@ test('invalid files are rejected atomically — state untouched', async ({ brows
   const page = await ctx.newPage()
   await blockExternalRequests(page)
   // Seed SOME state first so we can prove the import doesn't touch it.
+  await page.addInitScript(() =>
+    localStorage.setItem('mealime-planner:v1:onboarding', JSON.stringify({ completedSteps: [], dismissedForever: true, rewards: [] })),
+  )
   await page.goto('/recipes')
   await waitForCatalog(page)
   const planned = await openFirstRecipeDetail(page)
@@ -381,6 +400,9 @@ test('invalid files are rejected atomically — state untouched', async ({ brows
 
 test('unregistered persisted slices make export fail loudly (AGENTS.md rule)', async ({ page }) => {
   await blockExternalRequests(page)
+  await page.addInitScript(() =>
+    localStorage.setItem('mealime-planner:v1:onboarding', JSON.stringify({ completedSteps: [], dismissedForever: true, rewards: [] })),
+  )
   await page.goto('/recipes')
   await waitForCatalog(page)
   // Forge a persisted store key that no slice covers.

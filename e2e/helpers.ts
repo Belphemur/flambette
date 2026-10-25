@@ -146,6 +146,29 @@ export async function gotoTab(
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: label }).click()
 }
 
+/** Dismiss the ADR-0097 onboarding overlay if it is present — the welcome card's
+ * "Skip tour" sits inside the step card (z-50, pointer-events-auto) above the
+ * scrim (z-40), so it is clickable even while the scrim blocks the page beneath.
+ * Noop when the overlay is not mounted. */
+export async function dismissOnboarding(page: Page): Promise<void> {
+  // Wait for the overlay to appear — start() is called after loading=false,
+  // so the overlay may not be mounted yet when the helper runs.
+  try {
+    await page.getByTestId('onboarding-skip-intro').first().waitFor({ state: 'attached', timeout: 5000 })
+  } catch {
+    return // overlay not present — nothing to dismiss
+  }
+  await page.getByTestId('onboarding-skip-intro').click()
+  // Wait for the overlay to be removed from the DOM.
+  await page.waitForSelector('[data-test="onboarding-overlay"]', { state: 'detached', timeout: 5000 })
+  // Wait for pinia-plugin-persistedstate to flush dismissedForever to
+  // localStorage so backup/restore specs see the updated value on export.
+  await page.waitForFunction(
+    () => JSON.parse(localStorage.getItem('mealime-planner:v1:onboarding') || '{}').dismissedForever === true,
+    { timeout: 5000 },
+  )
+}
+
 /* ---------- Diet classifier reference sets (ADR-0018) ---------- */
 
 interface SnapshotMeta {
