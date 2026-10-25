@@ -17,6 +17,58 @@ test.describe('Onboarding tour (ADR-0097)', () => {
     await waitForCatalog(page, false)
   })
 
+  test('skip tour dismisses FOREVER and survives a reload', async ({ page }) => {
+    await page.getByTestId('onboarding-skip-intro').click()
+    await expect(page.getByTestId('onboarding-overlay')).toHaveCount(0)
+    // dismissedForever is true — overlay does NOT return, across tabs...
+    await gotoTab(page, 'Settings')
+    await gotoTab(page, 'Recipes')
+    await expect(page.getByTestId('onboarding-overlay')).toHaveCount(0)
+    // ...and across a full reload (the persisted dismissal must win).
+    await page.reload()
+    await waitForCatalog(page, false)
+    await expect(page.getByTestId('onboarding-overlay')).toHaveCount(0)
+    await expect.poll(async () => {
+      const ls = await page.evaluate(() => localStorage.getItem('mealime-planner:v1:onboarding'))
+      return JSON.parse(ls || '{}').dismissedForever
+    }).toBe(true)
+  })
+
+  test('Escape dismisses the tour (ADR-0097 §5) without closing the page behind it', async ({ page }) => {
+    await expect(page.getByTestId('onboarding-overlay')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('onboarding-overlay')).toHaveCount(0)
+    // The Escape belonged to the overlay only — the recipes list is intact.
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect.poll(async () => {
+      const ls = await page.evaluate(() => localStorage.getItem('mealime-planner:v1:onboarding'))
+      return JSON.parse(ls || '{}').dismissedForever
+    }).toBe(true)
+  })
+
+  test('clicking the welcome scrim dismisses the tour', async ({ page }) => {
+    await expect(page.getByTestId('onboarding-overlay')).toBeVisible()
+    await page.getByTestId('onboarding-scrim').click({ position: { x: 10, y: 10 } })
+    await expect(page.getByTestId('onboarding-overlay')).toHaveCount(0)
+  })
+
+  test('skip-ahead through every step reaches the completion card with the passport', async ({ page }) => {
+    await page.getByTestId('onboarding-start-tour').click()
+    // "Got it" advances without a stamp — 4 presses: search → open → plan
+    // → groceries (which navigates to /grocery) → completion.
+    for (let i = 0; i < 4; i++) {
+      await page.getByTestId('onboarding-got-it').click()
+    }
+    await expect(page.getByTestId('onboarding-overlay')).toHaveAttribute('data-test-step', 'completion')
+    await expect(page.getByTestId('onboarding-complete')).toBeVisible()
+    await expect(page.getByTestId('passport')).toBeVisible()
+    // Skipped steps earned NO stamps — the honest "0 of 5" reading.
+    await expect(page.getByTestId('onboarding-complete')).toContainText('0 of 5 stamps')
+    // The completion card's primary control dismisses (start cooking).
+    await page.getByTestId('onboarding-start-cooking').click()
+    await expect(page.getByTestId('onboarding-overlay')).toHaveCount(0)
+  })
+
   test('welcome step shows as a centered card with Start tour + Skip', async ({ page }) => {
     const overlay = page.getByTestId('onboarding-overlay')
     await expect(overlay).toBeVisible()
@@ -24,6 +76,10 @@ test.describe('Onboarding tour (ADR-0097)', () => {
     await expect(page.getByRole('heading', { name: 'Welcome to Flambette' })).toBeVisible()
     await expect(page.getByTestId('onboarding-start-tour')).toBeVisible()
     await expect(page.getByTestId('onboarding-skip-intro')).toBeVisible()
+    // Stitch welcome mock: the three feature rows introduce the app.
+    await expect(page.getByText('hand-curated recipes')).toBeVisible()
+    await expect(page.getByText('Waste-aware meal planning')).toBeVisible()
+    await expect(page.getByText('No accounts. Live household sync')).toBeVisible()
   })
 
   test('Start tour navigates to search step with spotlight ring', async ({ page }) => {

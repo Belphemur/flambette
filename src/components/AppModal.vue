@@ -5,6 +5,13 @@
  * always top). See the header note on stacking in the setup block.
  */
 const openModals: object[] = []
+
+/** True while ANY AppModal instance is mounted — the ADR-0097 onboarding
+ *  overlay (which cannot compose AppModal — see its header) reads this to
+ *  yield Escape to a real modal on top of it. */
+export function appModalsOpen(): boolean {
+  return openModals.length > 0
+}
 </script>
 
 <script setup lang="ts">

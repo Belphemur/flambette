@@ -1057,7 +1057,7 @@ function restartOnboarding(): void {
     ? 'border-saffron bg-brand text-on-brand'
     : 'border-border bg-surface text-text-muted'
   "
-  :aria-label="onboarding.completedSteps.includes(i) ? `${onboarding.currentStep >= 0 ? '' : ''}Step ${i + 1} complete` : `Step ${i + 1} not started`"
+  :aria-label="onboarding.completedSteps.includes(i) ? `Step ${i + 1} complete` : `Step ${i + 1} not started`"
   >
   <Check v-if="onboarding.completedSteps.includes(i)" :size="12" aria-hidden="true" />
   <span v-else>{{ i + 1 }}</span>

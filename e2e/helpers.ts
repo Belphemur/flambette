@@ -167,7 +167,10 @@ export async function dismissOnboarding(page: Page, timeout = 3000): Promise<voi
   } catch {
     return // overlay not present — nothing to dismiss
   }
-  await page.getByTestId('onboarding-skip-intro').click()
+  // Use force: true — the step card may be animating after a viewport
+  // resize (design-visual tests loop setViewportSize), which makes
+  // Playwright's stability check spin until the test timeout.
+  await page.getByTestId('onboarding-skip-intro').first().click({ force: true })
   // Wait for the overlay to be removed from the DOM.
   await page.waitForSelector('[data-test="onboarding-overlay"]', { state: 'detached', timeout })
   // Wait for pinia-plugin-persistedstate to flush dismissedForever to

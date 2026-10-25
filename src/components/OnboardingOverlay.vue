@@ -15,11 +15,15 @@ import {
   ChevronLeft,
   Flame,
   type LucideIcon,
+  Recycle,
   Search,
   BookOpen,
   CalendarPlus,
   ShoppingBasket,
+  Users,
 } from '@lucide/vue'
+import { catalog } from '../lib/catalog'
+import { appModalsOpen } from './AppModal.vue'
 import { useUiStore } from '../stores/ui'
 import {
   useOnboardingStore,
@@ -36,6 +40,36 @@ const onboarding = useOnboardingStore()
 
 /** Silence the halo pulse for motion-sensitive users (ADR-0097 §1). */
 const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
+
+/** The frozen catalog size for the welcome card's first feature row
+ *  (Stitch mock: "2,759 Hand-Curated Recipes"). Read off the loaded
+ *  catalog — the overlay only mounts once `loading` is false (App.vue),
+ *  so this is populated — never a hardcoded count that would drift on a
+ *  catalog refresh. */
+const recipeCount = computed(() => catalog.value?.variantMeta.length ?? 0)
+
+/** Welcome card feature rows (Stitch mock, screen 1); the first row leads
+ *  with the live catalog size. */
+const WELCOME_FEATURES = computed(() => [
+  {
+    icon: BookOpen,
+    title: `${recipeCount.value.toLocaleString()} hand-curated recipes`,
+    badge: '100% offline',
+    body: 'No internet required. Every recipe, photo, and scaled prep plan is available entirely on your device.',
+  },
+  {
+    icon: Recycle,
+    title: 'Waste-aware meal planning',
+    badge: 'Zero waste',
+    body: 'Plan smart and reduce food waste with auto-portioned quantities, so you buy fewer extra ingredients.',
+  },
+  {
+    icon: Users,
+    title: 'No accounts. Live household sync',
+    badge: 'Room code',
+    body: 'Share with your home in real time using a memorable three-word room code.',
+  },
+])
 
 /** Bounding rect of the current spotlight target, or null for full-screen cards. */
 const targetRect = ref<DOMRect | null>(null)
@@ -246,6 +280,20 @@ function dismiss(): void {
   onboarding.dismiss()
 }
 
+/** Escape owns dismissal (ADR-0097 §5). CAPTURE phase on window so the
+ *  overlay's keypress is decided BEFORE target/bubble handlers see it —
+ *  RecipeDetail's own Escape handler (navigate back) would otherwise also
+ *  react while the spotlight sits on `recipe-detail`. A live AppModal owns
+ *  Escape instead (its bubble listener runs later, so we simply yield);
+ *  IME composition Escapes (keyCode 229) are never ours. */
+function onEscape(e: KeyboardEvent): void {
+  if (e.key !== 'Escape') return
+  if (e.isComposing || e.keyCode === 229) return
+  if (appModalsOpen()) return
+  e.stopImmediatePropagation()
+  onboarding.dismiss()
+}
+
 /** "Got it" / "I have done this — skip ahead": advance without the stamp. */
 function skipAhead(): void {
   onboarding.next()
@@ -260,6 +308,7 @@ function goBack(): void {
 const showBack = computed(() => onboarding.currentStep > 0)
 
 onMounted(() => {
+  window.addEventListener('keydown', onEscape, true)
   void nextTick(() => {
     if (stepData.value?.target && onboarding.currentStep >= 0) {
       findTarget(stepData.value.target, onboarding.currentStep)
@@ -268,6 +317,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onEscape, true)
   cleanupSpotlight()
 })
 </script>
@@ -291,10 +341,15 @@ onBeforeUnmount(() => {
         :style="ringStyle"
       />
 
-      <!-- ===== Full-screen scrim for non-spotlight steps ===== -->
+      <!-- ===== Full-screen scrim for non-spotlight steps — click to
+      dismiss (ADR-0097 §5; the spotlight steps' scrim is the
+      pointer-events-none dim frame instead, so the highlighted target
+      stays interactive) ===== -->
       <div
       v-if="currentStepIdx >= 0 && !targetRect"
-      class="fixed inset-0 z-40 bg-espresso/75"
+      class="pointer-events-auto fixed inset-0 z-40 bg-espresso/75"
+      data-test="onboarding-scrim"
+      @click="dismiss"
     />
 
     <!-- ===== Step card===== -->
@@ -380,10 +435,33 @@ onBeforeUnmount(() => {
           </div>
           <h2 class="text-headline-md text-text">Welcome to Flambette</h2>
           <p class="mt-3 text-body-sm text-text-muted">
-            Your kitchen companion for planning meals from the frozen catalog.
-            This quick tour shows you how to search, plan, and shop — all
-            offline, all yours.
+            A warm, photo-led kitchen companion designed to plan meals faster,
+            minimize grocery waste, and cook with ease.
           </p>
+
+          <!-- Feature rows (Stitch welcome mock): the three things that
+               make flambette different, before the tour starts. -->
+          <div class="mt-5 space-y-2 text-left">
+            <div
+              v-for="feature in WELCOME_FEATURES"
+              :key="feature.title"
+              class="flex items-start gap-3 rounded-xl bg-brand-tint/40 p-3"
+            >
+              <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface text-brand">
+                <component :is="feature.icon" :size="16" aria-hidden="true" />
+              </span>
+              <div class="min-w-0">
+                <p class="flex flex-wrap items-center gap-2 text-sm font-semibold text-text">
+                  {{ feature.title }}
+                  <span
+                    class="rounded-full bg-saffron-soft/50 px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wide text-espresso"
+                  >{{ feature.badge }}</span>
+                </p>
+                <p class="mt-0.5 text-xs leading-relaxed text-text-muted">{{ feature.body }}</p>
+              </div>
+            </div>
+          </div>
+
           <div class="mt-6 flex flex-col gap-2 pt-2">
             <button
               class="h-12 w-full rounded-xl bg-brand px-4 text-base font-semibold text-on-brand transition-colors hover:bg-brand-strong active:scale-[0.98]"
@@ -400,6 +478,9 @@ onBeforeUnmount(() => {
               Skip tour
             </button>
           </div>
+          <p class="mt-4 text-[10px] font-mono uppercase tracking-wider text-text-muted">
+            Quick 60-second walkthrough
+          </p>
         </div>
       </div>
 

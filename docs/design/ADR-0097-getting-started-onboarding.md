@@ -78,6 +78,21 @@ knowledge "how an overlay works" lives once in AppModal.
 
 ## Consequences
 
+**Amendment (2026-10-24, as-built):** Decision 1 said the overlay "composes
+`AppModal.vue` as its shell". As built, it cannot: AppModal's panel is a
+CENTERED dialog surface, while a spotlight tour needs a pointer-transparent
+scrim with a cutout at the target and an ANCHORED step card that moves with
+it. `OnboardingOverlay.vue` therefore owns its own teleport + scrim, but it
+follows AppModal's discipline instead of drifting from it: it reads the new
+exported `appModalsOpen()` probe from `AppModal.vue` and YIELDS Escape to
+any live modal, listens in the capture phase so it owns the keypress before
+view-level Escape handlers (RecipeDetail's navigate-back), and suppresses
+IME-composition Escapes (keyCode 229) — the same guards this file's Escape
+arbitration exists for. Scrim click dismisses on the full-screen steps
+(welcome/completion); the spotlight steps use a `pointer-events: none` dim
+frame so the highlighted target stays interactive (no scrim dismissal
+there — the X/Skip affordances own it).
+
 - New persisted store + a single new backup slice file; the e2e registry
   coverage case (`backup-restore.spec.ts`) now has one more slice to assert —
   it is registered in `STORE_SLICES` so the existing coverage passes.
