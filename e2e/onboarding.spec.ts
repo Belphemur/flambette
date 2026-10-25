@@ -3,13 +3,15 @@ import { waitForCatalog, gotoTab } from './helpers'
 
 /**
  * ADR-0097: the dismissible, restartable onboarding tour.
+ *
+ * Each test gets a fresh browser context (empty localStorage), so the
+ * onboarding store starts in its initial state — start() fires after
+ * catalog load and the welcome step appears.
  */
 
 test.describe('Onboarding tour (ADR-0097)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/recipes')
-    await page.evaluate(() => localStorage.removeItem('mealime-planner:v1:onboarding'))
-    await page.reload()
     await waitForCatalog(page)
   })
 
@@ -32,7 +34,6 @@ test.describe('Onboarding tour (ADR-0097)', () => {
     await page.getByTestId('onboarding-start-tour').click()
     await expect(page).toHaveURL(/\/recipes/)
     await page.getByTestId('recipe-search-field').focus()
-    // Wait for the stamp to land in localStorage.
     await expect.poll(async () => {
       const ls = await page.evaluate(() => localStorage.getItem('mealime-planner:v1:onboarding'))
       const state = JSON.parse(ls || '{}')
@@ -43,7 +44,7 @@ test.describe('Onboarding tour (ADR-0097)', () => {
   test('skip tour dismisses for this session only', async ({ page }) => {
     await page.getByTestId('onboarding-skip-intro').click()
     await expect(page.getByTestId('onboarding-overlay')).toHaveCount(0)
-    // dismissedForever is set — overlay does NOT return.
+    // dismissedForever is true — overlay does NOT return.
     await gotoTab(page, 'Settings')
     await gotoTab(page, 'Recipes')
     await expect(page.getByTestId('onboarding-overlay')).toHaveCount(0)

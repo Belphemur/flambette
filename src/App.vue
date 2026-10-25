@@ -172,9 +172,10 @@ const roomChip = computed(() => {
 })
 
 /** ADR-0097: the onboarding overlay shows only on non-fullscreen surfaces
- * (cooking/shopping own the entire viewport) and only once the catalog
- * has loaded so the search field target is real. */
-const showOnboarding = computed(() => onboarding.active && !isFullscreenMode && !loading)
+ * (cooking/shopping own the entire viewport), never on the home/hero page
+ * (ADR-0078), and only once the catalog has loaded so the search field
+ * target is real. */
+const showOnboarding = computed(() => onboarding.active && !isFullscreenMode.value && !isHome.value && !loading.value)
 
 /** The recipe detail view is full-bleed (edge-to-edge hero image). */
 const isRecipe = computed(() => route.name === 'recipe')

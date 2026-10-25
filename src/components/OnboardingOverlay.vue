@@ -277,6 +277,7 @@ onBeforeUnmount(() => {
     <div
       data-test="onboarding-overlay"
       :data-test-step="isCompletion ? 'completion' : (stepData?.key ?? 'welcome')"
+      class="fixed inset-0 pointer-events-none"
     >
       <!-- ===== Spotlight scrim: dim frame with a hole at the target ===== -->
       <div v-if="targetRect" :style="dimFrameStyle" />
