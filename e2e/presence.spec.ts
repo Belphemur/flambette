@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { blockExternalRequests, gotoTab, liveRoomCode } from './helpers'
+import { blockExternalRequests, dismissOnboarding, gotoTab, liveRoomCode } from './helpers'
 
 /**
  * Room identity + live presence (ADR-0063).
@@ -23,6 +23,7 @@ test('chip tap opens the roster sheet: header count, own row marked you, canvas 
 }) => {
   await blockExternalRequests(page)
   await page.goto('/recipes')
+  await dismissOnboarding(page)
   await startHouseholdRoom(page)
 
   const chip = page.getByTestId('room-chip')
@@ -130,6 +131,7 @@ test('a backup round-trips the identity slice (ADR-0063 in ADR-0013)', async ({ 
   // preview shows the avatar next to the field.
   await blockExternalRequests(page)
   await page.goto('/recipes')
+  await dismissOnboarding(page)
   await startHouseholdRoom(page)
   await gotoTab(page, 'Settings')
   await expect(page.getByTestId('identity-avatar').locator('canvas')).toHaveCount(1)

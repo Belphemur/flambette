@@ -476,10 +476,14 @@ onMounted(async () => {
   // Config is loaded: re-join the household room unless this launch is
   // already in one (session resume / ?room= link).
   autoJoinHousehold()
-  // ADR-0097: begin the onboarding tour once the catalog is available — the
-  // search step spotlights the recipe search field, which needs the catalog
-  // to be populated. start() is a no-op when dismissed or already complete.
-  onboarding.start()
+  // ADR-0097: begin the onboarding tour once the catalog is available, and
+  // ONLY on the recipes page — the showcase starts here, not on the hero/welcome
+  // page (ADR-0078) or any other surface. Non-recipe tests are left alone so the
+  // overlay never blocks their clicks. start() is a no-op when dismissed or
+  // already complete.
+  if (route.name === 'recipes') {
+    onboarding.start()
+  }
   // Stale-version banner: one check after mount, then on a schedule.
   startBannerChecks()
   void checkBannerVersion()

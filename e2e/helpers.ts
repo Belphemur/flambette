@@ -34,15 +34,24 @@ export async function expectZeroMealimeRequests(page: Page): Promise<void> {
 }
 
 /**
- * Wait for the catalog to finish loading (recipe cards render).
- * Returns the list of recipe card articles.
+ * All recipe card articles on the Recipes tab (ADR-0047: `main article`).
  */
 export function recipeCards(page: Page) {
   return page.locator('main article')
 }
 
-export async function waitForCatalog(page: Page): Promise<void> {
+/**
+ * Wait for the catalog to finish loading (recipe cards render).
+ * ADR-0097: also dismisses the first-run onboarding tour so it doesn't
+ * block clicks in tests that don't need it. Noop when the overlay isn't
+ * mounted (e.g. the test isn't on /recipes, or the tour was already dismissed).
+ * Pass `dismiss = false` to keep the tour visible (used by onboarding.spec.ts).
+ */
+export async function waitForCatalog(page: Page, dismiss = true): Promise<void> {
   await expect(recipeCards(page).first()).toBeVisible({ timeout: 15_000 })
+  if (dismiss) {
+    await dismissOnboarding(page, 2000)
+  }
 }
 
 /**
@@ -150,22 +159,22 @@ export async function gotoTab(
  * "Skip tour" sits inside the step card (z-50, pointer-events-auto) above the
  * scrim (z-40), so it is clickable even while the scrim blocks the page beneath.
  * Noop when the overlay is not mounted. */
-export async function dismissOnboarding(page: Page): Promise<void> {
+export async function dismissOnboarding(page: Page, timeout = 3000): Promise<void> {
   // Wait for the overlay to appear — start() is called after loading=false,
   // so the overlay may not be mounted yet when the helper runs.
   try {
-    await page.getByTestId('onboarding-skip-intro').first().waitFor({ state: 'attached', timeout: 5000 })
+    await page.getByTestId('onboarding-skip-intro').first().waitFor({ state: 'attached', timeout })
   } catch {
     return // overlay not present — nothing to dismiss
   }
   await page.getByTestId('onboarding-skip-intro').click()
   // Wait for the overlay to be removed from the DOM.
-  await page.waitForSelector('[data-test="onboarding-overlay"]', { state: 'detached', timeout: 5000 })
+  await page.waitForSelector('[data-test="onboarding-overlay"]', { state: 'detached', timeout })
   // Wait for pinia-plugin-persistedstate to flush dismissedForever to
   // localStorage so backup/restore specs see the updated value on export.
   await page.waitForFunction(
     () => JSON.parse(localStorage.getItem('mealime-planner:v1:onboarding') || '{}').dismissedForever === true,
-    { timeout: 5000 },
+    { timeout },
   )
 }
 

@@ -12,7 +12,9 @@ import { waitForCatalog, gotoTab } from './helpers'
 test.describe('Onboarding tour (ADR-0097)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/recipes')
-    await waitForCatalog(page)
+    // ADR-0097: wait for the catalog WITHOUT dismissing the tour —
+    // this is the onboarding spec, the tour must stay visible.
+    await waitForCatalog(page, false)
   })
 
   test('welcome step shows as a centered card with Start tour + Skip', async ({ page }) => {

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { blockExternalRequests, expectZeroMealimeRequests } from './helpers'
+import { blockExternalRequests, dismissOnboarding, expectZeroMealimeRequests } from './helpers'
 
 /**
  * Changelog module (ADR-0060) + stale-version banner (ADR-0061).
@@ -14,6 +14,7 @@ import { blockExternalRequests, expectZeroMealimeRequests } from './helpers'
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
   await page.goto('/recipes')
+  await dismissOnboarding(page)
 })
 
 // --- version.json endpoint ---------------------------------------------------
