@@ -77,6 +77,11 @@ export interface SliceDef<T = unknown> {
   validate: (value: unknown) => string | null
   /** Replace persisted state via store actions/setters (validation ran first). */
   write: (value: T) => void
+  /** Optional hook run when the backup does NOT contain this slice's
+   *  file. Default behaviour (write(read()) — a restoring no-op) is kept
+   *  for slices without one. The onboarding slice overrides it: an older
+   *  backup without onboarding.json must not end a LIVE tour (qodo #6). */
+  onAbsent?: () => void
 }
 
 /** Every registered slice, in the order they are exported/validated/applied. */
@@ -697,16 +702,22 @@ export const STORE_SLICES: SliceDef<any>[] = [
         rewards?: string[]
       }
       // Replace-on-apply (ADR-0013) — a backup's onboarding state overwrites
-      // the live store. Only the persisted fields are restored; active and
-      // currentStep stay session-scoped (the overlay mounts fresh).
+      // the live store. Only the persisted fields are restored.
       if (v.dismissedForever !== undefined) onboarding.dismissedForever = v.dismissedForever
       if (v.completedSteps !== undefined) onboarding.completedSteps = [...v.completedSteps]
       if (v.rewards !== undefined) onboarding.rewards = [...(v.rewards as StampName[])]
-      // active/currentStep are NOT restored — a fresh mount calls start()
-      // which rewinds to the first incomplete step from the restored stamps.
+      // Explicit present-slice transition (qodo #6): the restored progress
+      // may differ from the live step, so a running tour ends its session
+      // and restarts from the restored stamps — unless the backup restores
+      // a dismissed or complete tour, where start() stays a no-op.
       onboarding.active = false
       onboarding.currentStep = -1
+      onboarding.start()
     },
+    // qodo #6: an ABSENT onboarding.json (older backup) must leave the
+    // live tour alone — default write(read()) would clear active/currentStep
+    // and kill a tour the user is mid-way through.
+    onAbsent() { /* keep the live tour session untouched */ },
   },
 ]
 
@@ -882,8 +893,16 @@ export function applyBackup(zipBytes: Uint8Array): ApplyResult {
   }
 
   /* ---- apply ---- */
-  for (const { slice, value } of validated) {
-    slice.write(value)
+  for (const { slice, value, present } of validated) {
+    if (present) {
+      slice.write(value)
+    } else if (slice.onAbsent) {
+      slice.onAbsent()
+    } else {
+      // Missing slice file: keep current state (no-op apply) — write()
+      // re-writes what read() just captured.
+      slice.write(value)
+    }
   }
 
   const byFile = new Map(validated.filter((v) => v.present).map((v) => [v.slice.file, v.value]))

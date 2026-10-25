@@ -84,6 +84,10 @@ let interactionCleanup: (() => void) | null = null
 let autoCompleteTimer: ReturnType<typeof setTimeout> | null = null
 let routeUnwatch: (() => void) | null = null
 
+/** The element currently under the spotlight — the re-measure listeners
+ *  (scroll capture + resize, qodo #10) read its live rect. */
+let spotlightEl: HTMLElement | null = null
+
 /* ---------- Step / stamp lookups ---------- */
 
 const currentStepIdx = computed(() => onboarding.currentStep)
@@ -177,7 +181,22 @@ function cleanupSpotlight(): void {
   if (interactionCleanup) { interactionCleanup(); interactionCleanup = null }
   if (autoCompleteTimer) { clearTimeout(autoCompleteTimer); autoCompleteTimer = null }
   if (routeUnwatch) { routeUnwatch(); routeUnwatch = null }
+  window.removeEventListener('scroll', remeasureSpotlight, true)
+  window.removeEventListener('resize', remeasureSpotlight)
+  spotlightEl = null
   targetRect.value = null
+}
+
+/** Follow the live target (qodo #10): the dim frame + ring + card are
+ *  fixed-positioned, so a page scroll or viewport resize leaves them over
+ *  the wrong spot. Scroll does not bubble but DOES travel the capture
+ *  path, so a capture listener on window sees every scroll container. */
+function remeasureSpotlight(): void {
+  if (!spotlightEl) return
+  const rect = spotlightEl.getBoundingClientRect()
+  if (rect.width === 0 || rect.height === 0) return
+  targetRect.value = rect
+  cardBelow.value = rect.bottom + 320 < window.innerHeight
 }
 
 /** Navigate to the route that hosts a step's target, if needed. */
@@ -211,17 +230,28 @@ function findTarget(target: string, stepIdx: number): void {
 
 /** Measure the target rect, position the card, and attach listeners. */
 function measureAndListen(stepIdx: number, el: HTMLElement): void {
+  // qodo #10: the target may sit off-screen (add-to-plan low on a long
+  // detail page) — bring it into view BEFORE measuring so the fixed
+  // scrim hole and anchored card land on a visible rect.
+  el.scrollIntoView({ block: 'center' })
   const rect = el.getBoundingClientRect()
   if (rect.width === 0 || rect.height === 0) return
   targetRect.value = rect
   cardBelow.value = rect.bottom + 320 < window.innerHeight
+  spotlightEl = el
+  window.addEventListener('scroll', remeasureSpotlight, true)
+  window.addEventListener('resize', remeasureSpotlight)
 
   const step = ONBOARDING_STEPS[stepIdx]
   if (!step) return
 
   let done = false
   const finish = () => {
+    // qodo #9: a stale closure (listener or timer from a previous setup
+    // run that survived a step change) must never advance the tour —
+    // only the step currently being spotlighted may complete itself.
     if (done) return
+    if (onboarding.currentStep !== stepIdx) return
     done = true
     if (interactionCleanup) { interactionCleanup(); interactionCleanup = null }
     if (autoCompleteTimer) { clearTimeout(autoCompleteTimer); autoCompleteTimer = null }
@@ -230,18 +260,27 @@ function measureAndListen(stepIdx: number, el: HTMLElement): void {
 
   switch (step.target) {
     case 'recipe-search-field':
-      el.addEventListener('focus', finish, { once: true })
+      // qodo #5: FOCUS is not a lesson learned — tapping the field to
+      // begin typing would end the step before a query exists. Only a
+      // real input event (a typed character) completes the search step.
       el.addEventListener('input', finish, { once: true })
       interactionCleanup = () => {
-        el.removeEventListener('focus', finish)
         el.removeEventListener('input', finish)
       }
       break
     case 'recipe-detail':
-    case 'grocery-list':
-      // The dialog / list just appeared — the real interaction is the
-      // user arriving at this surface. A short grace lets them read the card.
+      // The user's own card tap brought them here — arriving IS the
+      // interaction. A short grace lets them read the card.
       autoCompleteTimer = setTimeout(finish, 1000)
+      break
+    case 'grocery-list':
+      // qodo #7: appearing is not shopping. The overlay navigated here
+      // itself, so a timer would award provisioner for waiting. The
+      // stamp needs a real interaction INSIDE the list (checking an
+      // item, or any tap on the list) — "Got it" stays the stampless
+      // path for an empty list.
+      el.addEventListener('click', finish, { once: true, capture: true })
+      interactionCleanup = () => el.removeEventListener('click', finish, { capture: true })
       break
     case 'add-to-plan':
       el.addEventListener('click', finish, { once: true })
@@ -322,11 +361,9 @@ const showBack = computed(() => onboarding.currentStep > 0)
 
 onMounted(() => {
   window.addEventListener('keydown', onEscape, true)
-  void nextTick(() => {
-    if (stepData.value?.target && onboarding.currentStep >= 0) {
-      findTarget(stepData.value.target, onboarding.currentStep)
-    }
-  })
+  // qodo #9: NO findTarget here — the immediate currentStep watcher
+  // (flush: 'post') is the sole setup path, so every spotlight step gets
+  // exactly one measureAndListen run and one set of listeners/timers.
 })
 
 onBeforeUnmount(() => {
@@ -432,7 +469,7 @@ onBeforeUnmount(() => {
             <button
               class="h-12 w-full rounded-xl bg-brand px-4 text-base font-semibold text-on-brand transition-colors hover:bg-brand-strong active:scale-[0.98]"
               data-test="onboarding-start-cooking"
-              @click="dismiss"
+              @click="onboarding.finish()"
             >
               Start cooking
             </button>
@@ -441,7 +478,7 @@ onBeforeUnmount(() => {
               v-if="!ui.householdRoom"
               class="h-12 w-full rounded-lg border border-border-strong bg-surface-raised px-4 text-sm font-semibold text-text active:bg-surface-sunken"
               data-test="onboarding-start-household"
-              @click="() => { ui.showToast('Use the Household room card in Settings to start a room'); dismiss() }"
+              @click="() => { ui.showToast('Use the Household room card in Settings to start a room'); onboarding.finish() }"
             >
               Start a household
             </button>
@@ -486,7 +523,7 @@ onBeforeUnmount(() => {
             <button
               class="h-12 w-full rounded-xl bg-brand px-4 text-base font-semibold text-on-brand transition-colors hover:bg-brand-strong active:scale-[0.98]"
               data-test="onboarding-start-tour"
-              @click="onboarding.next()"
+              @click="onboarding.completeStep(0)"
             >
               Start tour
             </button>

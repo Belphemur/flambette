@@ -54,6 +54,7 @@ test.describe('Onboarding tour (ADR-0097)', () => {
 
   test('skip-ahead through every step reaches the completion card with the passport', async ({ page }) => {
     await page.getByTestId('onboarding-start-tour').click()
+    // Starting the tour EARNS first-taste (the welcome step is step 0).
     // "Got it" advances without a stamp — 4 presses: search → open → plan
     // → groceries (which navigates to /grocery) → completion.
     for (let i = 0; i < 4; i++) {
@@ -62,11 +63,16 @@ test.describe('Onboarding tour (ADR-0097)', () => {
     await expect(page.getByTestId('onboarding-overlay')).toHaveAttribute('data-test-step', 'completion')
     await expect(page.getByTestId('onboarding-complete')).toBeVisible()
     await expect(page.getByTestId('passport')).toBeVisible()
-    // Skipped steps earned NO stamps — the honest "0 of 5" reading.
-    await expect(page.getByTestId('onboarding-complete')).toContainText('0 of 5 stamps')
-    // The completion card's primary control dismisses (start cooking).
+    // Skipped steps earned NO stamps — only first-taste (Start tour) did.
+    await expect(page.getByTestId('onboarding-complete')).toContainText('1 of 5 stamps')
+    // Finishing the tour is NOT a dismissal (qodo #11): dismissedForever
+    // stays false, so Settings shows the earned state, not "Tour dismissed".
     await page.getByTestId('onboarding-start-cooking').click()
     await expect(page.getByTestId('onboarding-overlay')).toHaveCount(0)
+    await expect.poll(async () => {
+      const ls = await page.evaluate(() => localStorage.getItem('mealime-planner:v1:onboarding'))
+      return JSON.parse(ls || '{}').dismissedForever
+    }).toBe(false)
   })
 
   test('welcome step shows as a centered card with Start tour + Skip', async ({ page }) => {
@@ -88,10 +94,16 @@ test.describe('Onboarding tour (ADR-0097)', () => {
     await expect(page.getByTestId('spotlight-ring')).toBeVisible()
   })
 
-  test('focusing the search field earns the sharp-eye stamp', async ({ page }) => {
+  test('typing in the search field earns the sharp-eye stamp (focus alone never does)', async ({ page }) => {
     await page.getByTestId('onboarding-start-tour').click()
     await expect(page).toHaveURL(/\/recipes/)
+    // qodo #5: FOCUS is not completion — the user taps the field to begin
+    // typing and the tour must stay on the search step.
     await page.getByTestId('recipe-search-field').focus()
+    await page.waitForTimeout(300)
+    await expect(page.getByTestId('onboarding-overlay')).toHaveAttribute('data-test-step', 'search')
+    // A real typed character completes the lesson.
+    await page.getByTestId('recipe-search-field').fill('pasta')
     await expect.poll(async () => {
       const ls = await page.evaluate(() => localStorage.getItem('mealime-planner:v1:onboarding'))
       const state = JSON.parse(ls || '{}')
@@ -110,20 +122,22 @@ test.describe('Onboarding tour (ADR-0097)', () => {
 
   test('Settings card shows restart button and stamp state', async ({ page }) => {
     await page.getByTestId('onboarding-start-tour').click()
-    await page.getByTestId('recipe-search-field').focus()
+    await page.getByTestId('recipe-search-field').fill('soup')
     await gotoTab(page, 'Settings')
     const card = page.getByTestId('onboarding-card')
     await expect(card).toBeVisible()
     await expect(page.getByTestId('onboarding-restart')).toBeVisible()
-    // One stamp earned (sharp-eye) — a gold badge in the passport strip.
+    // Two stamps earned (first-taste on Start tour + sharp-eye on typing)
+    // — gold badges in the passport strip. The strip wraps on narrow
+    // viewports (qodo #8) so the badges stay inside the card.
     const earned = card.locator('[class*="bg-brand"][class*="text-on-brand"]')
-    await expect(earned).toHaveCount(1)
+    await expect(earned).toHaveCount(2)
   })
 
   test('restart from Settings clears stamps and shows welcome', async ({ page }) => {
     // Earn a stamp first.
     await page.getByTestId('onboarding-start-tour').click()
-    await page.getByTestId('recipe-search-field').focus()
+    await page.getByTestId('recipe-search-field').fill('soup')
     // Mid-tour navigation leaves the tour's surface → the tour ends
     // (stamps kept), which is what frees the nav bar to reach Settings.
     await gotoTab(page, 'Settings')

@@ -199,6 +199,16 @@ export const useOnboardingStore = defineStore('onboarding', {
       this.next()
     },
 
+    /** End the tour from the COMPLETION card (review qodo #11): finishing
+     *  the tour is not a dismissal — stamps stay, dismissedForever is NOT
+     *  set, so Settings shows the earned state ("All stamps earned!" when
+     *  every step was really completed) instead of "Tour dismissed".
+     *  start() still refuses to reopen a complete tour. */
+    finish(): void {
+      this.active = false
+      this.currentStep = -1
+    },
+
     /** Permanently dismiss the tour (X button, Escape, or Skip tour). */
     dismiss(): void {
       this.dismissedForever = true

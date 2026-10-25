@@ -120,3 +120,41 @@ there — the X/Skip affordances own it).
 - **Household as a sixth spotlight step:** rejected — folded into the
   completion card to avoid one more mount hop; the household flow already
   has its own dedicated surface (ADR-0021/0026).
+
+## Amendment (2026-10-25, review round 5 — completion/interaction semantics)
+
+Qodo review on the as-built overlay surfaced five correctness gaps; this
+amendment records the decided semantics:
+
+- **The welcome step is earned by starting the tour.** The welcome card's
+  "Start tour" button calls `completeStep(0)` (earns `first-taste`), not a
+  stampless `next()` — otherwise index 0 is never in `completedSteps`,
+  `isComplete` stays false, and every launch rewinds to welcome.
+- **Stamps require the real interaction (Decision 3 made literal).** The
+  search stamp fires on `input` (a typed character), never on `focus` —
+  tapping the field to begin typing is not a lesson learned. The grocery
+  stamp fires on a real click INSIDE the grocery list (checking an item),
+  never on a timer — the overlay navigates to `/grocery` itself, so an
+  appearance timer awarded `provisioner` for waiting. (The open-recipe
+  step keeps its 1s grace timer: the user's own card tap is the
+  interaction that produced the surface.)
+- **Finish ≠ dismiss.** The completion card's buttons call a new
+  `finish()` action (ends the session only) instead of `dismiss()` —
+  finishing the tour must not set `dismissedForever`, or Settings shows
+  "Tour dismissed" to a user who just completed it. `start()` already
+  refuses a complete tour; a finish with skipped stamps resumes at the
+  first incomplete step (the documented rewind behaviour).
+- **One setup path per spotlight.** The `onMounted` duplicate `findTarget`
+  is removed (the immediate `currentStep` watcher, flush `'post'`, is the
+  sole setup path) and each step's `finish` closure refuses to act unless
+  `onboarding.currentStep` still equals its step index — a stale listener
+  or timer can no longer double-advance past the next step's stamp.
+- **The spotlight follows its target.** `measureAndListen` scrolls the
+  target into view before measuring and re-measures the live rect on
+  window `scroll` (capture — scroll does not bubble but travels the
+  capture path) and `resize`; cleanup removes both.
+- **Backup/restore transitions (Decision 6 refined).** A backup that
+  OMITS `onboarding.json` runs the slice's new `onAbsent` hook: a no-op —
+  a live tour is never ended by an older backup's silence. A PRESENT
+  slice restores its fields, ends the live session, and calls `start()`
+  (a no-op when the backup restores a dismissed or complete tour).

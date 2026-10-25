@@ -108,6 +108,33 @@ describe('onboarding store (ADR-0097)', () => {
     expect(s.rewards).toEqual(['first-taste'])
   })
 
+  test('finish() ends the tour WITHOUT dismissing (qodo #11)', () => {
+    const s = useOnboardingStore()
+    // Finish via the completion card with every step really completed.
+    for (let i = 0; i < 5; i++) s.completeStep(i)
+    s.finish()
+    expect(s.active).toBe(false)
+    expect(s.currentStep).toBe(-1)
+    expect(s.dismissedForever).toBe(false)
+    expect(s.isComplete).toBe(true)
+    // start() refuses to reopen a finished tour (isComplete gate).
+    s.start()
+    expect(s.active).toBe(false)
+  })
+
+  test('finish() with skipped steps resumes at the first incomplete one', () => {
+    const s = useOnboardingStore()
+    s.completeStep(0) // Start tour earns first-taste
+    s.completeStep(1)
+    s.skipTo(COMPLETION_STEP) // skipped 2–4 via "Got it"
+    s.finish()
+    expect(s.dismissedForever).toBe(false)
+    s.start() // rewinds to the first incomplete step, stamps kept
+    expect(s.active).toBe(true)
+    expect(s.currentStep).toBe(2)
+    expect(s.rewards).toEqual(['first-taste', 'sharp-eye'])
+  })
+
   test('restart() clears stamps + dismissal and opens on the welcome step', () => {
     const s = useOnboardingStore()
     s.completeStep(0)

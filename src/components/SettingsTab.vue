@@ -1050,8 +1050,9 @@ function restartOnboarding(): void {
   <span :class="TILE"><Flame :size="16" aria-hidden="true" /></span>
   </div>
 
-  <!-- Stamp passport strip -->
-  <div class="flex items-center justify-start gap-2 pt-1">
+  <!-- Stamp passport strip — wraps on narrow phones (qodo #8): five
+  labeled badges exceed a 360px viewport's card width in one row. -->
+  <div class="flex flex-wrap items-center justify-start gap-x-4 gap-y-2 pt-1">
   <div
   v-for="(_, i) in ONBOARDING_STEPS"
   :key="i"
@@ -1085,7 +1086,7 @@ function restartOnboarding(): void {
   All stamps earned!
   </template>
   <template v-else>
-  {{ 5 - onboarding.rewards.length }} stamp{{ onboarding.rewards.length === 4 ? 's' : '' }} left to earn.
+  {{ 5 - onboarding.rewards.length }} stamp{{ 5 - onboarding.rewards.length === 1 ? '' : 's' }} left to earn.
   </template>
   </p>
   <button

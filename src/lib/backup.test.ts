@@ -5,6 +5,7 @@ import { useUiStore } from '../stores/ui'
 import { usePlanStore } from '../stores/plan'
 import { useRatingStore } from '../stores/rating'
 import { useIdentityStore } from '../stores/identity'
+import { useOnboardingStore } from '../stores/onboarding'
 
 /** read() of the settings slice also carries the theme override, which
  *  lives in localStorage under a non-Pinia key (useDark). */
@@ -804,5 +805,60 @@ describe('plan slice cleared-ingredients (ADR-0094 registry)', () => {
     expect(slice.validate({ entries: [], clearedIngredients: { 7: [42] } })).toContain(
       'must map ids to cleared entries',
     )
+  })
+})
+
+/** qodo #6 — the onboarding slice's absent/present transitions.
+ *  An older backup without onboarding.json must NOT end a live tour;
+ *  a present slice restores the stamps and restarts the tour session
+ *  unless it restores a dismissed or complete tour. */
+describe('onboarding slice (ADR-0097, qodo #6)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    ;(globalThis as Record<string, unknown>).localStorage = memoryStorage()
+  })
+
+  const onboardingSlice = () => {
+    const slice = STORE_SLICES.find((s) => s.file === 'onboarding.json')
+    if (!slice) throw new Error('onboarding.json slice missing from STORE_SLICES')
+    return slice
+  }
+
+  test('an absent slice leaves a LIVE tour untouched', () => {
+    const onboarding = useOnboardingStore()
+    onboarding.start()
+    onboarding.completeStep(0) // live tour, mid-search step
+    expect(onboarding.active).toBe(true)
+    expect(onboarding.currentStep).toBe(1)
+
+    onboardingSlice().onAbsent!()
+    expect(onboarding.active).toBe(true) // tour still running
+    expect(onboarding.currentStep).toBe(1)
+    expect(onboarding.completedSteps).toEqual([0])
+  })
+
+  test('a present partial slice ends the session and restarts from the restored stamps', () => {
+    const onboarding = useOnboardingStore()
+    onboarding.start()
+    onboarding.completeStep(0)
+    onboarding.completeStep(1) // live on step 2
+    expect(onboarding.active).toBe(true)
+
+    onboardingSlice().write({ completedSteps: [0], dismissedForever: false, rewards: ['first-taste'] })
+    expect(onboarding.active).toBe(true) // restarted, not abandoned
+    expect(onboarding.currentStep).toBe(1) // first incomplete
+    expect(onboarding.completedSteps).toEqual([0])
+  })
+
+  test('a present dismissed slice does NOT restart the tour', () => {
+    const onboarding = useOnboardingStore()
+    onboarding.start()
+    onboarding.completeStep(0)
+    expect(onboarding.active).toBe(true)
+
+    onboardingSlice().write({ completedSteps: [], dismissedForever: true, rewards: [] })
+    expect(onboarding.active).toBe(false)
+    expect(onboarding.currentStep).toBe(-1)
+    expect(onboarding.dismissedForever).toBe(true)
   })
 })
