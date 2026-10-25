@@ -355,14 +355,20 @@ onBeforeUnmount(() => {
     <!-- ===== Step card===== -->
     <div
       v-if="currentStepIdx >= 0"
-      class="fixed z-50 pointer-events-auto"
+      class="fixed z-50"
+      :class="
+        isSpotlight
+          ? 'pointer-events-auto'
+          : 'inset-0 flex items-center justify-center px-4 pointer-events-none'
+      "
       :style="isSpotlight ? anchoredCardStyle : null"
       :data-test="isCompletion ? 'onboarding-complete' : `onboarding-step-${stepData?.key}`"
     >
-      <!-- Full-screen centered card (welcome / completion) -->
+      <!-- Full-screen centered card (welcome / completion) — height-constrained
+           so the Skip control never falls below the fold on short viewports -->
       <div
         v-if="isCompletion || !isSpotlight"
-        class="mx-auto w-full max-w-md rounded-3xl bg-surface-raised p-8 ring-1 ring-border shadow-warm"
+        class="pointer-events-auto mx-auto w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl bg-surface-raised p-8 ring-1 ring-border shadow-warm"
       >
         <!-- ===== Completion card ===== -->
         <div v-if="isCompletion" class="text-center">
