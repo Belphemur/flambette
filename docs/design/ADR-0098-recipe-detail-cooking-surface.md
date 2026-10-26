@@ -1,6 +1,6 @@
 # ADR-0098: Recipe detail as a cooking surface — screen wake + inline end-of-recipe mark on mobile
 
-Status: accepted (2026-10-26) — supersedes ADR-0083 in part (mobile pill rendering only)
+Status: accepted — implemented in PR #106 (2026-10-26) — supersedes ADR-0083 in part (mobile pill rendering only)
 
 ## Context
 
