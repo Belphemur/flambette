@@ -282,7 +282,7 @@ const shopperCount = computed(() => room.peers)
 </script>
 
 <template>
-  <section class="space-y-3">
+  <section class="space-y-3" data-test="grocery-list">
   <div
   v-if="plan.plan.length === 0 && plan.customItems.length === 0"
   class="py-16 text-center text-text-muted"

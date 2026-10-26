@@ -49,6 +49,7 @@ export interface BackupCounts {
   favourites: number
   ratings: number
   pantry: number
+  onboarding: number
 }
 
 export interface ApplyResult {
@@ -76,6 +77,11 @@ export interface SliceDef<T = unknown> {
   validate: (value: unknown) => string | null
   /** Replace persisted state via store actions/setters (validation ran first). */
   write: (value: T) => void
+  /** Optional hook run when the backup does NOT contain this slice's
+   *  file. Default behaviour (write(read()) — a restoring no-op) is kept
+   *  for slices without one. The onboarding slice overrides it: an older
+   *  backup without onboarding.json must not end a LIVE tour (qodo #6). */
+  onAbsent?: () => void
 }
 
 /** Every registered slice, in the order they are exported/validated/applied. */
@@ -652,6 +658,73 @@ export const STORE_SLICES: SliceDef<any>[] = [
       useRoomStore().announceProfile()
     },
   },
+  /* ADR-0097 — onboarding tour state (onboarding store). Device-local
+     stamps + dismissal state. Persisted like every other device-local
+     preference so a backup/restore cycle preserves the user's progress
+     and dismissal choice. */
+  {
+    file: 'onboarding.json',
+    label: 'onboarding tour progress and stamps',
+    persistKeys: ['mealime-planner:v1:onboarding'],
+    read: () => {
+      const onboarding = useOnboardingStore()
+      return {
+        completedSteps: [...onboarding.completedSteps],
+        dismissedForever: onboarding.dismissedForever,
+        rewards: [...onboarding.rewards],
+      }
+    },
+    validate(value) {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return 'onboarding.json must be an object'
+      }
+      const v = value as Record<string, unknown>
+      if (v.completedSteps !== undefined) {
+        if (!Array.isArray(v.completedSteps) || v.completedSteps.some((x) => typeof x !== 'number' || !Number.isInteger(x))) {
+          return 'onboarding.json completedSteps must be an array of integers'
+        }
+      }
+      if (v.dismissedForever !== undefined && typeof v.dismissedForever !== 'boolean') {
+        return 'onboarding.json dismissedForever must be a boolean'
+      }
+      if (v.rewards !== undefined) {
+        if (!Array.isArray(v.rewards) || v.rewards.some((x) => typeof x !== 'string')) {
+          return 'onboarding.json rewards must be an array of strings'
+        }
+      }
+      return null
+    },
+    write(value) {
+      const onboarding = useOnboardingStore()
+      const v = value as {
+        completedSteps?: number[]
+        dismissedForever?: boolean
+        rewards?: string[]
+      }
+      // Replace-on-apply (ADR-0013) — a backup's onboarding state overwrites
+      // the live store. Only the persisted fields are restored.
+      if (v.dismissedForever !== undefined) onboarding.dismissedForever = v.dismissedForever
+      if (v.completedSteps !== undefined) onboarding.completedSteps = [...v.completedSteps]
+      if (v.rewards !== undefined) onboarding.rewards = [...(v.rewards as StampName[])]
+      // Explicit present-slice transition (qodo #6): the restored progress
+      // may differ from the live step, so a RUNNING tour ends its session
+      // and restarts from the restored stamps. An import never STARTS a
+      // tour that wasn't running — the welcome overlay would pop over
+      // whatever surface the user is on (e.g. Settings, right after the
+      // import) and block the app chrome behind its scrim. Restored
+      // stamps surface on the next natural start(): a fresh boot on the
+      // recipes page. start() stays a no-op for a dismissed or complete
+      // restored tour either way.
+      const wasLive = onboarding.active && onboarding.currentStep >= 0
+      onboarding.active = false
+      onboarding.currentStep = -1
+      if (wasLive) onboarding.start()
+    },
+    // qodo #6: an ABSENT onboarding.json (older backup) must leave the
+    // live tour alone — default write(read()) would clear active/currentStep
+    // and kill a tour the user is mid-way through.
+    onAbsent() { /* keep the live tour session untouched */ },
+  },
 ]
 
 function isStepTimersMap(value: unknown): boolean {  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
@@ -826,8 +899,16 @@ export function applyBackup(zipBytes: Uint8Array): ApplyResult {
   }
 
   /* ---- apply ---- */
-  for (const { slice, value } of validated) {
-    slice.write(value)
+  for (const { slice, value, present } of validated) {
+    if (present) {
+      slice.write(value)
+    } else if (slice.onAbsent) {
+      slice.onAbsent()
+    } else {
+      // Missing slice file: keep current state (no-op apply) — write()
+      // re-writes what read() just captured.
+      slice.write(value)
+    }
   }
 
   const byFile = new Map(validated.filter((v) => v.present).map((v) => [v.slice.file, v.value]))
@@ -840,6 +921,7 @@ export function applyBackup(zipBytes: Uint8Array): ApplyResult {
     favourites: (byFile.get('favourites.json') as number[] | undefined)?.length ?? 0,
     ratings: ((byFile.get('ratings.json') as unknown[]) ?? []).length,
     pantry: (byFile.get('pantry.json') as PantryIngredient[] | undefined)?.length ?? 0,
+    onboarding: (byFile.get('onboarding.json') as { completedSteps?: number[] } | undefined)?.completedSteps?.length ?? 0,
   }
   return { ok: true, counts }
 }
@@ -856,3 +938,5 @@ import { useIdentityStore } from '../stores/identity'
 import { useRoomStore } from '../stores/room'
 import { MAX_NAME_CHARS, isUuidShape, sanitizeDisplayName } from './profileName'
 import { usePantryStore } from '../stores/pantry'
+import { useOnboardingStore } from '../stores/onboarding'
+import type { StampName } from '../stores/onboarding'

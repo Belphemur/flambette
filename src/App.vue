@@ -25,6 +25,9 @@ import RosterSheet from './components/RosterSheet.vue'
 import TooltipBubble from './components/TooltipBubble.vue'
 import { useIdentityStore } from './stores/identity'
 import RecipeSearchField from './components/RecipeSearchField.vue'
+import OnboardingOverlay from './components/OnboardingOverlay.vue'
+import { appModalsOpen } from './components/AppModal.vue'
+import { useOnboardingStore } from './stores/onboarding'
 
 /**
  * The app-level head (ADR-0048), ONE owner for the two indexable
@@ -53,6 +56,8 @@ const room = useRoomStore()
 // ADR-0063: instantiating here runs the identity store's hydration-time
 // migration (generate when absent while a household room is saved).
 const identity = useIdentityStore()
+// ADR-0097: onboarding tour store — session-scoped overlay, device-local stamps.
+const onboarding = useOnboardingStore()
 
 /** The app-level head (ADR-0048): see the block comment above — ONE
  *  owner, the hero and the recipes list, homepage head everywhere else. */
@@ -166,6 +171,12 @@ const roomChip = computed(() => {
     code,
   }
 })
+
+/** ADR-0097: the onboarding overlay shows only on non-fullscreen surfaces
+ * (cooking/shopping own the entire viewport), never on the home/hero page
+ * (ADR-0078), and only once the catalog has loaded so the search field
+ * target is real. */
+const showOnboarding = computed(() => onboarding.active && !isFullscreenMode.value && !isHome.value && !loading.value)
 
 /** The recipe detail view is full-bleed (edge-to-edge hero image). */
 const isRecipe = computed(() => route.name === 'recipe')
@@ -285,6 +296,10 @@ watch(
     // must not leave a dead code behind, and Leave (Decision 5) still
     // undoes it in one tap.
     ui.setHouseholdRoom(code)
+    // ADR-0097 amendment: a link-joiner ADOPTS the household room (ADR-0049
+    // Decision 11) — migrate so they never see the tour on this or any later
+    // launch. Idempotent if it already fired at the boot decision point above.
+    onboarding.migrateRoomDone()
   },
 )
 
@@ -448,6 +463,11 @@ function stopBannerChecks() {
 
 onMounted(async () => {
   await router.isReady()
+  // ADR-0097: the boot route, captured BEFORE any await — the ?room= join
+  // flow redirects to /recipes while the catalog loads, and reading
+  // route.name after those awaits would open the tour over a fresh
+  // joiner's congrats modal. The tour is for the DIRECT recipes landing.
+  const bootRoute = route.name
   // The device-level timer-completion host (ADR-0081 amendment): watches
   // the persisted step timers for the whole app session, so a timer that
   // reaches zero outside the cooking route still alerts. Starting here
@@ -466,6 +486,37 @@ onMounted(async () => {
   // Config is loaded: re-join the household room unless this launch is
   // already in one (session resume / ?room= link).
   autoJoinHousehold()
+  // ADR-0097 amendment: a household-room member never sees the tour. After
+  // the room state has settled at boot (autoJoinHousehold ran and the ui
+  // store rehydrated its saved householdRoom), migrate the tour to done —
+  // this is the migration that keeps EXISTING installs silent. Exactly ONE
+  // decision point: migrateRoomDone sets dismissedForever, so the start()
+  // gate below is a no-op for room members (DRY: no second room check).
+  if (ui.householdRoom) onboarding.migrateRoomDone()
+  // ADR-0097: begin the onboarding tour once the catalog is available, and
+  // ONLY when the device BOOTED on the recipes page — the showcase starts
+  // there, not on the hero/welcome page (ADR-0078) or any other surface, and
+  // never over a modal that a ?room= join opened in the meantime. start() is
+  // a no-op when dismissed or already complete.
+  if (bootRoute === 'recipes' && !appModalsOpen()) {
+    onboarding.start()
+  }
+  // ADR-0097: a DIRECT boot on /recipes is handled by the bootRoute gate
+  // above. In-app navigation INTO /recipes — e.g. the home hero's "Start
+  // planning" button — does NOT re-run onMounted, so start() would never
+  // fire and the tour stays hidden until a hard refresh. Watch the route
+  // and start on arrival: start() is idempotent (no-op if dismissed /
+  // complete / already active), and migrateRoomDone() above already set
+  // dismissedForever for room members, so a household joiner still never
+  // sees the tour. The !loading guard mirrors showOnboarding's own gate.
+  watch(
+    () => route.name,
+    (name) => {
+      if (name === 'recipes' && !loading.value && !appModalsOpen()) {
+        onboarding.start()
+      }
+    },
+  )
   // Stale-version banner: one check after mount, then on a schedule.
   startBannerChecks()
   void checkBannerVersion()
@@ -771,4 +822,7 @@ onBeforeUnmount(() => {
        slot in the ui store keeps one-mount == one-open (AppModal's
        assumption); every end path funnels back into settleConfirm. -->
   <ConfirmModal v-if="ui.confirm" :prompt="ui.confirm" @close="ui.settleConfirm" />
+  <!-- ADR-0097: the getting-started tour — v-if-gated on active state +
+       non-fullscreen surfaces so it never covers cooking/shopping. -->
+  <OnboardingOverlay v-if="showOnboarding" />
 </template>

@@ -34,15 +34,24 @@ export async function expectZeroMealimeRequests(page: Page): Promise<void> {
 }
 
 /**
- * Wait for the catalog to finish loading (recipe cards render).
- * Returns the list of recipe card articles.
+ * All recipe card articles on the Recipes tab (ADR-0047: `main article`).
  */
 export function recipeCards(page: Page) {
   return page.locator('main article')
 }
 
-export async function waitForCatalog(page: Page): Promise<void> {
+/**
+ * Wait for the catalog to finish loading (recipe cards render).
+ * ADR-0097: also dismisses the first-run onboarding tour so it doesn't
+ * block clicks in tests that don't need it. Noop when the overlay isn't
+ * mounted (e.g. the test isn't on /recipes, or the tour was already dismissed).
+ * Pass `dismiss = false` to keep the tour visible (used by onboarding.spec.ts).
+ */
+export async function waitForCatalog(page: Page, dismiss = true): Promise<void> {
   await expect(recipeCards(page).first()).toBeVisible({ timeout: 15_000 })
+  if (dismiss) {
+    await dismissOnboarding(page, 2000)
+  }
 }
 
 /**
@@ -144,6 +153,32 @@ export async function gotoTab(
   label: 'Recipes' | 'Plan' | 'Grocery' | 'History' | 'Settings',
 ): Promise<void> {
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: label }).click()
+}
+
+/** Dismiss the ADR-0097 onboarding overlay if it is present — the welcome card's
+ * "Skip tour" sits inside the step card (z-50, pointer-events-auto) above the
+ * scrim (z-40), so it is clickable even while the scrim blocks the page beneath.
+ * Noop when the overlay is not mounted. */
+export async function dismissOnboarding(page: Page, timeout = 3000): Promise<void> {
+  // Wait for the overlay to appear — start() is called after loading=false,
+  // so the overlay may not be mounted yet when the helper runs.
+  try {
+    await page.getByTestId('onboarding-skip-intro').first().waitFor({ state: 'attached', timeout })
+  } catch {
+    return // overlay not present — nothing to dismiss
+  }
+  // Use force: true — the step card may be animating after a viewport
+  // resize (design-visual tests loop setViewportSize), which makes
+  // Playwright's stability check spin until the test timeout.
+  await page.getByTestId('onboarding-skip-intro').first().click({ force: true })
+  // Wait for the overlay to be removed from the DOM.
+  await page.waitForSelector('[data-test="onboarding-overlay"]', { state: 'detached', timeout })
+  // Wait for pinia-plugin-persistedstate to flush dismissedForever to
+  // localStorage so backup/restore specs see the updated value on export.
+  await page.waitForFunction(
+    () => JSON.parse(localStorage.getItem('mealime-planner:v1:onboarding') || '{}').dismissedForever === true,
+    { timeout },
+  )
 }
 
 /* ---------- Diet classifier reference sets (ADR-0018) ---------- */

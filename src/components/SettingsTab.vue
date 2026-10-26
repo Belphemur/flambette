@@ -5,12 +5,14 @@ import {
   CircleDot,
   ClipboardPaste,
   CheckCircle2,
+  Check,
   Database,
   Download,
   Dices,
   Egg,
   ExternalLink,
   Fish,
+  Flame,
   FlaskConical,
   Info,
   Link,
@@ -61,6 +63,8 @@ import { useFavouritesStore } from '../stores/favourites'
 import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 import { useIdentityStore } from '../stores/identity'
+import { useRouter } from 'vue-router'
+import { useOnboardingStore, ONBOARDING_STEPS, STAMP_LABELS } from '../stores/onboarding'
 import PersonAvatar from './PersonAvatar.vue'
 import MealimeImportModal from './MealimeImportModal.vue'
 
@@ -79,6 +83,8 @@ const room = useRoomStore()
 // ADR-0063: this device's room identity — the Settings card's name field
 // and avatar preview, and the rename push while connected.
 const identity = useIdentityStore()
+// ADR-0097: onboarding tour — restart + stamp state from Settings.
+const onboarding = useOnboardingStore()
 const { shareRoomLink, shareableCode } = useShareRoomLink()
 
 /* ---------- Timer alerts (ADR-0081 amendment, ADR-0093) ----------
@@ -320,6 +326,9 @@ function joinHouseholdRoom() {
   rolledNewCode.value = false
   roomInput.value = code
   ui.setHouseholdRoom(code)
+  // ADR-0097 amendment: this device is now a household member — migrate.
+  // Idempotent: a re-join into an already-joined room is a no-op here.
+  onboarding.migrateRoomDone()
 
   // Already LIVE in THIS room: reconnecting would drop a healthy socket
   // just to re-establish it, so the setting is saved without touching
@@ -378,6 +387,9 @@ watch(
     roomTyping = false
     roomInput.value = code
     ui.setHouseholdRoom(code)
+    // ADR-0097 amendment: the adopted (re-rolled) code is still a household
+    // room — migrate is a no-op if it already fired at the save above.
+    onboarding.migrateRoomDone()
     ui.showToast(`That code was taken — using ${code} instead`, {
       kind: 'household',
       duration: 6000,
@@ -622,6 +634,20 @@ async function importMealimeFavourites(): Promise<void> {
   } else {
     mealimeReport.value = { ...result, added: 0, removed: 0 }
   }
+}
+
+/* ---------- Onboarding tour (ADR-0097) ---------- */
+
+const router = useRouter()
+
+/** Restart the tour: clears stamps + rewinds to welcome, and lands the tour
+ *  on its home surface (/recipes — the search step lives there). Without the
+ *  push the welcome card would open as a modal over Settings and its scrim
+ *  would strand the user mid-tour on the wrong surface. */
+function restartOnboarding(): void {
+  onboarding.restart()
+  if (router.currentRoute.value.path !== '/recipes') void router.push('/recipes')
+  ui.showToast('Onboarding tour restarted — welcome back!')
 }
 </script>
 
@@ -1014,6 +1040,71 @@ async function importMealimeFavourites(): Promise<void> {
   </div>
   </div>
 
+  <!-- Getting started (ADR-0097): the onboarding tour. Device-local — the
+  tour is personal state (stamps, dismissal), never household-synced. Shows the
+  current stamp state and a restart affordance; dismissal is permanent until
+  restarted. Placed full-width so the passport strip has room. -->
+  <div :class="CARD" class="space-y-2.5 lg:col-span-12" data-test="onboarding-card">
+  <div class="flex items-start justify-between gap-3">
+  <div class="min-w-0">
+  <h2 class="text-headline-sm">Getting started</h2>
+  <p class="mt-0.5 text-body-sm text-text-muted">
+    The guided tour of search, planning, and groceries. It's dismissible and
+    restartable — your stamps are saved.
+  </p>
+  </div>
+  <span :class="TILE"><Flame :size="16" aria-hidden="true" /></span>
+  </div>
+
+  <!-- Stamp passport strip — wraps on narrow phones (qodo #8): five
+  labeled badges exceed a 360px viewport's card width in one row. -->
+  <div class="flex flex-wrap items-center justify-start gap-x-4 gap-y-2 pt-1">
+  <div
+  v-for="(_, i) in ONBOARDING_STEPS"
+  :key="i"
+  class="flex flex-col items-center gap-0.5"
+  >
+  <span
+  class="flex size-8 items-center justify-center rounded-full border text-[10px] font-mono font-bold"
+  :class="
+  onboarding.completedSteps.includes(i)
+    ? 'border-saffron bg-brand text-on-brand'
+    : 'border-border bg-surface text-text-muted'
+  "
+  :aria-label="onboarding.completedSteps.includes(i) ? `Step ${i + 1} complete` : `Step ${i + 1} not started`"
+  >
+  <Check v-if="onboarding.completedSteps.includes(i)" :size="12" aria-hidden="true" />
+  <span v-else>{{ i + 1 }}</span>
+  </span>
+  <span class="text-[10px] font-mono text-text-muted">
+  {{ STAMP_LABELS[ONBOARDING_STEPS[i].stamp!] }}
+  </span>
+  </div>
+  </div>
+
+  <!-- Status + action -->
+  <div class="flex items-center justify-between pt-2">
+  <p class="text-body-sm" :class="onboarding.dismissedForever ? 'text-danger' : 'text-success'">
+  <template v-if="onboarding.dismissedForever">
+  Tour dismissed — stamps are kept, restart to resume.
+  </template>
+  <template v-else-if="onboarding.isComplete">
+  All stamps earned!
+  </template>
+  <template v-else>
+  {{ 5 - onboarding.rewards.length }} stamp{{ 5 - onboarding.rewards.length === 1 ? '' : 's' }} left to earn.
+  </template>
+  </p>
+  <button
+  class="h-9 rounded-lg border border-border-strong bg-surface-raised px-3 text-xs font-semibold text-text active:bg-surface-sunken"
+  data-test="onboarding-restart"
+  @click="restartOnboarding"
+  >
+  {{ onboarding.dismissedForever ? 'Restart tour' : onboarding.isComplete ? 'Replay tour' : 'Restart tour' }}
+  </button>
+  </div>
+  </div>
+
   <!-- Backup & restore: ALWAYS rendered (restoring a backup is precisely
   what a fresh device needs, and this view is reachable on one). The
   render's "What's included" list is the REAL registry — the same
@@ -1206,6 +1297,12 @@ async function importMealimeFavourites(): Promise<void> {
   data-test="about-welcome"
   class="inline-flex self-start text-sm font-medium text-brand hover:text-brand-strong"
   >What is Flambette?</RouterLink>
+  <button
+  type="button"
+  data-test="settings-about-restart-tour"
+  class="text-sm text-brand hover:underline"
+  @click="restartOnboarding"
+  >Restart tour</button>
   </div>
   </div>
 

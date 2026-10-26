@@ -52,8 +52,10 @@ knowledge "how an overlay works" lives once in AppModal.
    is NOT a separate spotlight overlay (one less mount hop, and the
    celebration card is the natural place to say "now share it"); it earns a
    stamp only if the user actually starts a room. Each step auto-completes
-   when the real interaction fires while the tour is active, and every step
-   card offers a "I have done this — skip ahead" text control.
+   when the real interaction fires while the tour is active; each step card
+   also offers an "I've done this" text control that asserts the lesson
+   learned and earns that step's stamp immediately (owner directive
+   2026-10-26), alongside a stampless "Got it" acknowledge-and-advance.
 
 4. **Gamification as stamps, not a points economy.** Five collectible stamps
    (First taste, Sharp eye, Curious cook, Planner, Provisioner) render as
@@ -77,6 +79,21 @@ knowledge "how an overlay works" lives once in AppModal.
    registry-coverage e2e case does not fail.
 
 ## Consequences
+
+**Amendment (2026-10-24, as-built):** Decision 1 said the overlay "composes
+`AppModal.vue` as its shell". As built, it cannot: AppModal's panel is a
+CENTERED dialog surface, while a spotlight tour needs a pointer-transparent
+scrim with a cutout at the target and an ANCHORED step card that moves with
+it. `OnboardingOverlay.vue` therefore owns its own teleport + scrim, but it
+follows AppModal's discipline instead of drifting from it: it reads the new
+exported `appModalsOpen()` probe from `AppModal.vue` and YIELDS Escape to
+any live modal, listens in the capture phase so it owns the keypress before
+view-level Escape handlers (RecipeDetail's navigate-back), and suppresses
+IME-composition Escapes (keyCode 229) — the same guards this file's Escape
+arbitration exists for. Scrim click dismisses on the full-screen steps
+(welcome/completion); the spotlight steps use a `pointer-events: none` dim
+frame so the highlighted target stays interactive (no scrim dismissal
+there — the X/Skip affordances own it).
 
 - New persisted store + a single new backup slice file; the e2e registry
   coverage case (`backup-restore.spec.ts`) now has one more slice to assert —
@@ -105,3 +122,116 @@ knowledge "how an overlay works" lives once in AppModal.
 - **Household as a sixth spotlight step:** rejected — folded into the
   completion card to avoid one more mount hop; the household flow already
   has its own dedicated surface (ADR-0021/0026).
+
+## Amendment (2026-10-25, review round 5 — completion/interaction semantics)
+
+Qodo review on the as-built overlay surfaced five correctness gaps; this
+amendment records the decided semantics:
+
+- **The welcome step is earned by starting the tour.** The welcome card's
+  "Start tour" button calls `completeStep(0)` (earns `first-taste`), not a
+  stampless `next()` — otherwise index 0 is never in `completedSteps`,
+  `isComplete` stays false, and every launch rewinds to welcome.
+- **Stamps require the real interaction (Decision 3 made literal).** The
+  search stamp fires on `input` (a typed character), never on `focus` —
+  tapping the field to begin typing is not a lesson learned. The grocery
+  stamp fires on a real click INSIDE the grocery list (checking an item),
+  never on a timer — the overlay navigates to `/grocery` itself, so an
+  appearance timer awarded `provisioner` for waiting. (The open-recipe
+  step keeps its 1s grace timer: the user's own card tap is the
+  interaction that produced the surface.) Pressing "I've done this" on a
+  step card is an owner-approved exception: it grants that step's stamp
+  immediately (a self-assert path), bypassing the real-interaction gate.
+  "Got it" remains stampless acknowledge-and-advance. (Owner directive
+  2026-10-26.)
+- **Finish ≠ dismiss.** The completion card's buttons call a new
+  `finish()` action (ends the session only) instead of `dismiss()` —
+  finishing the tour must not set `dismissedForever`, or Settings shows
+  "Tour dismissed" to a user who just completed it. `start()` already
+  refuses a complete tour; a finish with skipped stamps resumes at the
+  first incomplete step (the documented rewind behaviour).
+- **One setup path per spotlight.** The `onMounted` duplicate `findTarget`
+  is removed (the immediate `currentStep` watcher, flush `'post'`, is the
+  sole setup path) and each step's `finish` closure refuses to act unless
+  `onboarding.currentStep` still equals its step index — a stale listener
+  or timer can no longer double-advance past the next step's stamp.
+- **The spotlight follows its target.** `measureAndListen` scrolls the
+  target into view before measuring and re-measures the live rect on
+  window `scroll` (capture — scroll does not bubble but travels the
+  capture path) and `resize`; cleanup removes both.
+- **Backup/restore transitions (Decision 6 refined).** A backup that
+  OMITS `onboarding.json` runs the slice's new `onAbsent` hook: a no-op —
+  a live tour is never ended by an older backup's silence. A PRESENT
+  slice restores its fields, ends the live session, and calls `start()`
+  ONLY when a tour session was live at import time. An import never
+  STARTS a tour that wasn't running — the welcome overlay would pop
+  over the surface the user is on (e.g. Settings right after the
+  import) and block the app chrome behind its scrim. Restored stamps
+  surface on the next natural `start()`: a fresh boot on the recipes
+  page. `start()` stays a no-op for a dismissed or complete restored
+  tour either way.
+
+## Amendment (2026-10-26, household-room migration)
+
+Owner directive: disable onboarding for anybody already in a room (they do
+not need to see it); make it a migration that checks whether the device is
+in a room and, if so, sets the onboarding full as done; avoid coupling via
+coding-philosophy (DRY > SOLID > KISS).
+
+A device that is (or becomes) a member of a household room must never see the
+tour - the migration marks the tour done at the moment room membership is
+established, and runs for existing installs too (not just a boot-time guard).
+
+- **Decision.** `onboarding.migrateRoomDone()` is called by the room-owning
+  layer whenever `ui.householdRoom` transitions to a real room code: the boot
+  auto-join (`autoJoinHousehold` in App.vue), the share-link adoption
+  (`joinRoomFromLink` then `ui.setHouseholdRoom`), and the Settings
+  create/join flow (`joinHouseholdRoom` plus its re-roll watcher in
+  SettingsTab.vue). It reuses `dismissedForever` as the never-show flag.
+- **Decoupling contract.** The onboarding store does NOT import `useUiStore`
+  (or identity/room stores) and does NOT read `householdRoom`. `householdRoom`
+  in the ui store stays the single source of truth for room membership - never
+  mirrored, never watched from onboarding. One direction of calls only:
+  room layer calls the onboarding action. The store exposes ONE new action and
+  takes NO room arguments.
+- **Idempotence / completeness (pinned semantics).**
+  1. Boot migration: after room state settles at boot, if `householdRoom` is
+     truthy AND the tour is neither complete nor already dismissed, mark done.
+  2. Mid-session transition: any flow that establishes membership (Settings
+     create/join, share-link join) routes through the SAME action; the tour
+     ends and is marked done. Stamps already earned are preserved (dismiss
+     semantics, not reset).
+  3. Already complete - left alone (earned stamps + finish state untouched).
+  4. Already dismissed - no-op (idempotent re-entry).
+  5. `restart()` still works afterwards (it clears `dismissedForever`) - a
+     room member who WANTS the tour gets it. NOTE: because `householdRoom` is
+     still set, a household member who restarts the tour will have it
+     re-dismissed on the NEXT boot (the migration fires again) - an accepted
+     consequence of in-a-room implies no-tour that the owner can revisit.
+  6. The boot route gate keeps ONE decision point (migrate, then `start()`
+     is a no-op for room members) - never sprinkled across App.vue.
+- **KISS - no new persisted field.** `dismissedForever` is reused as the
+  never-show flag; there is no `skippedForRoom` or second boolean. The
+  migration writes the SAME persisted field onboarding.json already carries,
+  so `backup-restore.spec.ts` export/import expectations are unchanged (a
+  backup that omits the slice stays a no-op via the existing `onAbsent` hook;
+  a present slice with `dismissedForever` survives a round trip).
+- **Two Restart-tour entry points.** The Settings Getting-Started card keeps
+  its `onboarding-restart` button; a SUBTLER Restart-tour CTA was added to the
+  About card (`settings-about-restart-tour`, text-sm text-brand hover:underline -
+  Warm Culinary Paper tokens) - both reuse `restartOnboarding` and never
+  duplicate the stamp-clearing logic.
+- **Nav-driven start (2026-10-26, owner directive: "clicking start planning
+  on the hero should trigger the onboarding").** The boot gate alone fired
+  only for a DIRECT boot on /recipes - a SPA push from the home hero
+  ("Start planning") never re-runs onMounted, so the tour stayed hidden
+  until a hard refresh, which defeats the hero's primary route into the
+  catalog. App.vue now also watches `route.name` and calls the same
+  idempotent `start()` on arrival at /recipes (post-catalog `!loading`
+  guard, `!appModalsOpen()` exactly like the boot gate). Room members stay
+  silent with no second room check: `migrateRoomDone()` has already set
+  `dismissedForever` at boot before any navigation can happen, so `start()`
+  remains a no-op for them. Engaging the Welcome step ("Start tour") is
+  what earns the `first-taste` stamp - unchanged.
+- **Not room-synced.** Onboarding data is device-local; the migration adds
+  nothing to the room-sync payload or STORE_SLICES merge semantics.

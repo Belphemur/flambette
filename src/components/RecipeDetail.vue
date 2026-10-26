@@ -934,6 +934,7 @@ function startCooking() {
   class="min-h-full"
   role="dialog"
   :aria-label="meta.name"
+  data-test="recipe-detail"
   tabindex="-1"
   @keydown="onKey"
   >
