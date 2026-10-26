@@ -152,3 +152,35 @@ test.describe('Onboarding tour (ADR-0097)', () => {
     expect(state.completedSteps).toEqual([])
   })
 })
+
+test.describe('Onboarding nav-driven start (ADR-0097 §3)', () => {
+  test('starts when entering /recipes from the home hero — no refresh needed', async ({
+    page,
+  }) => {
+    // Land on the home HERO (not a direct /recipes boot): the App.vue boot
+    // gate only starts the tour when the device BOOTS on /recipes, so the
+    // overlay must NOT appear here.
+    await page.goto('/')
+    await page.getByTestId('home-hero').waitFor()
+    await expect(page.getByTestId('onboarding-overlay')).toHaveCount(0)
+
+    // The hero's primary CTA navigates IN-APP to /recipes. A SPA push does
+    // NOT re-run App.vue's onMounted — the route watcher must start the tour.
+    await page.getByTestId('hero-start-planning').click()
+    await expect(page).toHaveURL(/\/recipes$/)
+
+    // The Welcome step appears immediately, no hard refresh required.
+    await expect(page.getByTestId('onboarding-overlay')).toBeVisible()
+    await expect(page.getByTestId('onboarding-overlay')).toHaveAttribute(
+      'data-test-step',
+      'welcome',
+    )
+
+    // Engaging it ("I've done this") earns the first-taste stamp.
+    await page.getByTestId('onboarding-start-tour').click()
+    await expect.poll(async () => {
+      const ls = await page.evaluate(() => localStorage.getItem('mealime-planner:v1:onboarding'))
+      return JSON.parse(ls || '{}').rewards?.includes('first-taste')
+    }, { timeout: 5000 }).toBe(true)
+  })
+})

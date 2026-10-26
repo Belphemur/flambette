@@ -216,6 +216,31 @@ export const useOnboardingStore = defineStore('onboarding', {
       this.currentStep = -1
     },
 
+    /** ADR-0097 amendment (2026-10-06): a household-room member never sees
+     *  the tour. The room-owning layer calls this action whenever membership
+     *  is established (boot auto-join, share-link join, Settings create/join)
+     *  — it does NOT read room state itself (DRY: `householdRoom` lives only in
+     *  the ui store, one direction of calls: room layer → this action).
+     *
+     *  Idempotent and loss-free:
+     *   - no-op when the tour is already complete (earned stamps + finish
+     *     state are left untouched — a finisher stays a finisher);
+     *   - no-op when already dismissed (re-entry after a reload / re-join);
+     *   - preserves earned stamps (dismiss semantics: completedSteps and
+     *     rewards are never cleared — only the "show" flag flips);
+     *   - ends any in-flight session so a mid-tour overlay vanishes.
+     *
+     *  Reuses `dismissedForever` as the "never show again" flag — KISS, no
+     *  new persisted field — so Settings' "Restart tour" still re-opens the
+     *  tour for a household member who explicitly wants it. */
+    migrateRoomDone(): void {
+      if (this.isComplete) return
+      if (this.dismissedForever) return
+      this.dismissedForever = true
+      this.active = false
+      this.currentStep = -1
+    },
+
     /** Restart from the beginning — clears stamps, rewinds to welcome. */
     restart(): void {
       this.dismissedForever = false

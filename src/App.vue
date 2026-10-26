@@ -296,6 +296,10 @@ watch(
     // must not leave a dead code behind, and Leave (Decision 5) still
     // undoes it in one tap.
     ui.setHouseholdRoom(code)
+    // ADR-0097 amendment: a link-joiner ADOPTS the household room (ADR-0049
+    // Decision 11) — migrate so they never see the tour on this or any later
+    // launch. Idempotent if it already fired at the boot decision point above.
+    onboarding.migrateRoomDone()
   },
 )
 
@@ -482,6 +486,13 @@ onMounted(async () => {
   // Config is loaded: re-join the household room unless this launch is
   // already in one (session resume / ?room= link).
   autoJoinHousehold()
+  // ADR-0097 amendment: a household-room member never sees the tour. After
+  // the room state has settled at boot (autoJoinHousehold ran and the ui
+  // store rehydrated its saved householdRoom), migrate the tour to done —
+  // this is the migration that keeps EXISTING installs silent. Exactly ONE
+  // decision point: migrateRoomDone sets dismissedForever, so the start()
+  // gate below is a no-op for room members (DRY: no second room check).
+  if (ui.householdRoom) onboarding.migrateRoomDone()
   // ADR-0097: begin the onboarding tour once the catalog is available, and
   // ONLY when the device BOOTED on the recipes page — the showcase starts
   // there, not on the hero/welcome page (ADR-0078) or any other surface, and
@@ -490,6 +501,22 @@ onMounted(async () => {
   if (bootRoute === 'recipes' && !appModalsOpen()) {
     onboarding.start()
   }
+  // ADR-0097: a DIRECT boot on /recipes is handled by the bootRoute gate
+  // above. In-app navigation INTO /recipes — e.g. the home hero's "Start
+  // planning" button — does NOT re-run onMounted, so start() would never
+  // fire and the tour stays hidden until a hard refresh. Watch the route
+  // and start on arrival: start() is idempotent (no-op if dismissed /
+  // complete / already active), and migrateRoomDone() above already set
+  // dismissedForever for room members, so a household joiner still never
+  // sees the tour. The !loading guard mirrors showOnboarding's own gate.
+  watch(
+    () => route.name,
+    (name) => {
+      if (name === 'recipes' && !loading.value && !appModalsOpen()) {
+        onboarding.start()
+      }
+    },
+  )
   // Stale-version banner: one check after mount, then on a schedule.
   startBannerChecks()
   void checkBannerVersion()

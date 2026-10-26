@@ -326,6 +326,9 @@ function joinHouseholdRoom() {
   rolledNewCode.value = false
   roomInput.value = code
   ui.setHouseholdRoom(code)
+  // ADR-0097 amendment: this device is now a household member — migrate.
+  // Idempotent: a re-join into an already-joined room is a no-op here.
+  onboarding.migrateRoomDone()
 
   // Already LIVE in THIS room: reconnecting would drop a healthy socket
   // just to re-establish it, so the setting is saved without touching
@@ -384,6 +387,9 @@ watch(
     roomTyping = false
     roomInput.value = code
     ui.setHouseholdRoom(code)
+    // ADR-0097 amendment: the adopted (re-rolled) code is still a household
+    // room — migrate is a no-op if it already fired at the save above.
+    onboarding.migrateRoomDone()
     ui.showToast(`That code was taken — using ${code} instead`, {
       kind: 'household',
       duration: 6000,
@@ -1291,6 +1297,12 @@ function restartOnboarding(): void {
   data-test="about-welcome"
   class="inline-flex self-start text-sm font-medium text-brand hover:text-brand-strong"
   >What is Flambette?</RouterLink>
+  <button
+  type="button"
+  data-test="settings-about-restart-tour"
+  class="text-sm text-brand hover:underline"
+  @click="restartOnboarding"
+  >Restart tour</button>
   </div>
   </div>
 

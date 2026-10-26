@@ -164,3 +164,68 @@ amendment records the decided semantics:
   surface on the next natural `start()`: a fresh boot on the recipes
   page. `start()` stays a no-op for a dismissed or complete restored
   tour either way.
+
+## Amendment (2026-10-26, household-room migration)
+
+Owner directive: disable onboarding for anybody already in a room (they do
+not need to see it); make it a migration that checks whether the device is
+in a room and, if so, sets the onboarding full as done; avoid coupling via
+coding-philosophy (DRY > SOLID > KISS).
+
+A device that is (or becomes) a member of a household room must never see the
+tour - the migration marks the tour done at the moment room membership is
+established, and runs for existing installs too (not just a boot-time guard).
+
+- **Decision.** `onboarding.migrateRoomDone()` is called by the room-owning
+  layer whenever `ui.householdRoom` transitions to a real room code: the boot
+  auto-join (`autoJoinHousehold` in App.vue), the share-link adoption
+  (`joinRoomFromLink` then `ui.setHouseholdRoom`), and the Settings
+  create/join flow (`joinHouseholdRoom` plus its re-roll watcher in
+  SettingsTab.vue). It reuses `dismissedForever` as the never-show flag.
+- **Decoupling contract.** The onboarding store does NOT import `useUiStore`
+  (or identity/room stores) and does NOT read `householdRoom`. `householdRoom`
+  in the ui store stays the single source of truth for room membership - never
+  mirrored, never watched from onboarding. One direction of calls only:
+  room layer calls the onboarding action. The store exposes ONE new action and
+  takes NO room arguments.
+- **Idempotence / completeness (pinned semantics).**
+  1. Boot migration: after room state settles at boot, if `householdRoom` is
+     truthy AND the tour is neither complete nor already dismissed, mark done.
+  2. Mid-session transition: any flow that establishes membership (Settings
+     create/join, share-link join) routes through the SAME action; the tour
+     ends and is marked done. Stamps already earned are preserved (dismiss
+     semantics, not reset).
+  3. Already complete - left alone (earned stamps + finish state untouched).
+  4. Already dismissed - no-op (idempotent re-entry).
+  5. `restart()` still works afterwards (it clears `dismissedForever`) - a
+     room member who WANTS the tour gets it. NOTE: because `householdRoom` is
+     still set, a household member who restarts the tour will have it
+     re-dismissed on the NEXT boot (the migration fires again) - an accepted
+     consequence of in-a-room implies no-tour that the owner can revisit.
+  6. The boot route gate keeps ONE decision point (migrate, then `start()`
+     is a no-op for room members) - never sprinkled across App.vue.
+- **KISS - no new persisted field.** `dismissedForever` is reused as the
+  never-show flag; there is no `skippedForRoom` or second boolean. The
+  migration writes the SAME persisted field onboarding.json already carries,
+  so `backup-restore.spec.ts` export/import expectations are unchanged (a
+  backup that omits the slice stays a no-op via the existing `onAbsent` hook;
+  a present slice with `dismissedForever` survives a round trip).
+- **Two Restart-tour entry points.** The Settings Getting-Started card keeps
+  its `onboarding-restart` button; a SUBTLER Restart-tour CTA was added to the
+  About card (`settings-about-restart-tour`, text-sm text-brand hover:underline -
+  Warm Culinary Paper tokens) - both reuse `restartOnboarding` and never
+  duplicate the stamp-clearing logic.
+- **Nav-driven start (2026-10-26, owner directive: "clicking start planning
+  on the hero should trigger the onboarding").** The boot gate alone fired
+  only for a DIRECT boot on /recipes - a SPA push from the home hero
+  ("Start planning") never re-runs onMounted, so the tour stayed hidden
+  until a hard refresh, which defeats the hero's primary route into the
+  catalog. App.vue now also watches `route.name` and calls the same
+  idempotent `start()` on arrival at /recipes (post-catalog `!loading`
+  guard, `!appModalsOpen()` exactly like the boot gate). Room members stay
+  silent with no second room check: `migrateRoomDone()` has already set
+  `dismissedForever` at boot before any navigation can happen, so `start()`
+  remains a no-op for them. Engaging the Welcome step ("Start tour") is
+  what earns the `first-taste` stamp - unchanged.
+- **Not room-synced.** Onboarding data is device-local; the migration adds
+  nothing to the room-sync payload or STORE_SLICES merge semantics.

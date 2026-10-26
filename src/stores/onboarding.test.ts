@@ -162,3 +162,81 @@ describe('onboarding store (ADR-0097)', () => {
     expect(s.currentStep).toBe(COMPLETION_STEP)
   })
 })
+
+/**
+ * ADR-0097 amendment (2026-10-06, household-room migration).
+ *
+ * A household-room member never sees the tour. The room-owning layer
+ * (App.vue boot + join flows, SettingsTab join flow) calls
+ * `migrateRoomDone()` whenever membership is established; the store does
+ * NOT read room state itself (DRY). migrateRoomDone reuses
+ * `dismissedForever` as the never-show flag (KISS, no new persisted
+ * field) and is idempotent + stamp-preserving.
+ */
+describe('onboarding store - household-room migration (ADR-0097 amendment)', () => {
+  test('migrateRoomDone marks a pending tour done and ends the session', () => {
+    const s = useOnboardingStore()
+    s.start()
+    expect(s.active).toBe(true)
+    expect(s.currentStep).toBe(0)
+    s.migrateRoomDone()
+    expect(s.dismissedForever).toBe(true)
+    expect(s.active).toBe(false)
+    expect(s.currentStep).toBe(-1)
+    // No stamps yet; only the session-only pair (active/currentStep) clears.
+    expect(s.completedSteps).toEqual([])
+    expect(s.rewards).toEqual([])
+  })
+
+  test('migrateRoomDone preserves earned stamps (dismiss semantics)', () => {
+    const s = useOnboardingStore()
+    s.completeStep(0) // earns first-taste
+    s.completeStep(2) // earns curious-cook
+    expect(s.rewards).toEqual(['first-taste', 'curious-cook'])
+    s.migrateRoomDone()
+    expect(s.dismissedForever).toBe(true)
+    // Stamps survive the migration - a member loses nothing they earned.
+    expect(s.completedSteps).toEqual([0, 2])
+    expect(s.rewards).toEqual(['first-taste', 'curious-cook'])
+  })
+
+  test('migrateRoomDone is a no-op when the tour is already complete', () => {
+    const s = useOnboardingStore()
+    for (let i = 0; i < ONBOARDING_STEPS.length; i++) s.completeStep(i)
+    expect(s.isComplete).toBe(true)
+    s.migrateRoomDone()
+    // A finisher stays a finisher - dismissedForever is NOT set by migration.
+    expect(s.dismissedForever).toBe(false)
+    expect(s.isComplete).toBe(true)
+    expect(s.rewards).toHaveLength(5)
+  })
+
+  test('migrateRoomDone is a no-op when already dismissed (idempotent)', () => {
+    const s = useOnboardingStore()
+    s.dismiss()
+    expect(s.dismissedForever).toBe(true)
+    s.migrateRoomDone()
+    expect(s.dismissedForever).toBe(true) // still dismissed, single source
+    // Repeat calls are safe - re-joins / reloads never double-effect.
+    s.migrateRoomDone()
+    s.migrateRoomDone()
+    expect(s.dismissedForever).toBe(true)
+  })
+
+  test('restart() re-opens the tour after a room migration', () => {
+    const s = useOnboardingStore()
+    s.start()
+    s.completeStep(0)
+    s.migrateRoomDone()
+    expect(s.dismissedForever).toBe(true)
+    // A household member who WANTS the tour gets it; restart clears the
+    // reused never-show flag so the tour re-arms.
+    s.restart()
+    expect(s.dismissedForever).toBe(false)
+    expect(s.active).toBe(true)
+    expect(s.currentStep).toBe(0)
+    // restart() is a full reset - stamps cleared (fresh run), not by migrate.
+    expect(s.completedSteps).toEqual([])
+    expect(s.rewards).toEqual([])
+  })
+})
