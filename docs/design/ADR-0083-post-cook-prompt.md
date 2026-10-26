@@ -1,6 +1,6 @@
 # ADR-0083: The post-cook prompt — rate and favourite when the meal is done
 
-Status: accepted (2026-10-12) — implemented in PR #84
+Status: accepted (superseded in part by ADR-0098) (2026-10-12) — implemented in PR #84
 
 ## Context
 
@@ -362,3 +362,17 @@ Pixel 7 asserts the unchanged icon-only mobile geometry; the wiggle
 test pins animation-name on the svg and its absence on the label on
 both layouts). The icon-only note above is kept for the decision
 trail.
+
+## Change note — 2026-10-26, superseded in part by ADR-0098: the pill is DESKTOP-ONLY
+
+The mobile rendering of the floating "Cooked this?" pill — the floating
+overlay, the wiggle nudge and the tail-sentinel trigger at every layout —
+is superseded ON MOBILE (below `lg`) by ADR-0098: on phones the mark is
+an INLINE CTA (`data-test="detail-cook-cta"`) after the last step, no
+floating overlay and no wiggle there. Every DESKTOP (`lg`+) ruling in
+this record — icon-only content, full text label from `2xl`,
+free-margin placement, always-visible policy, wiggle, flick dismiss,
+tail sentinel — remains the authority for `lg`+ and is untouched.
+ADR-0098 also adds the Screen Wake Lock to the detail page (cooking-mode
+parity with ADR-0020). The desktop change-note above is kept for the
+decision trail.
