@@ -64,10 +64,24 @@ two cards, then the action deck.
   is what keeps you cooking now: record removed, session resumes exactly
   where it was. The window Escape handler yields while the prompt is
   open (registration order — it fires before AppModal's).
-- **The detail "Cooked this?" pill (ADR-0083 addendum, owner pill-round
-  rulings 2026-10-13, superseding the float note's suppression)**:
-  RecipeDetail renders the compact pill from the Stitch render ("Recipe
-  Detail End (Mobile Dark)", Warm Culinary Paper) FLOATING, exactly as
+- **The detail page is a cooking surface (ADR-0098)**:
+  RecipeDetail holds a best-effort Screen Wake Lock (`'screen'`) while
+  the page is open — `onMounted` acquires it, `onUnmounted` releases it,
+  and a `visibilitychange` listener re-acquires when the tab returns to
+  visible. This is the SAME ADR-0020 pattern CookingView ships: silent
+  no-op when the API is absent or denied (private tab, unsupported
+  browser, cross-origin iframe) — the detail page still renders and the
+  cook flow is untouched. Active on both layouts (harmless on desktop;
+  the API is mobile where it matters). Pinned by
+  `e2e/detail-wakelock.spec.ts`.
+- **The detail mark: desktop pill / mobile inline CTA (ADR-0098,
+  superseding ADR-0083's mobile rendering)**: the floating
+  "Cooked this?" pill (ADR-0083 addendum, owner pill-round rulings
+  2026-10-13) is DESKTOP-ONLY as of ADR-0098 — the pill is gated by
+  `isDesktopLg` (`min-width: 1024px`) in `cookedPillVisible`, so it
+  never renders on mobile. RecipeDetail renders the compact pill from
+  the Stitch render ("Recipe Detail End (Mobile Dark)", Warm Culinary
+  Paper) FLOATING, exactly as
   Stitch designed — ONE pill `fixed` to the viewport at the content's
   right edge (~120px above the bottom nav via
   `bottom-[calc(120px+env(safe-area-inset-bottom))]`, `z-40`,
@@ -124,10 +138,24 @@ two cards, then the action deck.
   path (captures the prior exactly like the session does) and raises
   the SAME `PostCookPrompt` over the detail page: Done → `/history`;
   Undo → record removed and the user STAYS on detail. `data-test`:
-  `cooked-pill`; the prompt keeps the prompt's own hooks. Pinned by
-  `e2e/cooked-pill.spec.ts` on Desktop Chrome + Pixel 7 and by the
-  auxiliary Firefox runner `playwright.pill-firefox.ts` (CI installs
-  chromium only).
+  `cooked-pill` (desktop) + `detail-cook-cta` (mobile).
+  Pinned by `e2e/cooked-pill.spec.ts` (Desktop Chrome asserts the
+  floating pill, Pixel 7 asserts the inline CTA) and the auxiliary
+  Firefox runner `playwright.pill-firefox.ts` (CI installs chromium only).
+
+  MOBILE INLINE CTA (gated `v-if="!isDesktopLg"`, rendered in-flow
+  immediately after the `</ol>` step list; the `lg:hidden` class only
+  guards the prerendered first paint): a full-width tonal button — `h-11`,
+  `rounded-xl`, `border-success/25 bg-success/8 text-success`, one
+  `CookingPot :size=16` — labelled "Mark as cooked" (the cooking
+  session's in-flow label, NOT "Cooked this?"). ALWAYS offered once
+  the doc loads: no sentinel, no wiggle, no dismissal, no cooked-today
+  guard — it can be pressed repeatedly, each press records another cook
+  and re-raises the SAME prompt. It calls the same single
+  `recordCookFromDetail()` path the desktop pill uses (extracted from
+  `cookFromPill()`), so the prior-capture and Undo semantics are
+  identical: Undo removes the record and the user stays on the detail
+  page with the CTA still present.
 - Rejected render fictions: the "ACTION STEP" badge, difficulty labels,
   est-times beyond the recipe's own minutes.
 
