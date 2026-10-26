@@ -44,7 +44,7 @@ import RatingStars from './RatingStars.vue'
 import PostCookPrompt from './PostCookPrompt.vue'
 import NutritionModal from './NutritionModal.vue'
 import { formatAbsolute, formatRelative, useCookHistory } from '../lib/history'
-import { useIntersectionObserver } from '@vueuse/core'
+import { useIntersectionObserver, useMediaQuery } from '@vueuse/core'
 import { ICON_ROLES, ingredientRole, mealRole } from '../lib/palette'
 import { recipeSeoHead } from '../lib/seo'
 import HueIcon from './HueIcon.vue'
@@ -617,9 +617,11 @@ function onTailVisibility() {
 watch(tailStepEl, (el) => {
   if (el) evaluateTailInView()
 })
+const isDesktopLg = useMediaQuery('(min-width: 1024px)')
 const cookedPillVisible = computed(
   () =>
     !!meta.value &&
+    isDesktopLg.value &&
     tailInView.value &&
     !ui.isPillDismissed(meta.value.id) &&
     !pillPromptOpen.value,
@@ -751,17 +753,12 @@ function onPillPointerEnd(event: PointerEvent) {
 }
 
 /**
- * Pill tap = record + the SAME prompt, no separate flow: the ONE
- * plan.markCooked path the cooking session uses (plan-aware — a planned
- * meal leaves the plan, an unplanned cook still records, ADR-0032).
+ * Record a cooked event and raise the post-cook prompt — the ONE
+ * mark path both the floating pill (desktop) and the inline CTA (mobile)
+ * share (ADR-0098). The prior-capture (plan entry + cleared ingredients)
+ * is what lets Undo return the plan to its pre-mark state.
  */
-function cookFromPill() {
-  // A flick that ends on the pill still fires a synthetic click AFTER
-  // the dismiss consumed the gesture: swallow it — and only it — here.
-  if (pillSwiped.value) {
-    pillSwiped.value = false
-    return
-  }
+function recordCookFromDetail() {
   if (!meta.value || pillEvent.value) return
   const id = meta.value.id
   const entry = plan.plan.find((e) => e.variantId === id)
@@ -773,6 +770,19 @@ function cookFromPill() {
   pillEvent.value = plan.markCooked(id)
   pillPrior.value = prior
   pillPromptOpen.value = true
+}
+
+/**
+ * Pill tap = swipe-latch check + the SAME record+prompt path (ADR-0083).
+ */
+function cookFromPill() {
+  // A flick that ends on the pill still fires a synthetic click AFTER
+  // the dismiss consumed the gesture: swallow it — and only it — here.
+  if (pillSwiped.value) {
+    pillSwiped.value = false
+    return
+  }
+  recordCookFromDetail()
 }
 
 /**
@@ -854,6 +864,34 @@ function close() {
   else router.replace('/recipes')
 }
 
+/* ---------- Screen wake lock (best effort) — ADR-0098 / ADR-0020 ---------- */
+
+type WakeLockSentinel = { release(): Promise<void> }
+type WakeLockNavigator = Navigator & {
+  wakeLock?: { request(type: 'screen'): Promise<WakeLockSentinel> }
+}
+let wakeLock: WakeLockSentinel | null = null
+
+async function acquireWakeLock() {
+  try {
+    wakeLock = (await (navigator as WakeLockNavigator).wakeLock?.request('screen')) ?? null
+  } catch {
+    // Denied or unsupported — cooking still works, screen may dim.
+    wakeLock = null
+  }
+}
+async function releaseWakeLock() {
+  try {
+    await wakeLock?.release()
+  } catch {
+    // Already released.
+  }
+  wakeLock = null
+}
+function onVisibility() {
+  if (document.visibilityState === 'visible') void acquireWakeLock()
+}
+
 function onKey(e: KeyboardEvent) {
   // The facts modal owns Escape while it is open (ADR-0039): this view
   // must not navigate away underneath it.
@@ -866,12 +904,16 @@ function onKey(e: KeyboardEvent) {
 }
 onMounted(() => {
   window.addEventListener('keydown', onKey)
+  void acquireWakeLock()
+  document.addEventListener('visibilitychange', onVisibility)
   // Warm the restriction artifacts (control plane + overlay) so a swapped
   // ingredient list is ready; no-op when no restriction is active.
   void restrictionPrefs.ensureLoaded()
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onKey)
+  document.removeEventListener('visibilitychange', onVisibility)
+  void releaseWakeLock()
 })
 
 function addToPlan() {
@@ -1580,6 +1622,23 @@ function startCooking() {
   </ul>
   </li>
   </ol>
+
+  <!-- Inline mark-as-cooked CTA on mobile (ADR-0098): after the last step,
+  always offered, pressable repeatedly — same plan.markCooked path and
+  same PostCookPrompt the floating pill raises on desktop. The v-if gate
+  keeps it out of the desktop DOM entirely (the two surfaces never
+  co-exist); the lg:hidden class guards the prerendered first paint. -->
+  <div v-if="!isDesktopLg" class="mt-4 lg:hidden">
+    <button
+      type="button"
+      class="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-success/25 bg-success/8 text-sm font-semibold text-success transition-colors hover:bg-success/12"
+      data-test="detail-cook-cta"
+      @click="recordCookFromDetail"
+    >
+      <CookingPot :size="16" aria-hidden="true" />
+      Mark as cooked
+    </button>
+  </div>
   </section>
   </div>
   </template>
@@ -1594,17 +1653,18 @@ function startCooking() {
   navigation, surface-raised fill, subtle border, the ONE popover
   shadow (ADR-0068), warm accent dot. The pointer-events-none wrapper
   keeps the fixed overlay from intercepting taps outside the pill (the
-  ADR-0049 hit-testing lesson). OWNER desktop rulings (2026-10-14): the
-  pill sits on the RIGHT SIDE of the instructions column — from `xl` its
-  left edge anchors 1.5rem OUTSIDE the 1100px --container-app edge
+  ADR-0049 hit-testing lesson). OWNER desktop rulings (2026-10-14):
+  DESKTOP-ONLY as of ADR-0098 — the pill is gated by `isDesktopLg`
+  (`min-width: 1024px`) in `cookedPillVisible`, so it never renders on
+  mobile; the inline `detail-cook-cta` (above) owns the mobile mark.
+  The pill sits on the RIGHT SIDE of the instructions column — from `xl`
+  its left edge anchors 1.5rem OUTSIDE the 1100px --container-app edge
   (right: calc((100vw - 1100px) / 2 - 24px)), fully in the free page
   margin so it NEVER overlays the step text; from `2xl` that margin is
   wide enough for the FULL text label ("Cooked this?" — at 1536px the
-  margin is 218px vs the pill's ~130px with label). Below `xl` the pill
-  stays in-container at the content's right edge (mobile px-4 gutter,
-  unchanged); the wiggle animates ONLY the CookingPot svg on ALL
-  layouts — the text label never animates. The desktop pill floats
-  ~110px above the bottom (mobile keeps its bottom-nav offset).
+  margin is 218px vs the pill's ~130px with label). The wiggle animates
+  ONLY the CookingPot svg on ALL layouts it appears — the text label
+  never animates. The desktop pill floats ~110px above the bottom.
   Hidden until the LAST THREE steps come into view (the sentinel on
   the third-from-last step); ALWAYS offered otherwise — the
   cooked-today suppression is retired (owner ruling 2026-10-13). The
