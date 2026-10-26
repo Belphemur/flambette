@@ -111,6 +111,22 @@ test.describe('Onboarding tour (ADR-0097)', () => {
     }, { timeout: 5000 }).toBe(true)
   })
 
+  test("clicking 'I've done this' on a step grants that step's stamp at click time", async ({ page }) => {
+    // ADR-0097: "I've done this" asserts the step's lesson was learned — it
+    // earns THIS step's stamp immediately (no real interaction required),
+    // distinct from "Got it" (stampless acknowledge-and-advance).
+    await page.getByTestId('onboarding-start-tour').click()
+    await expect(page.getByTestId('onboarding-overlay')).toHaveAttribute('data-test-step', 'search')
+    // Click "I've done this" on the search step WITHOUT typing — sharp-eye
+    // is earned at click time, then the tour advances to the open step.
+    await page.getByTestId('onboarding-skip-step').click()
+    await expect.poll(async () => {
+      const ls = await page.evaluate(() => localStorage.getItem('mealime-planner:v1:onboarding'))
+      return JSON.parse(ls || '{}').rewards?.includes('sharp-eye')
+    }, { timeout: 5000 }).toBe(true)
+    await expect(page.getByTestId('onboarding-overlay')).toHaveAttribute('data-test-step', 'open')
+  })
+
   test('skip tour dismisses for this session only', async ({ page }) => {
     await page.getByTestId('onboarding-skip-intro').click()
     await expect(page.getByTestId('onboarding-overlay')).toHaveCount(0)

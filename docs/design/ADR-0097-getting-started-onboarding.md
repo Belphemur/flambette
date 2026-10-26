@@ -52,8 +52,10 @@ knowledge "how an overlay works" lives once in AppModal.
    is NOT a separate spotlight overlay (one less mount hop, and the
    celebration card is the natural place to say "now share it"); it earns a
    stamp only if the user actually starts a room. Each step auto-completes
-   when the real interaction fires while the tour is active, and every step
-   card offers a "I have done this — skip ahead" text control.
+   when the real interaction fires while the tour is active; each step card
+   also offers an "I've done this" text control that asserts the lesson
+   learned and earns that step's stamp immediately (owner directive
+   2026-10-26), alongside a stampless "Got it" acknowledge-and-advance.
 
 4. **Gamification as stamps, not a points economy.** Five collectible stamps
    (First taste, Sharp eye, Curious cook, Planner, Provisioner) render as
@@ -137,7 +139,11 @@ amendment records the decided semantics:
   never on a timer — the overlay navigates to `/grocery` itself, so an
   appearance timer awarded `provisioner` for waiting. (The open-recipe
   step keeps its 1s grace timer: the user's own card tap is the
-  interaction that produced the surface.)
+  interaction that produced the surface.) Pressing "I've done this" on a
+  step card is an owner-approved exception: it grants that step's stamp
+  immediately (a self-assert path), bypassing the real-interaction gate.
+  "Got it" remains stampless acknowledge-and-advance. (Owner directive
+  2026-10-26.)
 - **Finish ≠ dismiss.** The completion card's buttons call a new
   `finish()` action (ends the session only) instead of `dismiss()` —
   finishing the tour must not set `dismissedForever`, or Settings shows

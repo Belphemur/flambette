@@ -622,10 +622,13 @@ onBeforeUnmount(() => {
           <div v-else />
 
           <div class="flex items-center gap-2">
+            <!-- "I've done this" asserts the step's real interaction was performed:
+                 earn THIS step's stamp (completeStep) and advance. "Got it" (below)
+                 is a stampless acknowledge-and-advance. -->
             <button
               class="text-sm font-semibold text-text-muted hover:text-text"
               data-test="onboarding-skip-step"
-              @click="skipAhead"
+              @click="() => onboarding.completeStep(onboarding.currentStep)"
             >
               I've done this
             </button>
