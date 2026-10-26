@@ -707,12 +707,18 @@ export const STORE_SLICES: SliceDef<any>[] = [
       if (v.completedSteps !== undefined) onboarding.completedSteps = [...v.completedSteps]
       if (v.rewards !== undefined) onboarding.rewards = [...(v.rewards as StampName[])]
       // Explicit present-slice transition (qodo #6): the restored progress
-      // may differ from the live step, so a running tour ends its session
-      // and restarts from the restored stamps — unless the backup restores
-      // a dismissed or complete tour, where start() stays a no-op.
+      // may differ from the live step, so a RUNNING tour ends its session
+      // and restarts from the restored stamps. An import never STARTS a
+      // tour that wasn't running — the welcome overlay would pop over
+      // whatever surface the user is on (e.g. Settings, right after the
+      // import) and block the app chrome behind its scrim. Restored
+      // stamps surface on the next natural start(): a fresh boot on the
+      // recipes page. start() stays a no-op for a dismissed or complete
+      // restored tour either way.
+      const wasLive = onboarding.active && onboarding.currentStep >= 0
       onboarding.active = false
       onboarding.currentStep = -1
-      onboarding.start()
+      if (wasLive) onboarding.start()
     },
     // qodo #6: an ABSENT onboarding.json (older backup) must leave the
     // live tour alone — default write(read()) would clear active/currentStep

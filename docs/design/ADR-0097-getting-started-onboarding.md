@@ -157,4 +157,10 @@ amendment records the decided semantics:
   OMITS `onboarding.json` runs the slice's new `onAbsent` hook: a no-op —
   a live tour is never ended by an older backup's silence. A PRESENT
   slice restores its fields, ends the live session, and calls `start()`
-  (a no-op when the backup restores a dismissed or complete tour).
+  ONLY when a tour session was live at import time. An import never
+  STARTS a tour that wasn't running — the welcome overlay would pop
+  over the surface the user is on (e.g. Settings right after the
+  import) and block the app chrome behind its scrim. Restored stamps
+  surface on the next natural `start()`: a fresh boot on the recipes
+  page. `start()` stays a no-op for a dismissed or complete restored
+  tour either way.

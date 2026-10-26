@@ -861,4 +861,23 @@ describe('onboarding slice (ADR-0097, qodo #6)', () => {
     expect(onboarding.currentStep).toBe(-1)
     expect(onboarding.dismissedForever).toBe(true)
   })
+
+  test('an import never STARTS a tour that was not live (qodo #6 regression)', () => {
+    const onboarding = useOnboardingStore()
+    // No tour running — the device never toured (e.g. booted on a
+    // non-recipes page). The restored slice is pristine: not dismissed,
+    // not complete. The import must NOT pop the welcome overlay over
+    // whatever surface the user is on; stamps surface on the next
+    // natural start().
+    expect(onboarding.active).toBe(false)
+    onboardingSlice().write({ completedSteps: [], dismissedForever: false, rewards: [] })
+    expect(onboarding.active).toBe(false)
+    expect(onboarding.currentStep).toBe(-1)
+    expect(onboarding.completedSteps).toEqual([])
+    // The restored state is still pending: the next natural boot on the
+    // recipes page starts the tour from the first incomplete step.
+    onboarding.start()
+    expect(onboarding.active).toBe(true)
+    expect(onboarding.currentStep).toBe(0)
+  })
 })
