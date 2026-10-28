@@ -41,6 +41,7 @@ export const SYNCED_STORES = [
   'favorites',
   'ratings',
   'ratingTombstones',
+  'qtyOverrides',
   'planIdentity',
 ] as const
 

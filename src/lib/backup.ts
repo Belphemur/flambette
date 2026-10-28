@@ -49,6 +49,7 @@ export interface BackupCounts {
   favourites: number
   ratings: number
   pantry: number
+  overrides: number
   onboarding: number
 }
 
@@ -298,6 +299,27 @@ export const STORE_SLICES: SliceDef<any>[] = [
     },
     write(value) {
       usePantryStore().replaceAll(value as PantryIngredient[])
+    },
+  },
+  /* Per-line grocery quantity overrides (ADR-0100) — household state, in
+     the same registry change as the synced store. */
+  {
+    file: 'grocery-qty-overrides.json',
+    label: 'grocery quantity overrides',
+    persistKeys: ['mealime-planner:v1:groceryQtyOverrides'],
+    read: () => ({ ...useQtyOverridesStore().map }),
+    validate(value) {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return 'grocery-qty-overrides.json must be an object'
+      }
+      for (const [key, amount] of Object.entries(value)) {
+        if (!key) return 'override keys must be non-empty line identities'
+        if (typeof amount !== 'string') return 'override amounts must be strings'
+      }
+      return null
+    },
+    write(value) {
+      useQtyOverridesStore().replaceAll(value)
     },
   },
   /* Persisted ui prefs (history-sharing opt-OUT + quick filters + household
@@ -921,6 +943,9 @@ export function applyBackup(zipBytes: Uint8Array): ApplyResult {
     favourites: (byFile.get('favourites.json') as number[] | undefined)?.length ?? 0,
     ratings: ((byFile.get('ratings.json') as unknown[]) ?? []).length,
     pantry: (byFile.get('pantry.json') as PantryIngredient[] | undefined)?.length ?? 0,
+    overrides: Object.keys(
+      (byFile.get('grocery-qty-overrides.json') as Record<string, string> | undefined) ?? {},
+    ).length,
     onboarding: (byFile.get('onboarding.json') as { completedSteps?: number[] } | undefined)?.completedSteps?.length ?? 0,
   }
   return { ok: true, counts }
@@ -938,5 +963,6 @@ import { useIdentityStore } from '../stores/identity'
 import { useRoomStore } from '../stores/room'
 import { MAX_NAME_CHARS, isUuidShape, sanitizeDisplayName } from './profileName'
 import { usePantryStore } from '../stores/pantry'
+import { useQtyOverridesStore } from '../stores/groceryQtyOverrides'
 import { useOnboardingStore } from '../stores/onboarding'
 import type { StampName } from '../stores/onboarding'

@@ -13,6 +13,7 @@ import {
 } from '../lib/quickFilters'
 import { useCustomIngredientsStore, type CustomIngredient } from './customIngredients'
 import { usePantryStore, type PantryIngredient } from './pantry'
+import { useQtyOverridesStore } from './groceryQtyOverrides'
 import { useFavouritesStore, DEFAULT_STAMP } from './favourites'
 import { usePlanStore, cookedEventKey, type CookedEntry } from './plan'
 import { useGroceryStore } from './grocery'
@@ -111,6 +112,18 @@ interface SharedState {
    * record.
    */
   ratingTombstones?: Record<string, number>
+  /**
+   * ADR-0100 — per-line grocery quantity overrides (`lineKeyIdentity` →
+   * the clamped amount in the line's own unit grammar). Plain whole-state
+   * LWW like `customs`/`pantry`: the map is small, the ONE writer per
+   * store owns its shape, and a deletion (the Reset action) rides the
+   * WHOLE state — no tombstones needed.
+   * Emitted ALWAYS (an empty map IS the household's answer, so "no more
+   * overrides anywhere" can converge). OPTIONAL on the wire: a peer
+   * running older code sends no `qtyOverrides` key and keeps its own —
+   * absence means "don't touch", NEVER a wipe.
+   */
+  qtyOverrides?: Record<string, string>
   /**
    * ADR-0034 — the identity of the household's CURRENT plan (the id it was
    * minted with and when it was started). Plain whole-state state, not a
@@ -232,6 +245,7 @@ export const useRoomStore = defineStore('room', () => {
   const pantry = usePantryStore()
   const favourites = useFavouritesStore()
   const ratings = useRatingStore()
+  const qtyOverrides = useQtyOverridesStore()
   const ui = useUiStore()
   // ADR-0063: this device's room identity (UUIDv7 + safe-word name). The
   // FIRST join/create generates it (see `connect`); every later dial reuses
@@ -418,6 +432,10 @@ export const useRoomStore = defineStore('room', () => {
     state.planIdentity = plan.planId
       ? { planId: plan.planId, planCreatedAt: plan.planCreatedAt }
       : null
+    // ADR-0100: quantity overrides are plain whole-state state — emitted
+    // ALWAYS (an empty map is the household's answer, like `customs`),
+    // and the receiver re-runs the normalization funnel (`replaceAll`).
+    state.qtyOverrides = { ...qtyOverrides.map }
     // ADR-0031: the favourites RECORDS (with delete markers) and the star
     // ratings are emitted ONLY when non-empty — an absent key means
     // "nothing to merge", never "clear the household", so a peer that
@@ -556,6 +574,11 @@ export const useRoomStore = defineStore('room', () => {
       // snapshot that carries BOTH an old record and its tombstone still
       // ends deleted — deletion wins ties, never the stale record.
       if (state.ratingTombstones != null) ratings.mergeTombstones(state.ratingTombstones)
+      // Quantity overrides (ADR-0100): whole-state LWW; an ABSENT key is
+      // "don't touch" (an older peer), never a wipe. `replaceAll` runs the
+      // same normalization funnel as backup import, so an inbound payload
+      // can never break the store's invariants (trims, cap, non-empty).
+      if (state.qtyOverrides) qtyOverrides.replaceAll(state.qtyOverrides)
     } finally {
       applyingRemote = false
       // Finding #2 (qodo) + CodeRabbit mirror case: an inbound merge can
@@ -706,6 +729,10 @@ export const useRoomStore = defineStore('room', () => {
         ui.quickFilters, // quick filters are household state (ADR-0028)
         plan.cookedHistory, // only pushed when ui.shareCookedHistory — snapshot() gates it
         ui.shareCookedHistory, // flipping sharing must trigger a retroactive push
+        // ADR-0100: the quantity-override map is household state; store
+        // actions (set/clear/sweep) replace the ref, so the identity watch
+        // below sees every edit the same way.
+        qtyOverrides.map,
         // ADR-0034: the plan identity is household state, and it can be
         // minted LAZILY (a legacy install, an inbound snapshot) long after
         // the plan itself stopped changing — without these the new id would

@@ -6,6 +6,7 @@ import { useRoomStore, type RoomStatus } from './room'
 import { useRatingStore } from './rating'
 import { usePantryStore } from './pantry'
 import { useIdentityStore } from './identity'
+import { useQtyOverridesStore } from './groceryQtyOverrides'
 import { STORE_SLICES } from '../lib/backup'
 
 /**
@@ -768,6 +769,58 @@ describe('room store — quick filters are household state (ADR-0028)', () => {
     })
     expect(ratings.ratingFor(7)).toBe(0)
     expect(ratings.tombstones['7']).toBe(5_000)
+  })
+})
+
+describe('room store — quantity overrides are household state (ADR-0100)', () => {
+  test('the seeded snapshot carries qtyOverrides ALWAYS — even empty', async () => {
+    const { socket } = await startRoom()
+    const seeded = socket.frames('state')[0]
+    expect((seeded.state as Record<string, unknown>).qtyOverrides).toEqual({})
+  })
+
+  test('a payload WITH qtyOverrides is applied and normalized (a buggy peer cannot break the store)', async () => {
+    const { socket } = await startRoom()
+    const before = socket.frames('state').length
+    socket.receive({
+      type: 'state',
+      rev: 99,
+      state: {
+        plan: [],
+        customItems: [],
+        checked: {},
+        qtyOverrides: { 'egg||ml': '  500 ml ', junk: '', zero: 0 },
+      },
+    })
+    const store = useQtyOverridesStore()
+    expect(store.map).toEqual({ 'egg||ml': '500 ml' })
+    // Adoption is not echoed back — the mutation ran inside
+    // `applyingRemote`, so the sync watcher never queued a push.
+    expect(socket.frames('state')).toHaveLength(before)
+  })
+
+  test('a payload WITHOUT qtyOverrides (older peer) leaves the local map alone', async () => {
+    const store = useQtyOverridesStore()
+    store.set('peach||row', '3 peaches')
+    const { socket } = await startRoom()
+    socket.receive({
+      type: 'state',
+      rev: 99,
+      state: { plan: [], customItems: [], checked: {} },
+    })
+    // Absence means "don't touch", NEVER a wipe (ADR-0028).
+    expect(store.map).toEqual({ 'peach||row': '3 peaches' })
+  })
+
+  test('a local override edit rides the snapshot when pushed', async () => {
+    const { socket } = await startRoom()
+    const store = useQtyOverridesStore()
+    store.set('soy sauce||tbsp', '4 tbsp')
+    await sleep(500) // PUSH_DEBOUNCE_MS — the debounced override push drains
+    const pushed = socket.frames('state').at(-1)
+    expect(((pushed?.state ?? {}) as Record<string, unknown>).qtyOverrides).toEqual({
+      'soy sauce||tbsp': '4 tbsp',
+    })
   })
 })
 
