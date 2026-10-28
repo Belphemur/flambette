@@ -277,6 +277,24 @@ export const useUiStore = defineStore(
     const changelogOpen = ref(false)
 
     /**
+     * The ingredient-detail sheet's prompt slot (ADR-0100): the ONE open
+     * ingredient, `{ nameKey, displayName }`, hosted by App.vue's single
+     * `<IngredientDetailSheet v-if="ui.ingredientPrompt">`. NON-persisted
+     * (exactly like `toast`/`confirm`/`changelogOpen` — a closed reading
+     * surface never survives a reload) and deliberately NOT room-synced:
+     * what I am looking at is one device's curiosity.
+     */
+    const ingredientPrompt = ref<{ nameKey: string; displayName: string } | null>(null)
+
+    function openIngredientSheet(prompt: { nameKey: string; displayName: string }): void {
+      ingredientPrompt.value = prompt
+    }
+
+    function closeIngredientSheet(): void {
+      ingredientPrompt.value = null
+    }
+
+    /**
      * Open the ONE confirm modal. A SECOND call while a question is up is
      * a REPLACEMENT (same as a toast): the previous prompt ends through
      * its own settle path (its onDismiss fires) before the new question
@@ -807,6 +825,9 @@ export const useUiStore = defineStore(
       toast,
       confirm,
       changelogOpen,
+      ingredientPrompt,
+      openIngredientSheet,
+      closeIngredientSheet,
       showConfirm,
       settleConfirm,
       autoPlanRuleset,

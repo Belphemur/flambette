@@ -20,6 +20,7 @@ import {
 import { usePlanStore } from '../stores/plan'
 import { useGroceryStore } from '../stores/grocery'
 import { useUiStore } from '../stores/ui'
+import { useQtyOverridesStore } from '../stores/groceryQtyOverrides'
 import { eventsDisplayLines, groceryDisplayLines } from './restrictions'
 import { useRestrictions } from '../composables/useRestrictions'
 
@@ -45,6 +46,9 @@ export function useGroceryList() {
   const plan = usePlanStore()
   const checked = useGroceryStore()
   const ui = useUiStore()
+  // ADR-0100: per-line quantity overrides (household-synced) — the
+  // display pipeline consults them AFTER the derived sum is built.
+  const qtyOverrides = useQtyOverridesStore()
   // Dietary restrictions (the restriction ADR): the grocery list shows the
   // substituted ingredient names AND quantities from the same source doc
   // (the metric overlay), while every key stays the base doc's (the
@@ -148,6 +152,12 @@ export function useGroceryList() {
    * hand-checked item can never uncheck itself, and two household members
    * on different systems keep the same list. Both consumers (Grocery tab
    * and Shop view) read the same `text` from this one pass.
+   *
+   * ADR-0100: a line whose `lineKeyIdentity` carries an override renders
+   * the override INSTEAD of the derived sum (localized through the SAME
+   * pipeline, one display vocabulary — the store value was clamped once
+   * at commit). `derivedText` carries the un-overridden rendering for the
+   * editor's Reset anchor.
    */
   const items = computed<GroceryItemView[]>(() => {
     if (
@@ -157,12 +167,22 @@ export function useGroceryList() {
       return []
     }
     const system = ui.unitSystem
+    const overrides = qtyOverrides.map
     return aggregateGroceries(aggregateInputs.value).map((item) => ({
       ...item,
-      lines: item.lines.map((line) => ({
-        ...line,
-        text: localizeQuantity(line.display, system),
-      })),
+      lines: item.lines.map((line) => {
+        const derivedText = localizeQuantity(line.display, system)
+        const override = overrides[lineKeyIdentity(line.key)]
+        return {
+          ...line,
+          derivedText,
+          // Only a VISIBLE line applies its override: the identity is
+          // present in this render by construction, so the cleared-claim
+          // inertness rule is structural here — hidden lines are not
+          // rendered at all.
+          text: override !== undefined ? localizeQuantity(override, system) : derivedText,
+        }
+      }),
     }))
   })
 
@@ -214,6 +234,41 @@ export function useGroceryList() {
   }
 
   watch(plannedMetas, ensureDocs, { immediate: true })
+
+  /* ---------- Override orphan sweep (ADR-0100) ---------- */
+
+  /**
+   * The retention universe for quantity overrides: EVERY line identity
+   * one material. Ignoring the cleared filter mirrors the ADR-0094
+   * shadow aggregation (`mealSurvivingLines` does the same single-input
+   * pass): an override on a line hidden by a cleared claim stays —
+   * INERT, never stabbed out from behind the clear — while a line that
+   * no longer exists anywhere (its last contributing meal left the
+   * plan) orphans its override and the sweep releases it.
+   *
+   * NULL while docs are still loading: a half-built aggregation must
+   * never sweep (it would look like an empty list); an EMPTY plan is a
+   * real "no lines exist" and sweeps everything.
+   */
+  const retainedIdentities = computed<ReadonlySet<string> | null>(() => {
+    if (aggregateInputs.value.length !== plannedMetas.value.length) return null
+    const ids = new Set<string>()
+    for (const input of aggregateInputs.value) {
+      // Same single-input shadow pattern `mealSurvivingLines` uses.
+      for (const group of aggregateGroceries([{ ...input, cleared: undefined }])) {
+        for (const line of group.lines) ids.add(lineKeyIdentity(line.key))
+      }
+    }
+    return ids
+  })
+
+  watch(
+    retainedIdentities,
+    (ids) => {
+      if (ids) qtyOverrides.sweep(ids)
+    },
+    { flush: 'post' },
+  )
 
   /* ---------- Clear-grocery workflow ---------- */
 
