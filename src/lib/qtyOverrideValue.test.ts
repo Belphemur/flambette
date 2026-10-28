@@ -76,11 +76,22 @@ describe('stepQtyOverrideAmount', () => {
     expect(stepQtyOverrideAmount('to taste', 1)).toBe('to taste')
   })
 
-  test('stepping never goes under the floor', () => {
-    expect(stepQtyOverrideAmount('¼ cups', -1)).toBe('¼ cups')
+  test('stepping uses the fallback unit when the draft is bare', () => {
+    expect(stepQtyOverrideAmount('3', 1, 'cloves')).toBe('4 cloves')
+    // Below the floor clamps the stepped amount at ¼.
+    expect(stepQtyOverrideAmount('1/2', -1, 'cloves')).toBe('¼ cloves')
   })
 
   test('a mixed fractional draft steps numerically (glyph fractions stay in the vocabulary)', () => {
     expect(stepQtyOverrideAmount('1 ½ tsp', 1)).toBe('2 ½ tsp')
+  })
+
+  test('a BARE amount inherits the line_unit fallback (authored in the line grammar)', () => {
+    expect(normalizeQtyOverrideAmount('3', 'cloves')).toBe('3 cloves')
+    expect(normalizeQtyOverrideAmount('1/2', 'cloves')).toBe('½ cloves')
+    // An explicit container annotation rides the fallback too.
+    expect(normalizeQtyOverrideAmount('2', '(142 g) pkg')).toBe('2 (142 g) pkg')
+    // …and an EXPLICIT unit keeps itself (the fallback is only for bare).
+    expect(normalizeQtyOverrideAmount('3 cups', 'cloves')).toBe('3 cups')
   })
 })

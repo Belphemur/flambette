@@ -37,6 +37,8 @@ const props = defineProps<{
   text: string
   /** The un-overridden rendering — the Reset anchor. */
   derivedText?: string
+  /** The line's canonical unit token — a bare amount inherits it. */
+  fallbackUnit?: string
   /** Editing exists on the Grocery tab only (ADR-0100). */
   editable?: boolean
   /** Muted (checked) styling for the badge text. */
@@ -45,6 +47,8 @@ const props = defineProps<{
 
 const overrides = useQtyOverridesStore()
 const identity = computed(() => lineKeyIdentity(props.lineKey))
+/** The line's canonical unit — a bare draft inherits it (ADR-0100). */
+const fallbackUnit = computed(() => props.fallbackUnit ?? '')
 
 /* ---------- ONE open editor across every row ---------- */
 
@@ -81,12 +85,12 @@ function resetToDerived(): void {
 }
 
 function step(direction: 1 | -1): void {
-  draft.value = stepQtyOverrideAmount(draft.value, direction)
+  draft.value = stepQtyOverrideAmount(draft.value, direction, fallbackUnit.value)
 }
 
 /** Done: COMMIT — one clamp (the normalize), then the store write. */
 function commit(): void {
-  const value = normalizeQtyOverrideAmount(draft.value)
+  const value = normalizeQtyOverrideAmount(draft.value, fallbackUnit.value)
   if (!value) overrides.clear(identity.value)
   else overrides.set(identity.value, value)
   closeEditor()

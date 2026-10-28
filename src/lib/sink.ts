@@ -40,7 +40,7 @@ export function sinkChecked<T>(rows: readonly T[], isChecked: (row: T) => boolea
 export function sinkedStoreRows<
   I extends {
     name: string
-    lines: { key: string; text?: string; derivedText?: string }[]
+    lines: { key: string; text?: string; derivedText?: string; fallbackUnit?: string }[]
   },
 >(section: { items: I[] }, checked: Record<string, boolean>) {
   return sinkChecked(

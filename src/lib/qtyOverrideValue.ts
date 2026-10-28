@@ -29,6 +29,9 @@ export const MAX_QTY_OVERRIDE = 9999
  * - container phrase (`½ (142 g) pkg`) → `formatContainerQuantity`
  * - parseable amount+unit (`3 cups`, `67.5 ml`) → the aggregation
  *   display stack, amount floored/capped
+ * - a BARE amount (`3`, `1/2`) inherits the LINE's own unit (`fallbackUnit`)
+ *   — the override is authored in the line's grammar (ADR-0100), and a
+ *   shopper stepping "3 cloves" to "4" means four cloves, not a unitless 4
  * - anything else (`a pinch`, `to taste`) → trimmed verbatim prose —
  *   there is no grammar to clamp, and dropping the shopper's text would
  *   be a lie.
@@ -36,7 +39,7 @@ export const MAX_QTY_OVERRIDE = 9999
  * Empty input is NOT a value: the caller treats '' as "drop the
  * override" (the editor's empty Done/commit).
  */
-export function normalizeQtyOverrideAmount(raw: string): string {
+export function normalizeQtyOverrideAmount(raw: string, fallbackUnit = ''): string {
   const s = raw.trim()
   if (!s) return ''
   const container = parseContainerQuantity(s)
@@ -51,9 +54,10 @@ export function normalizeQtyOverrideAmount(raw: string): string {
   const candidate = negative ? s.slice(1).trim() : s
   const parsed = parseQuantity(candidate)
   if (parsed) {
+    const unit = parsed.unit || fallbackUnit.trim()
     const amount = clampAmount(negative ? -parsed.amount : parsed.amount)
-    const body = formatMetricAmount(amount, parsed.unit)
-    return parsed.unit ? `${body} ${parsed.unit}` : body
+    const body = formatMetricAmount(amount, unit)
+    return unit ? `${body} ${unit}` : body
   }
   // Prose: keep the shopper's words verbatim (trimmed, length-capped by
   // the store's own funnel).
@@ -72,11 +76,12 @@ function clampAmount(amount: number): number {
  * else. A draft with no parseable amount steps nowhere (prose is not a
  * number) and re-normalizes without change.
  */
-export function stepQtyOverrideAmount(raw: string, direction: 1 | -1): string {
+export function stepQtyOverrideAmount(raw: string, direction: 1 | -1, fallbackUnit = ''): string {
   const parsed = parseQuantity(raw.trim())
-  if (!parsed) return normalizeQtyOverrideAmount(raw)
+  if (!parsed) return normalizeQtyOverrideAmount(raw, fallbackUnit)
   const key = parsed.unit.trim().toLowerCase()
   const step = key === 'g' || key === 'ml' ? 10 : key === 'kg' ? 0.1 : 1
-  const next = `${clampAmount(parsed.amount + direction * step)}${parsed.unit ? ` ${parsed.unit}` : ''}`
-  return normalizeQtyOverrideAmount(next)
+  const unit = parsed.unit || fallbackUnit.trim()
+  const next = `${clampAmount(parsed.amount + direction * step)}${unit ? ` ${unit}` : ''}`
+  return normalizeQtyOverrideAmount(next, fallbackUnit)
 }

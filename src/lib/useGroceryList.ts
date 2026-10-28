@@ -9,6 +9,7 @@ import {
   type GroceryItemView,
 } from './grocery'
 import { localizeQuantity } from './units'
+import { parseQuantity } from './quantity'
 import { STORE_SECTIONS } from './sections'
 import { extraCheckedKey } from './extraCheckedKeys'
 import type { RecipeDoc, VariantMeta } from './types'
@@ -176,6 +177,7 @@ export function useGroceryList() {
         return {
           ...line,
           derivedText,
+          fallbackUnit: parseQuantity(line.display)?.unit ?? '',
           // Only a VISIBLE line applies its override: the identity is
           // present in this render by construction, so the cleared-claim
           // inertness rule is structural here — hidden lines are not

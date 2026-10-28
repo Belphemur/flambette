@@ -447,6 +447,12 @@ export interface GroceryLineView extends GroceryLine {
    * on overridden lines.
    */
   derivedText?: string
+  /**
+   * The line's own unit token (canonical `display`'s), for the editor's
+   * clamp: a BARE amount inherits it (ADR-0100 — the override is authored
+   * in the line's unit grammar).
+   */
+  fallbackUnit?: string
 }
 
 export interface GroceryItemView extends Omit<GroceryItem, 'lines'> {

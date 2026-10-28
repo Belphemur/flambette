@@ -702,6 +702,7 @@ function openIngredientSheet(entry: {
   :line-key="entry.line.key"
   :text="entry.line.text"
   :derived-text="entry.line.derivedText"
+  :fallback-unit="entry.line.fallbackUnit"
   :checked="!!checked.map[entry.line.key]"
   editable
   v-model:open-key="openQtyKey"
