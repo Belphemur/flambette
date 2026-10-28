@@ -105,7 +105,11 @@ and are NOT adopted — the base layout is the contract.
   not a literal `<button>` element, but it must still be a keyboard- and
   AT-reachable control with an accessible name ("Change quantity of X").
   Pressing opens the inline editor under the badge: stepper pill (mono
-  value), Reset (drops the override, back to derived), Done.
+  value), Reset (drops the override, back to derived), Done. The editor is
+  rendered through a `<Teleport to="body">` + `position:fixed` overlay
+  (z-50, repositioned to the badge button on open/scroll/resize) so the
+  grocery rows' `overflow-hidden` cards cannot clip it when the edited row
+  is the last visible one (issue #101 regression).
 - **Grocery tab ONLY** (owner ruling): the editable affordance exists on
   GroceryTab mobile + desktop. ShopView (shopping mode) renders the override
   value but offers NO editing.
