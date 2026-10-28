@@ -164,6 +164,7 @@ test('full round-trip: seed, export, fresh context, import — everything is res
     'cooked-history.json',
     'custom-ingredients.json',
     'favourites.json',
+    'grocery-qty-overrides.json',
     'identity.json',
     'meta.json',
     'onboarding.json',
@@ -188,6 +189,8 @@ test('full round-trip: seed, export, fresh context, import — everything is res
   expect(json('ratings.json')).toEqual([])
   // ADR-0082: the tombstone slice rides along, empty for the seed.
   expect(json('rating_tombstones.json')).toEqual({})
+  // ADR-0100: the quantity-override map rides along, empty for the seed.
+  expect(json('grocery-qty-overrides.json')).toEqual({})
   // ADR-0087: the pantry rides along, empty for the seed (device-local).
   expect(json('pantry.json')).toEqual([])
   // ADR-0097: onboarding stamps ride along, dismissed for the seed (the

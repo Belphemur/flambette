@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test'
-import { blockExternalRequests, gotoTab, openFirstRecipeDetail, waitForCatalog } from './helpers'
+import {
+  blockExternalRequests,
+  gotoTab,
+  openFirstRecipeDetail,
+  tapShopRowToggle,
+  waitForCatalog,
+} from './helpers'
 
 test.beforeEach(async ({ page }) => {
   await blockExternalRequests(page)
@@ -28,19 +34,19 @@ test('shopping mode: enter, toggle, progress, exit', async ({ page }) => {
 
   // Toggle a row: progress +1 and the row dims (fades to 40%). Checked rows
   // sink within their section, so assert on dimmed rows rather than position.
-  await rows.first().click()
+  await tapShopRowToggle(rows.first())
   await expect(progress).toHaveText(/^1 \/ \d+$/)
   await expect(page.locator('[data-test=shop-row].opacity-40')).toHaveCount(1)
 
   // Toggling again unchecks (rows are plain toggles).
-  await page.locator('[data-test=shop-row].opacity-40').first().click()
+  await tapShopRowToggle(page.locator('[data-test=shop-row].opacity-40').first())
   await expect(progress).toHaveText(/^0 \/ \d+$/)
   await expect(page.locator('[data-test=shop-row].opacity-40')).toHaveCount(0)
 
   // Toggle everything: keep tapping the first undimmed row (checked rows
   // sink live, so position-based iteration would double-tap).
   for (let i = 0; i < total; i++) {
-    await page.locator('[data-test=shop-row]:not(.opacity-40)').first().click()
+    await tapShopRowToggle(page.locator('[data-test=shop-row]:not(.opacity-40)').first())
   }
   await expect(progress).toHaveText(new RegExp(`^${total} \\/ ${total}$`))
 
