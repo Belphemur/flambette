@@ -1397,6 +1397,7 @@
    "image": "img/ingredients/onion.webp"
   },
   "green onions (scallions)": {
+   "image": "img/ingredients/spring onions.webp",
    "substitutes": [
     "chives"
    ]
@@ -3269,7 +3270,7 @@
    ]
   }
  },
- "generatedAt": "2026-10-28T19:57:27+00:00",
+ "generatedAt": "2026-10-28T23:30:37+00:00",
  "license": "Free at point of access per themealdb.com/api.php; supporter key only required for app-store releases. Attribution recorded in the ADR.",
  "review": [
   "basil pesto",
@@ -3454,7 +3455,6 @@
   "grape",
   "grape juice",
   "grapeseed oil",
-  "green onions (scallions)",
   "green tea",
   "grenadine",
   "ground coffee",
@@ -3604,6 +3604,6 @@
   "yuba",
   "za'atar"
  ],
- "withImages": 601,
+ "withImages": 602,
  "withSubstitutes": 338
 }

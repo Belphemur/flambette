@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { Minus, Pencil, Plus } from '@lucide/vue'
 import { useQtyOverridesStore } from '../stores/groceryQtyOverrides'
 import { lineKeyIdentity } from '../lib/grocery'
@@ -70,10 +70,53 @@ const isOpen = computed(() => props.editable && openKey.value === props.lineKey)
  */
 const draft = ref('')
 
+const triggerRef = ref<HTMLElement | null>(null)
+const editorStyle = ref<Record<string, string>>({})
+let stopReposition: (() => void) | null = null
+
+/**
+ * The inline editor is Teleport-ed to <body> and position:fixed (template) so
+ * it floats OVER the grocery rows instead of being clipped by their
+ * overflow-hidden cards — the last-row editor was invisible before this fix
+ * (ADR-0100).
+ */
+function positionEditor(): void {
+  const el = triggerRef.value
+  if (!el) {
+    editorStyle.value = {}
+    return
+  }
+  const r = el.getBoundingClientRect()
+  editorStyle.value = {
+    position: 'fixed',
+    top: `${r.bottom + 8}px`,
+    right: `${window.innerWidth - r.right}px`,
+    zIndex: '50',
+  }
+}
+
 watch(
   isOpen,
-  (open) => {
-    if (open) draft.value = props.text
+  async (open) => {
+    if (open) {
+      draft.value = props.text
+      await nextTick(positionEditor)
+      if (!stopReposition) {
+        const onViewportChange = () => {
+          if (isOpen.value) positionEditor()
+        }
+        window.addEventListener('scroll', onViewportChange, { passive: true })
+        window.addEventListener('resize', onViewportChange)
+        stopReposition = () => {
+          window.removeEventListener('scroll', onViewportChange)
+          window.removeEventListener('resize', onViewportChange)
+        }
+      }
+    } else {
+      stopReposition?.()
+      stopReposition = null
+      editorStyle.value = {}
+    }
   },
   { immediate: true },
 )
@@ -111,6 +154,7 @@ function toggle(): void {
          exact text the read-only badge shows. -->
     <button
       v-if="editable"
+      ref="triggerRef"
       type="button"
       class="group/qty flex items-center gap-1 rounded-md bg-surface-sunken px-2 py-1 outline-none focus-visible:ring-2 focus-visible:ring-brand"
       data-test="grocery-qty-edit"
@@ -137,13 +181,17 @@ function toggle(): void {
       data-test="grocery-qty"
       >{{ text }}</span
     >
-    <!-- The inline editor, anchored under the badge (a right-anchored
-    popover so it never pushes the row's layout). -->
-    <div
-      v-if="isOpen"
-      class="absolute right-0 top-full z-20 mt-1.5 flex w-fit items-center gap-1 whitespace-nowrap rounded-xl bg-surface-raised p-1 shadow-popover ring-1 ring-border"
-      data-test="grocery-qty-editor"
-    >
+    <!-- The inline editor, anchored under the badge. Teleport to <body> +
+    position:fixed so an ancestor's overflow-hidden (the grocery row cards)
+    cannot clip it on the last row — it floats over the whole page (ADR-0100). -->
+    <Teleport to="body">
+      <div
+        v-if="isOpen"
+        :style="editorStyle"
+        class="z-50 flex w-fit min-w-32 items-center gap-1 whitespace-nowrap rounded-xl bg-surface-raised p-1 shadow-popover ring-1 ring-border"
+        data-test="grocery-qty-editor"
+        @click.stop
+      >
       <button
         type="button"
         class="flex size-11 shrink-0 items-center justify-center rounded-lg text-text transition-colors hover:bg-surface-sunken active:bg-surface-sunken"
@@ -191,6 +239,7 @@ function toggle(): void {
       >
         Done
       </button>
-    </div>
+      </div>
+    </Teleport>
   </span>
 </template>

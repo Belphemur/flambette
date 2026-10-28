@@ -115,6 +115,7 @@ ALIASES = {
     "edamame": "soya bean",
     "alfalfa sprouts": "bean sprouts",
     "romaine hearts": "lettuce",
+    "green onions (scallions)": "spring onions",
 }
 
 # Tokens that are preparation qualifiers or connectives, never the food noun.

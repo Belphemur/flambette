@@ -222,3 +222,23 @@ test('ShopView opens the sheet from the name and renders the override READ-ONLY'
   await expect(page.getByTestId('ingredient-detail')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
+
+
+test('the qty editor floats over the page and is not clipped by row overflow (issue #101)', async ({
+  page,
+}) => {
+  await gotoTab(page, 'Grocery')
+  const row = garlicRow(page)
+  await row.getByTestId('grocery-qty-edit').click()
+  const editor = page.getByTestId('grocery-qty-editor')
+  await expect(editor).toBeVisible()
+
+  // Regression guard: the editor must be Teleport-ed to <body> and
+  // position:fixed so a grocery row's overflow-hidden card cannot clip it on
+  // the last row. Before the fix it was an `absolute z-20` child of the row
+  // (and invisible when that row was the final visible row).
+  await expect(
+    page.locator('body > [data-test="grocery-qty-editor"]'),
+  ).toHaveCount(1)
+  await expectZeroMealimeRequests(page)
+})
