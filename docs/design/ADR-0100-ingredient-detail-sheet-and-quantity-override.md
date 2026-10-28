@@ -2,6 +2,14 @@
 
 Status: accepted — design adopted 2026-10-28 (owner reviewed the Stitch renders; "The mockup looks awesome, this is what I want"). Data corpus: ADR-0099. Implementation pending.
 
+Change note (2026-10-28, post-adoption verification): the desktop modal
+citation below originally read `9846068c4e4e462c8f8f7feb0d3a1598` — a
+PHANTOM id (that generation never landed; `list_screens` proves it absent
+from the project). The desktop form was re-generated as
+`1142b9332ed84a90b4bfe3fe70985034` and its exported HTML verified (fonts:
+Plus Jakarta Sans + JetBrains Mono only; every hex inside the Warm Culinary
+Paper set). Never trust a remembered screen id — verify against the project.
+
 ## Context
 
 Issue #101 asks for an ingredient detail view in the grocery list: image
@@ -28,9 +36,16 @@ Warm Culinary Paper token set. Supporting explorations (same project):
   and desktop `d8ac47441a5c413c8f3145e7ae98f582`: the editable-quantity badge
   affordance (dashed underline + pencil glyph; open state shows an inline
   stepper pill with Reset).
-- "Ingredient Detail: Peaches (Desktop Modal)" — `9846068c4e4e462c8f8f7feb0d3a1598`:
+- "Ingredient Detail: Peaches (Desktop Modal)" — `1142b9332ed84a90b4bfe3fe70985034`:
   the desktop form is a centered ~480px modal on the Level-3 espresso-blur
   backdrop (same content as the mobile sheet).
+
+The owner pasted the two grocery renders as export directories
+(`stitch_flambette_recipe_app_grocery-edit-{mobile,desktop}`, each with
+`code.html` + `screen.png` + a Warm Culinary Paper token file). The exports
+carry NO ids internally — the ids above are the `list_screens`-verified
+truth, and the pasted `code.html` is the adoption contract for structure,
+classes and copy.
 
 Two LAYOUT variants of the sheet were generated after adoption was declared
 and are NOT adopted — the base layout is the contract.
@@ -108,6 +123,15 @@ and are NOT adopted — the base layout is the contract.
 ## Rejected fictions (from the renders, never implement)
 
 - "In Peak Season" pill (desktop modal) — no seasonality data exists.
+- The re-generated desktop modal's inert background mock — "Active Run ·
+  Week 42", "amber-falcon-lantern · 2 peers", "4 meals planned, 28 items",
+  "3/4 pending", the avatar disc, header utility icons — illustrative only.
+- The per-recipe-row meta line ("Prep: 25 min · 2 peaches") in the desktop
+  modal render — the ADOPTED row contract (mobile sheet) is name + chevron
+  only; no per-row meta ships.
+- The modal's custom drop shadow and zoom-in animation — Level 3 separates
+  by the espresso scrim alone; `shadow-popover` stays the ONE shadow at
+  level 2; the scrim is static, never animated (ADR-0068).
 - The mock list's invented items ("Oat Milk 3.8% Barista", "Peaches (Ripe
   Yellow)", "Heirloom Tomatoes · 3 pcs") — illustrative only.
 - Material Symbols icon names — implementation maps to bundled @lucide/vue
