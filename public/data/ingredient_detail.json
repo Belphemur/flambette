@@ -1,18 +1,18 @@
 {
- "count": 781,
+ "count": 870,
  "entries": {
   "2% milk": {
-   "image": "img/ingredients/milk.webp"
+   "image": "img/ingredients/2_milk.webp"
   },
   "acorn squash": {
-   "image": "img/ingredients/squash.webp",
+   "image": "img/ingredients/acorn_squash.webp",
    "substitutes": [
     "butternut squash",
     "delicata squash"
    ]
   },
   "active dry yeast": {
-   "image": "img/ingredients/yeast.webp"
+   "image": "img/ingredients/active_dry_yeast.webp"
   },
   "agave nectar": {
    "image": "img/ingredients/agave_nectar.webp"
@@ -44,30 +44,30 @@
    "image": "img/ingredients/allspice.webp"
   },
   "almond": {
-   "image": "img/ingredients/almonds.webp",
+   "image": "img/ingredients/almond.webp",
    "substitutes": [
     "cashews",
     "walnuts"
    ]
   },
   "almond butter": {
-   "image": "img/ingredients/butter.webp"
+   "image": "img/ingredients/almond_butter.webp"
   },
   "almond extract": {
-   "image": "img/ingredients/almond extract.webp"
+   "image": "img/ingredients/almond_extract.webp"
   },
   "almond flour": {
-   "image": "img/ingredients/almond flour.webp"
+   "image": "img/ingredients/almond_flour.webp"
   },
   "almond meal/flour": {
-   "image": "img/ingredients/almonds.webp",
+   "image": "img/ingredients/almond_meal_flour.webp",
    "substitutes": [
     "whole wheat flour (different texture)",
     "oat flour"
    ]
   },
   "almond milk": {
-   "image": "img/ingredients/almond milk.webp"
+   "image": "img/ingredients/almond_milk.webp"
   },
   "almond milk, unsweetened": {
    "image": "img/ingredients/almond milk.webp",
@@ -1970,11 +1970,17 @@
     "baby spinach"
    ]
   },
+  "kefir": {
+   "image": "img/ingredients/kefir.webp"
+  },
   "ketchup": {
    "image": "img/ingredients/tomato ketchup.webp",
    "substitutes": [
     "chili-garlic sauce"
    ]
+  },
+  "khorasan wheat": {
+   "image": "img/ingredients/khorasan_wheat.webp"
   },
   "kidney bean": {
    "image": "img/ingredients/kidney beans.webp",
@@ -1982,6 +1988,9 @@
     "black beans",
     "pinto beans"
    ]
+  },
+  "kiwi": {
+   "image": "img/ingredients/kiwi.webp"
   },
   "kiwifruit": {
    "image": "img/ingredients/kiwifruit.webp",
@@ -2014,6 +2023,9 @@
   "lactose-free greek yogurt": {
    "image": "img/ingredients/yogurt.webp"
   },
+  "lactose-free half-and-half": {
+   "image": "img/ingredients/lactose_free_half_and_half.webp"
+  },
   "lactose-free ice cream": {
    "image": "img/ingredients/cream.webp"
   },
@@ -2028,6 +2040,9 @@
   },
   "lactose-free yogurt": {
    "image": "img/ingredients/yogurt.webp"
+  },
+  "lager": {
+   "image": "img/ingredients/lager.webp"
   },
   "lamb loin chop": {
    "image": "img/ingredients/lamb.webp",
@@ -2075,6 +2090,9 @@
     "lean ground beef"
    ]
   },
+  "lecithin": {
+   "image": "img/ingredients/lecithin.webp"
+  },
   "leek": {
    "image": "img/ingredients/leek.webp",
    "substitutes": [
@@ -2092,12 +2110,18 @@
   "lemon juice": {
    "image": "img/ingredients/lemon juice.webp"
   },
+  "lemonade": {
+   "image": "img/ingredients/lemonade.webp"
+  },
   "lentil": {
    "image": "img/ingredients/lentils.webp",
    "substitutes": [
     "brown lentils, dried",
     "green lentils, dried"
    ]
+  },
+  "lima bean": {
+   "image": "img/ingredients/lima_bean.webp"
   },
   "lime": {
    "image": "img/ingredients/lime.webp",
@@ -2116,8 +2140,20 @@
     "gluten-free spaghetti pasta"
    ]
   },
+  "linseed oil": {
+   "image": "img/ingredients/linseed_oil.webp"
+  },
+  "liqueur": {
+   "image": "img/ingredients/liqueur.webp"
+  },
   "lobster": {
    "image": "img/ingredients/lobster.webp"
+  },
+  "longan": {
+   "image": "img/ingredients/longan.webp"
+  },
+  "macadamia nut": {
+   "image": "img/ingredients/macadamia_nut.webp"
   },
   "macaroni (elbow) pasta": {
    "image": "img/ingredients/macaroni.webp",
@@ -2141,6 +2177,9 @@
     "pineapples"
    ]
   },
+  "margarine": {
+   "image": "img/ingredients/margarine.webp"
+  },
   "marinara sauce": {
    "image": "img/ingredients/marinara_sauce.webp",
    "substitutes": [
@@ -2148,8 +2187,17 @@
     "pizza sauce"
    ]
   },
+  "marsala": {
+   "image": "img/ingredients/marsala.webp"
+  },
+  "marshmallow": {
+   "image": "img/ingredients/marshmallow.webp"
+  },
   "mascarpone": {
    "image": "img/ingredients/mascarpone.webp"
+  },
+  "matcha": {
+   "image": "img/ingredients/matcha.webp"
   },
   "mayonnaise": {
    "image": "img/ingredients/mayonnaise.webp",
@@ -2158,12 +2206,18 @@
     "avocado oil mayonnaise"
    ]
   },
+  "meatball": {
+   "image": "img/ingredients/meatball.webp"
+  },
   "medjool dates, pitted": {
    "image": "img/ingredients/medjool dates.webp",
    "substitutes": [
     "raisins",
     "dried figs"
    ]
+  },
+  "microgreen": {
+   "image": "img/ingredients/microgreen.webp"
   },
   "milk": {
    "image": "img/ingredients/milk.webp"
@@ -2174,11 +2228,17 @@
   "milk powder": {
    "image": "img/ingredients/milk.webp"
   },
+  "millet": {
+   "image": "img/ingredients/millet.webp"
+  },
   "millet flour": {
    "image": "img/ingredients/flour.webp"
   },
   "mint extract": {
    "image": "img/ingredients/mint.webp"
+  },
+  "miso paste": {
+   "image": "img/ingredients/miso_paste.webp"
   },
   "miso paste, red": {
    "image": "img/ingredients/miso_paste_red.webp",
@@ -2193,6 +2253,9 @@
     "miso paste, red (stronger)",
     "soy sauce"
    ]
+  },
+  "mixed green": {
+   "image": "img/ingredients/mixed_green.webp"
   },
   "molass": {
    "image": "img/ingredients/molasses.webp"
@@ -2242,8 +2305,14 @@
     "natural almond butter"
    ]
   },
+  "navy bean": {
+   "image": "img/ingredients/navy_bean.webp"
+  },
   "nectarine": {
    "image": "img/ingredients/nectarine.webp"
+  },
+  "neutral oil": {
+   "image": "img/ingredients/neutral_oil.webp"
   },
   "neutral vegetable oil": {
    "image": "img/ingredients/vegetables.webp",
@@ -2394,6 +2463,12 @@
     "salsa (any brand)"
    ]
   },
+  "palm oil": {
+   "image": "img/ingredients/palm_oil.webp"
+  },
+  "pancetta": {
+   "image": "img/ingredients/pancetta.webp"
+  },
   "panko bread crumb": {
    "image": "img/ingredients/bread.webp",
    "substitutes": [
@@ -2401,6 +2476,9 @@
     "gluten-free flour",
     "almond meal/flour"
    ]
+  },
+  "papaya": {
+   "image": "img/ingredients/papaya.webp"
   },
   "paprika": {
    "image": "img/ingredients/paprika.webp",
@@ -2426,6 +2504,9 @@
     "Asiago cheese"
    ]
   },
+  "parmigiano": {
+   "image": "img/ingredients/parmigiano.webp"
+  },
   "parsley": {
    "image": "img/ingredients/parsley.webp"
   },
@@ -2442,6 +2523,12 @@
     "carrots",
     "turnips"
    ]
+  },
+  "pasta sauce": {
+   "image": "img/ingredients/pasta_sauce.webp"
+  },
+  "pasti": {
+   "image": "img/ingredients/pasti.webp"
   },
   "pastry flour": {
    "image": "img/ingredients/flour.webp"
@@ -2502,11 +2589,23 @@
     "gluten-free penne pasta"
    ]
   },
+  "pepperoni": {
+   "image": "img/ingredients/pepperoni.webp"
+  },
+  "persimmon": {
+   "image": "img/ingredients/persimmon.webp"
+  },
   "philadelphia brick cream cheese": {
    "image": "img/ingredients/cheese.webp",
    "substitutes": [
     "cream cheese (any brand)"
    ]
+  },
+  "pickle": {
+   "image": "img/ingredients/pickle.webp"
+  },
+  "pickled gherkin": {
+   "image": "img/ingredients/pickled_gherkin.webp"
   },
   "pickled onion": {
    "image": "img/ingredients/onion.webp"
@@ -2565,12 +2664,18 @@
   "plant-based cream cheese": {
    "image": "img/ingredients/cheese.webp"
   },
+  "plantain": {
+   "image": "img/ingredients/plantain.webp"
+  },
   "plum": {
    "image": "img/ingredients/plum.webp",
    "substitutes": [
     "peaches",
     "apricots"
    ]
+  },
+  "poblano": {
+   "image": "img/ingredients/poblano.webp"
   },
   "polenta (cornmeal)": {
    "image": "img/ingredients/cornmeal.webp",
@@ -2589,12 +2694,21 @@
   "pomegranate": {
    "image": "img/ingredients/pomegranate.webp"
   },
+  "ponzu": {
+   "image": "img/ingredients/ponzu.webp"
+  },
+  "popcorn": {
+   "image": "img/ingredients/popcorn.webp"
+  },
   "poppy seed": {
    "image": "img/ingredients/seeds.webp",
    "substitutes": [
     "sesame seeds",
     "chia seeds"
    ]
+  },
+  "poppyseed oil": {
+   "image": "img/ingredients/poppyseed_oil.webp"
   },
   "pork chop": {
    "image": "img/ingredients/pork.webp"
@@ -2679,11 +2793,20 @@
     "bacon (saltier)"
    ]
   },
+  "prosecco": {
+   "image": "img/ingredients/prosecco.webp"
+  },
+  "provolone": {
+   "image": "img/ingredients/provolone.webp"
+  },
   "prune": {
    "image": "img/ingredients/prunes.webp"
   },
   "prune juice": {
    "image": "img/ingredients/prunes.webp"
+  },
+  "psyllium husk": {
+   "image": "img/ingredients/psyllium_husk.webp"
   },
   "pumpkin seed": {
    "image": "img/ingredients/pumpkin.webp",
@@ -2706,12 +2829,18 @@
     "sweet potato pur\u00e9e"
    ]
   },
+  "queso fresco": {
+   "image": "img/ingredients/queso_fresco.webp"
+  },
   "quinoa": {
    "image": "img/ingredients/quinoa.webp",
    "substitutes": [
     "couscous",
     "brown rice"
    ]
+  },
+  "radicchio": {
+   "image": "img/ingredients/radicchio.webp"
   },
   "radish": {
    "image": "img/ingredients/radish.webp",
@@ -2726,6 +2855,12 @@
     "dried cranberries",
     "chopped medjool dates, pitted"
    ]
+  },
+  "rambutan": {
+   "image": "img/ingredients/rambutan.webp"
+  },
+  "ramen": {
+   "image": "img/ingredients/ramen.webp"
   },
   "ranch dressing": {
    "image": "img/ingredients/ranch_dressing.webp",
@@ -2815,6 +2950,9 @@
     "apple cider vinegar"
    ]
   },
+  "relish": {
+   "image": "img/ingredients/relish.webp"
+  },
   "rhubarb": {
    "image": "img/ingredients/rhubarb.webp"
   },
@@ -2833,6 +2971,9 @@
   },
   "rice cracker": {
    "image": "img/ingredients/rice.webp"
+  },
+  "rice flour": {
+   "image": "img/ingredients/rice_flour.webp"
   },
   "rice starch": {
    "image": "img/ingredients/starch.webp"
@@ -2900,6 +3041,9 @@
   "romano cheese": {
    "image": "img/ingredients/cheese.webp"
   },
+  "rooibo": {
+   "image": "img/ingredients/rooibo.webp"
+  },
   "root beer": {
    "image": "img/ingredients/beer.webp"
   },
@@ -2929,11 +3073,23 @@
   "rum": {
    "image": "img/ingredients/rum.webp"
   },
+  "rusk": {
+   "image": "img/ingredients/rusk.webp"
+  },
+  "rutabaga": {
+   "image": "img/ingredients/rutabaga.webp"
+  },
   "rye": {
    "image": "img/ingredients/rye.webp"
   },
   "rye crispbread": {
    "image": "img/ingredients/rye.webp"
+  },
+  "rye flour": {
+   "image": "img/ingredients/rye_flour.webp"
+  },
+  "safflower oil": {
+   "image": "img/ingredients/safflower_oil.webp"
   },
   "saffron": {
    "image": "img/ingredients/saffron.webp"
@@ -2950,6 +3106,9 @@
   },
   "sake": {
    "image": "img/ingredients/sake.webp"
+  },
+  "salami": {
+   "image": "img/ingredients/salami.webp"
   },
   "salmon": {
    "image": "img/ingredients/salmon.webp"
@@ -2987,6 +3146,12 @@
   "salty snack": {
    "image": "img/ingredients/salt.webp"
   },
+  "sandwich loaf": {
+   "image": "img/ingredients/sandwich_loaf.webp"
+  },
+  "sangria": {
+   "image": "img/ingredients/sangria.webp"
+  },
   "sardine": {
    "image": "img/ingredients/sardines.webp"
   },
@@ -2999,6 +3164,9 @@
   },
   "sausage": {
    "image": "img/ingredients/sausages.webp"
+  },
+  "scallop": {
+   "image": "img/ingredients/scallop.webp"
   },
   "scotch bonnet": {
    "image": "img/ingredients/scotch bonnet.webp"
@@ -3016,14 +3184,23 @@
     "cod fillet"
    ]
   },
+  "seaweed": {
+   "image": "img/ingredients/seaweed.webp"
+  },
   "self-raising flour": {
    "image": "img/ingredients/flour.webp"
+  },
+  "seltzer": {
+   "image": "img/ingredients/seltzer.webp"
   },
   "semi-skimmed milk": {
    "image": "img/ingredients/milk.webp"
   },
   "semolina": {
    "image": "img/ingredients/semolina.webp"
+  },
+  "serrano": {
+   "image": "img/ingredients/serrano.webp"
   },
   "sesame ginger dressing": {
    "image": "img/ingredients/ginger.webp",
@@ -3056,6 +3233,9 @@
   "sherry vinegar": {
    "image": "img/ingredients/sherry vinegar.webp"
   },
+  "short rib": {
+   "image": "img/ingredients/short_rib.webp"
+  },
   "shortening": {
    "image": "img/ingredients/shortening.webp"
   },
@@ -3087,6 +3267,9 @@
     "cheddar cheese"
    ]
   },
+  "shredded coconut": {
+   "image": "img/ingredients/shredded_coconut.webp"
+  },
   "shredded sweetened coconut": {
    "image": "img/ingredients/shredded_sweetened_coconut.webp",
    "substitutes": [
@@ -3113,6 +3296,9 @@
   },
   "skim milk": {
    "image": "img/ingredients/milk.webp"
+  },
+  "skyr": {
+   "image": "img/ingredients/skyr.webp"
   },
   "sliced black olive": {
    "image": "img/ingredients/black olives.webp",
@@ -3177,12 +3363,18 @@
     "trout fillet"
    ]
   },
+  "sodium bicarbonate": {
+   "image": "img/ingredients/sodium_bicarbonate.webp"
+  },
   "sole fillet": {
    "image": "img/ingredients/sole_fillet.webp",
    "substitutes": [
     "cod fillet",
     "tilapia fillet"
    ]
+  },
+  "sorbet": {
+   "image": "img/ingredients/sorbet.webp"
   },
   "sour cream": {
    "image": "img/ingredients/sour cream.webp"
@@ -3198,6 +3390,9 @@
   },
   "soy milk": {
    "image": "img/ingredients/milk.webp"
+  },
+  "soy oil": {
+   "image": "img/ingredients/soy_oil.webp"
   },
   "soy sauce": {
    "image": "img/ingredients/soy sauce.webp",
@@ -3225,8 +3420,14 @@
     "zucchini squash (spiralized)"
    ]
   },
+  "sparkling fruit wine": {
+   "image": "img/ingredients/sparkling_fruit_wine.webp"
+  },
   "sparkling water": {
    "image": "img/ingredients/water.webp"
+  },
+  "spelt": {
+   "image": "img/ingredients/spelt.webp"
   },
   "spelt flour": {
    "image": "img/ingredients/flour.webp"
@@ -3240,6 +3441,9 @@
     "romaine lettuce",
     "baby spinach"
    ]
+  },
+  "sprinkle": {
+   "image": "img/ingredients/sprinkle.webp"
   },
   "squid": {
    "image": "img/ingredients/squid.webp"
@@ -3310,6 +3514,9 @@
   "sunflower seed butter": {
    "image": "img/ingredients/butter.webp"
   },
+  "surimi": {
+   "image": "img/ingredients/surimi.webp"
+  },
   "sushi rice": {
    "image": "img/ingredients/sushi rice.webp"
   },
@@ -3327,6 +3534,9 @@
     "kale",
     "baby spinach"
    ]
+  },
+  "swiss cheese": {
+   "image": "img/ingredients/swiss_cheese.webp"
   },
   "taco seasoning": {
    "image": "img/ingredients/seasoning.webp",
@@ -3351,12 +3561,27 @@
   "tapioca starch": {
    "image": "img/ingredients/starch.webp"
   },
+  "tarragon": {
+   "image": "img/ingredients/tarragon.webp"
+  },
+  "tea": {
+   "image": "img/ingredients/tea.webp"
+  },
+  "tea leave": {
+   "image": "img/ingredients/tea_leave.webp"
+  },
   "tempeh": {
    "image": "img/ingredients/tempeh.webp",
    "substitutes": [
     "extra firm tofu",
     "veggie ground, plant based"
    ]
+  },
+  "tequila": {
+   "image": "img/ingredients/tequila.webp"
+  },
+  "teriyaki sauce": {
+   "image": "img/ingredients/teriyaki_sauce.webp"
   },
   "thai curry paste, green": {
    "image": "img/ingredients/thai_curry_paste_green.webp",
@@ -3381,6 +3606,9 @@
     "Italian seasoning"
    ]
   },
+  "tilapia": {
+   "image": "img/ingredients/tilapia.webp"
+  },
   "tilapia fillet": {
    "image": "img/ingredients/tilapia_fillet.webp",
    "substitutes": [
@@ -3397,6 +3625,9 @@
     "plain sesame oil (less toasty)",
     "extra virgin olive oil (different flavor)"
    ]
+  },
+  "toffee": {
+   "image": "img/ingredients/toffee.webp"
   },
   "tomato": {
    "image": "img/ingredients/tomato.webp",
@@ -3432,6 +3663,9 @@
     "hard taco shells (crushed)"
    ]
   },
+  "trail mix": {
+   "image": "img/ingredients/trail_mix.webp"
+  },
   "trout": {
    "image": "img/ingredients/trout.webp"
   },
@@ -3464,6 +3698,9 @@
     "plain Greek yogurt + cucumber + dill (DIY)",
     "hummus"
    ]
+  },
+  "udon": {
+   "image": "img/ingredients/udon.webp"
   },
   "unsalted butter": {
    "image": "img/ingredients/unsalted butter.webp"
@@ -3498,6 +3735,9 @@
   },
   "vegan cheese": {
    "image": "img/ingredients/cheese.webp"
+  },
+  "vegan chocolate": {
+   "image": "img/ingredients/vegan_chocolate.webp"
   },
   "vegan cream": {
    "image": "img/ingredients/cream.webp"
@@ -3538,12 +3778,18 @@
     "tempeh (crumbled)"
    ]
   },
+  "vermouth": {
+   "image": "img/ingredients/vermouth.webp"
+  },
   "virgin coconut oil": {
    "image": "img/ingredients/virgin_coconut_oil.webp",
    "substitutes": [
     "butter, unsalted",
     "neutral vegetable oil"
    ]
+  },
+  "vodka": {
+   "image": "img/ingredients/vodka.webp"
   },
   "walnut": {
    "image": "img/ingredients/walnuts.webp",
@@ -3568,11 +3814,20 @@
     "celery (for crunch)"
    ]
   },
+  "watercres": {
+   "image": "img/ingredients/watercres.webp"
+  },
   "watermelon": {
    "image": "img/ingredients/watermelon.webp"
   },
+  "wheat cracker": {
+   "image": "img/ingredients/wheat_cracker.webp"
+  },
   "whipping cream": {
    "image": "img/ingredients/whipping cream.webp"
+  },
+  "whiskey": {
+   "image": "img/ingredients/whiskey.webp"
   },
   "white chocolate": {
    "image": "img/ingredients/white chocolate.webp"
@@ -3589,6 +3844,9 @@
   },
   "white rice": {
    "image": "img/ingredients/rice.webp"
+  },
+  "white sauce": {
+   "image": "img/ingredients/white_sauce.webp"
   },
   "white wine": {
    "image": "img/ingredients/white wine.webp"
@@ -3651,6 +3909,9 @@
     "balsamic vinegar"
    ]
   },
+  "xanthan gum": {
+   "image": "img/ingredients/xanthan_gum.webp"
+  },
   "yellow bell pepper": {
    "image": "img/ingredients/yellow_bell_peppers.webp",
    "substitutes": [
@@ -3677,6 +3938,12 @@
     "red potatoes",
     "new potatoes"
    ]
+  },
+  "yuba": {
+   "image": "img/ingredients/yuba.webp"
+  },
+  "za'atar": {
+   "image": "img/ingredients/za_atar.webp"
   },
   "zucchini": {
    "image": "img/ingredients/zucchini.webp"
@@ -3964,6 +4231,6 @@
   "yuba",
   "za'atar"
  ],
- "withImages": 781,
+ "withImages": 870,
  "withSubstitutes": 338
 }
