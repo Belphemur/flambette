@@ -1,6 +1,37 @@
 {
-  "generatedAt": "2026-10-19T14:45:38Z",
+  "generatedAt": "2026-10-29T00:58:34Z",
   "versions": [
+    {
+      "version": "v2.13.0",
+      "date": "2026-10-28",
+      "title": "Ingredient detail page with substitutions, editable grocery quantities, and 60 curated ingredient images",
+      "features": [
+        {
+          "text": "ingredient detail page with substitutions, editable grocery quantities, and 60 curated ingredient images",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "dismissible onboarding tour + household room migration + hero start",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "recipes keep your screen awake while you cook; new \"Mark as cooked\" button at the end on mobile",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "home routes returning users to recipes; /welcome always reachable",
+          "scope": null,
+          "pr": 103,
+          "adr": "ADR-0096"
+        }
+      ]
+    },
     {
       "version": "v2.12.0",
       "date": "2026-10-19",
