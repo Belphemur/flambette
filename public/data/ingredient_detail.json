@@ -1,5 +1,5 @@
 {
- "count": 870,
+ "count": 871,
  "entries": {
   "2% milk": {
    "image": "img/ingredients/2_milk.webp"
@@ -3057,6 +3057,9 @@
     "thyme, dried"
    ]
   },
+  "ros\u00e9": {
+   "image": "img/ingredients/rose.webp"
+  },
   "rotini pasta": {
    "image": "img/ingredients/rotini_pasta.webp",
    "substitutes": [
@@ -4231,6 +4234,6 @@
   "yuba",
   "za'atar"
  ],
- "withImages": 870,
+ "withImages": 871,
  "withSubstitutes": 338
 }
