@@ -1,14 +1,42 @@
-# Auto-Plan (ADR-0024 → ADR-0080)
+# Auto-Plan (ADR-0024 → ADR-0101)
 
 The plan generator is `src/lib/packPlanner.ts` — a PURE lib (no
 Vue/Pinia/fetch) over the committed `public/data/pack_index.json`
 footprint. Deterministic greedy packing: score = marginal whole-package
-cost (`Σ ceil(container total)`, containers per ADR-0017)
-`+ 0.25·(1−rating) + 0.2·tagOverlap − 0.05·isFavourite`. Staples in the
-index's `pantryStaples` are present-but-free. Category / diet / ruleset
-exclusions are resolved OUTSIDE the lib by `useAutoPlan` into
-`excludeIds`. The index carries no recipe metadata — ratings and
-`variety_tag_ids` are injected from `builder_data.variant_meta`.
+cost (`Σ ceil(container total)`, containers per ADR-0017) MINUS a
+waste-matching credit (ADR-0101: shared committed keys + leftover-fill,
+capped at 0.9 — see below) `+ 0.25·(1−rating) + 0.2·tagOverlap −
+0.05·isFavourite`. Staples in the index's `pantryStaples` are
+present-but-free. Category / diet / ruleset exclusions are resolved
+OUTSIDE the lib by `useAutoPlan` into `excludeIds`. The index carries no
+recipe metadata — ratings and `variety_tag_ids` are injected from
+`builder_data.variant_meta`.
+
+## v4 — class-aware waste matching (ADR-0101)
+
+The grocery list merges two dinners sharing an ingredient nameKey into
+ONE purchase (ADR-0003) — the old scorer priced only CONTAINER rows and
+was blind to that. The slot scan now subtracts a credit that is capped
+at `CREDIT_CAP = 0.9` (each candidate's match + fill total): matching
+reorders candidates WITHIN a package tier and never across one — a +1
+package candidate can never outrank a 0-marginal candidate on credit.
+
+- **Classes** come from the ONE aisle table (`bucketFor` in
+  `src/lib/sections.ts`): Meat & Seafood → 0, Produce → 1, everything
+  else → 2. 339 keys classified once per request (33 / 91 / 215).
+- **Match credit** (presence-based, mirroring the tag term): per
+  NON-container, non-pantry row whose key is already committed in the
+  ledger's `scored` set (base meals included): meat 0.5, produce 0.25,
+  other 0.05 (`MEAT_MATCH_WEIGHT`/`PRODUCE_MATCH_WEIGHT`/
+  `OTHER_MATCH_WEIGHT`).
+- **Leftover-fill credit**: per container row landing in a committed
+  package with a remainder (`ceil(total) > total`),
+  `FILL_WEIGHT = 0.25 × min(need, remainder)`; excess beyond the
+  remainder keeps flowing through the marginal ceil term.
+- **Unchanged** (still the v1→v3 layer): proposals ranking, continuity
+  seed, disjoint windows, pack dedupe, recency demotion, favourite
+  bonus, the printed `packagesBought` definition and `src/lib/
+  containers.ts`.
 
 ## v3 — proposals (ADR-0080, the current contract)
 
@@ -35,10 +63,12 @@ asc — waste first, then rating, then favourite (owner-binding order).
   request; offered candidates rank behind fresh ones, and the greedy
   slots skip them while the fresh pool can fill. NOT persisted — no
   store, no backup, no room payload. Closing the dialog resets it.
-- **Generation 0 is bit-for-bit stable**: e2e pins the default
-  pre-selected 4-pack `[13443, 6389, 11982, 6167]` (dinner, fresh
-  profile, replace on empty). Any catalog or scoring change breaks those
-  pins loudly — that is the contract working.
+- **Generation 0 is pinnable but NOT frozen**: e2e pins the default
+  pre-selected 4-pack — `[13443, 6227, 11982, 38226]` since ADR-0101
+  (dinner, fresh profile, replace on empty; was
+  `[13443, 6389, 11982, 6167]` under the pre-matching scorer). Any
+  catalog or scoring change breaks those pins loudly — that is the
+  contract working.
 
 ## Ratings, smoothing, favourites
 

@@ -22,11 +22,10 @@ import {
  */
 
 // Same contract as e2e/auto-plan.spec.ts, same value: the generation-0
-// CHEAPEST proposal under ADR-0080 (fresh profile, dinner, empty plan).
-// Down from v2's 8-package rating-ranked anchor #17452 to the 4-package
-// pack anchored on #13443 — the loud break is the contract working.
+// CHEAPEST proposal under ADR-0080, re-pinned for the ADR-0101
+// class-aware scorer (still 4 packages, still anchored on #13443).
 // Verify with the probe, not by eye (`scripts/probe_autoplan_pin.ts`).
-const PINNED_DEFAULT_IDS = [13443, 6389, 11982, 6167]
+const PINNED_DEFAULT_IDS = [13443, 6227, 11982, 38226]
 
 type RatingRecord = { rating: number; count: number; updatedAt: number }
 

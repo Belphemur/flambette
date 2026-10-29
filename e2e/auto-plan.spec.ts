@@ -21,11 +21,11 @@ import {
  * pin loudly — that is the point.
  */
 
-// The generation-0 4-pack after the 2,759-recipe catalog sync (2026-10-02).
-// The 29 new recipes change the eligible-slice rating mean AND enter the
-// candidate pool, so the arithmetic legitimately moves — but only inside the
-// DINNER slice: `ui.autoPlanRuleset` defaults to 'dinner', so that is the
-// eligible set the seed ranks over.
+// The generation-0 4-pack after the ADR-0101 class-aware scorer (2026-10-28).
+// The slot score now subtracts a waste-matching credit (shared committed
+// ingredient keys + leftover-fill, capped at 0.9), so the arithmetic
+// legitimately moves — the pre-select is still the CHEAPEST of the three
+// waste-ranked proposals, still 4 packages.
 //
 // The 0f74ee6 re-pin here ([17452, 23775, 19678, 22308]) was captured from
 // `scripts/probe_autoplan_pin.ts` while that probe mirrored the planner with
@@ -34,12 +34,14 @@ import {
 // app can never generate. The probe now applies the dinner default and
 // reports the pack below as HOLDS. A pin is only worth anything if the thing
 // producing it is a faithful mirror; verify with the probe, not by eye.
-// The generation-0 pre-selected proposal under ADR-0080 (fresh profile,
-// dinner, empty plan, replace-on-empty press): the CHEAPEST of the three
-// waste-ranked proposals — the 4-package pack anchored on #13443, down
-// from the 8-package rating-ranked v2 anchor #17452. The old pin breaking
-// loudly IS the contract working (ADR-0027 §Consequences, ADR-0080).
-const PINNED_DEFAULT_IDS = [13443, 6389, 11982, 6167]
+//
+// The ADR-0101 §Measured prototype predicted [13443, 5451, 4988, 6389]; the
+// real planner emits [13443, 6227, 11982, 38226] — the prototype's
+// measurement run dropped the variety-tag penalty (grid-searched: it is the
+// only scorer variant reproducing both of the prototype's numbers), while
+// ADR-0101 §Decision 5 retains the tag term. The real output is the
+// contract; see the PR body for the divergence note.
+const PINNED_DEFAULT_IDS = [13443, 6227, 11982, 38226]
 
 /** Open + generate in the Auto-Plan dialog with the DEFAULT count 4. */
 async function generate(page: Page): Promise<void> {
@@ -613,6 +615,41 @@ test('add mode shares waste with the base (combined packages ≤ separate sums)'
   const pCombined = await previewPackages(page)
 
   expect(pCombined).toBeLessThanOrEqual(pAlone + pThree)
+  await expectZeroMealimeRequests(page)
+})
+
+// ADR-0101 §Consequences: in add mode the continuation's slots prefer
+// candidates that match what the base plan already committed. Pinned on
+// the picked ids (the planner's internals are not observable in e2e):
+// over the pinned 4-pack the +3 continuation completes to [9889, 30915,
+// 26529] and the whole 7-meal pack still buys FOUR packages — zero new
+// packages for three dinners. The additions' matching is visible in the
+// ids themselves: #30915 ("...Steak Pita Wrap") and #26529 ("Seared Strip
+// Steak") are BOTH striploin-steak dinners that merge into ONE grocery
+// purchase (ADR-0003 merge-by-nameKey) — a shared, previously invisible
+// count/weight row the old scorer was blind to.
+test('add mode matching: the +3 continuation shares the base at zero extra packages (ADR-0101)', async ({
+  page,
+}) => {
+  await page.goto('/plan')
+  await expect(page.getByTestId('auto-plan-button').first()).toBeVisible({ timeout: 15_000 })
+
+  // Base: the pinned gen-0 pack (fresh profile, dinner, replace-on-empty).
+  await setGeneration(page, 0)
+  await generate(page)
+  await confirm(page)
+  expect(await plannedIds(page)).toEqual(PINNED_DEFAULT_IDS)
+
+  // +3 at the SAME generation: the continuity proposal is the selected
+  // card; its packages line describes base + additions.
+  await setGeneration(page, 0)
+  await generateWithCount(page, 3)
+  const additions = await previewIds(page)
+  expect(additions).toEqual([9889, 30915, 26529])
+  expect(await previewPackages(page)).toBe(4)
+
+  await confirm(page)
+  expect(await plannedIds(page)).toEqual([...PINNED_DEFAULT_IDS, 9889, 30915, 26529])
   await expectZeroMealimeRequests(page)
 })
 
