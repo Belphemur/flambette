@@ -95,26 +95,40 @@ const plannedMetas = computed(() => {
 
 /** Recipe docs for the planned meals, loaded only while the sheet is up. */
 const docs = ref(new Map<number, Awaited<ReturnType<typeof getRecipe>>>())
+/**
+ * A failed recipe fetch is a COMPLETION event, not a silent spin (review
+ * round 9): loadingRows settles once any fetch fails, so the sheet shows
+ * the rows that did load (or the not-in-plan fallback) instead of
+ * pulsing skeletons forever.
+ */
+const docsLoadFailed = ref(false)
 const stopDocLoad = watch(
   () => [props.prompt.nameKey, plannedMetas.value.map((m) => m.id).join(',')] as const,
   async () => {
     const missing = plannedMetas.value.filter((meta) => !docs.value.has(meta.id))
     if (missing.length === 0) return
-    try {
-      const loaded = await Promise.all(missing.map((meta) => getRecipe(meta)))
-      const next = new Map(docs.value)
-      for (const doc of loaded) next.set(doc.id, doc)
-      docs.value = next
-    } catch {
-      /* offline/degraded: the rows stay empty, nothing throws */
+    docsLoadFailed.value = false
+    // allSettled keeps every doc that DID load; one failure must not
+    // blank the rows that were fine.
+    const settled = await Promise.allSettled(missing.map((meta) => getRecipe(meta)))
+    const next = new Map(docs.value)
+    let failed = false
+    for (const result of settled) {
+      if (result.status === 'fulfilled') next.set(result.value.id, result.value)
+      else failed = true
     }
+    docs.value = next
+    if (failed) docsLoadFailed.value = true
   },
   { immediate: true },
 )
 onBeforeUnmount(() => stopDocLoad())
 
 const loadingRows = computed(
-  () => plannedMetas.value.length > 0 && docs.value.size < plannedMetas.value.length,
+  () =>
+    !docsLoadFailed.value &&
+    plannedMetas.value.length > 0 &&
+    docs.value.size < plannedMetas.value.length,
 )
 
 /**

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { normalizeQtyOverrideAmount } from '../lib/qtyOverrideValue'
 
 /**
  * Per-line grocery quantity overrides (ADR-0100).
@@ -46,7 +47,14 @@ export const OVERRIDES_MAX_CHARS = 80
 
 function validOverrideValue(value: unknown): string {
   if (typeof value !== 'string') return ''
-  return value.trim().slice(0, OVERRIDES_MAX_CHARS)
+  const trimmed = value.trim().slice(0, OVERRIDES_MAX_CHARS)
+  if (!trimmed) return ''
+  // The bound the editor commits through: a parseable value (amount+unit,
+  // container phrase) is clamped to the shared floor/cap, prose stays
+  // verbatim — so a buggy peer's `999999 cups` or a hand-edited backup's
+  // `0 cups` can never render past the editor's own range (the funnel is
+  // unit-context-free here, so a BARE amount cannot invent a unit).
+  return normalizeQtyOverrideAmount(trimmed) || trimmed
 }
 
 /**

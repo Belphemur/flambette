@@ -154,12 +154,38 @@ and are NOT adopted — the base layout is the contract.
 `ingredient-detail` (sheet host) · `ingredient-detail-name` ·
 `ingredient-detail-amount` · `ingredient-detail-image` ·
 `ingredient-detail-credit` · `ingredient-detail-subs` ·
-`ingredient-detail-recipe-row` · `ingredient-detail-close` ·
+`ingredient-detail-recipe-row` (sheet recipe rows) · `ingredient-detail-close` ·
 `grocery-qty-edit` (the editable badge) · `grocery-qty-editor` (the open
-stepper) · `grocery-qty-reset`. e2e asserts the sheet opens from BOTH
-surfaces, the credit renders only with a photo, substitutes hide when
-absent, and the override survives a contributing meal's removal while the
-line persists.
+stepper) · `grocery-qty-reset` · `grocery-qty-done` · `grocery-qty-minus` /
+`grocery-qty-plus` / `grocery-qty-value`. ShopView's check circle is a real
+checkbox control: `shop-row-toggle` (role=checkbox, `aria-checked`). e2e asserts
+the sheet opens from BOTH surfaces, the credit renders only with a photo,
+substitutes hide when absent, and the override survives a contributing meal's
+removal while the line persists.
+
+## Change note — 2026-10-28 review round 9 (qodo)
+
+- **Done on an untouched draft only closes the editor** — the derived sum is
+  never frozen into an override by a no-edit Done or a Reset→Done pass; an
+  edited draft that equals the derived rendering clears the override instead of
+  writing it (an override of the derived sum is invisible and only freezes the
+  line against future composition changes).
+- **The store unit is the line's canonical grammar** (round-trip rule): the
+  shopper edits in the localized display grammar (a bare amount inherits the
+  display unit; an explicit local unit stays what they typed) and the committed
+  value is converted back to the line's canonical unit (`canonicalQtyOverrideAmount`)
+  before the store write — a metric household member is never handed a raw
+  `4.8 lb`, and a dual system's identity is preserved.
+- **The inbound funnel (`normalizeQtyOverrides`) clamps parseable values**
+  through the same shared grammar (floor ¼, cap 9999): a buggy peer snapshot or
+  a hand-edited backup can never render past the editor's own range. Prose
+  stays verbatim, container phrases keep their annotation.
+- **ShopView's check circle is a real control** (`role="checkbox"`,
+  `aria-checked`, focusable) and the read-only badge no longer stops the row's
+  tap — a press on the quantity toggles the item as it did before ADR-0100.
+- **Reliability seams**: a failed recipe fetch settles the sheet's skeleton
+  (`Promise.allSettled` + a failure flag), and a failed corpus import resets
+  the single-flight memo so the next sheet open retries.
 
 ## Consequences
 

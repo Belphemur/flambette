@@ -39,9 +39,16 @@ interface IngredientDetailFile {
 let entriesPromise: Promise<Record<string, CorpusEntry>> | null = null
 
 function loadEntries(): Promise<Record<string, CorpusEntry>> {
-  entriesPromise ??= import('../../public/data/ingredient_detail.json').then(
-    (mod) => (mod.default as IngredientDetailFile).entries,
-  )
+  // Single-flight, but a REJECTED flight is never retained: a failed
+  // chunk fetch (offline before the chunk is cached) resets the memo, so
+  // the next sheet open retries the import instead of replaying the
+  // cached rejection until a full page reload (review round 9).
+  entriesPromise ??= import('../../public/data/ingredient_detail.json')
+    .then((mod) => (mod.default as IngredientDetailFile).entries)
+    .catch((err) => {
+      entriesPromise = null
+      throw err
+    })
   return entriesPromise
 }
 

@@ -479,13 +479,22 @@ function openIngredientSheet(entry: {
   data-test="shop-row"
   @click="checked.toggleChecked(entry.line.key)"
   >
-  <span
+  <!-- A REAL checkbox control (review round 9): the circle is the row's
+  keyboard/AT path — focusable, checkbox semantics, Space/Enter via the
+  native button — while the padded row area remains the pointer toggle.
+  The name button stays a SEPARATE control (the sheet's door). -->
+  <button
+  type="button"
+  role="checkbox"
+  :aria-checked="!!checked.map[entry.line.key]"
+  :aria-label="`${checked.map[entry.line.key] ? 'Uncheck' : 'Check'} ${entry.item.name}`"
   class="flex size-6 shrink-0 items-center justify-center rounded-full border-2 border-border-strong"
   :class="checked.map[entry.line.key] ? 'border-success bg-success text-on-success' : ''"
-  aria-hidden="true"
+  data-test="shop-row-toggle"
+  @click.stop="checked.toggleChecked(entry.line.key)"
   >
   <Check v-if="checked.map[entry.line.key]" :size="16" />
-  </span>
+  </button>
   <!-- ADR-0100: the name is the sheet's door (stopPropagation so the
   row's toggle never double-fires) — the surrounding row stays the
   checkbox tap area. Shopping has NO name→check ambiguity here because

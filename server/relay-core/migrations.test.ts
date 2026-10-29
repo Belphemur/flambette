@@ -77,6 +77,43 @@ describe('pending detection from the recorded version (ADR-0088 §4)', () => {
   })
 })
 
+describe('migration 004 — the quantity overrides become a synchronized store (ADR-0100)', () => {
+  test('an UPGRADE from the immediately-preceding version creates store_qty_overrides', () => {
+    // The round-9 regression guard: a database already coherent at
+    // version 3 (a relaiy peer that has NOT yet taken the 004 step) must
+    // gain the new table and the version-4 ledger stamp — the shape the
+    // live fleet actually upgrades through.
+    const db = bunDb()
+    applyMigrations(db, () => 1_000)
+    // The sanctioned way back to a coherent version-3 shape is the
+    // runner's own rollback entry point (the only path 004's `down`
+    // runs through): drop the version-4 table.
+    rollbackTo(db, 3)
+    const objectsAtV3 = db
+      .all("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .map((row) => String(row.name))
+    expect(objectsAtV3).not.toContain(storeTableName('qtyOverrides'))
+
+    applyMigrations(db, () => 9_000)
+    expect(ledger(db)).toEqual([
+      { version: 1, applied_at: 1_000 },
+      { version: 2, applied_at: 1_000 },
+      { version: 3, applied_at: 1_000 },
+      { version: 4, applied_at: 9_000 },
+    ])
+    const objects = db
+      .all("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .map((row) => String(row.name))
+    expect(objects).toContain(storeTableName('qtyOverrides'))
+    // The canonical per-store shape, shared with 001/002/003's tables:
+    // the value CHECK refuses non-JSON upserts.
+    expect(() =>
+      db.exec(storeUpsertSql('qtyOverrides'), 'c1', 'not json', 1, 1),
+    ).toThrow(/CHECK constraint failed/)
+    db.close()
+  })
+})
+
 describe('migration 003 — the pantry becomes a synchronized store (ADR-0090)', () => {
   test('store_pantry carries the shared per-store shape, CHECK included', () => {
     const db = bunDb()

@@ -4,7 +4,12 @@ import { Minus, Pencil, Plus } from '@lucide/vue'
 import { onClickOutside } from '@vueuse/core'
 import { useQtyOverridesStore } from '../stores/groceryQtyOverrides'
 import { lineKeyIdentity } from '../lib/grocery'
-import { normalizeQtyOverrideAmount, stepQtyOverrideAmount } from '../lib/qtyOverrideValue'
+import {
+  canonicalQtyOverrideAmount,
+  normalizeQtyOverrideAmount,
+  stepQtyOverrideAmount,
+} from '../lib/qtyOverrideValue'
+import { parseQuantity } from '../lib/quantity'
 
 /**
  * The grocery quantity badge (ADR-0100).
@@ -44,7 +49,11 @@ const props = defineProps<{
   text: string
   /** The un-overridden rendering — the Reset anchor. */
   derivedText?: string
-  /** The line's canonical unit token — a bare amount inherits it. */
+  /** The line's CANONICAL unit token (from `line.display`) — the unit the
+   *  STORE value travels in: a bare edited amount inherits the localized
+   *  display grammar, and an explicit localized unit is converted BACK to
+   *  this canonical one so every system renders the same override
+   *  (ADR-0100 round-trip rule). */
   fallbackUnit?: string
   /** Editing exists on the Grocery tab only (ADR-0100). */
   editable?: boolean
@@ -54,8 +63,17 @@ const props = defineProps<{
 
 const overrides = useQtyOverridesStore()
 const identity = computed(() => lineKeyIdentity(props.lineKey))
-/** The line's canonical unit — a bare draft inherits it (ADR-0100). */
+/** The line's canonical unit — the unit the STORE value travels in (ADR-0100). */
 const fallbackUnit = computed(() => props.fallbackUnit ?? '')
+
+/**
+ * The LOCALIZED display unit the draft is authored in (the derived
+ * rendering's own unit — `oz` on an imperial device); a bare amount
+ * inherits it. Empty when the line's display is a phrase, not a quantity.
+ */
+const displayUnit = computed(
+  () => parseQuantity((props.derivedText ?? props.text).trim())?.unit.trim() ?? '',
+)
 
 /* ---------- ONE open editor across every row ---------- */
 
@@ -76,6 +94,12 @@ const isOpen = computed(() => props.editable && openKey.value === props.lineKey)
  * edits what they read), typed freely, stepped by ±, committed on Done.
  */
 const draft = ref('')
+/**
+ * Whether the shopper actually edited since the editor opened: a Done on
+ * an UNTOUCHED draft closes without touching the store (the derived sum
+ * is never frozen into an override, ADR-0100 round-trip rule).
+ */
+const edited = ref(false)
 
 const triggerRef = ref<HTMLElement | null>(null)
 const editorStyle = ref<Record<string, string>>({})
@@ -107,6 +131,7 @@ watch(
   async (open) => {
     if (open) {
       draft.value = props.text
+      edited.value = false
       await nextTick(positionEditor)
       if (!stopReposition) {
         const onViewportChange = () => {
@@ -135,14 +160,35 @@ function resetToDerived(): void {
 }
 
 function step(direction: 1 | -1): void {
-  draft.value = stepQtyOverrideAmount(draft.value, direction, fallbackUnit.value)
+  edited.value = true
+  draft.value = stepQtyOverrideAmount(draft.value, direction, displayUnit.value)
 }
 
-/** Done: COMMIT — one clamp (the normalize), then the store write. */
+/**
+ * Done: COMMIT — a draft the shopper never touched just closes (the
+ * derived sum is never frozen into an override); an edited draft that
+ * equals the derived rendering CLEARS instead of writing (an override of
+ * the derived sum is invisible and only freezes the line); otherwise one
+ * clamp (the normalize in the LOCAL display grammar, ADR-0037's
+ * clamp-once) and one canonicalization to the line's STORE unit — every
+ * system renders the same override (ADR-0100 round-trip rule) — then the
+ * store write.
+ */
 function commit(): void {
-  const value = normalizeQtyOverrideAmount(draft.value, fallbackUnit.value)
-  if (!value) overrides.clear(identity.value)
-  else overrides.set(identity.value, value)
+  if (!edited.value) {
+    closeEditor()
+    return
+  }
+  const displayValue = normalizeQtyOverrideAmount(draft.value, displayUnit.value)
+  const derivedDisplay = normalizeQtyOverrideAmount(props.derivedText ?? '', displayUnit.value)
+  if (!displayValue || displayValue === derivedDisplay) {
+    overrides.clear(identity.value)
+    closeEditor()
+    return
+  }
+  const stored = canonicalQtyOverrideAmount(displayValue, fallbackUnit.value)
+  if (!stored) overrides.clear(identity.value)
+  else overrides.set(identity.value, stored)
   closeEditor()
 }
 
@@ -173,10 +219,21 @@ onClickOutside(
   },
   { ignore: [triggerRef] },
 )
+
+/**
+ * The root span stops click propagation ONLY in the editable pass (the
+ * grocery rows' tap-to-check must not fire through the badge/editor); the
+ * read-only ShopView pass lets the tap BUBBLE to the row, which keeps
+ * the quantity area part of the row's check-toggle surface (a tap on
+ * the quantity toggles the item — the pre-ADR-0100 behavior).
+ */
+function onRootClick(event: MouseEvent): void {
+  if (props.editable) event.stopPropagation()
+}
 </script>
 
 <template>
-  <span class="relative inline-flex shrink-0" @click.stop>
+  <span class="relative inline-flex shrink-0" @click="onRootClick">
     <!-- The edit affordance: an AT-reachable button that still shows the
          exact text the read-only badge shows. -->
     <button
@@ -238,6 +295,7 @@ onClickOutside(
         class="h-11 w-20 rounded-lg bg-transparent text-center font-mono-data text-label-md tabular-nums text-text outline-none"
         :aria-label="`Quantity for ${name}`"
         data-test="grocery-qty-value"
+        @input="edited = true"
         @keydown.enter="commit"
         @keydown.esc="closeEditor"
         @click.stop

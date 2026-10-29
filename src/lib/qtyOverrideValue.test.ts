@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  canonicalQtyOverrideAmount,
   MAX_QTY_OVERRIDE,
   MIN_QTY_OVERRIDE,
   normalizeQtyOverrideAmount,
@@ -93,5 +94,43 @@ describe('stepQtyOverrideAmount', () => {
     expect(normalizeQtyOverrideAmount('2', '(142 g) pkg')).toBe('2 (142 g) pkg')
     // …and an EXPLICIT unit keeps itself (the fallback is only for bare).
     expect(normalizeQtyOverrideAmount('3 cups', 'cloves')).toBe('3 cups')
+  })
+})
+
+describe('canonicalQtyOverrideAmount (the ADR-0100 round-trip: display value → store unit)', () => {
+  test('imperial-native units step back to the line\u2019s canonical metric unit', () => {
+    // An imperial shopper edits "4.8 lb" on a canonical-kg line; the
+    // STORE value stays metric so a metric household member renders the
+    // same line through the same stack.
+    expect(canonicalQtyOverrideAmount('3 oz', 'g')).toBe('85 g')
+    // The shared format stack's own rounding (709.764 ml → 1 decimal): the
+    // stored value reads exactly like a derived one.
+    expect(canonicalQtyOverrideAmount('24 fl oz', 'ml')).toBe('709.8 ml')
+    expect(canonicalQtyOverrideAmount('2 inch', 'cm')).toBe('5.1 cm')
+    expect(canonicalQtyOverrideAmount('4.8 lb', 'kg')).toMatch(/^2\.1[78] kg$/)
+  })
+
+  test('plurals and case fold onto the same conversion', () => {
+    expect(canonicalQtyOverrideAmount('3 lbs', 'kg')).toBe(
+      canonicalQtyOverrideAmount('3 lb', 'kg'),
+    )
+    expect(canonicalQtyOverrideAmount('3 OZ.', 'g')).toBe(
+      canonicalQtyOverrideAmount('3 oz', 'g'),
+    )
+  })
+
+  test('system-invariant units are the identity (counts, cups, prose, containers)', () => {
+    expect(canonicalQtyOverrideAmount('5 cloves', '')).toBe('5 cloves')
+    expect(canonicalQtyOverrideAmount('2 cups', 'cup')).toBe('2 cups')
+    expect(canonicalQtyOverrideAmount('a pinch', '')).toBe('a pinch')
+    expect(canonicalQtyOverrideAmount('\u00bd (142 g) pkgs', '')).toBe('\u00bd (142 g) pkgs')
+    // An out-of-pair canonical unit is NOT converted (the conversion
+    // never invents a unit the line never had).
+    expect(canonicalQtyOverrideAmount('4.8 lb', 'l')).toBe('4.8 lb')
+  })
+
+  test('bare amounts and empty input pass through (no unit to convert)', () => {
+    expect(canonicalQtyOverrideAmount('7', 'g')).toBe('7')
+    expect(canonicalQtyOverrideAmount('', 'g')).toBe('')
   })
 })

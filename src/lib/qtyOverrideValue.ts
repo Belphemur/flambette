@@ -15,9 +15,15 @@
 
 import {
   formatMetricAmount,
+  OZ_GRAMS,
   parseQuantity,
 } from './quantity'
 import { formatContainerQuantity, parseContainerQuantity } from './containers'
+import {
+  CENTIMETRES_PER_INCH,
+  KILOGRAMS_PER_POUND,
+  MILLILITRES_PER_FLUID_OUNCE,
+} from './units'
 
 /** Absolute floor/max for a committed amount (steppers and typed values). */
 export const MIN_QTY_OVERRIDE = 0.25
@@ -67,6 +73,69 @@ export function normalizeQtyOverrideAmount(raw: string, fallbackUnit = ''): stri
 function clampAmount(amount: number): number {
   if (!Number.isFinite(amount)) return MIN_QTY_OVERRIDE
   return Math.min(MAX_QTY_OVERRIDE, Math.max(MIN_QTY_OVERRIDE, amount))
+}
+
+/**
+ * Grams per unit / millilitres per unit for the imperial-native units an
+ * imperial-localized draft can carry (the mirror of units.ts's ONE-WAY
+ * metric→imperial audience table). The step-back direction — an edited
+ * local display value converted back into the line's canonical metric
+ * unit before the store write, ADR-0100's round-trip rule.
+ */
+const IMPERIAL_TO_METRIC: ReadonlyMap<string, readonly [number, string]> = new Map([
+  ['lb', [1000 * KILOGRAMS_PER_POUND, 'g']],
+  ['lbs', [1000 * KILOGRAMS_PER_POUND, 'g']],
+  ['oz', [OZ_GRAMS, 'g']],
+  ['ounce', [OZ_GRAMS, 'g']],
+  ['ounces', [OZ_GRAMS, 'g']],
+  ['fl oz', [MILLILITRES_PER_FLUID_OUNCE, 'ml']],
+  ['inch', [CENTIMETRES_PER_INCH, 'cm']],
+  ['inches', [CENTIMETRES_PER_INCH, 'cm']],
+])
+
+/**
+ * Convert one normalized DISPLAY value into the LINE's canonical unit
+ * (ADR-0100 round-trip rule, 2026-10-28 review): the shopper edits in
+ * the localized display grammar (`4.8 lb` on an imperial device, or a
+ * bare amount that inherited the line's localized unit), but the STORE
+ * value must stay in the canonical metric grammar all systems agree on —
+ * a metric household member can never be handed a raw `4.8 lb`.
+ *
+ * - a unit that is not imperial-native (counts, cups, tbsp, prose) is
+ *   the identity — the catalog authors it the same in every system
+ * - a bare amount (no unit) cannot be converted — with no unit and no
+ *   conversion target, the canonical unit IS inherited by the caller
+ *   passing the display fallback; nothing to do here
+ * - the canonical unit must be the metric side of the pair (`g`/`kg`/`ml`) —
+ *   a `dual` system's canonical display is already the store value
+ * - the converted amount re-normalizes through the SAME adjacent scaling
+ *   stack (`formatMetricAmount`), so a stored override reads exactly
+ *   like a derived one on every system
+ */
+export function canonicalQtyOverrideAmount(value: string, canonicalUnit = ''): string {
+  const s = value.trim()
+  if (!s) return ''
+  const canonical = canonicalUnit.trim()
+  const parsed = parseQuantity(s)
+  if (!parsed || !parsed.unit.trim()) return s
+  const conv = IMPERIAL_TO_METRIC.get(localUnitKey(parsed.unit))
+  if (!conv) return s
+  const [perUnit, metricUnit] = conv
+  // Only convert WHEN the line's canonical unit is the metric side of
+  // the pair (g/kg for weights, ml for volumes, cm for lengths) — a
+  // canonical unit outside the pair is system-invariant and the value
+  // already travels correctly.
+  if (canonical !== metricUnit && !(metricUnit === 'g' && canonical === 'kg')) return s
+  const metricAmount = parsed.amount * perUnit
+  const amount = metricUnit === 'g' && canonical === 'kg' ? metricAmount / 1000 : metricAmount
+  return `${formatMetricAmount(amount, canonical)} ${canonical}`
+}
+
+/** Case-folded unit-key comparison without a trailing period. */
+function localUnitKey(unit: string): string {
+  const u = unit.trim().toLowerCase()
+  if (u.endsWith('.') && u.length > 1) return u.slice(0, -1)
+  return u
 }
 
 /**

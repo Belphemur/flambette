@@ -38,6 +38,19 @@ describe('normalizeQtyOverrides', () => {
     expect(long.a).toBe('x'.repeat(80))
   })
 
+  test('inbound numeric values carry the editor\'s shared clamp (round 9)', () => {
+    // A buggy peer or hand-edited backup can render past the editor's
+    // own range NO MORE than the editor's typed path can: parseable
+    // values clamp floor/cap through the SAME grammar, prose stays verbatim.
+    expect(
+      normalizeQtyOverrides({ hi: '999999 cups', lo: '0 cups', keep: 'a pinch' }),
+    ).toEqual({
+      hi: '9999 cups',
+      lo: '¼ cups',
+      keep: 'a pinch',
+    })
+  })
+
   test('the cap keeps the map bounded at 500 entries', () => {
     const raw: Record<string, string> = {}
     for (let i = 0; i < 600; i++) raw[`identity-${i}`] = `${i} cups`

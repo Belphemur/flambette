@@ -108,3 +108,43 @@ test('shopping mode: custom items get their own section and collapse works', asy
   await first.click()
   await expect(first).toHaveAttribute('aria-expanded', 'true')
 })
+
+test('shopping rows stay reachable: keyboard check + quantity taps through (round 9)', async ({
+  page,
+}) => {
+  await gotoTab(page, 'Grocery')
+  await page.locator('[data-test=start-shopping]').click()
+  await expect(page).toHaveURL(/\/shop$/)
+  const rows = page.locator('[data-test=shop-row]')
+  const first = rows.first()
+  await expect(first).toBeVisible()
+  const progress = page.locator('[data-test=shopping-progress]')
+  await expect(progress).toHaveText(/^0 \/ \d+$/)
+
+  // The circle is a REAL checkbox control (review round 9): focusable,
+  // AT-named out of the box as a checkbox — Space/Enter through the
+  // native button toggles the line.
+  const toggle = first.getByTestId('shop-row-toggle')
+  await expect(toggle).toHaveAttribute('role', 'checkbox')
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
+  await toggle.focus()
+  await page.keyboard.press('Enter')
+  await expect(progress).toHaveText(/^1 \/ \d+$/)
+  // Checked rows SINK live within their section: the checked line's own
+  // circle now speaks as UNcheck (the same DOM node moved to the sink).
+  await expect(page.getByRole('checkbox', { name: /^Uncheck / })).toHaveCount(1)
+  await expect(page.locator('[data-test=shop-row].opacity-40')).toHaveCount(1)
+  // …and the same control unchecks through the keyboard (re-focus after
+  // the sink moved it).
+  await page.getByRole('checkbox', { name: /^Uncheck / }).focus()
+  await page.keyboard.press('Enter')
+  await expect(progress).toHaveText(/^0 \/ \d+$/)
+  await expect(page.locator('[data-test=shop-row].opacity-40')).toHaveCount(0)
+
+  // The read-only quantity badge no longer stops the row's tap: a press
+  // on the quantity is part of the check-toggle surface (the ADR-0100
+  // dead zone on the right edge is gone).
+  await rows.first().getByTestId('grocery-qty').click()
+  await expect(progress).toHaveText(/^1 \/ \d+$/)
+  await expect(page.locator('[data-test=shop-row].opacity-40')).toHaveCount(1)
+})
