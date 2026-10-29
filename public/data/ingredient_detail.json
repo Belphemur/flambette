@@ -809,7 +809,7 @@
    ]
   },
   "crushed red pepper": {
-   "image": "img/ingredients/pepper.webp",
+   "image": "img/ingredients/crushed_red_pepper.webp",
    "substitutes": [
     "cayenne pepper (use less)",
     "chili paste",
@@ -1393,7 +1393,7 @@
    ]
   },
   "green bell pepper": {
-   "image": "img/ingredients/pepper.webp",
+   "image": "img/ingredients/green_bell_peppers.webp",
    "substitutes": [
     "yellow bell peppers",
     "orange bell peppers",
@@ -1982,7 +1982,7 @@
    ]
   },
   "orange bell pepper": {
-   "image": "img/ingredients/pepper.webp",
+   "image": "img/ingredients/orange_bell_peppers.webp",
    "substitutes": [
     "yellow bell peppers",
     "red bell peppers"
@@ -2395,7 +2395,7 @@
    ]
   },
   "red bell pepper": {
-   "image": "img/ingredients/pepper.webp",
+   "image": "img/ingredients/red_bell_peppers.webp",
    "substitutes": [
     "red bell peppers",
     "yellow bell peppers",
@@ -3292,7 +3292,7 @@
    ]
   },
   "yellow bell pepper": {
-   "image": "img/ingredients/pepper.webp",
+   "image": "img/ingredients/yellow_bell_peppers.webp",
    "substitutes": [
     "orange bell peppers",
     "red bell peppers",
