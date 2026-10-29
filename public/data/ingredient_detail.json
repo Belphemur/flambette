@@ -15,6 +15,7 @@
    "image": "img/ingredients/yeast.webp"
   },
   "alfalfa sprout": {
+   "image": "img/ingredients/alfalfa_sprout.webp",
    "substitutes": [
     "broccoli sprouts",
     "sunflower sprouts",
@@ -22,6 +23,7 @@
    ]
   },
   "alfredo sauce": {
+   "image": "img/ingredients/alfredo_sauce.webp",
    "substitutes": [
     "marinara sauce (very different flavor)",
     "heavy whipping cream + Parmesan cheese (quick DIY sauce)"
@@ -109,12 +111,14 @@
    "image": "img/ingredients/rice.webp"
   },
   "arrowroot starch/powder": {
+   "image": "img/ingredients/arrowroot_starch_powder.webp",
    "substitutes": [
     "cornstarch",
     "tapioca starch"
    ]
   },
   "artichoke hearts, marinated": {
+   "image": "img/ingredients/artichoke_hearts_marinated.webp",
    "substitutes": [
     "canned artichoke hearts (rinsed)",
     "sun-dried tomatoes, oil-packed"
@@ -189,6 +193,7 @@
    ]
   },
   "balsamic vinaigrette": {
+   "image": "img/ingredients/balsamic_vinaigrette.webp",
    "substitutes": [
     "balsamic vinegar + olive oil (DIY)",
     "Italian salad dressing"
@@ -212,6 +217,7 @@
    ]
   },
   "barbecue sauce": {
+   "image": "img/ingredients/barbecue_sauce.webp",
    "substitutes": [
     "hoisin sauce (different flavor)",
     "ketchup + brown sugar + vinegar (DIY)"
@@ -410,6 +416,7 @@
    "image": "img/ingredients/cabbage.webp"
   },
   "caesar dressing": {
+   "image": "img/ingredients/caesar_dressing.webp",
    "substitutes": [
     "blue cheese dressing",
     "Italian salad dressing"
@@ -441,6 +448,7 @@
    "image": "img/ingredients/tomato.webp"
   },
   "cannellini (white kidney) bean": {
+   "image": "img/ingredients/cannellini_white_kidney_bean.webp",
    "substitutes": [
     "great Northern beans",
     "garbanzo beans (chickpeas)"
@@ -503,12 +511,14 @@
    ]
   },
   "cauliflower": {
+   "image": "img/ingredients/cauliflower.webp",
    "substitutes": [
     "cauliflower florets",
     "broccoli"
    ]
   },
   "cauliflower floret": {
+   "image": "img/ingredients/cauliflower_floret.webp",
    "substitutes": [
     "cauliflower (cut into florets)",
     "broccoli florets"
@@ -542,12 +552,14 @@
    ]
   },
   "cheese ravioli, fresh or frozen": {
+   "image": "img/ingredients/cheese_ravioli_fresh_or_frozen.webp",
    "substitutes": [
     "cheese tortellini, fresh or frozen",
     "potato gnocchi"
    ]
   },
   "cheese tortellini, fresh or frozen": {
+   "image": "img/ingredients/cheese_tortellini_fresh_or_frozen.webp",
    "substitutes": [
     "cheese ravioli, fresh or frozen",
     "penne pasta"
@@ -624,7 +636,7 @@
    "image": "img/ingredients/chickpea flour.webp"
   },
   "chili garlic sauce": {
-   "image": "img/ingredients/garlic.webp"
+   "image": "img/ingredients/chili_garlic_sauce.webp"
   },
   "chili powder": {
    "image": "img/ingredients/chili powder.webp",
@@ -634,6 +646,7 @@
    ]
   },
   "chili-garlic sauce": {
+   "image": "img/ingredients/chili_garlic_sauce.webp",
    "substitutes": [
     "sriracha",
     "hot sauce"
@@ -761,6 +774,7 @@
    ]
   },
   "cottage cheese": {
+   "image": "img/ingredients/cottage_cheese.webp",
    "substitutes": [
     "ricotta cheese",
     "plain Greek yogurt"
@@ -957,6 +971,7 @@
    "image": "img/ingredients/egg.webp"
   },
   "eggplant": {
+   "image": "img/ingredients/eggplant.webp",
    "substitutes": [
     "zucchini squash",
     "portobello mushrooms"
@@ -1032,6 +1047,7 @@
    "image": "img/ingredients/salt.webp"
   },
   "flank steak": {
+   "image": "img/ingredients/flank_steak.webp",
    "substitutes": [
     "skirt steak",
     "sirloin steak"
@@ -1045,6 +1061,7 @@
    ]
   },
   "flatbreads or naan": {
+   "image": "img/ingredients/flatbreads_or_naan.webp",
    "substitutes": [
     "whole grain pitas",
     "pre-made pizza crust"
@@ -1054,6 +1071,7 @@
    "image": "img/ingredients/seeds.webp"
   },
   "french vinaigrette": {
+   "image": "img/ingredients/french_vinaigrette.webp",
    "substitutes": [
     "Italian salad dressing",
     "balsamic vinaigrette"
@@ -1123,6 +1141,7 @@
    ]
   },
   "frozen cherrie": {
+   "image": "img/ingredients/frozen_cherries.webp",
    "substitutes": [
     "frozen blueberries",
     "frozen raspberries"
@@ -1319,6 +1338,7 @@
    "image": "img/ingredients/golden syrup.webp"
   },
   "graham cracker": {
+   "image": "img/ingredients/graham_cracker.webp",
    "substitutes": [
     "digestive biscuits",
     "vanilla wafer cookies"
@@ -1332,6 +1352,7 @@
    ]
   },
   "granola": {
+   "image": "img/ingredients/granola.webp",
    "substitutes": [
     "granola, nut free",
     "granola, vegan"
@@ -1397,7 +1418,7 @@
    "image": "img/ingredients/onion.webp"
   },
   "green onions (scallions)": {
-   "image": "img/ingredients/spring onions.webp",
+   "image": "img/ingredients/green_onions_scallions.webp",
    "substitutes": [
     "chives"
    ]
@@ -1433,12 +1454,14 @@
    ]
   },
   "guacamole": {
+   "image": "img/ingredients/guacamole.webp",
    "substitutes": [
     "mashed avocado",
     "hummus"
    ]
   },
   "halibut fillet": {
+   "image": "img/ingredients/halibut_fillet.webp",
    "substitutes": [
     "cod fillet",
     "sole fillets"
@@ -1520,6 +1543,7 @@
    "image": "img/ingredients/horseradish.webp"
   },
   "hot sauce": {
+   "image": "img/ingredients/hot_sauce.webp",
    "substitutes": [
     "cayenne pepper",
     "chili-garlic sauce"
@@ -1543,6 +1567,7 @@
    ]
   },
   "italian salad dressing": {
+   "image": "img/ingredients/italian_salad_dressing.webp",
    "substitutes": [
     "French vinaigrette",
     "balsamic vinaigrette"
@@ -1571,6 +1596,7 @@
    ]
   },
   "kalamata olives, pitted": {
+   "image": "img/ingredients/kalamata_olives_pitted.webp",
    "substitutes": [
     "sliced black olives",
     "green olives"
@@ -1604,6 +1630,7 @@
    ]
   },
   "kiwifruit": {
+   "image": "img/ingredients/kiwifruit.webp",
    "substitutes": [
     "strawberries",
     "pineapples"
@@ -1761,6 +1788,7 @@
    ]
   },
   "marinara sauce": {
+   "image": "img/ingredients/marinara_sauce.webp",
    "substitutes": [
     "tomato sauce + Italian herbs (DIY)",
     "pizza sauce"
@@ -1799,12 +1827,14 @@
    "image": "img/ingredients/mint.webp"
   },
   "miso paste, red": {
+   "image": "img/ingredients/miso_paste_red.webp",
    "substitutes": [
     "miso paste, white (milder)",
     "soy sauce (thinner, saltier)"
    ]
   },
   "miso paste, white": {
+   "image": "img/ingredients/miso_paste_white.webp",
    "substitutes": [
     "miso paste, red (stronger)",
     "soy sauce"
@@ -1972,12 +2002,14 @@
    ]
   },
   "oreo chocolate sandwich cookie": {
+   "image": "img/ingredients/oreo_chocolate_sandwich_cookie.webp",
    "substitutes": [
     "chocolate sandwich cookies (any brand)",
     "chocolate wafer cookies"
    ]
   },
   "orzo pasta": {
+   "image": "img/ingredients/orzo_pasta.webp",
    "substitutes": [
     "rice",
     "macaroni (elbow) pasta"
@@ -2099,6 +2131,7 @@
    ]
   },
   "pecan halve": {
+   "image": "img/ingredients/pecan_halve.webp",
    "substitutes": [
     "pumpkin seeds"
    ]
@@ -2129,6 +2162,7 @@
    ]
   },
   "pineapple": {
+   "image": "img/ingredients/pineapple.webp",
    "substitutes": [
     "mangoes",
     "peaches"
@@ -2175,6 +2209,7 @@
    "image": "img/ingredients/cheese.webp"
   },
   "plum": {
+   "image": "img/ingredients/plum.webp",
    "substitutes": [
     "peaches",
     "apricots"
@@ -2188,6 +2223,7 @@
    ]
   },
   "polenta, pre-cooked": {
+   "image": "img/ingredients/polenta_pre_cooked.webp",
    "substitutes": [
     "cornmeal (cooked into polenta)",
     "grits (cooked)"
@@ -2335,6 +2371,7 @@
    ]
   },
   "ranch dressing": {
+   "image": "img/ingredients/ranch_dressing.webp",
    "substitutes": [
     "blue cheese dressing",
     "honey mustard dressing"
@@ -2380,6 +2417,7 @@
    ]
   },
   "red grape": {
+   "image": "img/ingredients/red_grape.webp",
    "substitutes": [
     "green grapes",
     "black grapes"
@@ -2424,6 +2462,7 @@
    "image": "img/ingredients/rhubarb.webp"
   },
   "ribeye steak": {
+   "image": "img/ingredients/ribeye_steak.webp",
    "substitutes": [
     "striploin (New York strip) steak",
     "sirloin steak"
@@ -2488,6 +2527,7 @@
    "image": "img/ingredients/oats.webp"
   },
   "romaine heart": {
+   "image": "img/ingredients/romaine_heart.webp",
    "substitutes": [
     "romaine lettuce",
     "spring mix (mixed greens)"
@@ -2517,6 +2557,7 @@
    ]
   },
   "rotini pasta": {
+   "image": "img/ingredients/rotini_pasta.webp",
    "substitutes": [
     "gluten-free rotini pasta"
    ]
@@ -2612,6 +2653,7 @@
    "image": "img/ingredients/sea salt.webp"
   },
   "sea scallop": {
+   "image": "img/ingredients/sea_scallop.webp",
    "substitutes": [
     "raw peeled shrimp, fresh or frozen",
     "cod fillet"
@@ -2689,12 +2731,14 @@
    ]
   },
   "shredded sweetened coconut": {
+   "image": "img/ingredients/shredded_sweetened_coconut.webp",
    "substitutes": [
     "shredded unsweetened coconut + a pinch of sugar",
     "coconut flakes"
    ]
   },
   "shredded unsweetened coconut": {
+   "image": "img/ingredients/shredded_unsweetened_coconut.webp",
    "substitutes": [
     "shredded sweetened coconut (sweeter)",
     "coconut flakes"
@@ -2777,6 +2821,7 @@
    ]
   },
   "sole fillet": {
+   "image": "img/ingredients/sole_fillet.webp",
    "substitutes": [
     "cod fillet",
     "tilapia fillet"
@@ -2833,6 +2878,7 @@
    "image": "img/ingredients/peas.webp"
   },
   "spring mix (mixed greens)": {
+   "image": "img/ingredients/spring_mix_mixed_greens.webp",
    "substitutes": [
     "romaine lettuce",
     "baby spinach"
@@ -2848,6 +2894,7 @@
    "image": "img/ingredients/oats.webp"
   },
   "stir-fry sauce": {
+   "image": "img/ingredients/stir_fry_sauce.webp",
    "substitutes": [
     "teriyaki sauce",
     "hoisin sauce"
@@ -2864,12 +2911,14 @@
    ]
   },
   "striploin (new york strip) steak": {
+   "image": "img/ingredients/striploin_new_york_strip_steak.webp",
    "substitutes": [
     "ribeye steak (richer)",
     "sirloin steak"
    ]
   },
   "sugar snap pea": {
+   "image": "img/ingredients/sugar_snap_pea.webp",
    "substitutes": [
     "snow peas",
     "green beans"
@@ -2916,6 +2965,7 @@
    ]
   },
   "swiss chard": {
+   "image": "img/ingredients/swiss_chard.webp",
    "substitutes": [
     "kale",
     "baby spinach"
@@ -2952,12 +3002,14 @@
    ]
   },
   "thai curry paste, green": {
+   "image": "img/ingredients/thai_curry_paste_green.webp",
    "substitutes": [
     "Thai curry paste, red",
     "curry powder (much milder flavor)"
    ]
   },
   "thai curry paste, red": {
+   "image": "img/ingredients/thai_curry_paste_red.webp",
    "substitutes": [
     "Thai curry paste, green"
    ]
@@ -2973,6 +3025,7 @@
    ]
   },
   "tilapia fillet": {
+   "image": "img/ingredients/tilapia_fillet.webp",
    "substitutes": [
     "cod fillet",
     "sole fillets"
@@ -3049,6 +3102,7 @@
    ]
   },
   "tzatziki sauce": {
+   "image": "img/ingredients/tzatziki_sauce.webp",
    "substitutes": [
     "plain Greek yogurt + cucumber + dill (DIY)",
     "hummus"
@@ -3074,6 +3128,7 @@
    ]
   },
   "vanilla whey-based protein powder (containing 20 grams protein/serving)": {
+   "image": "img/ingredients/vanilla_whey_based_protein_powder.webp",
    "substitutes": [
     "vanilla plant-based protein powder (containing 20 grams protein/serving)"
    ]
@@ -3113,18 +3168,21 @@
    "image": "img/ingredients/vegetable stock.webp"
   },
   "veggie burger patties, plant-based": {
+   "image": "img/ingredients/veggie_burger_patties_plant_based.webp",
    "substitutes": [
     "portobello mushrooms",
     "garbanzo beans (chickpeas) (for DIY patties)"
    ]
   },
   "veggie ground, plant based": {
+   "image": "img/ingredients/veggie_ground_plant_based.webp",
    "substitutes": [
     "crumbled extra firm tofu",
     "tempeh (crumbled)"
    ]
   },
   "virgin coconut oil": {
+   "image": "img/ingredients/virgin_coconut_oil.webp",
    "substitutes": [
     "butter, unsalted",
     "neutral vegetable oil"
@@ -3196,6 +3254,7 @@
    ]
   },
   "whole grain pita": {
+   "image": "img/ingredients/whole_grain_pita.webp",
    "substitutes": [
     "whole grain bread",
     "flatbreads or naan"
@@ -3335,18 +3394,12 @@
  "source": "TheMealDB (themealdb.com)",
  "unmatched": [
   "agave nectar",
-  "alfalfa sprout",
-  "alfredo sauce",
   "amaranth",
   "anchovie",
   "anchovy paste",
   "argan oil",
-  "arrowroot starch/powder",
-  "artichoke hearts, marinated",
   "arugula",
   "balsamic glaze",
-  "balsamic vinaigrette",
-  "barbecue sauce",
   "barley",
   "berrie",
   "bittersweet chocolate",
@@ -3361,7 +3414,6 @@
   "brisket",
   "bulgur",
   "butter bean",
-  "caesar dressing",
   "calamari",
   "calvado",
   "camembert",
@@ -3372,24 +3424,18 @@
   "canned corn",
   "canned fish",
   "canned jalape\u00f1o",
-  "cannellini (white kidney) bean",
   "cantaloupe",
   "catfish",
-  "cauliflower",
-  "cauliflower floret",
   "chai concentrate",
   "champagne",
   "chard",
   "chayote",
   "cheddar",
-  "cheese ravioli, fresh or frozen",
-  "cheese tortellini, fresh or frozen",
   "cherrie",
   "chervil",
   "chicory powder",
   "chili crisp",
   "chili flake",
-  "chili-garlic sauce",
   "chocolate bar",
   "coconut amino",
   "coconut chip",
@@ -3400,7 +3446,6 @@
   "corn bran",
   "corn oil",
   "corn syrup",
-  "cottage cheese",
   "cottonseed oil",
   "crab",
   "cream of tartar",
@@ -3415,18 +3460,13 @@
   "dried bean",
   "dried herb",
   "edam",
-  "eggplant",
   "endive",
   "energy bar",
   "escarole",
   "espresso",
   "espresso bean",
   "farro",
-  "flank steak",
-  "flatbreads or naan",
   "flaxseed",
-  "french vinaigrette",
-  "frozen cherrie",
   "fructose",
   "fruit juice",
   "fruit leather",
@@ -3449,8 +3489,6 @@
   "gluten-free soy sauce",
   "gluten-free tamari",
   "gouda",
-  "graham cracker",
-  "granola",
   "granola bar",
   "grape",
   "grape juice",
@@ -3459,29 +3497,23 @@
   "grenadine",
   "ground coffee",
   "gruyere",
-  "guacamole",
   "guar gum",
   "gumdrop",
   "habanero",
   "halibut",
-  "halibut fillet",
   "halloumi",
   "harissa",
   "hazelnut",
   "hazelnut oil",
   "herbal tea",
   "hot dog",
-  "hot sauce",
   "ice lolly",
   "instant coffee",
-  "italian salad dressing",
   "jicama",
   "kalamata olive",
-  "kalamata olives, pitted",
   "kefir",
   "khorasan wheat",
   "kiwi",
-  "kiwifruit",
   "lactose-free half-and-half",
   "lager",
   "lecithin",
@@ -3492,7 +3524,6 @@
   "longan",
   "macadamia nut",
   "margarine",
-  "marinara sauce",
   "marsala",
   "marshmallow",
   "matcha",
@@ -3500,30 +3531,22 @@
   "microgreen",
   "millet",
   "miso paste",
-  "miso paste, red",
-  "miso paste, white",
   "mixed green",
   "navy bean",
   "nectarine",
   "neutral oil",
-  "oreo chocolate sandwich cookie",
-  "orzo pasta",
   "palm oil",
   "pancetta",
   "papaya",
   "parmigiano",
   "pasta sauce",
   "pasti",
-  "pecan halve",
   "pepperoni",
   "persimmon",
   "pickle",
   "pickled gherkin",
-  "pineapple",
   "plantain",
-  "plum",
   "poblano",
-  "polenta, pre-cooked",
   "ponzu",
   "popcorn",
   "poppyseed oil",
@@ -3534,15 +3557,10 @@
   "radicchio",
   "rambutan",
   "ramen",
-  "ranch dressing",
-  "red grape",
   "relish",
-  "ribeye steak",
   "rice flour",
-  "romaine heart",
   "rooibo",
   "ros\u00e9",
-  "rotini pasta",
   "rusk",
   "rutabaga",
   "rye flour",
@@ -3551,59 +3569,41 @@
   "sandwich loaf",
   "sangria",
   "scallop",
-  "sea scallop",
   "seaweed",
   "seltzer",
   "serrano",
   "short rib",
   "shredded coconut",
-  "shredded sweetened coconut",
-  "shredded unsweetened coconut",
   "skyr",
   "sodium bicarbonate",
-  "sole fillet",
   "sorbet",
   "soy oil",
   "sparkling fruit wine",
   "spelt",
-  "spring mix (mixed greens)",
   "sprinkle",
-  "stir-fry sauce",
-  "striploin (new york strip) steak",
-  "sugar snap pea",
   "surimi",
-  "swiss chard",
   "swiss cheese",
   "tarragon",
   "tea",
   "tea leave",
   "tequila",
   "teriyaki sauce",
-  "thai curry paste, green",
-  "thai curry paste, red",
   "tilapia",
-  "tilapia fillet",
   "toffee",
   "trail mix",
-  "tzatziki sauce",
   "udon",
-  "vanilla whey-based protein powder (containing 20 grams protein/serving)",
   "vegan chocolate",
-  "veggie burger patties, plant-based",
-  "veggie ground, plant based",
   "vermouth",
-  "virgin coconut oil",
   "vodka",
   "watercres",
   "watermelon",
   "wheat cracker",
   "whiskey",
   "white sauce",
-  "whole grain pita",
   "xanthan gum",
   "yuba",
   "za'atar"
  ],
- "withImages": 602,
+ "withImages": 661,
  "withSubstitutes": 338
 }
