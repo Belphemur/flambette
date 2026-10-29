@@ -122,16 +122,19 @@ class TestIndexOutput(unittest.TestCase):
         # test passed while checking nothing (caught in PR #48 review, second
         # round). The self.assertTrue below is what stops that recurring — a
         # mis-aligned pattern must fail loudly, not pass quietly.
+        # The row LINK names the exact file: with collided numbers (ADR-0027
+        # x3, ADR-0038/0039/0040/0060 x2) a number-prefix lookup reads an
+        # arbitrary sibling's Status and fails a record that was never
+        # retired. Resolve the file from the link itself.
         retired = re.findall(
-            r"^\| \[(\d{4})\]\([^)]+\) \|[^|]*\|\s*"
+            r"^\| \[(\d{4})\]\((ADR-\d{4}-[^)]+\.md)\) \|[^|]*\|\s*"
             r"(superseded|accepted \(superseded in part\))\s*\|",
             self.text, re.M)
         self.assertTrue(retired, "no retired records matched — pattern mis-aligned")
-        for num, bucket in retired:
-            fname = [f for f in os.listdir(DESIGN)
-                     if f.startswith("ADR-%s-" % num)]
-            self.assertTrue(fname, "no file for ADR-%s" % num)
-            head = open(os.path.join(DESIGN, fname[0])).read()[:3000]
+        for num, fname, bucket in retired:
+            self.assertTrue(os.path.exists(os.path.join(DESIGN, fname)),
+                            "retired row links a missing file: %s" % fname)
+            head = open(os.path.join(DESIGN, fname)).read()[:3000]
             m = re.search(r"status\s*:?\s*\**\s*([^\n*]+)", head, re.I)
             raw = (m.group(1) if m else "").lower()
             self.assertIn("superseded", raw,

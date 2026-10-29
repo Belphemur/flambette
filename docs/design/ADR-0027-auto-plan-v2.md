@@ -1,6 +1,8 @@
 # ADR-0027: Auto-Plan v2 — variety-aware completion planning
 
-**Status:** Accepted (2026-09-29).
+**Status:** accepted (superseded in part by ADR-0101) (2026-09-29) — the slot
+score's waste term gains the class-aware match + leftover-fill credits;
+smoothing, tags, rotation and determinism stand.
 **Extends:** ADR-0024 (the pack builder) — this record changes the SELECTION
 POLICY and the default interaction; ADR-0024's index, container model and
 determinism posture are unchanged and stay in force.

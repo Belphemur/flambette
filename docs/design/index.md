@@ -5,7 +5,7 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**106 records.** One file per decision (`ADR-NNNN-slug.md`),
+**107 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
@@ -41,7 +41,6 @@ architecture is shaped the way it is.
 | [0024](ADR-0024-auto-plan-pack-builder.md) | Auto-Plan — generating a meal plan from the frozen catalog | 2026-09-29 |
 | [0025](ADR-0025-smoke-run-images-in-ci.md) | Images are smoke-run in CI, not just built | 2026-09-29 |
 | [0026](ADR-0026-room-join-or-create-lifecycle.md) | A room is created by whoever arrives first, and dies when nobody is there | 2026-09-29 |
-| [0027](ADR-0027-auto-plan-v2.md) | Auto-Plan v2 — variety-aware completion planning | 2026-09-29 |
 | [0027](ADR-0027-preview-hosting-vercel-now-cloudflare-later.md) | Vercel hosts previews; Cloudflare is the future full-stack host | 2026-09-29 |
 | [0027](ADR-0027-unified-quick-filters.md) | One quick-filter object, one filter surface, no orphan controls | 2026-09-29 |
 | [0028](ADR-0028-filter-sync-and-join-reconciliation.md) | The quick filters are household state, and adoption is the join | 2026-09-29 |
@@ -103,6 +102,7 @@ architecture is shaped the way it is.
 | [0098](ADR-0098-recipe-detail-cooking-surface.md) | Recipe detail as a cooking surface — screen wake + inline end-of-recipe mark on mobile _(supersedes ADR-0083)_ | 2026-10-26 |
 | [0099](ADR-0099-ingredient-detail-data-corpus.md) | Ingredient detail data corpus — offline images + curated substitutions | 2026-10-28 |
 | [0100](ADR-0100-ingredient-detail-sheet-and-quantity-override.md) | Ingredient detail sheet + per-line quantity override | 2026-10-28 |
+| [0101](ADR-0101-auto-plan-class-aware-matching.md) | Auto-Plan v4 — class-aware waste matching (meat first, produce second, leftover-fill) _(supersedes ADR-0027)_ | 2026-10-28 |
 
 ## Not in force
 
@@ -114,6 +114,7 @@ understand why the current shape is the shape.
 | [0004](ADR-0004-share-url-and-rooms.md) | Share via URL deep-link (`?p=`), rooms for interactive sync | accepted (superseded in part) | 2026-09-23 |
 | [0019](ADR-0019-household-room.md) | A persistent household room replaces share-links as the default flow | accepted (superseded in part) | 2026-09-28 |
 | [0022](ADR-0022-measured-amounts.md) | Measured amounts under the cooking step text | accepted (superseded in part) | 2026-09-28 |
+| [0027](ADR-0027-auto-plan-v2.md) | Auto-Plan v2 — variety-aware completion planning | accepted (superseded in part) | 2026-09-29 |
 | [0033](ADR-0033-auto-plan-regenerate-seed.md) | An Auto-Plan "Regenerate" press rolls the seed | accepted (superseded in part) | 2026-10-01 |
 | [0035](ADR-0035-design-tokens-and-categorical-hues.md) | A design-token layer (DESIGN.md), categorical food hues, and a wider desktop | superseded | 2026-10-01 |
 | [0036](ADR-0036-kitchen-companion-redesign.md) | A kitchen companion, not an accent-only reskin | proposed | 2026-10-01 |
@@ -148,8 +149,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0101**). Do not count the files -- that is how the
-   collisions above happened (106 files share 100 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0102**). Do not count the files -- that is how the
+   collisions above happened (107 files share 101 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.
