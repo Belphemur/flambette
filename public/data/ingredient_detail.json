@@ -1,5 +1,5 @@
 {
- "count": 661,
+ "count": 681,
  "entries": {
   "2% milk": {
    "image": "img/ingredients/milk.webp"
@@ -13,6 +13,9 @@
   },
   "active dry yeast": {
    "image": "img/ingredients/yeast.webp"
+  },
+  "agave nectar": {
+   "image": "img/ingredients/agave_nectar.webp"
   },
   "alfalfa sprout": {
    "image": "img/ingredients/alfalfa_sprout.webp",
@@ -83,6 +86,9 @@
     "pecan halves"
    ]
   },
+  "amaranth": {
+   "image": "img/ingredients/amaranth.webp"
+  },
   "anchovy fillets, packed in oil": {
    "image": "img/ingredients/anchovy fillet.webp",
    "substitutes": [
@@ -123,6 +129,9 @@
     "canned artichoke hearts (rinsed)",
     "sun-dried tomatoes, oil-packed"
    ]
+  },
+  "arugula": {
+   "image": "img/ingredients/arugula.webp"
   },
   "asparagu": {
    "image": "img/ingredients/asparagus.webp",
@@ -192,6 +201,9 @@
     "baking powder (use 3 times the amount, weaker lift)"
    ]
   },
+  "balsamic glaze": {
+   "image": "img/ingredients/balsamic_glaze.webp"
+  },
   "balsamic vinaigrette": {
    "image": "img/ingredients/balsamic_vinaigrette.webp",
    "substitutes": [
@@ -222,6 +234,9 @@
     "hoisin sauce (different flavor)",
     "ketchup + brown sugar + vinegar (DIY)"
    ]
+  },
+  "barley": {
+   "image": "img/ingredients/barley.webp"
   },
   "barley flour": {
    "image": "img/ingredients/flour.webp"
@@ -274,6 +289,9 @@
   "beet": {
    "image": "img/ingredients/beets.webp"
   },
+  "bittersweet chocolate": {
+   "image": "img/ingredients/bittersweet_chocolate.webp"
+  },
   "black bean": {
    "image": "img/ingredients/black beans.webp",
    "substitutes": [
@@ -321,8 +339,17 @@
     "raspberries"
    ]
   },
+  "bratwurst": {
+   "image": "img/ingredients/bratwurst.webp"
+  },
   "brie": {
    "image": "img/ingredients/brie.webp"
+  },
+  "brioche": {
+   "image": "img/ingredients/brioche.webp"
+  },
+  "brisket": {
+   "image": "img/ingredients/brisket.webp"
   },
   "broccoli": {
    "image": "img/ingredients/broccoli.webp",
@@ -381,6 +408,9 @@
   "buckwheat flour": {
    "image": "img/ingredients/buckwheat flour.webp"
   },
+  "bulgur": {
+   "image": "img/ingredients/bulgur.webp"
+  },
   "butter": {
    "image": "img/ingredients/butter.webp"
   },
@@ -429,6 +459,12 @@
     "paprika + cayenne pepper + garlic powder blend"
    ]
   },
+  "calamari": {
+   "image": "img/ingredients/calamari.webp"
+  },
+  "camembert": {
+   "image": "img/ingredients/camembert.webp"
+  },
   "candied ginger": {
    "image": "img/ingredients/ginger.webp"
   },
@@ -459,6 +495,9 @@
   },
   "canola oil": {
    "image": "img/ingredients/canola oil.webp"
+  },
+  "cantaloupe": {
+   "image": "img/ingredients/cantaloupe.webp"
   },
   "caper": {
    "image": "img/ingredients/capers.webp",
@@ -510,6 +549,9 @@
     "peanuts, roasted unsalted"
    ]
   },
+  "catfish": {
+   "image": "img/ingredients/catfish.webp"
+  },
   "cauliflower": {
    "image": "img/ingredients/cauliflower.webp",
    "substitutes": [
@@ -543,6 +585,9 @@
   },
   "celery seed": {
    "image": "img/ingredients/celery.webp"
+  },
+  "chayote": {
+   "image": "img/ingredients/chayote.webp"
   },
   "cheddar cheese": {
    "image": "img/ingredients/cheddar cheese.webp",
@@ -793,6 +838,9 @@
     "white mushrooms",
     "portobello mushrooms"
    ]
+  },
+  "croissant": {
+   "image": "img/ingredients/croissant.webp"
   },
   "crumbled blue cheese": {
    "image": "img/ingredients/cheese.webp",
@@ -1460,6 +1508,9 @@
     "hummus"
    ]
   },
+  "habanero": {
+   "image": "img/ingredients/habanero.webp"
+  },
   "halibut fillet": {
    "image": "img/ingredients/halibut_fillet.webp",
    "substitutes": [
@@ -1594,6 +1645,9 @@
     "basmati rice",
     "long-grain white rice"
    ]
+  },
+  "jicama": {
+   "image": "img/ingredients/jicama.webp"
   },
   "kalamata olives, pitted": {
    "image": "img/ingredients/kalamata_olives_pitted.webp",
@@ -1887,6 +1941,9 @@
    "substitutes": [
     "natural almond butter"
    ]
+  },
+  "nectarine": {
+   "image": "img/ingredients/nectarine.webp"
   },
   "neutral vegetable oil": {
    "image": "img/ingredients/vegetables.webp",
@@ -3211,6 +3268,9 @@
     "celery (for crunch)"
    ]
   },
+  "watermelon": {
+   "image": "img/ingredients/watermelon.webp"
+  },
   "whipping cream": {
    "image": "img/ingredients/whipping cream.webp"
   },
@@ -3604,6 +3664,6 @@
   "yuba",
   "za'atar"
  ],
- "withImages": 661,
+ "withImages": 681,
  "withSubstitutes": 338
 }
