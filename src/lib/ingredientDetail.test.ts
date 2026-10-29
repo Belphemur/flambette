@@ -56,11 +56,14 @@ describe('ingredientDetailFrom (the pure accessor seam)', () => {
 describe('loadIngredientDetail (the single-flight corpus chunk)', () => {
   test('the committed artifact answers real nameKeys and safe-empties the rest', async () => {
     // A nameKey the corpus provably carries (an image + substitutes row).
+    // The exact file behind a key is owned by the image-wiring batches — the
+    // contract here is "an app-served webp exists", not a pinned path.
     const squash = await loadIngredientDetail('acorn squash')
-    expect(squash.image).toBe('img/ingredients/squash.webp')
+    expect(squash.image?.startsWith('img/ingredients/')).toBe(true)
+    expect(squash.image?.endsWith('.webp')).toBe(true)
     expect(squash.credit).toBe('Photo: TheMealDB')
     expect(squash.substitutes?.length).toBeGreaterThan(0)
-    // A nameKey outside the 661-entry universe (an invented grocery key).
+    // A nameKey outside the 871-entry universe (an invented grocery key).
     expect(await loadIngredientDetail('pink dragonfruit')).toEqual({})
   })
 })
