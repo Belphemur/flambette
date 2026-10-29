@@ -10,7 +10,9 @@ import { aisleIcon, aisleNumber } from '../lib/aisleRole'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
 import IngredientAutocomplete from './IngredientAutocomplete.vue'
 import PullClearIndicator from './PullClearIndicator.vue'
+import GroceryQtyBadge from './GroceryQtyBadge.vue'
 import { usePullToClear } from '../composables/usePullToClear'
+import { useUiStore } from '../stores/ui'
 
 const router = useRouter()
 const customIngredients = useCustomIngredientsStore()
@@ -212,6 +214,21 @@ const progressPct = computed(() =>
 
 function exitShopping() {
   void router.push('/grocery')
+}
+
+/* ---------- Ingredient detail sheet (ADR-0100) ---------- */
+
+/**
+ * Same trigger as the Grocery tab: the ingredient NAME row is the
+ * sheet's door; the row's remaining area keeps the check toggle. The
+ * badge here renders the override READ-ONLY (no editing in shopping
+ * mode) — the same component, `editable` false.
+ */
+const ui = useUiStore()
+function openIngredientSheet(entry: {
+  item: { normalized: string; name: string }
+}): void {
+  ui.openIngredientSheet({ nameKey: entry.item.normalized, displayName: entry.item.name })
 }
 </script>
 
@@ -456,32 +473,53 @@ function exitShopping() {
   the ordering lives once in src/lib/sink.ts, shared with the extras
   sub-sections above. -->
   <li v-for="entry in sinkedStoreRows(section, checked.map)" :key="entry.line.key">
-  <button
+  <div
   class="flex min-h-16 w-full items-center gap-3 px-3 py-2 text-left text-body-md"
   :class="checked.map[entry.line.key] ? 'opacity-40' : ''"
   data-test="shop-row"
   @click="checked.toggleChecked(entry.line.key)"
   >
-  <span
+  <!-- A REAL checkbox control (review round 9): the circle is the row's
+  keyboard/AT path — focusable, checkbox semantics, Space/Enter via the
+  native button — while the padded row area remains the pointer toggle.
+  The name button stays a SEPARATE control (the sheet's door). -->
+  <button
+  type="button"
+  role="checkbox"
+  :aria-checked="!!checked.map[entry.line.key]"
+  :aria-label="`${checked.map[entry.line.key] ? 'Uncheck' : 'Check'} ${entry.item.name}`"
   class="flex size-6 shrink-0 items-center justify-center rounded-full border-2 border-border-strong"
   :class="checked.map[entry.line.key] ? 'border-success bg-success text-on-success' : ''"
-  aria-hidden="true"
+  data-test="shop-row-toggle"
+  @click.stop="checked.toggleChecked(entry.line.key)"
   >
   <Check v-if="checked.map[entry.line.key]" :size="16" />
-  </span>
-  <span
-  class="min-w-0 flex-1 truncate text-body-md"
-  :class="checked.map[entry.line.key] ? 'text-text-muted line-through' : 'text-text'"
-  >{{ entry.item.name }}</span
-  >
-  <!-- Data voice (ADR-0066/ADR-0075 rule 3): the quantity is a mono
-  badge, not a run-on prefix. -->
-  <span
-  v-if="entry.line.text"
-  class="shrink-0 rounded-md bg-surface-sunken px-2 py-1 font-mono-data text-label-sm tabular-nums"
-  :class="checked.map[entry.line.key] ? 'text-text-muted' : 'text-text'"
-  >{{ entry.line.text }}</span>
   </button>
+  <!-- ADR-0100: the name is the sheet's door (stopPropagation so the
+  row's toggle never double-fires) — the surrounding row stays the
+  checkbox tap area. Shopping has NO name→check ambiguity here because
+  the circle + row padding still toggle. -->
+  <button
+  type="button"
+  class="min-w-0 flex-1 truncate text-left text-body-md"
+  :class="checked.map[entry.line.key] ? 'text-text-muted line-through' : 'text-text'"
+  data-test="shop-name"
+  :aria-label="`Ingredient details for ${entry.item.name}`"
+  @click.stop="openIngredientSheet(entry)"
+  >
+  <span>{{ entry.item.name }}</span>
+  </button>
+  <!-- Data voice (ADR-0066/ADR-0075 rule 3): the quantity is a mono
+  badge — and per ADR-0100 this surface renders the line's override
+  value READ-ONLY (no editor in shopping mode). -->
+  <GroceryQtyBadge
+  v-if="entry.line.text"
+  :name="entry.item.name"
+  :line-key="entry.line.key"
+  :text="entry.line.text"
+  :checked="!!checked.map[entry.line.key]"
+  />
+  </div>
   </li>
   </ul>
   </template>

@@ -77,3 +77,30 @@
 - The grocery provenance pill must stay a flex sibling OUTSIDE the
   truncating name span (inside = tooltip clipped by `overflow-hidden`),
   and it stays `cursor-help` (a tooltip target).
+- **The ingredient NAME row opens the detail sheet; the quantity badge
+  edits (ADR-0100)**: on BOTH grocery surfaces the row's NAME + amount
+  area is a tap door into the ingredient detail sheet (ephemeral ui
+  prompt slot — never persisted, never room-synced). On ShopView the
+  row's toggle area is everything EXCEPT the name (the e2e taps the
+  circle: `tapShopRowToggle`). On GroceryTab the name is a button inside
+  the row's `<label>` (a label never forwards to the checkbox when the
+  event target is an interactive descendant, so the checkbox keeps its
+  single-owner tap edge) and the checkbox stays the only check control.
+  The quantity badge is the EDIT affordance on GroceryTab ONLY — a mono
+  badge with a dashed underline (muted at rest → primary hover/focus)
+  and a small pencil glyph, an AT-reachable button ("Change quantity of
+  X", hooks `grocery-qty-edit` / `grocery-qty-editor` /
+  `grocery-qty-reset`) opening an inline stepper (minus / value / plus
+  at the 44px touch height, mono data voice) with Reset (drops the
+  override) and Done (commits). The committed value normalizes ONCE
+  through `normalizeQtyOverrideAmount` (qtyOverrideValue.ts — the
+  aggregation's own display vocabulary; a BARE amount inherits the
+  line's unit; prose stays verbatim; empty = drop) and travels as the
+  household `qtyOverrides` map keyed by `lineKeyIdentity` — it renders
+  INSTEAD of the derived sum for that ONE line, sibling lines of the
+  same ingredient are untouched, a meal removal that keeps the line
+  alive keeps the override, and the line leaving the list releases it
+  (`useGroceryList`'s render-side sweep, retention universe computed
+  IGNORING the cleared filter so a clear-hidden line stays inert).
+  ShopView renders the override value READ-ONLY through the same
+  component (`editable` off) — no editor in shopping mode.

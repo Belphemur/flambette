@@ -6,6 +6,7 @@ import {
   openFirstRecipeDetail,
   openRecipeDetail,
   waitForCatalog,
+  tapShopRowToggle,
 } from './helpers'
 
 test.beforeEach(async ({ page }) => {
@@ -87,7 +88,9 @@ test('unchecking one item re-expands an auto-collapsed category', async ({ page 
   await shopToggle.click()
   const garlicRow = shopProduce.getByTestId('shop-row').filter({ hasText: /garlic/i }).first()
   await expect(garlicRow).toBeVisible()
-  await garlicRow.click()
+  // ADR-0100: the row NAME opens the ingredient sheet — tap the circle
+  // to toggle the check (the behavior this spec pins).
+  await tapShopRowToggle(garlicRow)
   await page.getByTestId('exit-shopping').click()
 
   // Back on Grocery the category is expanded again, one item short.

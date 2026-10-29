@@ -441,6 +441,18 @@ export function clearedSpellingsDiverge(
 export interface GroceryLineView extends GroceryLine {
   /** `display` converted for display; identical to `display` in metric. */
   text: string
+  /**
+   * `text` WITHOUT the line's quantity override (ADR-0100) — what the
+   * editor's Reset anchors the draft back to. Differs from `text` only
+   * on overridden lines.
+   */
+  derivedText?: string
+  /**
+   * The line's own unit token (canonical `display`'s), for the editor's
+   * clamp: a BARE amount inherits it (ADR-0100 — the override is authored
+   * in the line's unit grammar).
+   */
+  fallbackUnit?: string
 }
 
 export interface GroceryItemView extends Omit<GroceryItem, 'lines'> {

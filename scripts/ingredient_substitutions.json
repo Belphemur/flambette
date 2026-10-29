@@ -1,0 +1,3389 @@
+{
+ "note": "Curated ingredient substitutions (owner-approved 2026-10-28). LLM-drafted then curated; keyed by nameKey (grocery.ts rule). displayNames preserves the taxonomy spellings that merged into the key.",
+ "count": 338,
+ "substitutions": {
+  "acorn squash": {
+   "subs": [
+    "butternut squash",
+    "delicata squash"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "acorn squash"
+   ]
+  },
+  "alfalfa sprout": {
+   "subs": [
+    "broccoli sprouts",
+    "sunflower sprouts",
+    "soybean sprouts"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "alfalfa sprouts"
+   ]
+  },
+  "alfredo sauce": {
+   "subs": [
+    "marinara sauce (very different flavor)",
+    "heavy whipping cream + Parmesan cheese (quick DIY sauce)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Alfredo sauce"
+   ]
+  },
+  "all-purpose flour": {
+   "subs": [
+    "gluten-free flour",
+    "gluten-free bread crumbs",
+    "almond meal/flour"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "all-purpose flour"
+   ]
+  },
+  "almond": {
+   "subs": [
+    "cashews",
+    "walnuts"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "almonds"
+   ]
+  },
+  "almond meal/flour": {
+   "subs": [
+    "whole wheat flour (different texture)",
+    "oat flour"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "almond meal/flour"
+   ]
+  },
+  "almond milk, unsweetened": {
+   "subs": [
+    "oat milk",
+    "soy milk"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "almond milk, unsweetened"
+   ]
+  },
+  "almonds, sliced": {
+   "subs": [
+    "almonds (sliced at home)",
+    "pecan halves"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "almonds, sliced"
+   ]
+  },
+  "anchovy fillets, packed in oil": {
+   "subs": [
+    "anchovy paste",
+    "fish sauce"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "anchovy fillets, packed in oil"
+   ]
+  },
+  "apple cider vinegar": {
+   "subs": [
+    "white wine vinegar",
+    "lemon juice"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "apple cider vinegar"
+   ]
+  },
+  "apricot": {
+   "subs": [
+    "peaches",
+    "plums"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "apricots"
+   ]
+  },
+  "arrowroot starch/powder": {
+   "subs": [
+    "cornstarch",
+    "tapioca starch"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "arrowroot starch/powder"
+   ]
+  },
+  "artichoke hearts, marinated": {
+   "subs": [
+    "canned artichoke hearts (rinsed)",
+    "sun-dried tomatoes, oil-packed"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "artichoke hearts, marinated"
+   ]
+  },
+  "asparagu": {
+   "subs": [
+    "green beans",
+    "broccoli"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "asparagus"
+   ]
+  },
+  "avocado": {
+   "subs": [
+    "hummus (for spreading)",
+    "mashed edamame"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "avocados"
+   ]
+  },
+  "avocado oil mayonnaise": {
+   "subs": [
+    "mayonnaise",
+    "vegan mayonnaise"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "avocado oil mayonnaise"
+   ]
+  },
+  "baby arugula": {
+   "subs": [
+    "baby spinach",
+    "spring mix (mixed greens)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "baby arugula"
+   ]
+  },
+  "baby bok choy": {
+   "subs": [
+    "napa cabbage",
+    "Swiss chard"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "baby bok choy"
+   ]
+  },
+  "baby spinach": {
+   "subs": [
+    "kale",
+    "spring mix (mixed greens)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "baby spinach"
+   ]
+  },
+  "bacon": {
+   "subs": [
+    "turkey bacon",
+    "pancetta"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "bacon"
+   ]
+  },
+  "baking powder": {
+   "subs": [
+    "baking soda + cream of tartar (DIY blend)",
+    "self-rising flour (adjust other flour)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "baking powder"
+   ]
+  },
+  "baking soda": {
+   "subs": [
+    "baking powder (use 3 times the amount, weaker lift)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "baking soda"
+   ]
+  },
+  "balsamic vinaigrette": {
+   "subs": [
+    "balsamic vinegar + olive oil (DIY)",
+    "Italian salad dressing"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "balsamic vinaigrette"
+   ]
+  },
+  "balsamic vinegar": {
+   "subs": [
+    "red wine vinegar",
+    "apple cider vinegar"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "balsamic vinegar"
+   ]
+  },
+  "banana": {
+   "subs": [
+    "applesauce (in baking)",
+    "mangoes"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "bananas"
+   ]
+  },
+  "barbecue sauce": {
+   "subs": [
+    "hoisin sauce (different flavor)",
+    "ketchup + brown sugar + vinegar (DIY)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "barbecue sauce"
+   ]
+  },
+  "basil pesto": {
+   "subs": [
+    "sun-dried tomato pesto",
+    "fresh basil + olive oil + pine nuts (DIY)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "basil pesto"
+   ]
+  },
+  "basil, dried": {
+   "subs": [
+    "Italian seasoning",
+    "fresh basil (add at the end of cooking)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "basil, dried"
+   ]
+  },
+  "basmati rice": {
+   "subs": [
+    "jasmine rice",
+    "long-grain white rice"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "basmati rice"
+   ]
+  },
+  "black bean": {
+   "subs": [
+    "kidney beans",
+    "pinto beans"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "black beans"
+   ]
+  },
+  "black pepper": {
+   "subs": [
+    "white pepper",
+    "cayenne pepper"
+   ],
+   "provenance": "snapshot",
+   "displayNames": [
+    "black pepper"
+   ]
+  },
+  "blackberrie": {
+   "subs": [
+    "blueberries",
+    "raspberries"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "blackberries"
+   ]
+  },
+  "blue cheese dressing": {
+   "subs": [
+    "ranch dressing",
+    "Caesar dressing"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "blue cheese dressing"
+   ]
+  },
+  "blueberrie": {
+   "subs": [
+    "blackberries",
+    "raspberries"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "blueberries"
+   ]
+  },
+  "broccoli": {
+   "subs": [
+    "broccoli florets",
+    "cauliflower"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "broccoli"
+   ]
+  },
+  "broccoli floret": {
+   "subs": [
+    "broccoli (cut into florets)",
+    "cauliflower florets"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "broccoli florets"
+   ]
+  },
+  "broccoli slaw": {
+   "subs": [
+    "shredded cabbage (coleslaw mix)",
+    "shredded carrots"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "broccoli slaw"
+   ]
+  },
+  "brown lentils, dried": {
+   "subs": [
+    "green lentils, dried",
+    "red lentils, dried"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "brown lentils, dried"
+   ]
+  },
+  "brown sugar": {
+   "subs": [
+    "granulated sugar + molasses (DIY)",
+    "coconut sugar"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "brown sugar"
+   ]
+  },
+  "brussels sprout": {
+   "subs": [
+    "broccoli",
+    "cauliflower"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Brussels sprouts"
+   ]
+  },
+  "butter (boston) lettuce": {
+   "subs": [
+    "romaine lettuce",
+    "spring mix (mixed greens)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "butter (Boston) lettuce"
+   ]
+  },
+  "butter, unsalted": {
+   "subs": [
+    "virgin coconut oil",
+    "extra virgin olive oil",
+    "neutral vegetable oil"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "butter, unsalted"
+   ]
+  },
+  "butternut squash": {
+   "subs": [
+    "acorn squash",
+    "frozen butternut squash, pieces"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "butternut squash"
+   ]
+  },
+  "caesar dressing": {
+   "subs": [
+    "blue cheese dressing",
+    "Italian salad dressing"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Caesar dressing"
+   ]
+  },
+  "cajun seasoning": {
+   "subs": [
+    "Creole seasoning",
+    "paprika + cayenne pepper + garlic powder blend"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Cajun seasoning"
+   ]
+  },
+  "cannellini (white kidney) bean": {
+   "subs": [
+    "great Northern beans",
+    "garbanzo beans (chickpeas)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cannellini (white kidney) beans"
+   ]
+  },
+  "caper": {
+   "subs": [
+    "chopped green olives",
+    "chopped dill pickles"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "capers"
+   ]
+  },
+  "cardamom, ground": {
+   "subs": [
+    "cinnamon, ground",
+    "ground ginger"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cardamom, ground"
+   ]
+  },
+  "carrot": {
+   "subs": [
+    "carrots",
+    "parsnips",
+    "carrot (if a single piece)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "carrot",
+    "carrots"
+   ]
+  },
+  "cashews, roasted unsalted": {
+   "subs": [
+    "almonds",
+    "peanuts, roasted unsalted"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cashews, roasted unsalted"
+   ]
+  },
+  "cauliflower": {
+   "subs": [
+    "cauliflower florets",
+    "broccoli"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cauliflower"
+   ]
+  },
+  "cauliflower floret": {
+   "subs": [
+    "cauliflower (cut into florets)",
+    "broccoli florets"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cauliflower florets"
+   ]
+  },
+  "cayenne pepper": {
+   "subs": [
+    "crushed red pepper",
+    "hot sauce (use less)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cayenne pepper"
+   ]
+  },
+  "celery": {
+   "subs": [
+    "fennel bulbs (anise note)",
+    "green bell peppers"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "celery"
+   ]
+  },
+  "cheddar cheese": {
+   "subs": [
+    "Monterey Jack cheese",
+    "Colby cheese"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cheddar cheese"
+   ]
+  },
+  "cheese ravioli, fresh or frozen": {
+   "subs": [
+    "cheese tortellini, fresh or frozen",
+    "potato gnocchi"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cheese ravioli, fresh or frozen"
+   ]
+  },
+  "cheese tortellini, fresh or frozen": {
+   "subs": [
+    "cheese ravioli, fresh or frozen",
+    "penne pasta"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cheese tortellini, fresh or frozen"
+   ]
+  },
+  "chia seed": {
+   "subs": [
+    "flax seeds (ground)",
+    "sesame seeds"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "chia seeds"
+   ]
+  },
+  "chicken breasts, boneless skinles": {
+   "subs": [
+    "chicken thighs, boneless skinless (juicier)",
+    "chicken drumsticks"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "chicken breasts, boneless skinless"
+   ]
+  },
+  "chicken drumstick": {
+   "subs": [
+    "chicken thighs, boneless skinless",
+    "chicken wings, split with tips removed"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "chicken drumsticks"
+   ]
+  },
+  "chicken or vegetable broth": {
+   "subs": [
+    "bouillon cubes",
+    "bouillon granules",
+    "water (for cooking grains)"
+   ],
+   "provenance": "snapshot",
+   "displayNames": [
+    "chicken or vegetable broth"
+   ]
+  },
+  "chicken thighs, boneless skinles": {
+   "subs": [
+    "chicken breasts, boneless skinless",
+    "chicken drumsticks"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "chicken thighs, boneless skinless"
+   ]
+  },
+  "chicken wings, split with tips removed": {
+   "subs": [
+    "chicken drumsticks",
+    "chicken thighs, boneless skinless"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "chicken wings, split with tips removed"
+   ]
+  },
+  "chili powder": {
+   "subs": [
+    "paprika + cumin + cayenne pepper (DIY blend)",
+    "Cajun seasoning"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "chili powder"
+   ]
+  },
+  "chili-garlic sauce": {
+   "subs": [
+    "sriracha",
+    "hot sauce"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "chili-garlic sauce"
+   ]
+  },
+  "chive": {
+   "subs": [
+    "green onions (scallions)",
+    "leeks (mild)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "chives"
+   ]
+  },
+  "chunk light tuna in water": {
+   "subs": [
+    "canned salmon",
+    "canned chunk white tuna"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "chunk light tuna in water"
+   ]
+  },
+  "cilantro": {
+   "subs": [
+    "Italian (flat-leaf) parsley",
+    "curly parsley"
+   ],
+   "provenance": "snapshot",
+   "displayNames": [
+    "cilantro"
+   ]
+  },
+  "cinnamon, ground": {
+   "subs": [
+    "nutmeg, ground",
+    "pumpkin pie spice"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cinnamon, ground"
+   ]
+  },
+  "cloves, ground": {
+   "subs": [
+    "allspice",
+    "nutmeg, ground"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cloves, ground"
+   ]
+  },
+  "cocoa powder": {
+   "subs": [
+    "cacao powder",
+    "unsweetened dark chocolate chips (melted, reduce sugar)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cocoa powder"
+   ]
+  },
+  "coconut milk": {
+   "subs": [
+    "coconut cream (richer)",
+    "heavy whipping cream (non-vegan curries)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "coconut milk"
+   ]
+  },
+  "cod fillet": {
+   "subs": [
+    "halibut fillet",
+    "sole fillets"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cod fillet"
+   ]
+  },
+  "coriander, ground": {
+   "subs": [
+    "cumin, ground",
+    "caraway seeds"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "coriander, ground"
+   ]
+  },
+  "corn": {
+   "subs": [
+    "frozen corn",
+    "canned corn"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "corn"
+   ]
+  },
+  "cornstarch": {
+   "subs": [
+    "arrowroot starch/powder"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "cornstarch"
+   ]
+  },
+  "cottage cheese": {
+   "subs": [
+    "ricotta cheese",
+    "plain Greek yogurt"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cottage cheese"
+   ]
+  },
+  "cream cheese": {
+   "subs": [
+    "mascarpone cheese",
+    "cottage cheese (blended smooth)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cream cheese"
+   ]
+  },
+  "cremini mushroom": {
+   "subs": [
+    "white mushrooms",
+    "portobello mushrooms"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cremini mushrooms"
+   ]
+  },
+  "crumbled blue cheese": {
+   "subs": [
+    "crumbled feta cheese",
+    "goat cheese"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "crumbled blue cheese"
+   ]
+  },
+  "crumbled feta cheese": {
+   "subs": [
+    "goat cheese",
+    "queso fresco"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "crumbled feta cheese"
+   ]
+  },
+  "crushed red pepper": {
+   "subs": [
+    "cayenne pepper (use less)",
+    "chili paste",
+    "hot sauce"
+   ],
+   "provenance": "snapshot",
+   "displayNames": [
+    "crushed red pepper"
+   ]
+  },
+  "cumin, ground": {
+   "subs": [
+    "chili powder",
+    "coriander, ground"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "cumin, ground"
+   ]
+  },
+  "curry powder": {
+   "subs": [
+    "cumin",
+    "coriander + cumin + turmeric + ground ginger blend"
+   ],
+   "provenance": "snapshot",
+   "displayNames": [
+    "curry powder"
+   ]
+  },
+  "dark chocolate chip": {
+   "subs": [
+    "semi-sweet chocolate chips",
+    "chopped chocolate bar"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "dark chocolate chips"
+   ]
+  },
+  "deli roast beef": {
+   "subs": [
+    "oven roasted turkey breast, sliced",
+    "deli ham"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "deli roast beef"
+   ]
+  },
+  "diced tomato": {
+   "subs": [
+    "canned crushed tomatoes",
+    "fresh tomatoes (diced)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "diced tomatoes"
+   ]
+  },
+  "dijon mustard": {
+   "subs": [
+    "yellow mustard",
+    "whole-grain mustard"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Dijon mustard"
+   ]
+  },
+  "dill, dried": {
+   "subs": [
+    "fresh dill",
+    "dried tarragon"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "dill, dried"
+   ]
+  },
+  "dried apricot": {
+   "subs": [
+    "raisins",
+    "dried cranberries"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "dried apricots"
+   ]
+  },
+  "dried cranberrie": {
+   "subs": [
+    "raisins",
+    "dried cherries"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "dried cranberries"
+   ]
+  },
+  "edamame": {
+   "subs": [
+    "green peas",
+    "green beans"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "edamame"
+   ]
+  },
+  "egg": {
+   "subs": [
+    "eggs (if scaling up)",
+    "ground flax + water (vegan binder, 1 tbsp + 3 tbsp)",
+    "egg (if scaling down)",
+    "applesauce (in baking, 1/4 cup per egg)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "egg",
+    "eggs"
+   ]
+  },
+  "eggplant": {
+   "subs": [
+    "zucchini squash",
+    "portobello mushrooms"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "eggplants"
+   ]
+  },
+  "english cucumber": {
+   "subs": [
+    "regular cucumber",
+    "Persian cucumbers",
+    "regular cucumbers"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "English cucumber",
+    "English cucumbers"
+   ]
+  },
+  "english muffin": {
+   "subs": [
+    "whole grain bread",
+    "bagels"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "English muffins"
+   ]
+  },
+  "extra firm tofu": {
+   "subs": [
+    "tempeh",
+    "veggie ground, plant based"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "extra firm tofu"
+   ]
+  },
+  "extra virgin olive oil": {
+   "subs": [
+    "neutral vegetable oil (neutral flavor)",
+    "avocado oil"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "extra virgin olive oil"
+   ]
+  },
+  "fennel bulb": {
+   "subs": [
+    "celery",
+    "yellow onions"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "fennel bulbs"
+   ]
+  },
+  "fettuccine pasta": {
+   "subs": [
+    "gluten-free fettuccine pasta"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "fettuccine pasta"
+   ]
+  },
+  "fish sauce": {
+   "subs": [
+    "soy sauce"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "fish sauce"
+   ]
+  },
+  "flank steak": {
+   "subs": [
+    "skirt steak",
+    "sirloin steak"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "flank steaks"
+   ]
+  },
+  "flat rice (pad thai) noodle": {
+   "subs": [
+    "linguine pasta",
+    "rice vermicelli"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "flat rice (pad thai) noodles"
+   ]
+  },
+  "flatbreads or naan": {
+   "subs": [
+    "whole grain pitas",
+    "pre-made pizza crust"
+   ],
+   "provenance": "snapshot",
+   "displayNames": [
+    "flatbreads or naan"
+   ]
+  },
+  "french vinaigrette": {
+   "subs": [
+    "Italian salad dressing",
+    "balsamic vinaigrette"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "French vinaigrette"
+   ]
+  },
+  "fresh basil": {
+   "subs": [
+    "basil, dried",
+    "Italian seasoning"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "fresh basil"
+   ]
+  },
+  "fresh dill": {
+   "subs": [
+    "dill, dried",
+    "fresh tarragon"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "fresh dill"
+   ]
+  },
+  "fresh mint": {
+   "subs": [
+    "dried mint",
+    "fresh basil (different flavor)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "fresh mint"
+   ]
+  },
+  "fresh mozzarella cheese": {
+   "subs": [
+    "mozzarella cheese",
+    "provolone cheese"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "fresh mozzarella cheese"
+   ]
+  },
+  "fresh rosemary": {
+   "subs": [
+    "rosemary, dried",
+    "fresh thyme"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "fresh rosemary"
+   ]
+  },
+  "fresh sage": {
+   "subs": [
+    "sage, dried",
+    "fresh thyme"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "fresh sage"
+   ]
+  },
+  "fresh thyme": {
+   "subs": [
+    "thyme, dried",
+    "Italian seasoning"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "fresh thyme"
+   ]
+  },
+  "frozen blueberrie": {
+   "subs": [
+    "blueberries",
+    "frozen mixed berries"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "frozen blueberries"
+   ]
+  },
+  "frozen butternut squash, piece": {
+   "subs": [
+    "butternut squash (peeled and cut)",
+    "acorn squash"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "frozen butternut squash, pieces"
+   ]
+  },
+  "frozen cherrie": {
+   "subs": [
+    "frozen blueberries",
+    "frozen raspberries"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "frozen cherries"
+   ]
+  },
+  "frozen chopped spinach": {
+   "subs": [
+    "baby spinach",
+    "kale"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "frozen chopped spinach"
+   ]
+  },
+  "frozen corn": {
+   "subs": [
+    "corn",
+    "canned corn"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "frozen corn"
+   ]
+  },
+  "frozen mango": {
+   "subs": [
+    "mangoes",
+    "frozen peaches"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "frozen mangoes"
+   ]
+  },
+  "frozen mixed berrie": {
+   "subs": [
+    "frozen blueberries",
+    "frozen raspberries"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "frozen mixed berries"
+   ]
+  },
+  "frozen mixed vegetables (carrots, corn, green beans, peas)": {
+   "subs": [
+    "frozen peas",
+    "frozen corn"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "frozen mixed vegetables (carrots, corn, green beans, peas)"
+   ]
+  },
+  "frozen pea": {
+   "subs": [
+    "edamame",
+    "frozen corn"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "frozen peas"
+   ]
+  },
+  "frozen raspberrie": {
+   "subs": [
+    "raspberries",
+    "frozen blueberries"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "frozen raspberries"
+   ]
+  },
+  "frozen shredded hash brown potato": {
+   "subs": [
+    "yellow potatoes (shredded)",
+    "frozen diced potatoes"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "frozen shredded hash brown potatoes"
+   ]
+  },
+  "frozen, riced cauliflower": {
+   "subs": [
+    "cauliflower florets (grated or riced at home)",
+    "white rice (different texture)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "frozen, riced cauliflower"
+   ]
+  },
+  "gala apple": {
+   "subs": [
+    "Granny Smith apples"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "Gala apples"
+   ]
+  },
+  "garam masala": {
+   "subs": [
+    "curry powder (milder)",
+    "cumin + coriander + cardamom (DIY blend)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "garam masala"
+   ]
+  },
+  "garbanzo beans (chickpeas)": {
+   "subs": [
+    "cannellini (white kidney) beans",
+    "white beans"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "garbanzo beans (chickpeas)"
+   ]
+  },
+  "garlic": {
+   "subs": [
+    "garlic flakes",
+    "garlic powder",
+    "chives",
+    "shallots"
+   ],
+   "provenance": "snapshot",
+   "displayNames": [
+    "garlic"
+   ]
+  },
+  "garlic powder": {
+   "subs": [
+    "garlic",
+    "garlic salt (reduce other salt)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "garlic powder"
+   ]
+  },
+  "ginger root": {
+   "subs": [
+    "ground ginger (use less)"
+   ],
+   "provenance": "snapshot",
+   "displayNames": [
+    "ginger root"
+   ]
+  },
+  "goat cheese": {
+   "subs": [
+    "crumbled feta cheese",
+    "cream cheese"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "goat cheese"
+   ]
+  },
+  "graham cracker": {
+   "subs": [
+    "digestive biscuits",
+    "vanilla wafer cookies"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "graham crackers"
+   ]
+  },
+  "granny smith apple": {
+   "subs": [
+    "Gala apples",
+    "Honeycrisp apples"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Granny Smith apples"
+   ]
+  },
+  "granola": {
+   "subs": [
+    "granola, nut free",
+    "granola, vegan"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "granola"
+   ]
+  },
+  "granulated sugar": {
+   "subs": [
+    "brown sugar",
+    "coconut sugar"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "granulated sugar"
+   ]
+  },
+  "grape tomato": {
+   "subs": [
+    "cherry tomatoes",
+    "tomatoes (diced)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "grape tomatoes"
+   ]
+  },
+  "grapefruit": {
+   "subs": [
+    "oranges",
+    "clementines"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "grapefruits"
+   ]
+  },
+  "green bean": {
+   "subs": [
+    "asparagus",
+    "broccoli"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "green beans"
+   ]
+  },
+  "green bell pepper": {
+   "subs": [
+    "yellow bell peppers",
+    "orange bell peppers",
+    "red bell peppers"
+   ],
+   "provenance": "snapshot",
+   "displayNames": [
+    "green bell peppers"
+   ]
+  },
+  "green lentils, dried": {
+   "subs": [
+    "brown lentils, dried",
+    "red lentils, dried",
+    "split yellow or green peas"
+   ],
+   "provenance": "snapshot",
+   "displayNames": [
+    "green lentils, dried"
+   ]
+  },
+  "green onions (scallions)": {
+   "subs": [
+    "chives"
+   ],
+   "provenance": "snapshot",
+   "displayNames": [
+    "green onions (scallions)"
+   ]
+  },
+  "ground chicken": {
+   "subs": [
+    "ground turkey",
+    "lean ground pork"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "ground chicken"
+   ]
+  },
+  "ground pork sausage": {
+   "subs": [
+    "pork sausages (casings removed)",
+    "lean ground pork + Italian seasoning"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "ground pork sausage"
+   ]
+  },
+  "ground turkey": {
+   "subs": [
+    "lean ground beef",
+    "ground chicken"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "ground turkey"
+   ]
+  },
+  "guacamole": {
+   "subs": [
+    "mashed avocado",
+    "hummus"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "guacamole"
+   ]
+  },
+  "halibut fillet": {
+   "subs": [
+    "cod fillet",
+    "sole fillets"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "halibut fillet"
+   ]
+  },
+  "halloumi cheese": {
+   "subs": [
+    "paneer",
+    "queso fresco"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "halloumi cheese"
+   ]
+  },
+  "ham steak, boneles": {
+   "subs": [
+    "deli ham (thick cut)",
+    "Canadian bacon"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "ham steak, boneless"
+   ]
+  },
+  "hard taco shell": {
+   "subs": [
+    "small corn tortillas (folded and baked)",
+    "tortilla chips"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "hard taco shells"
+   ]
+  },
+  "hard-cooked eggs, peeled": {
+   "subs": [
+    "eggs (hard-boiled and peeled at home)",
+    "egg whites (lighter dish)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "hard-cooked eggs, peeled"
+   ]
+  },
+  "heavy whipping cream": {
+   "subs": [
+    "half-and-half (will not whip)",
+    "full-fat coconut milk"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "heavy whipping cream"
+   ]
+  },
+  "hoisin sauce": {
+   "subs": [
+    "plum sauce",
+    "soy sauce + honey (DIY)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "hoisin sauce"
+   ]
+  },
+  "honey": {
+   "subs": [
+    "pure maple syrup"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "honey"
+   ]
+  },
+  "honey mustard dressing": {
+   "subs": [
+    "French vinaigrette"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "honey mustard dressing"
+   ]
+  },
+  "hot sauce": {
+   "subs": [
+    "cayenne pepper",
+    "chili-garlic sauce"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "hot sauce"
+   ]
+  },
+  "hummu": {
+   "subs": [
+    "white bean dip",
+    "guacamole"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "hummus"
+   ]
+  },
+  "italian (flat-leaf) parsley": {
+   "subs": [
+    "curly parsley",
+    "parsley flakes (dried)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Italian (flat-leaf) parsley"
+   ]
+  },
+  "italian salad dressing": {
+   "subs": [
+    "French vinaigrette",
+    "balsamic vinaigrette"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Italian salad dressing"
+   ]
+  },
+  "italian seasoning": {
+   "subs": [
+    "dried oregano + dried basil + dried thyme (DIY blend)",
+    "herbes de Provence"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Italian seasoning"
+   ]
+  },
+  "jalapeño pepper": {
+   "subs": [
+    "serrano peppers (hotter)",
+    "red chili peppers",
+    "jalapeño pepper (if scaling down)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "jalapeño pepper",
+    "jalapeño peppers"
+   ]
+  },
+  "jasmine rice": {
+   "subs": [
+    "basmati rice",
+    "long-grain white rice"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "jasmine rice"
+   ]
+  },
+  "kalamata olives, pitted": {
+   "subs": [
+    "sliced black olives",
+    "green olives"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Kalamata olives, pitted"
+   ]
+  },
+  "kale": {
+   "subs": [
+    "baby spinach",
+    "Swiss chard"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "kale"
+   ]
+  },
+  "kale, cut and ready to use": {
+   "subs": [
+    "kale (washed and cut)",
+    "baby spinach"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "kale, cut and ready to use"
+   ]
+  },
+  "ketchup": {
+   "subs": [
+    "chili-garlic sauce"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "ketchup"
+   ]
+  },
+  "kidney bean": {
+   "subs": [
+    "black beans",
+    "pinto beans"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "kidney beans"
+   ]
+  },
+  "kiwifruit": {
+   "subs": [
+    "strawberries",
+    "pineapples"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "kiwifruit"
+   ]
+  },
+  "lamb loin chop": {
+   "subs": [
+    "lamb rib chops",
+    "pork chops, bone-in (different flavor)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "lamb loin chops"
+   ]
+  },
+  "lamb rib chop": {
+   "subs": [
+    "lamb loin chops",
+    "pork chops, bone-in (different flavor)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "lamb rib chops"
+   ]
+  },
+  "large flour tortilla": {
+   "subs": [
+    "small gluten-free tortillas"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "large flour tortillas"
+   ]
+  },
+  "late july sea salt multigrain tortilla chip": {
+   "subs": [
+    "tortilla chips"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Late July sea salt multigrain tortilla chips"
+   ]
+  },
+  "lean ground beef": {
+   "subs": [
+    "ground turkey",
+    "ground chicken"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "lean ground beef"
+   ]
+  },
+  "lean ground pork": {
+   "subs": [
+    "ground turkey",
+    "lean ground beef"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "lean ground pork"
+   ]
+  },
+  "leek": {
+   "subs": [
+    "yellow onions",
+    "shallots"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "leeks"
+   ]
+  },
+  "lemon": {
+   "subs": [
+    "limes",
+    "lemon juice"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "lemon",
+    "lemons"
+   ]
+  },
+  "lentil": {
+   "subs": [
+    "brown lentils, dried",
+    "green lentils, dried"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "lentils"
+   ]
+  },
+  "lime": {
+   "subs": [
+    "lemons",
+    "lemon juice"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "lime",
+    "limes"
+   ]
+  },
+  "linguine pasta": {
+   "subs": [
+    "gluten-free linguine pasta",
+    "gluten-free spaghetti pasta"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "linguine pasta"
+   ]
+  },
+  "macaroni (elbow) pasta": {
+   "subs": [
+    "gluten-free macaroni (elbow) pasta"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "macaroni (elbow) pasta"
+   ]
+  },
+  "mango": {
+   "subs": [
+    "peaches",
+    "pineapples"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "mangoes"
+   ]
+  },
+  "marinara sauce": {
+   "subs": [
+    "tomato sauce + Italian herbs (DIY)",
+    "pizza sauce"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "marinara sauce"
+   ]
+  },
+  "mayonnaise": {
+   "subs": [
+    "vegan mayonnaise",
+    "avocado oil mayonnaise"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "mayonnaise"
+   ]
+  },
+  "medjool dates, pitted": {
+   "subs": [
+    "raisins",
+    "dried figs"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "medjool dates, pitted"
+   ]
+  },
+  "miso paste, red": {
+   "subs": [
+    "miso paste, white (milder)",
+    "soy sauce (thinner, saltier)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "miso paste, red"
+   ]
+  },
+  "miso paste, white": {
+   "subs": [
+    "miso paste, red (stronger)",
+    "soy sauce"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "miso paste, white"
+   ]
+  },
+  "mozzarella cheese": {
+   "subs": [
+    "provolone cheese",
+    "Monterey Jack cheese"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "mozzarella cheese"
+   ]
+  },
+  "napa cabbage": {
+   "subs": [
+    "red cabbage",
+    "baby bok choy"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "napa cabbage"
+   ]
+  },
+  "natural almond butter": {
+   "subs": [
+    "natural peanut butter",
+    "tahini"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "natural almond butter"
+   ]
+  },
+  "natural peanut butter": {
+   "subs": [
+    "natural almond butter"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "natural peanut butter"
+   ]
+  },
+  "neutral vegetable oil": {
+   "subs": [
+    "canola oil",
+    "sunflower oil"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "neutral vegetable oil"
+   ]
+  },
+  "new potato": {
+   "subs": [
+    "red potatoes",
+    "yellow potatoes"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "new potatoes"
+   ]
+  },
+  "no-boil lasagna noodle": {
+   "subs": [
+    "regular lasagna noodles (parboiled first)",
+    "whole wheat lasagna noodles"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "no-boil lasagna noodles"
+   ]
+  },
+  "nutmeg, ground": {
+   "subs": [
+    "allspice",
+    "cinnamon, ground"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "nutmeg, ground"
+   ]
+  },
+  "nutritional yeast flake": {
+   "subs": [
+    "grated Parmesan cheese (not vegan)",
+    "miso paste"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "nutritional yeast flakes"
+   ]
+  },
+  "oats, quick cooking": {
+   "subs": [
+    "rolled oats (longer cooking)",
+    "steel-cut oats (much longer cooking)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "oats, quick cooking"
+   ]
+  },
+  "oikos triple zero greek vanilla yogurt": {
+   "subs": [
+    "vanilla Greek yogurt (any brand)",
+    "plain Greek yogurt"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Oikos Triple Zero Greek vanilla yogurt"
+   ]
+  },
+  "onion powder": {
+   "subs": [
+    "yellow onions",
+    "garlic powder (different flavor)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "onion powder"
+   ]
+  },
+  "orange": {
+   "subs": [
+    "clementines",
+    "tangerines"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "oranges"
+   ]
+  },
+  "orange bell pepper": {
+   "subs": [
+    "yellow bell peppers",
+    "red bell peppers"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "orange bell peppers"
+   ]
+  },
+  "oregano, dried": {
+   "subs": [
+    "Italian seasoning",
+    "dried marjoram"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "oregano, dried"
+   ]
+  },
+  "oreo chocolate sandwich cookie": {
+   "subs": [
+    "chocolate sandwich cookies (any brand)",
+    "chocolate wafer cookies"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "OREO chocolate sandwich cookies"
+   ]
+  },
+  "orzo pasta": {
+   "subs": [
+    "rice",
+    "macaroni (elbow) pasta"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "orzo pasta"
+   ]
+  },
+  "oven roasted turkey breast, sliced": {
+   "subs": [
+    "deli roast beef",
+    "deli ham"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "oven roasted turkey breast, sliced"
+   ]
+  },
+  "pace chunky salsa": {
+   "subs": [
+    "salsa (any brand)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Pace chunky salsa"
+   ]
+  },
+  "panko bread crumb": {
+   "subs": [
+    "gluten-free bread crumbs",
+    "gluten-free flour",
+    "almond meal/flour"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "panko bread crumbs"
+   ]
+  },
+  "paprika": {
+   "subs": [
+    "smoked paprika (smokier)",
+    "cayenne pepper (much hotter, use less)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "paprika"
+   ]
+  },
+  "parmesan cheese": {
+   "subs": [
+    "Pecorino Romano cheese",
+    "Asiago cheese"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Parmesan cheese"
+   ]
+  },
+  "parmesan cheese, shredded": {
+   "subs": [
+    "Pecorino Romano cheese",
+    "Asiago cheese"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Parmesan cheese, shredded"
+   ]
+  },
+  "parsley flake": {
+   "subs": [
+    "fresh parsley",
+    "Italian (flat-leaf) parsley"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "parsley flakes"
+   ]
+  },
+  "parsnip": {
+   "subs": [
+    "carrots",
+    "turnips"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "parsnips"
+   ]
+  },
+  "peach": {
+   "subs": [
+    "nectarines",
+    "mangoes"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "peaches"
+   ]
+  },
+  "peanut sauce": {
+   "subs": [
+    "hoisin sauce (different flavor)",
+    "soy sauce + natural peanut butter + honey (DIY)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "peanut sauce"
+   ]
+  },
+  "peanuts, roasted unsalted": {
+   "subs": [
+    "cashews, roasted unsalted",
+    "almonds",
+    "almonds, sliced"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "peanuts, roasted unsalted"
+   ]
+  },
+  "pear": {
+   "subs": [
+    "apples",
+    "peaches"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "pears"
+   ]
+  },
+  "pecan halve": {
+   "subs": [
+    "pumpkin seeds"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "pecan halves"
+   ]
+  },
+  "penne pasta": {
+   "subs": [
+    "gluten-free penne pasta"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "penne pasta"
+   ]
+  },
+  "philadelphia brick cream cheese": {
+   "subs": [
+    "cream cheese (any brand)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Philadelphia brick cream cheese"
+   ]
+  },
+  "pine nut": {
+   "subs": [
+    "walnuts",
+    "almonds"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "pine nuts"
+   ]
+  },
+  "pineapple": {
+   "subs": [
+    "mangoes",
+    "peaches"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "pineapples"
+   ]
+  },
+  "pinto bean": {
+   "subs": [
+    "black beans",
+    "kidney beans"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "pinto beans"
+   ]
+  },
+  "pistachios, unsalted": {
+   "subs": [
+    "almonds",
+    "cashews, roasted unsalted"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "pistachios, unsalted"
+   ]
+  },
+  "plain greek yogurt": {
+   "subs": [
+    "sour cream",
+    "buttermilk",
+    "mayonnaise"
+   ],
+   "provenance": "snapshot",
+   "displayNames": [
+    "plain Greek yogurt"
+   ]
+  },
+  "plum": {
+   "subs": [
+    "peaches",
+    "apricots"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "plums"
+   ]
+  },
+  "polenta (cornmeal)": {
+   "subs": [
+    "cornmeal (cooked into polenta)",
+    "grits"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "polenta (cornmeal)"
+   ]
+  },
+  "polenta, pre-cooked": {
+   "subs": [
+    "cornmeal (cooked into polenta)",
+    "grits (cooked)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "polenta, pre-cooked"
+   ]
+  },
+  "poppy seed": {
+   "subs": [
+    "sesame seeds",
+    "chia seeds"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "poppy seeds"
+   ]
+  },
+  "pork chops, bone-in": {
+   "subs": [
+    "pork chops, boneless (faster cooking)",
+    "boneless pork loin"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "pork chops, bone-in"
+   ]
+  },
+  "pork chops, boneles": {
+   "subs": [
+    "pre-cooked vegan sausage"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "pork chops, boneless"
+   ]
+  },
+  "pork sausage": {
+   "subs": [
+    "pre-cooked vegan sausage"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "pork sausages"
+   ]
+  },
+  "portobello mushroom": {
+   "subs": [
+    "cremini mushrooms",
+    "white mushrooms"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "portobello mushrooms"
+   ]
+  },
+  "potato gnocchi": {
+   "subs": [
+    "cheese tortellini, fresh or frozen",
+    "macaroni (elbow) pasta"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "potato gnocchi"
+   ]
+  },
+  "powdered sugar": {
+   "subs": [
+    "granulated sugar (blended until fine)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "powdered sugar"
+   ]
+  },
+  "pre-cooked vegan sausage": {
+   "subs": [
+    "veggie hot dogs",
+    "tempeh"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "pre-cooked vegan sausage"
+   ]
+  },
+  "prosciutto": {
+   "subs": [
+    "deli ham",
+    "bacon (saltier)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "prosciutto"
+   ]
+  },
+  "pumpkin seed": {
+   "subs": [
+    "sunflower seeds",
+    "sesame seeds"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "pumpkin seeds"
+   ]
+  },
+  "pure maple syrup": {
+   "subs": [
+    "honey",
+    "agave nectar"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "pure maple syrup"
+   ]
+  },
+  "pure pumpkin purée": {
+   "subs": [
+    "butternut squash purée",
+    "sweet potato purée"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "pure pumpkin purée"
+   ]
+  },
+  "quinoa": {
+   "subs": [
+    "couscous",
+    "brown rice"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "quinoa"
+   ]
+  },
+  "radish": {
+   "subs": [
+    "turnips",
+    "red cabbage (shredded, for salads)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "radish"
+   ]
+  },
+  "raisin": {
+   "subs": [
+    "dried cranberries",
+    "chopped medjool dates, pitted"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "raisins"
+   ]
+  },
+  "ranch dressing": {
+   "subs": [
+    "blue cheese dressing",
+    "honey mustard dressing"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "ranch dressing"
+   ]
+  },
+  "raspberrie": {
+   "subs": [
+    "blackberries",
+    "strawberries"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "raspberries"
+   ]
+  },
+  "raw peeled shrimp, fresh or frozen": {
+   "subs": [
+    "sea scallops",
+    "cod fillet"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "raw peeled shrimp, fresh or frozen"
+   ]
+  },
+  "red bell pepper": {
+   "subs": [
+    "red bell peppers",
+    "yellow bell peppers",
+    "red bell pepper"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "red bell pepper",
+    "red bell peppers"
+   ]
+  },
+  "red cabbage": {
+   "subs": [
+    "green cabbage",
+    "napa cabbage"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "red cabbage"
+   ]
+  },
+  "red chili pepper": {
+   "subs": [
+    "jalapeño peppers",
+    "crushed red pepper"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "red chili peppers"
+   ]
+  },
+  "red grape": {
+   "subs": [
+    "green grapes",
+    "black grapes"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "red grapes"
+   ]
+  },
+  "red lentils, dried": {
+   "subs": [
+    "brown lentils, dried",
+    "split red lentils"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "red lentils, dried"
+   ]
+  },
+  "red onion": {
+   "subs": [
+    "red onions",
+    "yellow onions",
+    "green onions (scallions)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "red onion",
+    "red onions"
+   ]
+  },
+  "red potato": {
+   "subs": [
+    "new potatoes",
+    "yellow potatoes"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "red potatoes"
+   ]
+  },
+  "red wine vinegar": {
+   "subs": [
+    "balsamic vinegar",
+    "apple cider vinegar"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "red wine vinegar"
+   ]
+  },
+  "ribeye steak": {
+   "subs": [
+    "striploin (New York strip) steak",
+    "sirloin steak"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "ribeye steak"
+   ]
+  },
+  "rice vinegar": {
+   "subs": [
+    "white wine vinegar",
+    "apple cider vinegar (stronger flavor)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "rice vinegar"
+   ]
+  },
+  "ricotta cheese": {
+   "subs": [
+    "cottage cheese",
+    "cream cheese"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "ricotta cheese"
+   ]
+  },
+  "ro-tel diced tomatoes & green chilie": {
+   "subs": [
+    "diced tomatoes with green chilies (any brand)",
+    "diced tomatoes + diced green chilies"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "RO-TEL diced tomatoes & green chilies"
+   ]
+  },
+  "roasted red bell pepper": {
+   "subs": [
+    "red bell peppers (roasted at home)",
+    "sun-dried tomatoes, oil-packed"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "roasted red bell peppers"
+   ]
+  },
+  "romaine heart": {
+   "subs": [
+    "romaine lettuce",
+    "spring mix (mixed greens)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "romaine hearts"
+   ]
+  },
+  "romaine lettuce": {
+   "subs": [
+    "butter (Boston) lettuce",
+    "spring mix (mixed greens)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "romaine lettuce"
+   ]
+  },
+  "rosemary, dried": {
+   "subs": [
+    "fresh rosemary",
+    "thyme, dried"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "rosemary, dried"
+   ]
+  },
+  "rotini pasta": {
+   "subs": [
+    "gluten-free rotini pasta"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "rotini pasta"
+   ]
+  },
+  "rotisserie chicken, white and dark meat": {
+   "subs": [
+    "chicken breasts, boneless skinless (cooked and shredded)",
+    "oven roasted turkey breast, sliced"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "rotisserie chicken, white and dark meat"
+   ]
+  },
+  "sage, dried": {
+   "subs": [
+    "fresh sage",
+    "Italian seasoning"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "sage, dried"
+   ]
+  },
+  "salmon fillet": {
+   "subs": [
+    "salmon fillet, skinless",
+    "trout fillet"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "salmon fillet"
+   ]
+  },
+  "salsa": {
+   "subs": [
+    "pico de gallo",
+    "hot sauce (different texture)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "salsa"
+   ]
+  },
+  "salt": {
+   "subs": [
+    "sea salt",
+    "kosher salt"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "salt"
+   ]
+  },
+  "sauerkraut": {
+   "subs": [
+    "pickled cabbage",
+    "kimchi (spicier)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "sauerkraut"
+   ]
+  },
+  "sea scallop": {
+   "subs": [
+    "raw peeled shrimp, fresh or frozen",
+    "cod fillet"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "sea scallops"
+   ]
+  },
+  "sesame ginger dressing": {
+   "subs": [
+    "rice vinegar + toasted sesame oil (DIY)",
+    "honey mustard dressing"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "sesame ginger dressing"
+   ]
+  },
+  "sesame seed": {
+   "subs": [
+    "poppy seeds",
+    "chia seeds"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "sesame seeds"
+   ]
+  },
+  "shallot": {
+   "subs": [
+    "shallots",
+    "red onions",
+    "yellow onions"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "shallot",
+    "shallots"
+   ]
+  },
+  "shredded cabbage (coleslaw mix)": {
+   "subs": [
+    "red cabbage (shredded)",
+    "broccoli slaw"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "shredded cabbage (coleslaw mix)"
+   ]
+  },
+  "shredded carrot": {
+   "subs": [
+    "carrots (shredded at home)",
+    "broccoli slaw"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "shredded carrots"
+   ]
+  },
+  "shredded cheese, italian blend": {
+   "subs": [
+    "mozzarella cheese + Parmesan cheese",
+    "provolone cheese"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "shredded cheese, Italian blend"
+   ]
+  },
+  "shredded cheese, mexican blend": {
+   "subs": [
+    "cheddar cheese + Monterey Jack",
+    "cheddar cheese"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "shredded cheese, Mexican blend"
+   ]
+  },
+  "shredded sweetened coconut": {
+   "subs": [
+    "shredded unsweetened coconut + a pinch of sugar",
+    "coconut flakes"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "shredded sweetened coconut"
+   ]
+  },
+  "shredded unsweetened coconut": {
+   "subs": [
+    "shredded sweetened coconut (sweeter)",
+    "coconut flakes"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "shredded unsweetened coconut"
+   ]
+  },
+  "silk original almond milk": {
+   "subs": [
+    "almond milk, unsweetened (any brand)",
+    "oat milk"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Silk Original almond milk"
+   ]
+  },
+  "sliced black olive": {
+   "subs": [
+    "Kalamata olives, pitted (sliced)",
+    "green olives (sliced)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "sliced black olives"
+   ]
+  },
+  "sliced white mushroom": {
+   "subs": [
+    "white mushrooms (sliced at home)",
+    "cremini mushrooms"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "sliced white mushrooms"
+   ]
+  },
+  "small corn tortilla": {
+   "subs": [
+    "small flour tortillas",
+    "hard taco shells"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "small corn tortillas"
+   ]
+  },
+  "small flour tortilla": {
+   "subs": [
+    "small corn tortillas"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "small flour tortillas"
+   ]
+  },
+  "smoked paprika": {
+   "subs": [
+    "paprika"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "smoked paprika"
+   ]
+  },
+  "smoked salmon": {
+   "subs": [
+    "smoked trout",
+    "prosciutto (different flavor)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "smoked salmon"
+   ]
+  },
+  "soba (buckwheat) noodle": {
+   "subs": [
+    "linguine pasta",
+    "ramen noodles"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "soba (buckwheat) noodles"
+   ]
+  },
+  "sockeye salmon fillet": {
+   "subs": [
+    "salmon fillet",
+    "trout fillet"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "sockeye salmon fillet"
+   ]
+  },
+  "sole fillet": {
+   "subs": [
+    "cod fillet",
+    "tilapia fillet"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "sole fillets"
+   ]
+  },
+  "sourdough bread": {
+   "subs": [
+    "gluten-free bread"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "sourdough bread"
+   ]
+  },
+  "soy sauce": {
+   "subs": [
+    "tamari soy sauce",
+    "coconut aminos"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "soy sauce"
+   ]
+  },
+  "spaghetti pasta": {
+   "subs": [
+    "gluten-free spaghetti pasta"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "spaghetti pasta"
+   ]
+  },
+  "spaghetti squash": {
+   "subs": [
+    "butternut squash (spiralized)",
+    "zucchini squash (spiralized)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "spaghetti squash"
+   ]
+  },
+  "spring mix (mixed greens)": {
+   "subs": [
+    "romaine lettuce",
+    "baby spinach"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "spring mix (mixed greens)"
+   ]
+  },
+  "stir-fry sauce": {
+   "subs": [
+    "teriyaki sauce",
+    "hoisin sauce"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "stir-fry sauce"
+   ]
+  },
+  "strawberrie": {
+   "subs": [
+    "raspberries",
+    "blueberries"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "strawberries"
+   ]
+  },
+  "striploin (new york strip) steak": {
+   "subs": [
+    "ribeye steak (richer)",
+    "sirloin steak"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "striploin (New York strip) steak"
+   ]
+  },
+  "sugar snap pea": {
+   "subs": [
+    "snow peas",
+    "green beans"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "sugar snap peas"
+   ]
+  },
+  "sun-dried tomato pesto": {
+   "subs": [
+    "basil pesto",
+    "tomato paste + olive oil + Italian herbs (DIY)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "sun-dried tomato pesto"
+   ]
+  },
+  "sun-dried tomatoes, oil-packed": {
+   "subs": [
+    "roasted red bell peppers",
+    "tomato paste (concentrated flavor)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "sun-dried tomatoes, oil-packed"
+   ]
+  },
+  "sweet potato": {
+   "subs": [
+    "sweet potatoes",
+    "butternut squash",
+    "sweet potato (if scaling down)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "sweet potato",
+    "sweet potatoes"
+   ]
+  },
+  "swiss chard": {
+   "subs": [
+    "kale",
+    "baby spinach"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Swiss chard"
+   ]
+  },
+  "taco seasoning": {
+   "subs": [
+    "chili powder + cumin + paprika (DIY blend)",
+    "Cajun seasoning (different flavor)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "taco seasoning"
+   ]
+  },
+  "tahini": {
+   "subs": [
+    "natural almond butter",
+    "natural peanut butter (different flavor)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "tahini"
+   ]
+  },
+  "tamari soy sauce": {
+   "subs": [
+    "coconut aminos"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "tamari soy sauce"
+   ]
+  },
+  "tempeh": {
+   "subs": [
+    "extra firm tofu",
+    "veggie ground, plant based"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "tempeh"
+   ]
+  },
+  "thai curry paste, green": {
+   "subs": [
+    "Thai curry paste, red",
+    "curry powder (much milder flavor)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "Thai curry paste, green"
+   ]
+  },
+  "thai curry paste, red": {
+   "subs": [
+    "Thai curry paste, green"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "Thai curry paste, red"
+   ]
+  },
+  "thyme, dried": {
+   "subs": [
+    "fresh thyme",
+    "Italian seasoning"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "thyme, dried"
+   ]
+  },
+  "tilapia fillet": {
+   "subs": [
+    "cod fillet",
+    "sole fillets"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "tilapia fillet"
+   ]
+  },
+  "toasted sesame oil": {
+   "subs": [
+    "plain sesame oil (less toasty)",
+    "extra virgin olive oil (different flavor)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "toasted sesame oil"
+   ]
+  },
+  "tomato": {
+   "subs": [
+    "grape tomatoes",
+    "canned diced tomatoes"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "tomatoes"
+   ]
+  },
+  "tomato paste": {
+   "subs": [
+    "tomato sauce (simmered until reduced)",
+    "tomato puree"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "tomato paste"
+   ]
+  },
+  "tomato sauce": {
+   "subs": [
+    "tomato paste (diluted with water)",
+    "marinara sauce"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "tomato sauce"
+   ]
+  },
+  "tortilla chip": {
+   "subs": [
+    "tortilla chips (any brand)",
+    "hard taco shells (crushed)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "tortilla chips"
+   ]
+  },
+  "turmeric, ground": {
+   "subs": [
+    "ground ginger + paprika (color only, different flavor)",
+    "curry powder"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "turmeric, ground"
+   ]
+  },
+  "turnip": {
+   "subs": [
+    "parsnips",
+    "red radishes"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "turnips"
+   ]
+  },
+  "tzatziki sauce": {
+   "subs": [
+    "plain Greek yogurt + cucumber + dill (DIY)",
+    "hummus"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "tzatziki sauce"
+   ]
+  },
+  "vanilla extract": {
+   "subs": [
+    "vanilla bean paste",
+    "almond extract (different flavor)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "vanilla extract"
+   ]
+  },
+  "vanilla ice cream": {
+   "subs": [
+    "vanilla ice cream, vegan"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "vanilla ice cream"
+   ]
+  },
+  "vanilla whey-based protein powder (containing 20 grams protein/serving)": {
+   "subs": [
+    "vanilla plant-based protein powder (containing 20 grams protein/serving)"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "vanilla whey-based protein powder (containing 20 grams protein/serving)"
+   ]
+  },
+  "vegan mayonnaise": {
+   "subs": [
+    "mayonnaise",
+    "avocado oil mayonnaise"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "vegan mayonnaise"
+   ]
+  },
+  "veggie burger patties, plant-based": {
+   "subs": [
+    "portobello mushrooms",
+    "garbanzo beans (chickpeas) (for DIY patties)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "veggie burger patties, plant-based"
+   ]
+  },
+  "veggie ground, plant based": {
+   "subs": [
+    "crumbled extra firm tofu",
+    "tempeh (crumbled)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "veggie ground, plant based"
+   ]
+  },
+  "virgin coconut oil": {
+   "subs": [
+    "butter, unsalted",
+    "neutral vegetable oil"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "virgin coconut oil"
+   ]
+  },
+  "walnut": {
+   "subs": [
+    "pumpkin seeds"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "walnuts"
+   ]
+  },
+  "water": {
+   "subs": [
+    "chicken or vegetable broth (savory dishes)",
+    "coconut water"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "water"
+   ]
+  },
+  "water chestnut": {
+   "subs": [
+    "bamboo shoots (canned)",
+    "celery (for crunch)"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "water chestnuts"
+   ]
+  },
+  "white mushroom": {
+   "subs": [
+    "cremini mushrooms",
+    "portobello mushrooms"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "white mushrooms"
+   ]
+  },
+  "white wine vinegar": {
+   "subs": [
+    "rice vinegar",
+    "apple cider vinegar"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "white wine vinegar"
+   ]
+  },
+  "whole grain bread": {
+   "subs": [
+    "gluten-free bread"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "whole grain bread"
+   ]
+  },
+  "whole grain buns or roll": {
+   "subs": [
+    "gluten-free buns or rolls",
+    "whole grain pitas"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "whole grain buns or rolls"
+   ]
+  },
+  "whole grain pita": {
+   "subs": [
+    "whole grain bread",
+    "flatbreads or naan"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "whole grain pitas"
+   ]
+  },
+  "whole milk": {
+   "subs": [
+    "almond milk, unsweetened"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "whole milk"
+   ]
+  },
+  "whole wheat couscou": {
+   "subs": [
+    "quinoa",
+    "bulgur wheat"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "whole wheat couscous"
+   ]
+  },
+  "wild pink salmon, traditional style": {
+   "subs": [
+    "canned salmon",
+    "sockeye salmon fillet"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "wild pink salmon, traditional style"
+   ]
+  },
+  "worcestershire sauce": {
+   "subs": [
+    "soy sauce",
+    "coconut aminos",
+    "balsamic vinegar"
+   ],
+   "provenance": "restriction-swaps",
+   "displayNames": [
+    "Worcestershire sauce"
+   ]
+  },
+  "yellow bell pepper": {
+   "subs": [
+    "orange bell peppers",
+    "red bell peppers",
+    "green bell peppers"
+   ],
+   "provenance": "snapshot",
+   "displayNames": [
+    "yellow bell peppers"
+   ]
+  },
+  "yellow onion": {
+   "subs": [
+    "yellow onions",
+    "red onions",
+    "yellow onions (if scaling)",
+    "shallots"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "yellow onion",
+    "yellow onions"
+   ]
+  },
+  "yellow potato": {
+   "subs": [
+    "red potatoes",
+    "new potatoes"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "yellow potatoes"
+   ]
+  },
+  "zucchini squash": {
+   "subs": [
+    "yellow squash",
+    "eggplants"
+   ],
+   "provenance": "draft",
+   "displayNames": [
+    "zucchini squash"
+   ]
+  }
+ }
+}

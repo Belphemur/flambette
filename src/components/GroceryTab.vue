@@ -24,13 +24,16 @@ import { imageSrc, onImgError } from '../lib/images'
 import { usePlanStore } from '../stores/plan'
 import { useCustomIngredientsStore } from '../stores/customIngredients'
 import { useRoomStore } from '../stores/room'
+import { useUiStore } from '../stores/ui'
 import IngredientAutocomplete from './IngredientAutocomplete.vue'
 import PullClearIndicator from './PullClearIndicator.vue'
+import GroceryQtyBadge from './GroceryQtyBadge.vue'
 import { usePullToClear } from '../composables/usePullToClear'
 
 const plan = usePlanStore()
 const router = useRouter()
 const room = useRoomStore()
+const ui = useUiStore()
 const {
   checked,
   loadError,
@@ -279,6 +282,25 @@ const inRoom = computed(() => room.inRoom && room.code !== null)
 const roomLive = computed(() => room.status === 'live')
 /** null = "not told yet", which the strip says rather than guessing. */
 const shopperCount = computed(() => room.peers)
+
+/* ---------- Ingredient detail sheet (ADR-0100) + qty editor gate ---------- */
+
+/**
+ * The ONE open qty editor across the list (the badge component owns the
+ * pill, the view owns which row is open — opening B closes A).
+ */
+const openQtyKey = ref<string | null>(null)
+
+/**
+ * ADR-0100 trigger: the ROW's name is the sheet's door (the button the
+ * label holds). The sheet itself is hosted once in App.vue off the
+ * ephemeral ui-store prompt slot — never persisted, never room-synced.
+ */
+function openIngredientSheet(entry: {
+  item: { normalized: string; name: string }
+}): void {
+  ui.openIngredientSheet({ nameKey: entry.item.normalized, displayName: entry.item.name })
+}
 </script>
 
 <template>
@@ -629,14 +651,22 @@ const shopperCount = computed(() => room.peers)
   :aria-label="entry.line.text ? `${entry.line.text} ${entry.item.name}` : entry.item.name"
   @change="checked.toggleChecked(entry.line.key)"
   />
-  <span
-  class="min-w-0 flex-1 truncate text-body-sm"
-  :class="checked.map[entry.line.key] ? 'text-text-muted line-through' : 'text-text'"
-  >
   <!-- No quantity prefix (ADR-0071 delta 4): the amount is the row's
-  right-aligned mono badge below, not a bold run-on in the name. -->
+  right-aligned mono badge right, not a bold run-on in the name. -->
+  <!-- ADR-0100: the NAME is the sheet's tap-to-open door — an
+  AT-reachable button in the label (interactive descendants are excluded
+  from a label's activation, so the checkbox only toggles from the box
+  itself). The whole remaining row area keeps the checkbox's tap. -->
+  <button
+  type="button"
+  class="min-w-0 flex-1 truncate text-left text-body-sm"
+  :class="checked.map[entry.line.key] ? 'text-text-muted line-through' : 'text-text'"
+  data-test="grocery-name"
+  :aria-label="`Ingredient details for ${entry.item.name}`"
+  @click.stop="openIngredientSheet(entry)"
+  >
   <span>{{ entry.item.name }}</span>
-  </span>
+  </button>
   <!-- Provenance pill: a shrink-0 flex sibling OUTSIDE the
   truncating span, so the tooltip is never clipped by the
   name's overflow and the pill can never crowd the text
@@ -661,16 +691,22 @@ const shopperCount = computed(() => room.peers)
   </span>
   </span>
   </label>
-  <!-- Data voice: the merged amount, re-rendered from `entry.line.text` — the
-  SAME string the unit system already produces (ADR-0047), never a new
-  parser, and always the canonical metric basis so a checked key can
-  never orphan itself. -->
-  <span
+  <!-- Data voice: the merged amount — or, per ADR-0100, the line's
+  quantity override rendered INSTEAD of the derived sum. On the Grocery
+  tab the badge is the EDIT affordance (dashed underline + pencil, an
+  inline stepper anchored under it); ShopView renders the same badge
+  read-only through the same component. -->
+  <GroceryQtyBadge
   v-if="entry.line.text"
-  class="shrink-0 rounded-md bg-surface-sunken px-2 py-1 font-mono-data text-label-sm tabular-nums"
-  :class="checked.map[entry.line.key] ? 'text-text-muted' : 'text-text'"
-  data-test="grocery-qty"
-  >{{ entry.line.text }}</span>
+  :name="entry.item.name"
+  :line-key="entry.line.key"
+  :text="entry.line.text"
+  :derived-text="entry.line.derivedText"
+  :fallback-unit="entry.line.fallbackUnit"
+  :checked="!!checked.map[entry.line.key]"
+  editable
+  v-model:open-key="openQtyKey"
+  />
   </div>
   </li>
   </ul>

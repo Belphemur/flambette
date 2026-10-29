@@ -245,6 +245,7 @@ describe('the migration runner (ADR-0088 §4) over a real in-memory SQLite', () 
       { version: 1, name: 'per-store base schema' },
       { version: 2, name: 'split room state blobs into per-store rows' },
       { version: 3, name: 'the pantry becomes a synchronized store' },
+      { version: 4, name: 'grocery quantity overrides become a synchronized store (ADR-0100)' },
     ])
     db.close()
   })
@@ -405,6 +406,6 @@ describe('migration 002 splits the DO legacy blobs (ADR-0088 §4)', () => {
   })
 
   test('the runner is ascending and append-only (never renumber a shipped step)', () => {
-    expect(MIGRATIONS.map((step) => step.version)).toEqual([1, 2, 3])
+    expect(MIGRATIONS.map((step) => step.version)).toEqual([1, 2, 3, 4])
   })
 })

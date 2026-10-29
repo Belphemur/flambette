@@ -87,7 +87,7 @@
 - **Room sync**: whole-state last-write-wins keyed by `rev`; shared
   state = `{plan, customItems, checked, cleared, customs, pantry,
   cookedHistory, filters, favorites, ratings, ratingTombstones,
-  planIdentity}` — the SAME TWELVE keys the relay's per-store storage
+  qtyOverrides, planIdentity}` — the SAME THIRTEEN keys the relay's per-store storage
   knows as `SYNCED_STORES`
   (ADR-0088 §6 cross-checks the two vocabularies; adding a key without a
   migration and a `SYNCED_STORES` entry is exactly the drift the gate
@@ -112,7 +112,18 @@
   when non-empty, and there is ONE push writer —
   `schedulePush(immediate?)`, guarded by `applyingRemote`; preference
   edits pass `immediate` and skip the debounce, everything else keeps
-  it.
+  it. `qtyOverrides` is the ADR-0100 per-line grocery quantity override map
+  (`lineKeyIdentity` → the clamped amount in the line's own unit
+  grammar) — plain whole-state LWW like `customs`/`pantry` (a deletion —
+  the Reset — rides the whole map, so no tombstones), emitted ALWAYS (an
+  empty map IS the household's answer), OPTIONAL on the wire (an older
+  peer sends no key and keeps its own — absence is never a wipe), and
+  the receiver re-runs `normalizeQtyOverrides` through `replaceAll`.
+  The render side OWNS the orphan sweep: `useGroceryList` keeps each
+  device's map aligned with the lines its OWN render still knows (a
+  line that left every contributing meal releases its override; a line
+  hidden by a cleared claim keeps it, inert), so one peer's sweep never
+  erases an override whose line it cannot yet see.
 - **Relay storage is per-store SQLite (ADR-0088)**: both runtimes keep
   ONE TABLE per `SYNCED_STORES` key (`store_<snake_name>`, JSON-text
   value with a `json_valid` CHECK, per-store `created_at`/`updated_at`)
@@ -172,4 +183,6 @@
   ingredients, quick filters + settings, `favourites.json` (id array)
   and `ratings.json` (ADR-0031: `{id, rating, count, updatedAt}` rows
   whose import RECONCILES per record, so an older backup cannot roll
-  back a newer rating).
+  back a newer rating), `rating_tombstones.json` (ADR-0082) and
+  `grocery-qty-overrides.json` (ADR-0100: the per-line quantity-override
+  map, validated as a non-empty key → non-empty string record).

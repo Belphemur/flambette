@@ -21,6 +21,7 @@ import { normalizeRoomCode } from './lib/roomWords'
 import { useHead } from '@unhead/vue'
 import JoinCongratsModal from './components/JoinCongratsModal.vue'
 import ConfirmModal from './components/ConfirmModal.vue'
+import IngredientDetailSheet from './components/IngredientDetailSheet.vue'
 import RosterSheet from './components/RosterSheet.vue'
 import TooltipBubble from './components/TooltipBubble.vue'
 import { useIdentityStore } from './stores/identity'
@@ -822,6 +823,13 @@ onBeforeUnmount(() => {
        slot in the ui store keeps one-mount == one-open (AppModal's
        assumption); every end path funnels back into settleConfirm. -->
   <ConfirmModal v-if="ui.confirm" :prompt="ui.confirm" @close="ui.settleConfirm" />
+  <!-- ADR-0100: the ingredient detail sheet — one host off the ephemeral
+       ui-store prompt slot (not persisted, not room-synced). -->
+  <IngredientDetailSheet
+  v-if="ui.ingredientPrompt"
+  :prompt="ui.ingredientPrompt"
+  @close="ui.closeIngredientSheet"
+  />
   <!-- ADR-0097: the getting-started tour — v-if-gated on active state +
        non-fullscreen surfaces so it never covers cooking/shopping. -->
   <OnboardingOverlay v-if="showOnboarding" />

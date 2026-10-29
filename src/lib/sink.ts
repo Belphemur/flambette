@@ -38,7 +38,10 @@ export function sinkChecked<T>(rows: readonly T[], isChecked: (row: T) => boolea
  * `sinkChecked`, instead of drifting as a second sort expression.
  */
 export function sinkedStoreRows<
-  I extends { name: string; lines: { key: string; text?: string }[] },
+  I extends {
+    name: string
+    lines: { key: string; text?: string; derivedText?: string; fallbackUnit?: string }[]
+  },
 >(section: { items: I[] }, checked: Record<string, boolean>) {
   return sinkChecked(
     section.items.flatMap((item) => item.lines.map((line) => ({ item, line }))),

@@ -37,7 +37,7 @@ describe('the Bun relay persists to SQLite (ADR-0088 §1)', () => {
     const tables = tableNames(db)
     expect(tables.has('room')).toBeTrue()
     for (const store of SYNCED_STORES) expect(tables.has(storeTableName(store))).toBeTrue()
-    expect(db.query('SELECT COUNT(*) AS n FROM schema_migrations').all()[0]?.n).toBe(3)
+    expect(db.query('SELECT COUNT(*) AS n FROM schema_migrations').all()[0]?.n).toBe(4)
   })
 
   test('a push stores the split rows; a read joins them back', () => {
@@ -101,7 +101,7 @@ describe('the Bun relay persists to SQLite (ADR-0088 §1)', () => {
       expect(registry.floor()).toBe(7)
       expect(registry.nextSerial()).toBe(3)
       // Re-opening re-applies the migrations idempotently.
-      expect(db.query('SELECT COUNT(*) AS n FROM schema_migrations').all()[0]?.n).toBe(3)
+      expect(db.query('SELECT COUNT(*) AS n FROM schema_migrations').all()[0]?.n).toBe(4)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

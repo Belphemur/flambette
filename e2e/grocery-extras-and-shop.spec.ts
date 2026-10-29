@@ -8,6 +8,7 @@ import {
   gotoTab,
   openFirstRecipeDetail,
   pickCategoryOverride,
+  tapShopRowToggle,
   waitForCatalog,
 } from './helpers'
 import { zipStore } from '../src/lib/zip'
@@ -354,7 +355,8 @@ test.describe('ShopView auto-collapse (ADR-0008 addendum)', () => {
     for (let i = 0; i < total; i++) {
       // The sink re-sorts as we go, so always take the first NOT-checked row.
       const next = produce.locator('[data-test=shop-row]:not(.opacity-40)').first()
-      await next.click()
+      // ADR-0100: the name area opens the sheet; the toggle is the circle tap.
+      await tapShopRowToggle(next)
       // Sink first, collapse last: the header still reads the running N/N.
       await expect(produce.getByTestId('section-count-pill')).toHaveText(`${i + 1}/${total}`)
     }
@@ -376,14 +378,14 @@ test.describe('ShopView auto-collapse (ADR-0008 addendum)', () => {
     // Unchecking one line re-expands: open the group, drop a check.
     await toggle.click() // manual re-open keeps rows visible
     await expect(produce.locator('[data-test=shop-row]')).toHaveCount(total)
-    await produce.locator('[data-test=shop-row].opacity-40').first().click()
+    await tapShopRowToggle(produce.locator('[data-test=shop-row].opacity-40').first())
     await expect(produce.getByTestId('section-count-pill')).toHaveText(`${total - 1}/${total}`)
     // Not done any more → the group stays expanded (auto state cleared).
     await expect(toggle).toHaveAttribute('aria-expanded', 'true')
     await expect(produce.locator('[data-test=shop-row]')).toHaveCount(total)
 
     // Re-checking the last line collapses it again.
-    await produce.locator('[data-test=shop-row]:not(.opacity-40)').first().click()
+    await tapShopRowToggle(produce.locator('[data-test=shop-row]:not(.opacity-40)').first())
     await expect(produce.locator('[data-test=shop-row]')).toHaveCount(0)
     await expect(produce.getByTestId('section-count-pill')).toHaveText(`${total}/${total}`)
 

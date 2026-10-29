@@ -236,3 +236,14 @@ export async function visibleVariantIds(page: Page): Promise<number[]> {
     nodes.map((n) => Number((n as HTMLElement).dataset.variantId)),
   )
 }
+
+/**
+ * Tap a ShopView store-section row's TOGGLE area (ADR-0100): the row's
+ * NAME area now opens the ingredient detail sheet, so a spec exercising
+ * the CHECK toggle must tap the left edge (the circle) instead of the
+ * row's center. `min-h-16` (64px) rows; the circle sits at the left
+ * edge inside the row's 12px padding.
+ */
+export async function tapShopRowToggle(row: import('@playwright/test').Locator): Promise<void> {
+  await row.click({ position: { x: 20, y: 32 } })
+}

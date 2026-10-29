@@ -31,6 +31,7 @@ export const SHARED_STATE_KEYS = [
   'favorites',
   'ratings',
   'ratingTombstones',
+  'qtyOverrides',
   'planIdentity',
 ] as const
 

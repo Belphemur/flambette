@@ -1085,6 +1085,56 @@ text, never a colour-only distinction. Presence is the relay's live truth: the
 sheet shows who is CONNECTED NOW, not who has ever been in the household, and
 empty roster data degrades to the plain count, never a fake member list.
 
+### Ingredient detail sheet (ADR-0100)
+
+Tapping an ingredient's NAME + amount area on the grocery list opens the
+ingredient detail sheet — a bottom sheet on the AppModal machinery (Level 3
+espresso scrim) that becomes a centered ~480px modal card at `lg:`+. Visual
+authority: Stitch project 2725470430841257407, screens
+`3911e1af46314353b8b8818d8ab767c7` (mobile bottom sheet) and
+`1142b9332ed84a90b4bfe3fe70985034` (desktop modal); behavioural contract in
+[ADR-0100](docs/design/ADR-0100-ingredient-detail-sheet-and-quantity-override.md).
+
+The sheet is ONE raised paper card on the scrim: grab handle; a title row
+with the display name and the merged amounts in the mono data voice (the
+same text the row's badge renders); a full-width height-capped photo band;
+and the credit line **"Photo: TheMealDB"** directly beneath the photo in
+small muted mono — the credit is PART of the sheet, never repo-metadata
+only, and hides with the photo (ingredients without an image show the aisle
+glyph + hue per ADR-0076 `aisleIcon` instead). "Need a substitute?" is ONE
+prose line on a `surface-sunken` tonal card — informational only, never
+chips, never re-keying lines (ADR-0094's checked-key invariants are
+untouched). "You'll use this in…" lists the plan's recipes as compact
+tappable rows (circular thumbnail + name + chevron; tap navigates to
+`/recipe/:id` and closes the sheet). The single action is the tonal
+full-width Done — the sheet is a READING surface: no checkboxes, no second
+fill, no invented metadata (seasonality pills, per-row prep-time meta and
+mock list contents are rejected render fictions).
+
+### Editable quantity badge (ADR-0100)
+
+The grocery quantity badge on GroceryTab is an EDITABLE control, not a
+label — it must READ as editable without being a form field: the mono badge
+carries a dashed underline (`border`-family muted at rest) that flips to
+`primary` on hover/focus together with the text, plus a small pencil glyph
+(verified against the bundled lucide set and not already semantically
+claimed). Visual authority: Stitch screens
+`7245589bb91e457daa778ecefc631771` (mobile) and
+`d8ac47441a5c413c8f3145e7ae98f582` (desktop); behavioural contract in
+[ADR-0100](docs/design/ADR-0100-ingredient-detail-sheet-and-quantity-override.md).
+
+Pressing the badge opens the INLINE editor anchored under it — a compact
+stepper pill (minus / value / plus, all in the mono data voice at the 44px
+touch height) with a Reset link that drops the override back to the derived
+amount, and Done to commit. The edited value normalizes ONCE through the
+shared quantity parser before the store write and the display (ADR-0037's
+clamp-once rule). The override rides the per-line `lineKeyIdentity` key,
+renders INSTEAD of the derived sum for that line, is household-synced
+(ADR-0013 backup slice) and exists on GroceryTab ONLY — ShopView renders
+the override value read-only. The badge stays a right-aligned flex sibling
+with `@click.stop`: its hit target must never overlap the row label's
+tap-to-open area or the checkbox.
+
 ### Verification and implementation contract
 
 1. Read ADR-0036 before new semantic implementation; it records why this revision

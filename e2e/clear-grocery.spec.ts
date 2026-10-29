@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import {
   blockExternalRequests,
+  tapShopRowToggle,
   gotoTab,
   openFirstRecipeDetail,
   openRecipeDetail,
@@ -210,7 +211,10 @@ test('the adaptive clear button clears only checked rows in shopping mode (Shop)
     .locator('[data-test=shop-section]')
     .filter({ has: page.locator('[data-test=shop-section-rows] li:nth-child(2)') })
   await expect(multiLine.first()).toBeVisible()
-  await multiLine.first().locator('[data-test=shop-row]').first().click()
+  // ADR-0100: the row's NAME area opens the ingredient sheet now — the
+  // toggle lives in the circle/edge areas, and that is what this tap
+  // exercises (the toggle behavior the spec pins).
+  await tapShopRowToggle(multiLine.first().locator('[data-test=shop-row]').first())
 
   // One checked row → "Clear checked"; direct action, no modal; ONLY the
   // checked row goes — the unchecked rest stay, still unchecked.

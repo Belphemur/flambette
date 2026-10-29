@@ -186,12 +186,14 @@ export function storeRowSql(store: SyncedStore): string {
 import { MIGRATION_001 } from './migrations/001_rooms_and_stores'
 import { MIGRATION_002 } from './migrations/002_split_state_blobs'
 import { MIGRATION_003 } from './migrations/003_pantry'
+import { MIGRATION_004 } from './migrations/004_qty_overrides'
 
 /** The ordered migration list — append-only; never renumber a shipped step. */
 export const MIGRATIONS: readonly MigrationStep[] = [
   MIGRATION_001,
   MIGRATION_002,
   MIGRATION_003,
+  MIGRATION_004,
 ]
 
 /** Apply every pending step, ascending, and verify what the ledger claims. */
