@@ -20,6 +20,16 @@
  * v2 arithmetic when the new field is absent:
  * - `favoriteIds`: a favourited candidate pays FAVORITE_BONUS less score.
  *   A preference nudges ties; waste still decides.
+ *
+ * v4 (ADR-0101) redefines the waste model itself (unconditional — no
+ * opt-in field): the slot score subtracts a WASTE-MATCHING CREDIT —
+ * presence-based ingredient-match credit for sharing keys the ledger has
+ * already committed (the grocery list merges shared count/weight rows
+ * into ONE purchase — ADR-0003), plus leftover-fill credit for consuming
+ * the remainder of an already-opened package. Total credit is capped
+ * strictly below one package, so matching reorders candidates WITHIN a
+ * package tier and never across one.
+ *
  * Household RATINGS need no field: the caller already injects the rating
  * it wants scored through `ratings` (useAutoPlan blends the household
  * stars over the catalog mean), which keeps this lib a pure function of
@@ -29,6 +39,7 @@
  * (see src/composables/useAutoPlan.ts) and passed in.
  */
 import { containerContribution } from './containers'
+import { bucketFor } from './sections'
 
 /** Shape of the committed public/data/pack_index.json. */
 export interface PackIndex {
@@ -177,6 +188,36 @@ const TAG_WEIGHT = 0.2
  * package) but never outvote waste.
  */
 export const FAVORITE_BONUS = 0.05
+/**
+ * v4 (ADR-0101 §Decision 2) — waste-matching credit for sharing an
+ * ingredient key that is ALREADY committed in the ledger (base meals
+ * included): the grocery list merges shared count/weight rows into ONE
+ * purchase (ADR-0003), so sharing IS waste avoided — but the ledger
+ * prices packages, not those rows. Presence-based (amount is
+ * irrelevant), mirroring the tag term's shape. Meat first (0.5),
+ * produce second (0.25), everything else a nudge (0.05): one shared
+ * meat key outweighs one shared produce key two-to-one.
+ */
+export const MEAT_MATCH_WEIGHT = 0.5
+/** v4 (ADR-0101 §Decision 2) — the produce class's share of the match credit. */
+export const PRODUCE_MATCH_WEIGHT = 0.25
+/** v4 (ADR-0101 §Decision 2) — every class-2 key (the aisle "other" bucket). */
+export const OTHER_MATCH_WEIGHT = 0.05
+/**
+ * v4 (ADR-0101 §Decision 3) — leftover-fill credit: consuming part of an
+ * already-opened package's remainder earns `FILL_WEIGHT × min(need,
+ * remainder)`. The remainder is real waste the marginal term cannot see
+ * (a candidate that ignores a half-open package also costs 0 marginal).
+ */
+export const FILL_WEIGHT = 0.25
+/**
+ * v4 (ADR-0101 §Decision 4) — a candidate's TOTAL credit (match + fill)
+ * is capped here, strictly below one package. Invariant: a candidate
+ * that opens a new package can never outrank a zero-marginal candidate
+ * on matching credit alone — the cap keeps ADR-0080's waste-first order
+ * exact (matching reorders candidates WITHIN a package tier).
+ */
+export const CREDIT_CAP = 0.9
 /** v2 (ADR-0027) — seed rotation depth: the top-5 rated candidates take
  *  turns being the seed across generations. */
 export const ROTATION_K = 5
@@ -266,6 +307,64 @@ function marginalPackagesOf(
   return marginal
 }
 
+/**
+ * Ingredient class table (ADR-0101 §Decision 1) — 0 = Meat & Seafood,
+ * 1 = Produce, 2 = everything else. The ONE aisle keyword table
+ * (`sections.ts`'s `bucketFor`) stays the single source, so the planner's
+ * "meat" is exactly the aisle the shopper walks. One Uint8Array over the
+ * interned keys, built once per request (339 interned keys — trivial cost).
+ */
+function ingredientClasses(index: PackIndex): Uint8Array {
+  const classes = new Uint8Array(index.ingredientKeys.length)
+  for (let keyId = 0; keyId < classes.length; keyId++) {
+    const section = bucketFor(index.ingredientKeys[keyId])
+    classes[keyId] = section === 'Meat & Seafood' ? 0 : section === 'Produce' ? 1 : 2
+  }
+  return classes
+}
+
+/** Match weight per ingredient class (ADR-0101 §Decision 2). */
+const MATCH_WEIGHTS = [MEAT_MATCH_WEIGHT, PRODUCE_MATCH_WEIGHT, OTHER_MATCH_WEIGHT] as const
+
+/**
+ * The waste-matching CREDIT a candidate earns against the CURRENT ledger
+ * (ADR-0101 §Decision 2–4):
+ *
+ * - MATCH: per NON-container, non-pantry row whose ingredient key is
+ *   already committed (base meals included — `scored`), its class's
+ *   weight. Presence-based, mirroring the tag term.
+ * - FILL: per container row landing in a committed package that still
+ *   has a remainder (`ceil(total) > total`), `FILL_WEIGHT × min(need,
+ *   remainder)`. Excess beyond the remainder keeps flowing through the
+ *   marginal ceil term as today.
+ *
+ * The TOTAL is capped at `CREDIT_CAP` (strictly below one package), so
+ * matching reorders candidates WITHIN a package tier, never across one.
+ */
+function creditOf(
+  index: PackIndex,
+  classes: Uint8Array,
+  scored: ReadonlySet<number>,
+  totals: ReadonlyMap<number, number>,
+  pantry: ReadonlySet<string>,
+  id: number,
+): number {
+  let credit = 0
+  for (const [keyId, amount, unitId, isContainer] of index.recipes[String(id)]?.i ?? []) {
+    if (pantry.has(index.ingredientKeys[keyId])) continue
+    if (isContainer === 0) {
+      if (scored.has(keyId)) credit += MATCH_WEIGHTS[classes[keyId]]
+    } else if (amount > 0) {
+      const total = totals.get(containerKeyId(keyId, unitId))
+      if (total != null) {
+        const remainder = Math.ceil(total - EPS) - total
+        if (remainder > EPS) credit += FILL_WEIGHT * Math.min(amount, remainder)
+      }
+    }
+  }
+  return Math.min(credit, CREDIT_CAP)
+}
+
 /** Distinct candidate tags already present on picked meals (base incl.). */
 function tagOverlapOf(
   tags: ReadonlyMap<number, ReadonlyArray<number>> | undefined,
@@ -312,8 +411,10 @@ function sanitizeGeneration(raw: number | undefined): number {
  * ONE seeded greedy completion (the ADR-0080 refactor of the v2 body).
  * The seed is either FORCED (a proposal's anchor) or the rotating
  * rating-rank seed (ADR-0027). Slots 2..N minimize
- * `marginalPackages + RATING_WEIGHT*(1-rating) + TAG_WEIGHT*tagOverlap
- * - FAVORITE_BONUS*isFavourite`; ties → higher rating, then lower id.
+ * `marginalPackages − credit + RATING_WEIGHT*(1-rating) +
+ * TAG_WEIGHT*tagOverlap − FAVORITE_BONUS*isFavourite` (the credit is
+ * ADR-0101's waste-matching credit); ties → higher rating, then lower
+ * id.
  * No randomness anywhere: the same (index, request incl. generation) →
  * identical output.
  */
@@ -331,6 +432,10 @@ function runPack(index: PackIndex, req: PackPlanRequest, forcedSeedId: number | 
     req.excludeIds ? new Set(req.excludeIds) : null,
   )
   const pack: number[] = []
+
+  // ADR-0101: the class table is built ONCE per request and shared by the
+  // slot scan's credit computation below.
+  const classes = ingredientClasses(index)
 
   const warnings: string[] = []
   if (candidates.length === 0 && ledger.baseIds.length === 0) {
@@ -389,7 +494,8 @@ function runPack(index: PackIndex, req: PackPlanRequest, forcedSeedId: number | 
       if (freshOnly && offered!.has(id)) continue
       const rating = ratingOf(id)
       const score =
-        marginalPackagesOf(index, pantry, totals, id) +
+        marginalPackagesOf(index, pantry, totals, id) -
+        creditOf(index, classes, scored, totals, pantry, id) +
         RATING_WEIGHT * (1 - rating) +
         TAG_WEIGHT * tagOverlapOf(tags, tagPool, id) -
         (favorites?.has(id) ? FAVORITE_BONUS : 0)

@@ -2,8 +2,14 @@ import { describe, expect, test } from 'bun:test'
 import {
   buildAutoPlan,
   buildAutoPlanProposals,
+  CREDIT_CAP,
+  FAVORITE_BONUS,
+  FILL_WEIGHT,
   MAX_MEALS,
+  MEAT_MATCH_WEIGHT,
   MIN_MEALS,
+  OTHER_MATCH_WEIGHT,
+  PRODUCE_MATCH_WEIGHT,
   PROPOSAL_COUNT,
   type PackIndex,
 } from './packPlanner'
@@ -545,9 +551,13 @@ describe('buildAutoPlan v3 (ADR-0031 household favourites)', () => {
     // Same shape as the "package marginal cost outweighs any rating gap"
     // case: 0.05 < 1 opened package, so the container-free recipe still
     // wins even when the opening one is a favourite AND better rated.
+    // ADR-0101 note: the old fixture had recipe 2 sharing the seed's
+    // container remainder, so its leftover-fill credit (0.125) legitimately
+    // outvoted the 0.05 bonus — the fill case is pinned separately below.
+    // Recipe 2 here opens a DIFFERENT container (unitId 2) at marginal 1.
     const index = idx({
       '1': { i: [[0, 0.5, 1, 1]], s: 1 },
-      '2': { i: [[0, 0.5, 1, 1]], s: 1 },
+      '2': { i: [[0, 0.5, 2, 1]], s: 1 },
       '3': { i: [[1, 2, 0, 0]], s: 1 },
     })
     const plan = buildAutoPlan(index, {
@@ -600,6 +610,218 @@ describe('buildAutoPlan v3 (ADR-0031 household favourites)', () => {
     })
     expect(withoutFavorite.variantIds).toEqual([1, 2])
     expect(withFavorite.variantIds).toEqual([1, 3])
+  })
+})
+
+/**
+ * v4 (ADR-0101) — class-aware waste matching. The slot score subtracts a
+ * credit (match + leftover-fill, capped at CREDIT_CAP): the grocery list
+ * merges shared count/weight rows into ONE purchase (ADR-0003), so
+ * sharing a committed key (base included) AND consuming an opened
+ * package's remainder are waste the old scorer could not see. Weights:
+ * meat 0.5 > produce 0.25 > other 0.05; fill 0.25 × min(need, remainder).
+ */
+describe('buildAutoPlan v4 (ADR-0101 waste matching)', () => {
+  test('exports the five ADR-0101 weights', () => {
+    expect(MEAT_MATCH_WEIGHT).toBe(0.5)
+    expect(PRODUCE_MATCH_WEIGHT).toBe(0.25)
+    expect(OTHER_MATCH_WEIGHT).toBe(0.05)
+    expect(FILL_WEIGHT).toBe(0.25)
+    expect(CREDIT_CAP).toBe(0.9)
+  })
+
+  test('meat-match preference: equal marginal, the candidate sharing a committed meat key wins', () => {
+    // The seed commits 'salmon fillet' (Meat & Seafood via bucketFor).
+    // Recipes 2 and 3 are otherwise symmetric (one fresh produce key
+    // each, zero marginal, equal rating) — only #2 shares the meat key.
+    const index = idx(
+      {
+        '1': { i: [[0, 1, 0, 0]], s: 1 },
+        '2': { i: [[0, 1, 0, 0], [1, 1, 0, 0]], s: 2 },
+        '3': { i: [[2, 1, 0, 0], [3, 1, 0, 0]], s: 2 },
+      },
+      { ingredientKeys: ['salmon fillet', 'lettuce', 'onion', 'celery'] },
+    )
+    const plan = buildAutoPlan(index, {
+      count: 2,
+      ratings: ratings([
+        [1, 0.5],
+        [2, 0.5],
+        [3, 0.5],
+      ]),
+    })
+    expect(plan.variantIds).toEqual([1, 2])
+  })
+
+  test('produce-match second: a shared produce key outruns a shared other key', () => {
+    // Seed commits a meat, a produce and an other key. Slots rank by the
+    // SHARED credit: #2 shares lettuce (0.25), #3 shares yogurt (0.05)
+    // — equal marginal, equal rating → produce first. (The 0.5 meat case
+    // is the test above; the aisle names here classify via bucketFor.)
+    const index = idx(
+      {
+        '1': { i: [[0, 1, 0, 0], [1, 1, 0, 0], [2, 1, 0, 0]], s: 3 },
+        '2': { i: [[1, 1, 0, 0]], s: 1 },
+        '3': { i: [[2, 1, 0, 0]], s: 1 },
+      },
+      { ingredientKeys: ['salmon fillet', 'lettuce', 'plain greek yogurt'] },
+    )
+    const plan = buildAutoPlan(index, {
+      count: 3,
+      ratings: ratings([
+        [1, 0.5],
+        [2, 0.5],
+        [3, 0.5],
+      ]),
+    })
+    // Slot order is the credit gradient: meat's #2? No — #2 shares the
+    // PRODUCE key (0.25), #3 the other key (0.05). Seed 1, then 2, then 3.
+    expect(plan.variantIds).toEqual([1, 2, 3])
+  })
+
+  test('class gradient: a committed meat key (0.5) outruns produce (0.25) outruns other (0.05)', () => {
+    // bucketFor spot-check via behaviour: the seed commits one meat, one
+    // produce and one other key; three candidates each share exactly one
+    // and are otherwise identical. Slot order follows the credit.
+    const index = idx(
+      {
+        '1': { i: [[0, 1, 0, 0], [1, 1, 0, 0], [2, 1, 0, 0]], s: 3 },
+        '2': { i: [[0, 1, 0, 0]], s: 1 },
+        '3': { i: [[1, 1, 0, 0]], s: 1 },
+        '4': { i: [[2, 1, 0, 0]], s: 1 },
+      },
+      { ingredientKeys: ['chicken breasts, boneless skinles', 'lettuce', 'mayonnaise'] },
+    )
+    const plan = buildAutoPlan(index, {
+      count: 4,
+      ratings: ratings([
+        [1, 0.5],
+        [2, 0.5],
+        [3, 0.5],
+        [4, 0.5],
+      ]),
+    })
+    expect(plan.variantIds).toEqual([1, 2, 3, 4])
+  })
+
+  test('leftover-fill credit: consuming an opened package remainder outranks ignoring it', () => {
+    // Seed opens the ingA package at ½. Candidates at EQUAL marginal 0:
+    // #2 consumes the remainder (same container), #3 ignores it (linear
+    // rows only). Equal ratings → the filler wins.
+    const index = idx({
+      '1': { i: [[0, 0.5, 1, 1]], s: 1 },
+      '2': { i: [[0, 0.5, 1, 1]], s: 1 },
+      '3': { i: [[1, 2, 0, 0]], s: 1 },
+    })
+    const plan = buildAutoPlan(index, {
+      count: 2,
+      ratings: ratings([
+        [1, 0.5],
+        [2, 0.5],
+        [3, 0.5],
+      ]),
+    })
+    expect(plan.variantIds).toEqual([1, 2])
+    // The fill is bounded by the remainder: packages stay at 1.
+    expect(plan.packagesBought).toBe(1)
+  })
+
+  test('fill credit scales with min(need, remainder) — a bigger need is bounded by the remainder', () => {
+    // Remainder is 0.5; need 0.9 → fill = 0.25 × 0.5 (bounded). The
+    // excess 0.4 crosses the ceil and stays visible in the marginal term.
+    const index = idx({
+      '1': { i: [[0, 0.5, 1, 1]], s: 1 },
+      '2': { i: [[0, 0.9, 1, 1]], s: 1 },
+      '3': { i: [[0, 0.5, 1, 1]], s: 1 },
+    })
+    // #2 (need 0.9) pays marginal 1 for the excess (0.5+0.9 crosses the
+    // ceil) — so at equal ratings the exact-remainder filler #3 wins.
+    const plan = buildAutoPlan(index, {
+      count: 2,
+      ratings: ratings([
+        [1, 0.5],
+        [2, 0.5],
+        [3, 0.5],
+      ]),
+    })
+    expect(plan.variantIds).toEqual([1, 3])
+    // The fill is bounded by the remainder: packages stay at 1.
+    expect(plan.packagesBought).toBe(1)
+
+    // Without the exact-remainder filler, the need-0.9 candidate still
+    // gets picked — its excess beyond the remainder flows through the
+    // marginal ceil term (0.5 + 0.9 = 1.4 → 2 packages).
+    const planB = buildAutoPlan(
+      { ...index, recipes: { '1': index.recipes['1'], '2': index.recipes['2'] } },
+      {
+        count: 2,
+        ratings: ratings([
+          [1, 0.5],
+          [2, 0.5],
+        ]),
+      },
+    )
+    expect(planB.variantIds).toEqual([1, 2])
+    expect(planB.packagesBought).toBe(2)
+  })
+
+  test('the cap invariant: a +1-package candidate with maximal credit still loses to a zero-marginal one', () => {
+    // Seed commits a meat key AND a ½-opened package. #2 shares the meat
+    // key (match credit saturated at CREDIT_CAP = 0.9) and opens a NEW
+    // package (marginal 1); #3 shares nothing but costs 0 marginal.
+    // 1 − 0.9 + 0.125 = 0.225 > 0 + 0.125 = 0.125 → #3 wins.
+    const index = idx({
+      '1': { i: [[0, 1, 0, 0], [1, 0.5, 1, 1]], s: 2 },
+      '2': { i: [[0, 1, 0, 0], [2, 1, 1, 1]], s: 2 },
+      '3': { i: [[3, 2, 0, 0]], s: 1 },
+    })
+    const plan = buildAutoPlan(index, {
+      count: 2,
+      ratings: ratings([
+        [1, 0.5],
+        [2, 0.5],
+        [3, 0.5],
+      ]),
+    })
+    expect(plan.variantIds).toEqual([1, 3])
+  })
+
+  test('pantry keys earn no match credit', () => {
+    // Seed 1 commits 'lettuce' only (pantry rows are skipped by
+    // commit()). #2 uses pantry keys ONLY → no credit, so #3 (sharing
+    // the committed lettuce) wins the slot despite the higher id.
+    const index = idx(
+      {
+        '1': { i: [[0, 1, 0, 0]], s: 1 },
+        '2': { i: [[1, 1, 0, 0], [2, 1, 0, 0]], s: 0 },
+        '3': { i: [[0, 1, 0, 0]], s: 1 },
+      },
+      { ingredientKeys: ['lettuce', 'olive oil', 'salt'], pantry: ['olive oil', 'salt'] },
+    )
+    const plan = buildAutoPlan(index, {
+      count: 2,
+      ratings: ratings([
+        [1, 0.5],
+        [2, 0.5],
+        [3, 0.5],
+      ]),
+    })
+    expect(plan.variantIds).toEqual([1, 3])
+    expect(plan.scoredIngredients).toBe(1)
+  })
+
+  test('match + fill credits ADD toward the cap: the total is capped, neither term escapes it', () => {
+    // Seed commits a meat key (a match term) AND a ½-opened package
+    // (a fill term). #2 shares both: raw 0.5 + 0.125 = 0.625 < cap →
+    // uncapped; #9 below would need more shared keys to hit CREDIT_CAP.
+    const index = idx({
+      '1': { i: [[0, 1, 0, 0], [1, 0.5, 1, 1]], s: 2 },
+      '2': { i: [[0, 1, 0, 0], [1, 0.5, 1, 1]], s: 2 },
+    })
+    const plan = buildAutoPlan(index, { count: 2, ratings: ratings([[1, 0.5], [2, 0.5]]) })
+    // Both marginal 0 and #2 consumes the remainder → picked.
+    expect(plan.variantIds).toEqual([1, 2])
+    expect(plan.packagesBought).toBe(1)
   })
 })
 
@@ -956,21 +1178,21 @@ describe('buildAutoPlanProposals regeneration-variety amendment (ADR-0080, #74)'
     return real
   }
 
-  test('REAL INDEX gen-0 equality, replace mode: the exact pre-amendment proposal list (pin)', async () => {
+  test('REAL INDEX gen-0 equality, replace mode: the pinned proposal list (ADR-0101 pin)', async () => {
     const { index, req } = await realIndexReq()
     const proposals = buildAutoPlanProposals(index, { ...req, seedGeneration: 0 })
     expect(
       proposals.map((p) => ({ seedId: p.seedId, ids: p.variantIds, pk: p.packagesBought, kind: p.kind })),
     ).toEqual([
-      { seedId: 13443, ids: [13443, 6389, 11982, 6167], pk: 4, kind: 'rated' },
-      { seedId: 17452, ids: [17452, 9889, 6389, 6167], pk: 8, kind: 'rated' },
-      { seedId: 40322, ids: [40322, 9889, 6389, 6167], pk: 8, kind: 'rated' },
+      { seedId: 13443, ids: [13443, 6227, 11982, 38226], pk: 4, kind: 'rated' },
+      { seedId: 17452, ids: [17452, 26529, 10548, 30915], pk: 8, kind: 'rated' },
+      { seedId: 40322, ids: [40322, 28893, 5985, 6639], pk: 8, kind: 'rated' },
     ])
   })
 
-  test('REAL INDEX gen-0 equality, add mode: continuity pick + rated cards unchanged (pin)', async () => {
+  test('REAL INDEX gen-0 equality, add mode: continuity pick + rated cards (ADR-0101 pin)', async () => {
     const { index, req } = await realIndexReq()
-    const base = [13443, 6389, 11982, 6167]
+    const base = [13443, 6227, 11982, 38226]
     const proposals = buildAutoPlanProposals(index, {
       ...req,
       seedGeneration: 0,
@@ -979,9 +1201,9 @@ describe('buildAutoPlanProposals regeneration-variety amendment (ADR-0080, #74)'
     expect(
       proposals.map((p) => ({ seedId: p.seedId, ids: p.variantIds, pk: p.packagesBought, kind: p.kind })),
     ).toEqual([
-      { seedId: 9889, ids: [9889, 26529, 33435, 16579], pk: 4, kind: 'continuity' },
+      { seedId: 9889, ids: [9889, 30915, 26529, 33435], pk: 4, kind: 'continuity' },
       { seedId: 17452, ids: [17452, 26529, 16579, 30915], pk: 12, kind: 'rated' },
-      { seedId: 40322, ids: [40322, 26529, 33435, 16579], pk: 12, kind: 'rated' },
+      { seedId: 40322, ids: [40322, 30915, 26529, 33435], pk: 12, kind: 'rated' },
     ])
   })
 
@@ -995,7 +1217,7 @@ describe('buildAutoPlanProposals regeneration-variety amendment (ADR-0080, #74)'
 
   test('REAL INDEX add mode: the continuity lead differs across generations 0/1/2 (#74)', async () => {
     const { index, req } = await realIndexReq()
-    const base = [13443, 6389, 11982, 6167]
+    const base = [13443, 6227, 11982, 38226]
     const leads = [0, 1, 2].map((gen) =>
       buildAutoPlanProposals(index, { ...req, seedGeneration: gen, baseIds: base })[0].variantIds.join(','),
     )
