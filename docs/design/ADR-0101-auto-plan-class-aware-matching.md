@@ -163,3 +163,24 @@ packages) including the proposal layer, tags and smoothing; then rerun with
   amendment) is pinned and its rotation is the variety mechanism there;
   the slot credit already delivers "match what you already have" to the
   completed pack.
+
+## Addendum (2026-10-29) — measured against the implementation
+
+Landed in PR #110 (squash `3bdecc35`); unit 1,232 green, full e2e 814/814
+reconciled against `--list`, CI green on the PR.
+
+- **The prototype's predicted pack was right about everything but the
+  tie-break order.** The real gen-0 pack is `[13443, 6227, 11982, 38226]`,
+  not the predicted `[13443, 5451, 4988, 6389]`: still 4 packages with the
+  seed preserved, but the equal-marginal contenders resolved differently
+  under the real ratings and tags. Predicted tie order is not a contract;
+  package count and meat-sharing are.
+- **"The cap keeps variety" was run-specific, not a property.** With the
+  real ratings/tags the cap saturates (credit ≥ cap for the top
+  candidates), the tag term does not break the tie, and the pack resolved
+  to four salmon dinners — protein variety 1. Protein variety is not a
+  scored term anywhere in the score (ADR-0027's rotation governs only the
+  continuity seed's tie set). If variety becomes a requirement, the lever
+  is a variety term on already-committed protein keys or a tighter cap —
+  both measured feasible at the same package count; that is future work,
+  not a defect of this record.
