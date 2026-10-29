@@ -1,11 +1,10 @@
 /**
  * Probe: does the pinned Auto-Plan PROPOSAL still hold after a catalog sync?
  *
- * The e2e pins the generation-0 PRE-SELECTED proposal as [13443, 6389,
- * 11982, 6167] (ADR-0080): the CHEAPEST of the waste-ranked proposals —
- * packagesBought ASC, then seed rating DESC, then seed id ASC. A catalog
- * sync changes the candidate set, so the pin is only valid if the
- * arithmetic is unchanged. Run this BEFORE
+ * The e2e pins the generation-0 PRE-SELECTED proposal as [13443, 6227,
+ * 11982, 38226] (ADR-0080 + ADR-0101): the CHEAPEST of the waste-ranked
+ * proposals. A catalog sync changes the candidate set, so the pin is only
+ * valid if the arithmetic is unchanged. Run this BEFORE
  * `bunx playwright test e2e/auto-plan.spec.ts` so a pin break is
  * diagnosed here instead of in a browser.
  *
@@ -15,7 +14,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { buildAutoPlanProposals } from '../src/lib/packPlanner'
 
-const PINNED = [13443, 6389, 11982, 6167]
+const PINNED = [13443, 6227, 11982, 38226]
 
 /** Must match the `autoPlanRuleset` default in src/stores/ui.ts: the
  *  default pack is a DINNER pack, and a probe that mirrors the call
