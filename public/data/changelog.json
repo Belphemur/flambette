@@ -1,6 +1,75 @@
 {
-  "generatedAt": "2026-10-29T00:58:34Z",
+  "generatedAt": "2026-10-29T04:18:51Z",
   "versions": [
+    {
+      "version": "v2.14.0",
+      "date": "2026-10-29",
+      "title": "Wire final 172 transparent ingredient images (p\u2013z endgame), drop 41 orphaned mealdb files",
+      "features": [
+        {
+          "text": "wire final 172 transparent ingredient images (p\u2013z endgame), drop 41 orphaned mealdb files",
+          "scope": "data",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "wire 199 transparent ingredient images (f\u2013w sweep), drop 97 orphaned mealdb files",
+          "scope": "data",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "wire 201 transparent ingredient images (a\u2013f sweep), drop 66 orphaned mealdb files",
+          "scope": "data",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "wire rose.webp for ros\u00e9 \u2014 every ingredient now has an image",
+          "scope": "data",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "wire 98 more transparent ingredient images (2% milk..za'atar)",
+          "scope": "data",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "wire 100 new transparent ingredient images (anchovie..kalamata olive)",
+          "scope": "data",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "wire 20 new transparent ingredient images (agave nectar..watermelon)",
+          "scope": "data",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "Auto-Plan now favors meals that share your meat and produce and finishes opened packages to cut waste",
+          "scope": null,
+          "pr": null,
+          "adr": null
+        }
+      ],
+      "fixes": [
+        {
+          "text": "wire vegetable_stock.webp, drop orphaned mealdb file",
+          "scope": "data",
+          "pr": null,
+          "adr": null
+        },
+        {
+          "text": "replace MealDB images with transparent webp, wire pepper family",
+          "scope": "ingredients",
+          "pr": null,
+          "adr": null
+        }
+      ]
+    },
     {
       "version": "v2.13.0",
       "date": "2026-10-28",
