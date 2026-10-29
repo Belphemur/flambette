@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { Minus, Pencil, Plus } from '@lucide/vue'
+import { onClickOutside } from '@vueuse/core'
 import { useQtyOverridesStore } from '../stores/groceryQtyOverrides'
 import { lineKeyIdentity } from '../lib/grocery'
 import { normalizeQtyOverrideAmount, stepQtyOverrideAmount } from '../lib/qtyOverrideValue'
@@ -26,6 +27,12 @@ import { normalizeQtyOverrideAmount, stepQtyOverrideAmount } from '../lib/qtyOve
  * amount, and Done to commit. The committed value normalizes ONCE
  * through `normalizeQtyOverrideAmount` — the store write and the
  * display share that one spelling (ADR-0037's clamp-once).
+ *
+ * Outside the editor is a DISMISS: a pointer anywhere outside the
+ * editor — and outside the badge trigger — closes it (the popover
+ * design rule in docs/agents/conventions.md: this class of floating
+ * panel closes on outside-click AND on Escape); clicks INSIDE the
+ * editor never dismiss it and the trigger keeps its own toggle.
  */
 
 const props = defineProps<{
@@ -146,6 +153,26 @@ function closeEditor(): void {
 function toggle(): void {
   openKey.value = isOpen.value ? null : props.lineKey
 }
+
+/* ---------- Outside-click dismiss (popover design rule) ---------- */
+
+const editorRef = ref<HTMLElement | null>(null)
+
+/**
+ * The teleported editor is the armature: a pointer down anywhere outside
+ * it — except on the badge trigger itself, which is excluded so tapping
+ * it keeps its own toggle semantics — closes the editor. Clicks INSIDE
+ * the editor never fire this (containment check) and the editor's own
+ * `@click.stop` also stops the event at its root. `onClickOutside` is the
+ * @vueuse/core v15 API (useClickAway was removed upstream).
+ */
+onClickOutside(
+  editorRef,
+  () => {
+    if (isOpen.value) closeEditor()
+  },
+  { ignore: [triggerRef] },
+)
 </script>
 
 <template>
@@ -187,10 +214,12 @@ function toggle(): void {
     <Teleport to="body">
       <div
         v-if="isOpen"
+        ref="editorRef"
         :style="editorStyle"
         class="z-50 flex w-fit min-w-32 items-center gap-1 whitespace-nowrap rounded-xl bg-surface-raised p-1 shadow-popover ring-1 ring-border"
         data-test="grocery-qty-editor"
         @click.stop
+        @keydown.esc="closeEditor"
       >
       <button
         type="button"

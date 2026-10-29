@@ -109,7 +109,9 @@ and are NOT adopted — the base layout is the contract.
   rendered through a `<Teleport to="body">` + `position:fixed` overlay
   (z-50, repositioned to the badge button on open/scroll/resize) so the
   grocery rows' `overflow-hidden` cards cannot clip it when the edited row
-  is the last visible one (issue #101 regression).
+  is the last visible one (issue #101 regression). A pointer anywhere outside
+  the editor — and outside the badge trigger — also closes it (the popover
+  design rule in docs/agents/conventions.md).
 - **Grocery tab ONLY** (owner ruling): the editable affordance exists on
   GroceryTab mobile + desktop. ShopView (shopping mode) renders the override
   value but offers NO editing.

@@ -242,3 +242,37 @@ test('the qty editor floats over the page and is not clipped by row overflow (is
   ).toHaveCount(1)
   await expectZeroMealimeRequests(page)
 })
+
+test('the qty editor closes on outside click and stays open on inside press (popover rule)', async ({
+  page,
+}) => {
+  const row = garlicRow(page)
+  await row.getByTestId('grocery-qty-edit').click()
+  const editor = page.getByTestId('grocery-qty-editor')
+  await expect(editor).toBeVisible()
+
+  // Clicks INSIDE the editor never dismiss it — a stepper press keeps
+  // the editor open (and leaves the draft to commit or discard).
+  await editor.getByTestId('grocery-qty-plus').click()
+  await expect(editor).toBeVisible()
+
+  // A pointer anywhere OUTSIDE the editor — and outside the badge
+  // trigger — dismisses it: the Grocery List heading is inert (no
+  // handler, no state change), so the dismissal itself is what the
+  // count asserts.
+  await page.getByRole('heading', { name: 'Grocery List' }).click()
+  await expect(editor).toHaveCount(0)
+
+  // Dismiss is NOT Done: the stepped draft was discarded — the badge
+  // still renders the derived amount.
+  await expect(row.getByTestId('grocery-qty')).toHaveText(/\d+ cloves/)
+
+  // The trigger keeps its own toggle: tap to re-open, tap to close
+  // (the trigger is EXCLUDED from the outside-click surface so it
+  // cannot dismiss-and-reopen in one hit).
+  await row.getByTestId('grocery-qty-edit').click()
+  await expect(editor).toBeVisible()
+  await row.getByTestId('grocery-qty-edit').click()
+  await expect(editor).toHaveCount(0)
+  await expectZeroMealimeRequests(page)
+})

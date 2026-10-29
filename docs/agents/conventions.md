@@ -108,6 +108,16 @@ Cross-cutting rules for any change in this repo. Each rule names its ADR;
   machinery, hooks `confirm-modal`/`confirm-action`/`confirm-cancel`)
   — never `window.confirm()`, never a bespoke dialog, never a toast.
   A modal waits for an answer: no auto-dismiss.
+- **Floating editor popovers close on outside-click AND Escape (ADR-0100)**:
+  any popover/floating panel rendered as an app-level overlay (Teleport to
+  `body`, `position:fixed`, the qty-editor class) dismisses on a pointer
+  outside it — the trigger that opened it stays EXCLUDED so its tap keeps
+  its own toggle semantics — and closes on Escape from anywhere inside it.
+  The pattern instance is `GroceryQtyBadge.vue`'s qty editor
+  (`onClickOutside` from `@vueuse/core`, the editor root as the armature,
+  the trigger in `ignore`); new panels of the same class follow it. A modal
+  (AppModal) is NOT this class: it is an intentional blocker that answers
+  only to its own controls, Escape and the scrim.
 - **Accessibility**: every interactive element gets an `aria-label`; every
   view must work in dark mode.
 - **Clickable affordance**: every clickable surface gets a pointer cursor,
