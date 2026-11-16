@@ -20,8 +20,10 @@ import {
 } from '../composables/useConfirm'
 import { usePlanStore } from '../stores/plan'
 import { useGroceryStore } from '../stores/grocery'
+import { useRoomStore } from '../stores/room'
 import { useUiStore } from '../stores/ui'
 import { useQtyOverridesStore } from '../stores/groceryQtyOverrides'
+import { GroceryFinishLatch } from './notificationTriggers'
 import { eventsDisplayLines, groceryDisplayLines } from './restrictions'
 import { useRestrictions } from '../composables/useRestrictions'
 
@@ -30,6 +32,12 @@ import { useRestrictions } from '../composables/useRestrictions'
  * aggregates the planned meals into store-section lines and tracks the
  * checked/total progress.
  */
+
+/**
+ * The grocery-finished trigger's ONE latch (ADR-0102), module-scoped so
+ * the Grocery tab and Shopping mode cannot double-send a check burst.
+ */
+const groceryFinishLatch = new GroceryFinishLatch()
 
 /** One row of the Grocery tab's Contributing Meals card (ADR-0071). */
 export interface MealLineSummary {
@@ -46,6 +54,10 @@ export interface MealLineSummary {
 export function useGroceryList() {
   const plan = usePlanStore()
   const checked = useGroceryStore()
+  // ADR-0102: the socket owner — the grocery-finished trigger asks the
+  // relay to fan out through it (and reads `isApplyingRemote` so a remote
+  // snapshot adoption is absorbed, not re-announced).
+  const room = useRoomStore()
   const ui = useUiStore()
   // ADR-0100: per-line quantity overrides (household-synced) — the
   // display pipeline consults them AFTER the derived sum is built.
@@ -196,6 +208,26 @@ export function useGroceryList() {
     () =>
       items.value.reduce((n, item) => n + item.lines.filter((l) => checked.map[l.key]).length, 0) +
       plan.customItems.filter((i) => checked.map[extraCheckedKey(i)]).length,
+  )
+
+  /* ---------- Household grocery-finished trigger (ADR-0102) ----------
+   *
+   * The false→true transition of the ALL-CHECKED verdict — the same
+   * counts GroceryTab's and ShopView's auto-collapse read, so there is no
+   * second derivation. The latch is MODULE-scoped: both consuming views
+   * run this engine, and a check burst must send exactly ONE notification
+   * even if two mounted instances observe it. An observation that arrived
+   * from the ROOM (a remote snapshot adopted inside `applyingRemote`) is
+   * ABSORBED, not fired: the peer that did the checking already
+   * notified, and a device joining later must not re-announce old news.
+   */
+  watch(
+    () => [totalCount.value, checkedCount.value] as const,
+    ([total, done]) => {
+      const fired = groceryFinishLatch.observe(total, done)
+      if (fired && !room.isApplyingRemote()) room.notify('grocery-finished')
+    },
+    { immediate: true, flush: 'sync' },
   )
 
   /** Sections with items, in canonical order. */

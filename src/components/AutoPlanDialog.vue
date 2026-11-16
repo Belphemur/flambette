@@ -324,7 +324,9 @@ function confirmAutoPlan() {
   // the mutable dialog refs a later dialog open would overwrite
   // (qodo thread 3). Same semantics in BOTH modes.
   const undo = () => {
-  plan.replacePlan(atConfirm, plan.customItems)
+  // ADR-0102: the UNDO restores the pre-apply state — not a plan start
+  // (the apply above already fired the trigger). Marked exempt here.
+  plan.replacePlan(atConfirm, plan.customItems, undefined, { notifyExempt: true })
   plan.setClearedIngredients(clearedAtConfirm)
   }
   const warning = result.warnings?.[0]

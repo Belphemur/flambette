@@ -154,7 +154,9 @@ export const STORE_SLICES: SliceDef<any>[] = [
       plan.clearPlan()
       plan.clearCustomItems()
       plan.setClearedIngredients({})
-      plan.replacePlan(v.entries, v.customItems ?? [])
+      // ADR-0102: a backup restore is not "a plan started" — the entries
+      // are the household's YESTERDAY. Marked exempt at this site.
+      plan.replacePlan(v.entries, v.customItems ?? [], undefined, { notifyExempt: true })
       if (v.clearedIngredients) plan.setClearedIngredients(v.clearedIngredients)
       // ADR-0034: absent/null clears the identity, which is what a legacy
       // backup means — it predates plan identities.

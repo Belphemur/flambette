@@ -52,6 +52,35 @@ export interface PlanIdentity {
 /** cookedHistory keeps at most this many entries, newest first. */
 const COOKED_HISTORY_CAP = 200
 
+/* ------------------------------------------------------------------ *
+ * ADR-0102 plan-started notification trigger.
+ *
+ * The plan store is the ONE writer of plan mutations, so the trigger is
+ * a callback registry here rather than a watcher somewhere else: the
+ * mutation sites (`addToPlan`, `replacePlan`) fire it on the 0 → ≥1
+ * transition, the cook path's own mutation (`undoMarkCooked`) is marked
+ * EXEMPT at its site, and the room store (the socket owner) subscribes
+ * and turns the event into a `notify` frame. No watcher infers cause.
+ *
+ * Module-scope, like the store itself: one registration per app session.
+ * ------------------------------------------------------------------ */
+export type PlanStartedListener = () => void
+
+const planStartedListeners = new Set<PlanStartedListener>()
+
+/** Subscribe to the plan's 0 → ≥1 transition. Returns the unsubscribe. */
+export function onPlanStarted(listener: PlanStartedListener): () => void {
+  planStartedListeners.add(listener)
+  return () => {
+    planStartedListeners.delete(listener)
+  }
+}
+
+/** Fire the trigger — called ONLY from the store's mutation sites. */
+function notifyPlanStarted(): void {
+  for (const listener of [...planStartedListeners]) listener()
+}
+
 /**
  * Stable identity key for a cook event: the per-device id when the row
  * carries one, the (variantId, cookedAt) pair otherwise (legacy rows from
@@ -214,12 +243,17 @@ export const usePlanStore = defineStore(
       delete clearedIngredients.value[meta.id]
       // First meal of a plan starts a new plan identity (ADR-0034): the
       // previous one was invalidated when the plan emptied.
-      if (plan.value.length === 0) {
+      const wasEmpty = plan.value.length === 0
+      if (wasEmpty) {
         planId.value = ''
         planCreatedAt.value = 0
       }
       plan.value.push({ variantId: meta.id, servings: count })
       ensurePlanIdentity()
+      // ADR-0102 plan-started: the plan JUST transitioned 0 → ≥1 at this
+      // ONE mutation site. A later add lands on a non-empty plan — no
+      // trigger (only the first recipe on an EMPTY plan is news).
+      if (wasEmpty) notifyPlanStarted()
     }
 
     function removeFromPlan(variantId: number): void {
@@ -465,6 +499,12 @@ export const usePlanStore = defineStore(
       if (!prior.entry) return
       if (!planContains(prior.entry.variantId)) {
         plan.value.push({ ...prior.entry })
+        // ADR-0102: this push can transition an EMPTY plan to 1 — it is
+        // the cook path's own plan mutation, and it is explicitly
+        // NOTIFICATION-EXEMPT at this one site (the household just cooked
+        // a meal; an Undo restoring it is not "a plan started"). The
+        // exemption lives HERE, at the mutation, never in a watcher
+        // inferring cause.
       }
       // Restore the identity ONLY if this device is still on that plan.
       // If the cook emptied the plan and a new meal has since started
@@ -542,12 +582,22 @@ export const usePlanStore = defineStore(
      * minting there would be the fork the undo exists to prevent).
      * Every other caller (Auto-Plan replace, an inbound room snapshot)
      * omits it and gets a fresh identity, exactly as before.
+     *
+     * ADR-0102 plan-started: a 0 → ≥1 replacement IS a plan start (the
+     * Auto-Plan apply), so it notifies like `addToPlan` — UNLESS the
+     * caller is not starting a plan. The exempt callers are explicit:
+     * an inbound room snapshot (the household ALREADY knows — the peer
+     * that started it notified), a backup restore (restoring yesterday's
+     * data is not news) and the undo paths (restoring the state a moment
+     * ago is not news). No watcher infers cause: the caller marks it.
      */
     function replacePlan(
       entries: PlanEntry[],
       custom: string[] = [],
       identity?: PlanIdentity,
+      options?: { notifyExempt?: boolean },
     ): void {
+      const wasEmpty = plan.value.length === 0
       plan.value = entries.map((e) => ({
         variantId: e.variantId,
         servings: normalizePlanServings(e.servings),
@@ -576,6 +626,9 @@ export const usePlanStore = defineStore(
         planCreatedAt.value = 0
         if (plan.value.length > 0) ensurePlanIdentity()
       }
+      // ADR-0102 plan-started (see the doc above): the 0 → ≥1 half of this
+      // replacement, with the exempt callers marked at THEIR site.
+      if (wasEmpty && plan.value.length > 0 && !options?.notifyExempt) notifyPlanStarted()
     }
 
     return {

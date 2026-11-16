@@ -22,6 +22,7 @@ import { useUiStore } from './ui'
 import { useIdentityStore } from './identity'
 import { SHARED_STATE_KEYS } from '../lib/roomSyncStores'
 import type { PushTriggerKey } from '../lib/pushKeys'
+import { onPlanStarted } from './plan'
 
 export type RoomStatus = 'idle' | 'connecting' | 'live' | 'error'
 
@@ -316,6 +317,16 @@ export const useRoomStore = defineStore('room', () => {
   let keepaliveTimer: ReturnType<typeof setInterval> | null = null
   /** True while we're writing a remote snapshot into the local stores. */
   let applyingRemote = false
+
+  /**
+   * ADR-0102: the trigger paths ask this instead of each holding a
+   * half-copy of the flag — an observation that arrived from the ROOM is
+   * absorbed by its trigger (the peer that made the change already
+   * notified), never re-announced by the adopter.
+   */
+  function isApplyingRemote(): boolean {
+    return applyingRemote
+  }
   /**
    * True from the moment a local edit is queued for push until that push
    * has actually gone out.
@@ -474,7 +485,14 @@ export const useRoomStore = defineStore('room', () => {
     // silently stranding our cooks from the household forever.
     let localRowsMissingFromRoom = false
     try {
-      plan.replacePlan(state.plan ?? [], state.customItems ?? [])
+      // ADR-0102: an inbound snapshot is the household's OWN plan arriving
+      // — the peer that started it already fired the plan-started trigger
+      // — so this replacement is notify-exempt (marked here, never
+      // inferred). The applyingRemote guard below is the belt; this is
+      // the braces.
+      plan.replacePlan(state.plan ?? [], state.customItems ?? [], undefined, {
+        notifyExempt: true,
+      })
       // ADR-0034: adopt the household's plan identity. `null` is an answer
       // ("the plan is empty"), an ABSENT key is silence (an older peer) and
       // leaves ours alone — the two are deliberately distinct.
@@ -757,6 +775,18 @@ export const useRoomStore = defineStore('room', () => {
     () => schedulePush(true),
     { deep: true, flush: 'sync' },
   )
+
+  // ADR-0102 plan-started: the plan store's 0 → ≥1 transition asks the
+  // relay to fan a `plan-started` notification out. The registration
+  // lives HERE because this store owns the socket — the plan store must
+  // not know it exists. A remote ADOPTION (the snapshot path above) is
+  // marked exempt at its own site, so anything that reaches this listener
+  // is a genuine local start. Best-effort: `notify` is a silent no-op
+  // when the socket is not live. The subscription lives as long as the
+  // store (one per session) — no unsubscribe path is needed.
+  onPlanStarted(() => {
+    if (!applyingRemote) notify('plan-started')
+  })
 
   // ADR-0031: favourites publish immediately too, but the watcher
   // distinguishes a genuine household opinion from this device FINISHING
@@ -1312,5 +1342,6 @@ export const useRoomStore = defineStore('room', () => {
     sendPushRegister,
     sendPushUnregister,
     notify,
+    isApplyingRemote,
   }
 })

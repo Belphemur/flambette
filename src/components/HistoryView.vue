@@ -204,7 +204,10 @@ function confirmReplan() {
     // "restoring exact state" then means restoring NO identity, and
     // minting one (plan.ts would, if the parameter were dropped) would
     // silently change that plan's provenance.
-    plan.replacePlan(atConfirm, customAtConfirm, identityAtConfirm)
+    // ADR-0102: the UNDO restores the confirm-time state — that is not a
+    // plan start (the apply above already fired the trigger), so this
+    // replacement is notify-exempt at its own site.
+    plan.replacePlan(atConfirm, customAtConfirm, identityAtConfirm, { notifyExempt: true })
     plan.setClearedIngredients(clearedAtConfirm)
   }
   const n = preview.length
