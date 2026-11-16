@@ -26,6 +26,7 @@ import {
 import {
   applyMigrations,
   readBlobGraceUntil,
+  PUSH_DROP_SQL,
   ROOM_DELETE_SQL,
   ROOM_UPSERT_SQL,
   storeClearSql,
@@ -220,6 +221,10 @@ export function createSqliteStores(
   const dropRoomAndStores = db.transaction((code: string) => {
     db.query(ROOM_DELETE_SQL).run(code)
     for (const store of SYNCED_STORES) db.query(storeClearSql(store)).run(code)
+    // ADR-0102: the room's push subscriptions are part of ITS state — a
+    // deleted room leaves no fan-out targets behind (a re-created room
+    // re-registers its members on their next join).
+    db.query(PUSH_DROP_SQL).run(code)
   })
   const writeFloorRecord = db.transaction((record: FloorRecord) => {
     db.query('INSERT OR REPLACE INTO rev_floor (code, rev, at) VALUES (?, ?, ?)').run(

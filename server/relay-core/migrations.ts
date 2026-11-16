@@ -148,6 +148,22 @@ export const ROOM_UPSERT_SQL = `INSERT INTO room
 export const ROOM_DELETE_SQL = 'DELETE FROM room WHERE code = ?'
 
 /**
+ * The push-subscription DML (ADR-0102) — shared for the same reason the
+ * room/store SQL is: the table is the shared schema's (migration 005),
+ * and one hand-written copy per runtime is exactly the drift ADR-0040
+ * exists to prevent. `keys` is the JSON `{p256dh, auth}` blob, bound by
+ * the adapter; `created_at` survives an update (first registration).
+ */
+export const PUSH_UPSERT_SQL = `INSERT INTO push_subscriptions (code, endpoint, keys, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT (code, endpoint) DO UPDATE SET
+    keys = excluded.keys,
+    updated_at = excluded.updated_at`
+export const PUSH_LIST_SQL = 'SELECT endpoint, keys FROM push_subscriptions WHERE code = ?'
+export const PUSH_DELETE_SQL = 'DELETE FROM push_subscriptions WHERE code = ? AND endpoint = ?'
+export const PUSH_DROP_SQL = 'DELETE FROM push_subscriptions WHERE code = ?'
+
+/**
  * When the legacy-blob grace window closes (ADR-0088's 2026-10-14
  * addendum): migration 002's ledger stamp plus `graceMs`. The deadline
  * lives in the LEDGER, not the environment — the core cannot read env,
@@ -187,6 +203,7 @@ import { MIGRATION_001 } from './migrations/001_rooms_and_stores'
 import { MIGRATION_002 } from './migrations/002_split_state_blobs'
 import { MIGRATION_003 } from './migrations/003_pantry'
 import { MIGRATION_004 } from './migrations/004_qty_overrides'
+import { MIGRATION_005 } from './migrations/005_push_subscriptions'
 
 /** The ordered migration list — append-only; never renumber a shipped step. */
 export const MIGRATIONS: readonly MigrationStep[] = [
@@ -194,6 +211,7 @@ export const MIGRATIONS: readonly MigrationStep[] = [
   MIGRATION_002,
   MIGRATION_003,
   MIGRATION_004,
+  MIGRATION_005,
 ]
 
 /** Apply every pending step, ascending, and verify what the ledger claims. */

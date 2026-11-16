@@ -91,10 +91,18 @@ export function parsePositiveNumber(raw: string | undefined | null, fallback: nu
 export function healthPayload(config: {
   roomTtlMs: number
   attemptLimit: number
+  /**
+   * The VAPID PUBLIC key, present when the relay can send pushes
+   * (ADR-0102) — the client reads it from this payload to subscribe; the
+   * private key never leaves the relay. null = the notification feature
+   * is silently off on this deployment.
+   */
+  vapidPublicKey?: string | null
 }): {
   service: typeof RELAY_SERVICE
   roomTtlMs: number
   attemptLimit: number
+  vapidPublicKey?: string | null
 } {
   return { service: RELAY_SERVICE, ...config }
 }

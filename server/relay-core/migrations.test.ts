@@ -36,7 +36,7 @@ describe('pending detection from the recorded version (ADR-0088 §4)', () => {
   test('a fresh database runs every step and records each', () => {
     const db = bunDb()
     applyMigrations(db, () => 1_000)
-    expect(ledger(db).map((r) => Number(r.version))).toEqual([1, 2, 3, 4])
+    expect(ledger(db).map((r) => Number(r.version))).toEqual([1, 2, 3, 4, 5])
     db.close()
   })
 
@@ -69,6 +69,7 @@ describe('pending detection from the recorded version (ADR-0088 §4)', () => {
       { version: 2, applied_at: 2_000 },
       { version: 3, applied_at: 2_000 },
       { version: 4, applied_at: 2_000 },
+      { version: 5, applied_at: 2_000 },
     ])
     // ...and the pending tail did its work: the blob was split into rows.
     const row = db.all('SELECT value FROM store_plan WHERE code = ? OR code = ?', 'c1', 'C1')
@@ -100,6 +101,7 @@ describe('migration 004 — the quantity overrides become a synchronized store (
       { version: 2, applied_at: 1_000 },
       { version: 3, applied_at: 1_000 },
       { version: 4, applied_at: 9_000 },
+      { version: 5, applied_at: 9_000 },
     ])
     const objects = db
       .all("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -196,7 +198,7 @@ describe('the explicit rollback entry point (down runs ONLY here)', () => {
     rollbackTo(db, 1)
 
     applyMigrations(db, () => 2_000)
-    expect(ledger(db).map((r) => Number(r.version))).toEqual([1, 2, 3, 4])
+    expect(ledger(db).map((r) => Number(r.version))).toEqual([1, 2, 3, 4, 5])
     // 002's INSERT OR IGNORE re-inserts nothing over the surviving rows;
     // the fold (rollback) left a valid JSON blob and the re-apply's split
     // keeps it — the grace mirror's POST-migration shape (ADR-0088's

@@ -58,6 +58,10 @@ import { canonicalizeCode } from '../relay-core/codes'
 import {
   applyMigrations,
   readBlobGraceUntil,
+  PUSH_DELETE_SQL,
+  PUSH_DROP_SQL,
+  PUSH_LIST_SQL,
+  PUSH_UPSERT_SQL,
   ROOM_DELETE_SQL,
   ROOM_UPSERT_SQL,
   storeClearSql,
@@ -65,6 +69,14 @@ import {
   storeUpsertSql,
   type MigrationDatabase,
 } from '../relay-core/migrations'
+import {
+  createPushFanout,
+  isNotifyKey,
+  parsePushRegistration,
+  parseVapidConfig,
+  type PushFanout,
+  type PushStore,
+} from '../relay-core/push'
 import {
   createStoreWritePlanner,
   joinSnapshot,
@@ -194,6 +206,10 @@ export class Room extends DurableObject<Env> {
         for (const store of SYNCED_STORES) {
           this.ctx.storage.sql.exec(storeClearSql(store), this.#code)
         }
+        // ADR-0102: the room's push subscriptions are part of ITS state —
+        // a deleted room leaves no fan-out targets behind (a re-created
+        // room re-registers its members on their next join).
+        this.ctx.storage.sql.exec(PUSH_DROP_SQL, this.#code)
         // The room is gone; its remembered texts are dead weight (kody
         // review) — the planner stays bounded by the live room set.
         this.#planner.forget(this.#code)
@@ -364,6 +380,70 @@ export class Room extends DurableObject<Env> {
   #readSerial(): number {
     const row = this.#one('SELECT serial FROM peer_serial WHERE code = ?', this.#code)
     return row ? Number(row.serial) : 0
+  }
+
+  /* ------------------------------------------------------------------- push */
+
+  /**
+   * The push-subscription rows' storage facade (ADR-0102) — the same
+   * "adapter owns state" seam the room stores use, over this object's SQL.
+   */
+  get #pushStore(): PushStore {
+    return {
+      list: (code) =>
+        ([...this.ctx.storage.sql.exec(PUSH_LIST_SQL, code)] as
+          | { endpoint?: unknown; keys?: unknown }[]
+        ).flatMap((row) => {
+          if (typeof row.endpoint !== 'string' || typeof row.keys !== 'string') return []
+          try {
+            const parsed = JSON.parse(row.keys) as { p256dh?: unknown; auth?: unknown }
+            if (typeof parsed.p256dh !== 'string' || typeof parsed.auth !== 'string') return []
+            return [{ endpoint: row.endpoint, keys: { p256dh: parsed.p256dh, auth: parsed.auth } }]
+          } catch {
+            return [] // a corrupt row skips, it never kills the fan-out
+          }
+        }),
+      register: (code, row, at) => {
+        this.#ensureSchema()
+        this.ctx.storage.sql.exec(
+          PUSH_UPSERT_SQL,
+          code,
+          row.endpoint,
+          JSON.stringify(row.keys),
+          at,
+          at,
+        )
+      },
+      unregister: (code, endpoint) => {
+        this.#ensureSchema()
+        this.ctx.storage.sql.exec(PUSH_DELETE_SQL, code, endpoint)
+      },
+      drop: (code) => {
+        this.#ensureSchema()
+        this.ctx.storage.sql.exec(PUSH_DROP_SQL, code)
+      },
+    }
+  }
+
+  /**
+   * The fan-out, built ONCE per object instance: the dedupe window is the
+   * helper's in-memory state, so a per-event rebuild would forget it.
+   * VAPID comes from the Worker secrets (this.env); a deployment without
+   * them builds a fan-out whose `notify` is a silent no-op.
+   */
+  #fanout: PushFanout | null = null
+
+  get #push(): PushFanout {
+    this.#fanout ??= createPushFanout({
+      vapid: parseVapidConfig({
+        publicKey: this.env.VAPID_PUBLIC_KEY ?? null,
+        privateKey: this.env.VAPID_PRIVATE_KEY ?? null,
+        subject: this.env.VAPID_SUBJECT ?? null,
+      }),
+      store: this.#pushStore,
+      now: () => Date.now(),
+    })
+    return this.#fanout
   }
 
   /* ---------------------------------------------------------------- sockets */
@@ -611,6 +691,37 @@ export class Room extends DurableObject<Env> {
         // runtime has actually reaped it. Announcing `size - 1` here would
         // be right by arithmetic and wrong in fact if the socket did not
         // close cleanly.
+        return
+      }
+
+      case 'push_register': {
+        // ADR-0102: register this device's subscription for the room.
+        // Membership required; malformed payloads are SILENCE — a bad
+        // frame must not disturb the room's sync surface (best-effort
+        // feature, same ruling as the Bun adapter).
+        if (!member) return
+        const row = parsePushRegistration({ endpoint: msg.endpoint, keys: msg.keys })
+        if (row) this.#push.register(this.#code, row, Date.now())
+        return
+      }
+
+      case 'push_unregister': {
+        if (!member) return
+        if (typeof msg.endpoint === 'string') this.#push.unregister(this.#code, msg.endpoint)
+        return
+      }
+
+      case 'notify': {
+        // ADR-0102: the relay fans ONE household trigger out. Dedupe, copy
+        // and delivery are the shared core's; unknown keys are silence
+        // (an older client speaking a newer trigger never errors the
+        // room). Fire-and-forget: the handler never blocks on sends.
+        if (!member) return
+        if (isNotifyKey(msg.key)) {
+          this.#push.notify(this.#code, msg.key, {
+            ...(typeof msg.self === 'string' ? { self: msg.self } : {}),
+          })
+        }
         return
       }
 

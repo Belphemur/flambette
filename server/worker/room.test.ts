@@ -5,7 +5,7 @@ import {
   runInDurableObject,
   SELF,
 } from 'cloudflare:test'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { SYNCED_STORES, storeTableName } from '../relay-core/stores'
 
 /**
@@ -572,7 +572,7 @@ describe('per-store schema (ADR-0088 §2/§4)', () => {
     const ledger = await runInDurableObject(roomStub(room), (_i, state) =>
       state.storage.sql.exec('SELECT version, name FROM schema_migrations ORDER BY version').toArray(),
     )
-    expect(ledger).toHaveLength(4)
+    expect(ledger).toHaveLength(5)
   })
 
   it('the json_valid CHECK makes a corrupt store write fail AT WRITE TIME', async () => {
@@ -741,7 +741,7 @@ describe('per-store schema (ADR-0088 §2/§4)', () => {
     // 001's guarded ALTER backfilled updated_at from last_activity.
     expect(split.updated).toEqual([{ updated_at: 222 }])
     expect(split.planMeta).toEqual([{ created_at: 111, updated_at: 222 }])
-    expect(split.ledger).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }])
+    expect(split.ledger).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }])
 
     // The split is a round-trip: the joiner adopts the blob's stores.
     const a = await dial(`/?op=join&room=${room}`)
@@ -964,5 +964,108 @@ describe('presence (ADR-0063)', () => {
     expect(await a.expect('state')).toMatchObject({ rev: 1, from: 'p2' })
     a.close()
     b.close()
+  })
+})
+
+/* ------------------------------------------------------------------ push */
+
+/** The push-subscription rows one room's DO currently holds (ADR-0102). */
+async function pushRows(stub: DurableObjectStub, code: string) {
+  return await runInDurableObject(stub, (_instance, state) =>
+    state.storage.sql
+      .exec('SELECT endpoint, keys FROM push_subscriptions WHERE code = ?', code)
+      .toArray(),
+  )
+}
+
+describe('push wiring (ADR-0102)', () => {
+  it('push_register stores the subscription row; a re-register upserts it', async () => {
+    const room = nextRoom()
+    const a = await dial(`/?op=create&room=${room}`)
+    await a.expect('created')
+
+    a.send({ type: 'push_register', endpoint: 'https://push.example/a', keys: { p256dh: 'K1', auth: 'AUTH' } })
+    await vi.waitFor(async () => {
+      expect(await pushRows(roomStub(room), room)).toEqual([
+        { endpoint: 'https://push.example/a', keys: '{"p256dh":"K1","auth":"AUTH"}' },
+      ])
+    })
+
+    // A key rotation is an UPSERT: one row, new keys.
+    a.send({ type: 'push_register', endpoint: 'https://push.example/a', keys: { p256dh: 'K2', auth: 'AUTH' } })
+    await vi.waitFor(async () => {
+      expect(await pushRows(roomStub(room), room)).toEqual([
+        { endpoint: 'https://push.example/a', keys: '{"p256dh":"K2","auth":"AUTH"}' },
+      ])
+    })
+    a.close()
+  })
+
+  it('push_unregister drops exactly the named endpoint', async () => {
+    const room = nextRoom()
+    const a = await dial(`/?op=create&room=${room}`)
+    await a.expect('created')
+    a.send({ type: 'push_register', endpoint: 'https://push.example/a', keys: { p256dh: 'K', auth: 'A' } })
+    a.send({ type: 'push_register', endpoint: 'https://push.example/b', keys: { p256dh: 'K', auth: 'A' } })
+    await vi.waitFor(async () => {
+      expect(await pushRows(roomStub(room), room)).toHaveLength(2)
+    })
+    a.send({ type: 'push_unregister', endpoint: 'https://push.example/a' })
+    await vi.waitFor(async () => {
+      expect(await pushRows(roomStub(room), room)).toEqual([
+        { endpoint: 'https://push.example/b', keys: '{"p256dh":"K","auth":"A"}' },
+      ])
+    })
+    a.close()
+  })
+
+  it('a malformed push_register is SILENCE, not an error frame (best-effort feature)', async () => {
+    const room = nextRoom()
+    const a = await dial(`/?op=create&room=${room}`)
+    await a.expect('created')
+    a.send({ type: 'push_register', endpoint: 'http://insecure/x', keys: { p256dh: 'K', auth: 'A' } })
+    a.send({ type: 'push_register', endpoint: 'https://ok/x', keys: { p256dh: 'K' } })
+    // No error frame arrived: the room surface is untouched. Proof by
+    // continuing to speak the normal protocol.
+    a.send({ type: 'state', rev: 1, state: { plan: [] } })
+    await expectStoredRev(roomStub(room), 1)
+    expect(await pushRows(roomStub(room), room)).toEqual([])
+    a.close()
+  })
+
+  it('notify without VAPID secrets is INERT: no error, the room keeps working', async () => {
+    // The test env carries no VAPID_* secrets — exactly the no-VAPID
+    // deployment, so `notify` must be a silent no-op here.
+    const room = nextRoom()
+    const a = await dial(`/?op=create&room=${room}`)
+    await a.expect('created')
+    const b = await dial(`/?op=join&room=${room}`)
+    await b.expect('joined')
+    await a.expect('peers')
+
+    a.send({ type: 'notify', key: 'plan-started' })
+    a.send({ type: 'notify', key: 'the-room-was-never-here' }) // unknown key: silence
+    // The sockets are unharmed — the normal protocol still flows.
+    a.send({ type: 'state', rev: 2, state: { plan: [] } })
+    expect(await b.expect('state')).toMatchObject({ rev: 2 })
+    a.close()
+    b.close()
+  })
+
+  it('room expiry clears the push rows along with the room', async () => {
+    const room = nextRoom()
+    const a = await dial(`/?op=create&room=${room}`)
+    await a.expect('created')
+    a.send({ type: 'push_register', endpoint: 'https://push.example/a', keys: { p256dh: 'K', auth: 'A' } })
+    await vi.waitFor(async () => {
+      expect(await pushRows(roomStub(room), room)).toHaveLength(1)
+    })
+
+    await ageRoom(roomStub(room), 25)
+    await runDurableObjectAlarm(roomStub(room))
+    await a.expect('error')
+
+    expect(await pushRows(roomStub(room), room)).toEqual([])
+    a.close()
   })
 })
