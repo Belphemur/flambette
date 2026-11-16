@@ -5,14 +5,14 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**107 records.** One file per decision (`ADR-NNNN-slug.md`),
+**108 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
 
 ## In force
 
-The 85 accepted records below all still govern. Skim the ones
+The 86 accepted records below all still govern. Skim the ones
 near your change before proposing anything -- they encode *why* the
 architecture is shaped the way it is.
 
@@ -103,6 +103,7 @@ architecture is shaped the way it is.
 | [0099](ADR-0099-ingredient-detail-data-corpus.md) | Ingredient detail data corpus — offline images + curated substitutions | 2026-10-28 |
 | [0100](ADR-0100-ingredient-detail-sheet-and-quantity-override.md) | Ingredient detail sheet + per-line quantity override | 2026-10-28 |
 | [0101](ADR-0101-auto-plan-class-aware-matching.md) | Auto-Plan v4 — class-aware waste matching (meat first, produce second, leftover-fill) _(supersedes ADR-0027)_ | 2026-10-28 |
+| [0102](ADR-0102-household-push-notifications.md) | Household Push Notifications (Web Push via the relay) | 2026-11-16 |
 
 ## Not in force
 
@@ -149,8 +150,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0102**). Do not count the files -- that is how the
-   collisions above happened (107 files share 101 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0103**). Do not count the files -- that is how the
+   collisions above happened (108 files share 102 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.
