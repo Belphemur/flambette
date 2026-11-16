@@ -24,6 +24,7 @@ import { normalizeQuickFilters, type QuickFilters } from './quickFilters'
 import { isServings, FALLBACK_SERVINGS, MAX_SERVINGS, MIN_SERVINGS } from './servings'
 import { onlyTrueKeys, isClearedIngredient } from './grocery'
 import { isStepTimer } from './stepTimer'
+import { isNotificationSettings } from '../stores/ui'
 import { isUnitSystem, UNIT_SYSTEMS } from './units'
 import { zipStore, unzipStore, type ZipEntry } from './zip'
 
@@ -363,6 +364,12 @@ export const STORE_SLICES: SliceDef<any>[] = [
         // The dietary restrictions travel too (the restriction ADR): the
         // ids are normalized on import by the store's sole writer.
         dietaryRestrictionIds: [...ui.dietaryRestrictionIds],
+        // ADR-0102: the device-local push toggle travels with the settings.
+        // Only `enabled` is exported — `asked` is per-BROWSER interaction
+        // state (whether the permission prompt already ran on THIS
+        // device), and the archive says nothing about another device's
+        // prompts.
+        notificationSettings: { enabled: ui.notificationSettings.enabled },
       }
     },
     validate(value) {
@@ -449,6 +456,13 @@ export const STORE_SLICES: SliceDef<any>[] = [
       if (v.timerAlertVibrate !== undefined && typeof v.timerAlertVibrate !== 'boolean') {
         return 'settings.json timerAlertVibrate must be a boolean'
       }
+      // ADR-0102: absent is a valid "don't touch" (a pre-ADR-0102 backup);
+      // present must be the toggle object — import is validation-first, so
+      // a malformed value rejects the whole archive rather than silently
+      // flipping the toggle.
+      if (v.notificationSettings !== undefined && !isNotificationSettings(v.notificationSettings)) {
+        return 'settings.json notificationSettings must be { enabled: boolean }'
+      }
       // The restriction ADR: absent is a valid "don't touch" (a pre-
       // restriction backup); present must be an array of integer ids —
       // import is validation-first, and unknown ids are DROPPED at write
@@ -478,6 +492,7 @@ export const STORE_SLICES: SliceDef<any>[] = [
         timerAlertSound?: unknown
         timerAlertVibrate?: unknown
         dietaryRestrictionIds?: unknown
+        notificationSettings?: unknown
       }
       useUiStore().applySettings({
         shareCookedHistory: v.shareCookedHistory,
@@ -510,6 +525,11 @@ export const STORE_SLICES: SliceDef<any>[] = [
         // predates restrictions says nothing about the device's — absent
         // means "don't touch", never a wipe.
         dietaryRestrictionIds: v.dietaryRestrictionIds,
+        // ADR-0102: deliberately NOT defaulted either (the timerAlert
+        // rule) — a backup that predates the toggle says nothing about
+        // this device's intent, and "absent = don't touch" keeps a restore
+        // from silently re-subscribing it. Only `enabled` moves (see read).
+        notificationSettings: v.notificationSettings,
       })
       if (v.theme) writeTheme(v.theme.theme ?? '')
     },

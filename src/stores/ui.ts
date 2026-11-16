@@ -42,6 +42,34 @@ export const TABS: { id: string; label: string; icon: Component; to: string }[] 
 ]
 
 /** An inline button on a toast (e.g. [Clear] [Cancel]). */
+/**
+ * Household push notifications (ADR-0102): the ONE device-local settings
+ * slice. `enabled` is subscription-INTENT ("this device wants the
+ * household's push notifications"), not a granted permission — the browser
+ * permission prompt is a separate, per-origin browser state. `asked` is the
+ * no-nagging marker: the offer on first room join must not repeat after a
+ * decline, so the join path checks it before calling requestPermission()
+ * (the Settings row always prompts again — a person pressing the toggle is
+ * a deliberate gesture). Never part of the room payload, same ruling
+ * family as ADR-0037's device-local defaults: browser permission is
+ * per-device, so one shared switch would lie about half the household.
+ */
+export interface NotificationSettings {
+  enabled: boolean
+  asked: boolean
+}
+
+/** Validate a restored/persisted blob: `enabled` is required (the toggle is
+ *  the slice's ONE fact); `asked` is optional so an object written by a
+ *  build that predates the marker still validates (the field was added
+ *  additively). Anything else is malformed. */
+export function isNotificationSettings(value: unknown): value is NotificationSettings {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const v = value as Record<string, unknown>
+  if (typeof v.enabled !== 'boolean') return false
+  return v.asked === undefined || typeof v.asked === 'boolean'
+}
+
 export interface ToastAction {
   label: string
   run: () => void
@@ -211,6 +239,28 @@ export const useUiStore = defineStore(
      */
     const timerAlertSound = ref(true)
     const timerAlertVibrate = ref(true)
+    /**
+     * Household push notifications (ADR-0102): whether this DEVICE wants
+     * the household's push notifications (someone started a plan, the
+     * grocery finished). ON by default — the owner's ruling, matching the
+     * timer-alert toggles above. Persisted in this slice (backups carry
+     * the toggle), NEVER in the room payload.
+     *
+     * Device-local on purpose (ADR-0037's defaultServings reasoning):
+     * browser permission is per-device, per-origin browser state — one
+     * household member must not configure another phone's notifications.
+     * Being ON is subscription-INTENT, not a granted permission; the
+     * subscription composable (`usePushSubscription`) consults the
+     * browser's actual permission before subscribing. `asked` records that
+     * the automatic first-join offer already ran, so a decline is never
+     * re-asked on later launches (the Settings row always re-offers —
+     * pressing it is a deliberate gesture).
+     */
+    const notificationSettings = ref<NotificationSettings>({ enabled: true, asked: false })
+    /** The toggle's ONE writer (the Settings row, and backup import). */
+    function setNotificationEnabled(enabled: boolean): void {
+      notificationSettings.value = { ...notificationSettings.value, enabled }
+    }
     /** Persistent household room code the app auto-joins on start (ADR-0019). */
     const householdRoom = ref('')
     /**
@@ -475,6 +525,7 @@ export const useUiStore = defineStore(
       timerAlertSound?: unknown
       timerAlertVibrate?: unknown
       dietaryRestrictionIds?: unknown
+      notificationSettings?: unknown
     }): void {
       if (typeof prefs.shareCookedHistory === 'boolean') {
         shareCookedHistory.value = prefs.shareCookedHistory
@@ -536,6 +587,15 @@ export const useUiStore = defineStore(
       // cover rather than failing the whole archive over one stale id.
       if (prefs.dietaryRestrictionIds !== undefined) {
         setDietaryRestrictionIds(prefs.dietaryRestrictionIds)
+      }
+      // ADR-0102: absent is a valid "don't touch" (a pre-ADR-0102 backup
+      // keeps the device's own toggle and prompt marker); a present value
+      // is validated by the slice before it gets here. Only `enabled` is
+      // restored — `asked` is per-browser interaction state (whether the
+      // permission prompt already ran HERE), and the archive that travels
+      // to another device says nothing about it.
+      if (isNotificationSettings(prefs.notificationSettings)) {
+        setNotificationEnabled(prefs.notificationSettings.enabled)
       }
     }
 
@@ -818,6 +878,8 @@ export const useUiStore = defineStore(
       shareCookedHistory,
       timerAlertSound,
       timerAlertVibrate,
+      notificationSettings,
+      setNotificationEnabled,
       historyShareDefaultMigrated,
       quickFilters,
       householdRoom,
@@ -903,6 +965,10 @@ export const useUiStore = defineStore(
         // settings.json backup through the registered slice.
         'timerAlertSound',
         'timerAlertVibrate',
+        // Household push notifications (ADR-0102): the device-local toggle
+        // + prompt marker, restored on the next launch and carried by the
+        // settings.json backup through the registered slice.
+        'notificationSettings',
         // The per-recipe pill dismissals (ADR-0083 pill round): device-local,
         // restored on the next launch — never the room payload, never a
         // backup slice (the dismissal is a gesture, not a preference).
