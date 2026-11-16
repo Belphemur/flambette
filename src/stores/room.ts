@@ -21,6 +21,7 @@ import { useRatingStore } from './rating'
 import { useUiStore } from './ui'
 import { useIdentityStore } from './identity'
 import { SHARED_STATE_KEYS } from '../lib/roomSyncStores'
+import type { PushTriggerKey } from '../lib/pushKeys'
 
 export type RoomStatus = 'idle' | 'connecting' | 'live' | 'error'
 
@@ -1175,6 +1176,71 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   /**
+   * This device's push-subscription endpoint (ADR-0102), set by the
+   * subscription composable after a successful sync. `notify` frames
+   * carry it as `self` so the relay can exclude the ACTOR's own
+   * subscription from the fan-out — the actor does not get pinged for
+   * their own action. Null while no subscription is known (the frame
+   * then simply omits `self`, and an older relay ignores the field).
+   */
+  const pushSelfEndpoint = ref<string | null>(null)
+
+  function setPushSelfEndpoint(endpoint: string | null): void {
+    pushSelfEndpoint.value = endpoint
+  }
+
+  /**
+   * Register this device's push subscription for the CURRENT room
+   * (ADR-0102): endpoint + keys as a `push_register` frame over the
+   * existing socket. The relay stores the row keyed (room, endpoint);
+   * subscriptions NEVER ride the room-sync payload. Silent no-op when
+   * the socket is not live — the next join re-registers (subscription
+   * lifecycle: every join is an upsert).
+   */
+  function sendPushRegister(
+    endpoint: string,
+    keys: { p256dh: string; auth: string },
+  ): void {
+    if (!socketLive()) return
+    try {
+      ws!.send(JSON.stringify({ type: 'push_register', endpoint, keys })) // socketLive proved open
+    } catch {
+      /* socket closing; the next join re-registers */
+    }
+  }
+
+  /**
+   * Drop this device's subscription row for the current room (the
+   * toggle-off path, ADR-0102). Best-effort like every socket send.
+   */
+  function sendPushUnregister(endpoint: string): void {
+    if (!socketLive()) return
+    try {
+      ws!.send(JSON.stringify({ type: 'push_unregister', endpoint })) // socketLive proved open
+    } catch {
+      /* socket closing; nothing to retry — the row is pruned on expiry */
+    }
+  }
+
+  /**
+   * Ask the relay to fan ONE household trigger out (ADR-0102): a `notify`
+   * frame with the trigger key. The relay owns the copy, the dedupe
+   * window and the delivery; the client never renders a page-local
+   * notification. NOT throttled client-side — the trigger sites are
+   * transition edges (0→1, all-checked), not bursts, and the relay's
+   * dedupe window is the real guard.
+   */
+  function notify(key: PushTriggerKey): void {
+    if (!socketLive()) return
+    try {
+      const self = pushSelfEndpoint.value
+      ws!.send(JSON.stringify(self ? { type: 'notify', key, self } : { type: 'notify', key })) // socketLive proved open
+    } catch {
+      /* socket closing; the trigger is gone (best-effort by nature) */
+    }
+  }
+
+  /**
    * Push a rename to the relay (ADR-0063): a `profile` frame carrying the
    * NEW name — the id is fixed at join and never re-sent. No-op when not
    * live: the next join carries the profile at upgrade, so the roster
@@ -1222,6 +1288,7 @@ export const useRoomStore = defineStore('room', () => {
     peers,
     members,
     joinedProfileId,
+    pushSelfEndpoint,
     /**
      * Armed by a deliberate `join()`/`create()` and still unanswered by a
      * `live` frame. The app shell reads it to land a first-time joiner on
@@ -1241,5 +1308,9 @@ export const useRoomStore = defineStore('room', () => {
     resume,
     leave,
     announceProfile,
+    setPushSelfEndpoint,
+    sendPushRegister,
+    sendPushUnregister,
+    notify,
   }
 })

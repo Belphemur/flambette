@@ -25,6 +25,11 @@ import IngredientDetailSheet from './components/IngredientDetailSheet.vue'
 import RosterSheet from './components/RosterSheet.vue'
 import TooltipBubble from './components/TooltipBubble.vue'
 import { useIdentityStore } from './stores/identity'
+import {
+  ensureServiceWorker,
+  resubscribeFromServiceWorker,
+  syncPushSubscription,
+} from './composables/usePushSubscription'
 import RecipeSearchField from './components/RecipeSearchField.vue'
 import OnboardingOverlay from './components/OnboardingOverlay.vue'
 import { appModalsOpen } from './components/AppModal.vue'
@@ -464,6 +469,36 @@ function stopBannerChecks() {
 
 onMounted(async () => {
   await router.isReady()
+  // ADR-0102: the service worker registers at app boot — secure-context
+  // guarded inside (a plain-HTTP LAN origin resolves to a null
+  // registration and the notification feature is simply unavailable).
+  // The subscription itself is driven by the two watchers below: the
+  // ADR names exactly two offer moments (first room join after the
+  // feature ships, and the Settings row's own toggle), so no watcher
+  // infers anything else.
+  void ensureServiceWorker()
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event: MessageEvent) => {
+      if ((event.data as { type?: unknown })?.type === 'push-resubscribe') {
+        void resubscribeFromServiceWorker()
+      }
+    })
+  }
+  // ADR-0102 subscription lifecycle: every room JOIN re-registers the
+  // subscription (an upsert server-side, so a key rotation converges on
+  // the next dial), and a toggle flip subscribes/unsubscribes at once.
+  watch(
+    () => room.status,
+    (status) => {
+      if (status === 'live') void syncPushSubscription('join')
+    },
+  )
+  watch(
+    () => ui.notificationSettings.enabled,
+    () => {
+      void syncPushSubscription('toggle')
+    },
+  )
   // ADR-0097: the boot route, captured BEFORE any await — the ?room= join
   // flow redirects to /recipes while the catalog loads, and reading
   // route.name after those awaits would open the tour over a fresh

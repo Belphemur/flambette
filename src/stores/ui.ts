@@ -261,6 +261,15 @@ export const useUiStore = defineStore(
     function setNotificationEnabled(enabled: boolean): void {
       notificationSettings.value = { ...notificationSettings.value, enabled }
     }
+    /**
+     * The permission offer has run (granted, declined or dismissed) — the
+     * automatic first-join offer must never repeat (ADR-0102's no-nagging
+     * rule). One-way on purpose: a browser reset of the permission is
+     * the browser's story to tell, not ours to guess at.
+     */
+    function markNotificationAsked(): void {
+      notificationSettings.value = { ...notificationSettings.value, asked: true }
+    }
     /** Persistent household room code the app auto-joins on start (ADR-0019). */
     const householdRoom = ref('')
     /**
@@ -880,6 +889,7 @@ export const useUiStore = defineStore(
       timerAlertVibrate,
       notificationSettings,
       setNotificationEnabled,
+      markNotificationAsked,
       historyShareDefaultMigrated,
       quickFilters,
       householdRoom,
