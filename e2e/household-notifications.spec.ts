@@ -215,7 +215,7 @@ test('grocery-finished: the last check notifies once; a new completion notifies 
   for (let i = 0; i < 60; i++) {
     if ((await groceryProgress(page).textContent())!.includes(`${total} / ${total} items`)) break
     // click(), never check(): a checked row SINKS to the end of its
-    // section (ADR-0071 delta-1), so check()'s "did this element become
+    // section (ADR-0095), so check()'s "did this element become
     // checked" verification races the re-render and re-resolves to the
     // next row — click once and let the counter be the verdict.
     await uncheckedVisible.first().click()

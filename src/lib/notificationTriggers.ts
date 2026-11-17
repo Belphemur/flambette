@@ -20,15 +20,29 @@
 export class GroceryFinishLatch {
   /** The last observed all-checked state across EVERY observer. */
   #latched = false
+  /** False until the FIRST observation arrives (see `observe`). */
+  #primed = false
 
   /**
    * Observe one (total, checked) snapshot. Returns true exactly when the
    * all-checked verdict JUST transitioned false→true — the one moment a
    * notification is news. An uncheck re-arms the latch; re-checking fires
    * once more (a genuinely new completion).
+   *
+   * The FIRST observation is an ADOPTION, never a trigger: the watcher
+   * runs immediately, so a device mounting into an already-all-checked
+   * list (room adoption, hydrated stores, documents finishing loading)
+   * would otherwise read that restored verdict as a fresh completion and
+   * re-announce old news the household already saw. Only a transition
+   * OBSERVED after the first one is a real local completion.
    */
   observe(totalCount: number, checkedCount: number): boolean {
     const allChecked = totalCount > 0 && checkedCount === totalCount
+    if (!this.#primed) {
+      this.#primed = true
+      this.#latched = allChecked
+      return false
+    }
     if (allChecked === this.#latched) return false
     this.#latched = allChecked
     return allChecked
