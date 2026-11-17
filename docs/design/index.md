@@ -103,7 +103,7 @@ architecture is shaped the way it is.
 | [0099](ADR-0099-ingredient-detail-data-corpus.md) | Ingredient detail data corpus — offline images + curated substitutions | 2026-10-28 |
 | [0100](ADR-0100-ingredient-detail-sheet-and-quantity-override.md) | Ingredient detail sheet + per-line quantity override | 2026-10-28 |
 | [0101](ADR-0101-auto-plan-class-aware-matching.md) | Auto-Plan v4 — class-aware waste matching (meat first, produce second, leftover-fill) _(supersedes ADR-0027)_ | 2026-10-28 |
-| [0102](ADR-0102-household-push-notifications.md) | Household Push Notifications (Web Push via the relay) | 2026-11-16 |
+| [0102](ADR-0102-household-push-notifications.md) | Household Push Notifications (Web Push via the relay) | 2026-11-17 |
 
 ## Not in force
 

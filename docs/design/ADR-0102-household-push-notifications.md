@@ -1,6 +1,6 @@
 # ADR-0102: Household Push Notifications (Web Push via the relay)
 
-Status: accepted (2026-11-16)
+Status: implemented in PR #114 (merged 2026-11-17)
 
 ## Context
 
