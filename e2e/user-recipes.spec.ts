@@ -22,6 +22,18 @@ import {
 const PANCAKE_ID = 900001
 const UI_KEY = 'mealime-planner:v1:ui'
 
+/** The fixture pancake's `addedAt` in public/data/user_recipes.json (2026-10-01T00:00:00Z). */
+const PANCAKE_ADDED_AT = 1_790_812_800_000
+/**
+ * The frozen clock for the badge test: one day after the fixture's add, so
+ * the NEW badge is inside its 30-day recency window FOREVER — written as an
+ * expression over the same literal so a fixture re-date cannot desync it.
+ * A wall-clock-based freeze re-broke this spec when the real date crossed
+ * 30 days past the fixture (CI run 43918800557); a fixed constant cannot.
+ * The out-of-window side is unit-covered in src/lib/userRecipes.test.ts.
+ */
+const FAKE_NOW = PANCAKE_ADDED_AT + 24 * 3_600_000
+
 /** The card for the pancake, wherever the grid put it. */
 function pancakeCard(page: Page) {
   return page.locator(`main article[data-variant-id="${PANCAKE_ID}"]`)
@@ -96,6 +108,18 @@ test.describe('user recipes and the source filter (ADR-0054)', () => {
   })
 
   test('the NEW badge shows inside the window and never says Mealime', async ({ page }) => {
+    // Freeze the clock on a FIXED constant, not runtime Date.now(): the
+    // addInitScript callback cannot reference module scope, so the value
+    // crosses as an argument. Re-goto applies the stub before the app boots.
+    await page.addInitScript(
+      (now) => {
+        Date.now = () => now
+      },
+      FAKE_NOW,
+    )
+    await page.goto('/recipes')
+    await dismissJoinCongrats(page)
+    await waitForCatalog(page)
     await searchPancake(page)
     const card = pancakeCard(page)
     const badge = card.getByTestId('new-badge')
