@@ -51,6 +51,7 @@ import { RESTRICTIONS } from '../lib/restrictions'
 import { useRestrictions } from '../composables/useRestrictions'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
 import { confirmModal } from '../composables/useConfirm'
+import { offerPushPermissionFromGesture } from '../composables/usePushSubscription'
 import { getCatalog } from '../lib/catalog'
 import { USER_RECIPE_ID_BASE } from '../lib/userRecipes'
 import {
@@ -122,8 +123,15 @@ const canNotify =
  * The row's ONE writer: the store action. Flipping ON is subscription
  * intent — the composable that owns the browser subscription reacts to
  * the change (Task-2 wiring); flipping OFF unsubscribes server-side.
+ *
+ * Safari requires the permission request to BEGIN inside the user
+ * gesture, so a turning-ON change first hands the gesture to the push
+ * composable (synchronously, before any await) — the sync the store
+ * watcher triggers then adopts the already-started offer instead of
+ * issuing a detached second prompt.
  */
 function setNotificationEnabled(enabled: boolean) {
+  if (enabled && canNotify) offerPushPermissionFromGesture()
   ui.setNotificationEnabled(enabled)
 }
 

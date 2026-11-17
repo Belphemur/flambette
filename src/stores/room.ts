@@ -1125,6 +1125,9 @@ export const useRoomStore = defineStore('room', () => {
     // this room's business, and publishing it would overwrite the new
     // room's state before it exists.
     unsentLocalEdit = false
+    // A new room is a different room: the old one keeps no registration
+    // for this device (ADR-0102) — dropped while its socket is open.
+    unregisterPushEndpoint()
     wantedCode = preferredCode ? normalizeRoomCode(preferredCode) : generateRoomCode()
     codeRerolls = 0
     connect('create', undefined, true)
@@ -1152,7 +1155,14 @@ export const useRoomStore = defineStore('room', () => {
     // A join into a DIFFERENT code starts clean: an undelivered edit
     // belongs to the room we were in, not to this one. A re-join of the
     // SAME code (resume, reconnect) keeps it — that is the case it is for.
-    if (code.value !== normalized) unsentLocalEdit = false
+    if (code.value !== normalized) {
+      unsentLocalEdit = false
+      // A different room must not inherit this device's registration:
+      // the old room's row is dropped while its socket is still open
+      // (ADR-0102). A same-code re-join keeps the registration (the
+      // relay row is keyed by room, and this socket is going back).
+      unregisterPushEndpoint()
+    }
     code.value = normalized
     sessionStorage.setItem(ROOM_CODE_KEY, code.value)
     reconnectAttempts = 0
@@ -1253,6 +1263,21 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   /**
+   * Release this device's push registration for the room the socket is
+   * about to leave (ADR-0102): an explicit `leave()`, or a deliberate
+   * dial into a DIFFERENT room. Without it the former room keeps a live
+   * endpoint row and keeps pushing to a device that is no longer there.
+   * MUST run while the old socket is still open; best-effort otherwise —
+   * a dead socket means the row prunes on expiry instead.
+   */
+  function unregisterPushEndpoint(): void {
+    const endpoint = pushSelfEndpoint.value
+    if (!endpoint) return
+    sendPushUnregister(endpoint)
+    setPushSelfEndpoint(null)
+  }
+
+  /**
    * Ask the relay to fan ONE household trigger out (ADR-0102): a `notify`
    * frame with the trigger key. The relay owns the copy, the dedupe
    * window and the delivery; the client never renders a page-local
@@ -1288,6 +1313,9 @@ export const useRoomStore = defineStore('room', () => {
 
   /** Leave the current room and go back to idle. */
   function leave() {
+    // The old room must stop pushing to this device the moment we leave
+    // it (ADR-0102) — sent while this room's socket is still open.
+    unregisterPushEndpoint()
     code.value = null
     status.value = 'idle'
     error.value = null

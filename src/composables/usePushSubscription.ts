@@ -82,11 +82,18 @@ let vapidKeyPromise: Promise<string | null> | null = null
  * ws scheme; otherwise the same origin the app was served from (dev/e2e
  * proxy, Docker compose, LAN).
  */
-function relayBase(): string {
+/** Exported for the unit spec (the ws→http scheme unwrap is pinned). */
+export function relayBase(): string {
   const override = import.meta.env.VITE_RELAY_WS_URL
   if (override) {
     try {
-      return new URL(override).origin
+      const url = new URL(override)
+      // The override is a WEBSOCKET url (`wss://…`) — fetch() only speaks
+      // http(s), so the ws scheme is unwrapped to its HTTP twin (the
+      // health payload is served by the same relay over the same origin).
+      if (url.protocol === 'wss:') url.protocol = 'https:'
+      else if (url.protocol === 'ws:') url.protocol = 'http:'
+      return url.origin
     } catch {
       // A nonsense override degrades to same-origin — the same fallback
       // the room store's wsUrl applies.
@@ -100,16 +107,36 @@ function relayBase(): string {
  * relay has no keys configured (the feature is silently off) or the fetch
  * fails (best-effort, retried on the next sync call).
  */
-function fetchVapidPublicKey(): Promise<string | null> {
+/**
+ * Test seam: the key memo is module state; the unit spec resets it so
+ * each test starts with a clean page-load.
+ */
+export function resetVapidKeyMemoForTests(): void {
+  vapidKeyPromise = null
+}
+
+/** Exported for the unit spec (the memoize-only-success contract). */
+export function fetchVapidPublicKey(): Promise<string | null> {
   vapidKeyPromise ??= (async () => {
     try {
       const res = await fetch(`${relayBase()}/ws?vapid=1`, { method: 'GET' })
-      if (!res.ok) return null
+      if (!res.ok) {
+        // A failed lookup is NOT memoized: clearing the promise lets the
+        // next sync retry instead of disabling push for the whole page.
+        vapidKeyPromise = null
+        return null
+      }
       const body = (await res.json()) as { vapidPublicKey?: unknown }
-      return typeof body.vapidPublicKey === 'string' && body.vapidPublicKey
-        ? body.vapidPublicKey
-        : null
+      const key =
+        typeof body.vapidPublicKey === 'string' && body.vapidPublicKey ? body.vapidPublicKey : null
+      if (!key) {
+        // A definitive "no keys configured" IS cached — the answer is
+        // the relay's configuration, not a transport failure.
+        return null
+      }
+      return key
     } catch {
+      vapidKeyPromise = null
       return null
     }
   })()
@@ -130,12 +157,69 @@ function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
 /** Why a sync is running — the permission rules differ (see below). */
 export type PushSyncReason = 'join' | 'toggle'
 
+/* ---------------------------------------------------- gesture-routed ask */
+
+/**
+ * The Settings row's in-flight offer, set SYNCHRONOUSLY by
+ * `offerPushPermissionFromGesture` inside the row's change handler and
+ * consumed once by the next sync. Module-scoped: the handler and the
+ * store watcher that follows it are different call frames.
+ */
+let gestureOffer: Promise<boolean> | null = null
+
+/** The gesture offer's answer, consumed exactly once by the next sync. */
+function takeGestureOffer(): Promise<boolean> | null {
+  const offer = gestureOffer
+  gestureOffer = null
+  return offer
+}
+
+/**
+ * Begin the browser's permission offer from a DIRECT user gesture (the
+ * Settings row's change handler). Safari requires the request to be
+ * initiated inside the gesture — before any await — so the row calls
+ * this synchronously, and the sync that follows adopts its answer
+ * instead of issuing a second prompt. The `asked` marker is spent HERE
+ * (the Settings row re-offers on every deliberate press, so spending it
+ * without a confirmed relay key cannot lock the feature out); the
+ * AUTOMATIC join offer (below) validates the relay's key first and only
+ * then marks + asks.
+ */
+export function offerPushPermissionFromGesture(): void {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'default') return
+  const ui = useUiStore()
+  gestureOffer ??= (async () => {
+    ui.markNotificationAsked()
+    return (await requestNotificationPermission()) === 'granted'
+  })()
+}
+
+/**
+ * Serialize subscription syncs: one runs at a time, in call order. Two
+ * overlapping syncs would race the browser subscription and the relay
+ * rows — an enable finishing AFTER an off sync released the endpoint
+ * could register a subscription the user just turned off. A call that
+ * arrives mid-flight waits for the running sync, then runs against
+ * fresh state (and `doSync` re-checks its preconditions after every
+ * await, so a state change mid-sync still wins).
+ */
+let syncChain: Promise<void> = Promise.resolve()
+
+export function syncPushSubscription(reason: PushSyncReason): Promise<void> {
+  const run = syncChain.then(() => doSync(reason))
+  syncChain = run.catch(() => {})
+  return run
+}
+
 /**
  * Bring this device's subscription in step with (toggle, permission,
- * room, relay). Safe to call at any moment from any surface: every gate
- * below is a silent no-op on its way out.
+ * room, relay). Serialized by `syncPushSubscription`; safe to call at
+ * any moment from any surface: every gate below is a silent no-op on
+ * its way out. State is RE-CHECKED after every await — a toggle flip or
+ * a room change that lands mid-sync must win over this sync's older
+ * intent.
  */
-export async function syncPushSubscription(reason: PushSyncReason): Promise<void> {
+async function doSync(reason: PushSyncReason): Promise<void> {
   const room = useRoomStore()
   const ui = useUiStore()
   const settings = ui.notificationSettings
@@ -153,25 +237,42 @@ export async function syncPushSubscription(reason: PushSyncReason): Promise<void
   // subscription is keyed by). Reconnecting lands here again.
   if (room.status !== 'live' || !room.code) return
   const registration = await ensureServiceWorker()
-  if (!registration) return
+  if (!registration || !ui.notificationSettings.enabled) return
 
-  // Permission. Denied: nothing will ever be shown — quietly out.
-  // Default: the ONE offer rules (module doc) — the automatic join offer
-  // runs once per device (`asked`), the Settings row's own toggle always
-  // re-offers because a person pressing it is a deliberate gesture.
-  const permission =
-    typeof Notification !== 'undefined' ? Notification.permission : ('denied' as const)
-  if (permission === 'denied') return
-  if (permission === 'default') {
-    if (reason === 'join' && settings.asked) return
-    ui.markNotificationAsked()
-    const granted = await requestNotificationPermission()
-    if (granted !== 'granted') return
+  // A gesture offer (the Settings row) takes precedence: its prompt was
+  // already requested synchronously inside the user gesture (Safari
+  // requires that), so the sync only adopts its answer.
+  const gesture = takeGestureOffer()
+  if (gesture) {
+    if (!(await gesture) || !ui.notificationSettings.enabled) return
+  } else {
+    // The relay's PUBLIC key must exist BEFORE the automatic offer is
+    // spent: on a keyless deployment the prompt (and the one-time
+    // `asked` marker) would be burned on a feature that cannot deliver.
+    const vapidKey = await fetchVapidPublicKey()
+    if (!vapidKey || !ui.notificationSettings.enabled) return
+
+    // Permission. Denied: nothing will ever be shown — quietly out.
+    // Default: the ONE offer rules (module doc) — the automatic join
+    // offer runs once per device (`asked`), the Settings row's own
+    // toggle always re-offers because a person pressing it is a
+    // deliberate gesture.
+    const permission =
+      typeof Notification !== 'undefined' ? Notification.permission : ('denied' as const)
+    if (permission === 'denied') return
+    if (permission === 'default') {
+      if (reason === 'join' && settings.asked) return
+      ui.markNotificationAsked()
+      const granted = await requestNotificationPermission()
+      if (granted !== 'granted' || !ui.notificationSettings.enabled) return
+    }
   }
 
-  // The relay's PUBLIC key. Without it there is nothing to subscribe to.
+  // The relay's PUBLIC key. Without it there is nothing to subscribe to
+  // (the gesture path lands here first — its prompt beat the key lookup
+  // to stay inside the user gesture).
   const vapidPublicKey = await fetchVapidPublicKey()
-  if (!vapidPublicKey) return
+  if (!vapidPublicKey || !ui.notificationSettings.enabled) return
 
   let subscription = await registration.pushManager.getSubscription()
   if (!subscription) {
@@ -185,6 +286,12 @@ export async function syncPushSubscription(reason: PushSyncReason): Promise<void
       // "unsubscribed" Settings state as a decline — never an error.
       return
     }
+  }
+  // Last re-check before the register: the subscription about to be
+  // published describes the CURRENT room and the CURRENT preference.
+  if (!ui.notificationSettings.enabled || room.status !== 'live' || !room.code) {
+    if (!ui.notificationSettings.enabled) await releaseSubscription()
+    return
   }
   const json = subscription.toJSON()
   const keys = json.keys as { p256dh?: unknown; auth?: unknown } | undefined
