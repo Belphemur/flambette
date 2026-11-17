@@ -357,7 +357,11 @@ describe('prune on dead subscriptions', () => {
     fanout.register('room', row('https://push.example/dead'), 500)
     fanout.register('room', row('https://push.example/alive'), 500)
     fanout.notify('room', 'plan-started')
-    await waitSends(sender, 1)
+    await waitSends(sender, 2)
+    // The prune runs after the /dead row's own async send completes, which
+    // can lag the first send by a tick under suite load — settle before
+    // asserting the store (the file's settle() doc names this race).
+    await settle()
     expect(sender.sent).toHaveLength(2)
     expect(store.list('room').map((r) => r.endpoint)).toEqual(['https://push.example/alive'])
   })
