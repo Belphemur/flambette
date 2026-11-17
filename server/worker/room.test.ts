@@ -984,18 +984,18 @@ describe('push wiring (ADR-0102)', () => {
     const a = await dial(`/?op=create&room=${room}`)
     await a.expect('created')
 
-    a.send({ type: 'push_register', endpoint: 'https://push.example/a', keys: { p256dh: 'K1', auth: 'AUTH' } })
+    a.send({ type: 'push_register', endpoint: 'https://fcm.googleapis.com/a', keys: { p256dh: 'K1', auth: 'AUTH' } })
     await vi.waitFor(async () => {
       expect(await pushRows(roomStub(room), room)).toEqual([
-        { endpoint: 'https://push.example/a', keys: '{"p256dh":"K1","auth":"AUTH"}' },
+        { endpoint: 'https://fcm.googleapis.com/a', keys: '{"p256dh":"K1","auth":"AUTH"}' },
       ])
     })
 
     // A key rotation is an UPSERT: one row, new keys.
-    a.send({ type: 'push_register', endpoint: 'https://push.example/a', keys: { p256dh: 'K2', auth: 'AUTH' } })
+    a.send({ type: 'push_register', endpoint: 'https://fcm.googleapis.com/a', keys: { p256dh: 'K2', auth: 'AUTH' } })
     await vi.waitFor(async () => {
       expect(await pushRows(roomStub(room), room)).toEqual([
-        { endpoint: 'https://push.example/a', keys: '{"p256dh":"K2","auth":"AUTH"}' },
+        { endpoint: 'https://fcm.googleapis.com/a', keys: '{"p256dh":"K2","auth":"AUTH"}' },
       ])
     })
     a.close()
@@ -1005,15 +1005,15 @@ describe('push wiring (ADR-0102)', () => {
     const room = nextRoom()
     const a = await dial(`/?op=create&room=${room}`)
     await a.expect('created')
-    a.send({ type: 'push_register', endpoint: 'https://push.example/a', keys: { p256dh: 'K', auth: 'A' } })
-    a.send({ type: 'push_register', endpoint: 'https://push.example/b', keys: { p256dh: 'K', auth: 'A' } })
+    a.send({ type: 'push_register', endpoint: 'https://fcm.googleapis.com/a', keys: { p256dh: 'K', auth: 'A' } })
+    a.send({ type: 'push_register', endpoint: 'https://fcm.googleapis.com/b', keys: { p256dh: 'K', auth: 'A' } })
     await vi.waitFor(async () => {
       expect(await pushRows(roomStub(room), room)).toHaveLength(2)
     })
-    a.send({ type: 'push_unregister', endpoint: 'https://push.example/a' })
+    a.send({ type: 'push_unregister', endpoint: 'https://fcm.googleapis.com/a' })
     await vi.waitFor(async () => {
       expect(await pushRows(roomStub(room), room)).toEqual([
-        { endpoint: 'https://push.example/b', keys: '{"p256dh":"K","auth":"A"}' },
+        { endpoint: 'https://fcm.googleapis.com/b', keys: '{"p256dh":"K","auth":"A"}' },
       ])
     })
     a.close()
@@ -1056,7 +1056,7 @@ describe('push wiring (ADR-0102)', () => {
     const room = nextRoom()
     const a = await dial(`/?op=create&room=${room}`)
     await a.expect('created')
-    a.send({ type: 'push_register', endpoint: 'https://push.example/a', keys: { p256dh: 'K', auth: 'A' } })
+    a.send({ type: 'push_register', endpoint: 'https://fcm.googleapis.com/a', keys: { p256dh: 'K', auth: 'A' } })
     await vi.waitFor(async () => {
       expect(await pushRows(roomStub(room), room)).toHaveLength(1)
     })

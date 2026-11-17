@@ -9,6 +9,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   NOTIFY_DEDUPE_MS,
   NOTIFY_KEYS,
+  PUSH_ROOM_CAP,
   createPushFanout,
   notifyPayload,
   parsePushRegistration,
@@ -47,9 +48,9 @@ const VAPID: VapidConfig = await generateVapidKeys()
 function makeStore() {
   const rows = new Map<
     string,
-    { code: string; endpoint: string; keys: { p256dh: string; auth: string } }
+    { code: string; endpoint: string; keys: { p256dh: string; auth: string }; at: number }
   >()
-  const calls = { register: 0, unregister: 0, drop: 0 }
+  const calls = { register: 0, unregister: 0, drop: 0, trim: 0 }
   const store: PushStore & { calls: typeof calls } = {
     calls,
     list(code) {
@@ -57,9 +58,22 @@ function makeStore() {
         .filter((r) => r.code === code)
         .map((r) => ({ endpoint: r.endpoint, keys: r.keys }))
     },
-    register(code, row) {
+    register(code, row, at = 0) {
       calls.register++
-      rows.set(`${code}\u0000${row.endpoint}`, { code, endpoint: row.endpoint, keys: row.keys })
+      rows.set(`${code}\u0000${row.endpoint}`, { code, endpoint: row.endpoint, keys: row.keys, at })
+    },
+    // The SQL eviction's Map equivalent: newest `cap` rows by the
+    // registration stamp survive, the rest go (the trim test's oracle).
+    trim(code, cap) {
+      calls.trim++
+      const kept = [...rows.values()]
+        .filter((r) => r.code === code)
+        .sort((a, b) => b.at - a.at)
+        .slice(0, cap)
+        .map((r) => r.endpoint)
+      for (const [key, row] of [...rows]) {
+        if (row.code === code && !kept.includes(row.endpoint)) rows.delete(key)
+      }
     },
     unregister(code, endpoint) {
       calls.unregister++
@@ -157,25 +171,60 @@ describe('notify trigger vocabulary', () => {
 })
 
 describe('parsePushRegistration', () => {
-  test('accepts a well-formed https subscription with both keys', () => {
+  test('accepts a well-formed subscription on a real push service', () => {
     const parsed = parsePushRegistration({
-      endpoint: 'https://push.example/abc',
+      endpoint: 'https://fcm.googleapis.com/fcm/send/abc',
       keys: { p256dh: 'P-256-KEY', auth: 'AUTH-SECRET' },
     })
     expect(parsed).toEqual({
-      endpoint: 'https://push.example/abc',
+      endpoint: 'https://fcm.googleapis.com/fcm/send/abc',
       keys: { p256dh: 'P-256-KEY', auth: 'AUTH-SECRET' },
     })
+    // Every service's real host shape: the provider's own subdomains and
+    // the bare apex, but never a look-alike suffix domain.
+    for (const endpoint of [
+      'https://updates.push.services.mozilla.com/wpush/v2/abc',
+      'https://push.services.mozilla.com/abc',
+      'https://wns2-by3p.notify.windows.com/abc',
+      'https://notify.windows.com/abc',
+      'https://web.push.apple.com/abc',
+    ]) {
+      expect(parsePushRegistration({ endpoint, keys: { p256dh: 'k', auth: 'a' } })).not.toBeNull()
+    }
   })
 
-  test('refuses non-https endpoints, missing keys, and nonsense shapes', () => {
-    expect(
-      parsePushRegistration({ endpoint: 'http://insecure/abc', keys: { p256dh: 'k', auth: 'a' } }),
-    ).toBeNull()
-    expect(parsePushRegistration({ endpoint: 'https://ok/abc', keys: { p256dh: 'k' } })).toBeNull()
-    expect(parsePushRegistration({ endpoint: 'https://ok/abc', keys: 'keys' })).toBeNull()
+  test('refuses hosts the fan-out must never dial (SSRF gate)', () => {
+    for (const endpoint of [
+      'http://insecure/abc',
+      'https://push.example.evil.com/abc', // look-alike suffix
+      'https://internal.example/abc', // not a push service
+      'https://127.0.0.1/abc', // IPv4 literal
+      'https://[::1]/abc', // IPv6 literal
+      'https://localhost/abc',
+      'https://fcm.googleapis.com:8443/abc', // non-default port
+      `https://fcm.googleapis.com/${'x'.repeat(3000)}`, // oversized URL
+    ]) {
+      expect(parsePushRegistration({ endpoint, keys: { p256dh: 'k', auth: 'a' } })).toBeNull()
+    }
+  })
+
+  test('refuses oversized key strings and nonsense shapes', () => {
+    expect(parsePushRegistration({ endpoint: 'https://fcm.googleapis.com/abc', keys: { p256dh: 'k' } })).toBeNull()
+    expect(parsePushRegistration({ endpoint: 'https://fcm.googleapis.com/abc', keys: 'keys' })).toBeNull()
     expect(parsePushRegistration({ keys: { p256dh: 'k', auth: 'a' } })).toBeNull()
     expect(parsePushRegistration({ endpoint: 42, keys: { p256dh: 'k', auth: 'a' } })).toBeNull()
+    expect(
+      parsePushRegistration({
+        endpoint: 'https://fcm.googleapis.com/abc',
+        keys: { p256dh: 'k'.repeat(600), auth: 'a' },
+      }),
+    ).toBeNull()
+    expect(
+      parsePushRegistration({
+        endpoint: 'https://fcm.googleapis.com/abc',
+        keys: { p256dh: 'k', auth: 'a'.repeat(600) },
+      }),
+    ).toBeNull()
   })
 })
 
@@ -186,14 +235,35 @@ describe('parseVapidConfig', () => {
     expect(parseVapidConfig({ privateKey: 'only-private' })).toBeNull()
   })
 
-  test('a full pair parses; the subject rides along when present', () => {
-    expect(parseVapidConfig({ publicKey: 'PUB', privateKey: 'PRIV' })).toEqual({
-      publicKey: 'PUB',
-      privateKey: 'PRIV',
+  test('a real-shape pair parses; the subject rides along when present', () => {
+    expect(parseVapidConfig({ publicKey: VAPID.publicKey, privateKey: VAPID.privateKey })).toEqual({
+      publicKey: VAPID.publicKey,
+      privateKey: VAPID.privateKey,
     })
     expect(
-      parseVapidConfig({ publicKey: 'PUB', privateKey: 'PRIV', subject: 'mailto:a@b.c' }),
-    ).toEqual({ publicKey: 'PUB', privateKey: 'PRIV', subject: 'mailto:a@b.c' })
+      parseVapidConfig({
+        publicKey: VAPID.publicKey,
+        privateKey: VAPID.privateKey,
+        subject: 'mailto:a@b.c',
+      }),
+    ).toEqual({
+      publicKey: VAPID.publicKey,
+      privateKey: VAPID.privateKey,
+      subject: 'mailto:a@b.c',
+    })
+  })
+
+  test('a malformed pair is inert, not half-enabled', () => {
+    // Undecodable base64url, wrong point shape, wrong scalar size — the
+    // config must be OFF from boot rather than throw at the first send.
+    for (const raw of [
+      { publicKey: '!!!not base64!!!', privateKey: VAPID.privateKey },
+      { publicKey: VAPID.publicKey.slice(0, 20), privateKey: VAPID.privateKey },
+      { publicKey: VAPID.publicKey, privateKey: 'short' },
+      { publicKey: 'PUB', privateKey: 'PRIV' },
+    ]) {
+      expect(parseVapidConfig(raw)).toBeNull()
+    }
   })
 })
 
@@ -234,6 +304,25 @@ describe('registration', () => {
     fanout.register('room', row('https://push.example/a'), 500)
     fanout.drop('room')
     expect(store.list('room')).toHaveLength(0)
+  })
+
+  test('the per-room quota evicts the OLDEST registration past the cap', () => {
+    const store = makeStore()
+    const { fanout } = fanoutWith(store)
+    for (let i = 0; i < PUSH_ROOM_CAP + 3; i++) {
+      fanout.register('room', row(`https://push.example/${i}`), 1000 + i)
+    }
+    expect(store.list('room')).toHaveLength(PUSH_ROOM_CAP)
+    // The three oldest rows (stamps 1000..1002) are gone; the newest
+    // survive — one member cannot grow the table or the fan-out unbounded.
+    const endpoints = store.list('room').map((r) => r.endpoint)
+    expect(endpoints).not.toContain('https://push.example/0')
+    expect(endpoints).not.toContain('https://push.example/1')
+    expect(endpoints).not.toContain('https://push.example/2')
+    expect(endpoints).toContain(`https://push.example/${PUSH_ROOM_CAP + 2}`)
+    // Another room's rows are untouched by this room's trim.
+    fanout.register('other', row('https://push.example/x'), 1)
+    expect(store.list('other')).toHaveLength(1)
   })
 })
 

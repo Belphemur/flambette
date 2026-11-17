@@ -60,6 +60,7 @@ import {
   readBlobGraceUntil,
   PUSH_DELETE_SQL,
   PUSH_DROP_SQL,
+  PUSH_EVICT_SQL,
   PUSH_LIST_SQL,
   PUSH_UPSERT_SQL,
   ROOM_DELETE_SQL,
@@ -422,6 +423,12 @@ export class Room extends DurableObject<Env> {
         this.#ensureSchema()
         this.ctx.storage.sql.exec(PUSH_DROP_SQL, code)
       },
+      // The per-room quota's SQL half (ADR-0102 hardening) — the shared
+      // eviction statement, bound by the adapter that owns the storage.
+      trim: (code, cap) => {
+        this.#ensureSchema()
+        this.ctx.storage.sql.exec(PUSH_EVICT_SQL, code, cap)
+      },
     }
   }
 
@@ -715,12 +722,18 @@ export class Room extends DurableObject<Env> {
         // ADR-0102: the relay fans ONE household trigger out. Dedupe, copy
         // and delivery are the shared core's; unknown keys are silence
         // (an older client speaking a newer trigger never errors the
-        // room). Fire-and-forget: the handler never blocks on sends.
+        // room). The handler still never BLOCKS on sends, but the
+        // fan-out promise is tracked with `ctx.waitUntil` so the runtime
+        // keeps the delivery alive past this handler's return — an
+        // un-tracked promise can be cancelled mid-flight when the event
+        // handler ends before the network sends settle.
         if (!member) return
         if (isNotifyKey(msg.key)) {
-          this.#push.notify(this.#code, msg.key, {
-            ...(typeof msg.self === 'string' ? { self: msg.self } : {}),
-          })
+          this.ctx.waitUntil(
+            this.#push.notify(this.#code, msg.key, {
+              ...(typeof msg.self === 'string' ? { self: msg.self } : {}),
+            }),
+          )
         }
         return
       }

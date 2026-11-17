@@ -175,6 +175,9 @@ function vapidJwk(keys: VapidKeys): {
  * Sign a VAPID JWT for ONE audience (an endpoint's origin, RFC 8292 §3).
  * `exp` is now + 12h (the RFC's own example horizon; tokens are minted per
  * send and never cached, so a short claim needs no revocation story).
+ * `now` is a MILLISECOND timestamp (Date.now()'s unit, what every caller
+ * passes); `exp` is a Unix-SECONDS claim, so the conversion happens here —
+ * the two units must never be added raw.
  */
 export async function signVapidJwt(
   keys: VapidKeys,
@@ -185,7 +188,7 @@ export async function signVapidJwt(
   const header = { typ: 'JWT', alg: 'ES256' }
   const payload: Record<string, unknown> = {
     aud: audience,
-    exp: now + 12 * 60 * 60,
+    exp: Math.floor(now / 1000) + 12 * 60 * 60,
   }
   if (subject) payload.sub = subject
   const signingInput =
@@ -344,6 +347,10 @@ export async function sendWebPush(
         TTL: '3600',
       },
       body: bytes(body),
+      // A redirect would carry the VAPID-signed POST off the validated
+      // push service — the destination is confined to what registration
+      // allowed, so a redirect is refused, not followed.
+      redirect: 'error',
     } as unknown as RequestInit,
   )
   return {

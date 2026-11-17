@@ -27,7 +27,7 @@
  *   working unchanged (ADR-0102's upgrade-inert ruling).
  */
 
-import { sendWebPush, type VapidConfig } from './webpush'
+import { b64urlDecode, sendWebPush, type VapidConfig } from './webpush'
 
 /** One household event a member can be pushed about (mirrors the client's `src/lib/pushKeys.ts`). */
 export type NotifyKey = 'plan-started' | 'grocery-finished'
@@ -90,10 +90,75 @@ export interface PushStore {
   unregister(code: string, endpoint: string): void
   /** Forget the room's subscriptions entirely (the room is gone). */
   drop(code: string): void
+  /**
+   * Bound the room's rows to `cap`, evicting the OLDEST `updated_at`
+   * first (the per-room quota, ADR-0102 hardening — the core owns the
+   * decision, the adapters own the SQL).
+   */
+  trim(code: string, cap: number): void
 }
 
 /** How long one (room, key) trigger is suppressed after a send. */
 export const NOTIFY_DEDUPE_MS = 60_000
+
+/**
+ * The push-subscription cap per room (ADR-0102 hardening): a room's
+ * devices are a handful, so 32 rows is orders of magnitude above real
+ * use while bounding both the storage a `push_register` storm can consume
+ * and the number of sequential sends one `notify` can trigger.
+ */
+export const PUSH_ROOM_CAP = 32
+
+/**
+ * The endpoint URL's length cap (ADR-0102 hardening). Real push-service
+ * endpoints are ~150 chars; 2048 is a generous ceiling that keeps a
+ * junk frame from parking arbitrary-length strings in storage.
+ */
+export const PUSH_ENDPOINT_MAX_LENGTH = 2048
+
+/**
+ * The subscription key strings' length caps. A p256dh is the base64url
+ * of a 65-byte point (87 chars) and an auth secret 16+ bytes (22 chars);
+ * 512 lets padding variants through while bounding junk.
+ */
+const PUSH_KEY_MAX_LENGTH = 512
+
+/**
+ * The push-service hosts a subscription endpoint may live on. A room
+ * member can already reach the relay, so without this gate they could
+ * turn it into a proxy that POSTs VAPID-signed, encrypted payloads to
+ * ANY https host (internal services included) — the fan-out's outbound
+ * requests are confined to the real push services (ADR-0102 hardening).
+ */
+const ALLOWED_ENDPOINT_HOSTS = [
+  'fcm.googleapis.com', // Chrome / Android (FCM)
+  'push.services.mozilla.com', // Firefox (updates.push.services.mozilla.com)
+  'notify.windows.com', // Edge / Windows (wns2-*.notify.windows.com)
+  'web.push.apple.com', // Safari
+] as const
+
+/**
+ * Whether `endpoint` is a subscription URL the relay will fan out to.
+ * The four real push services only, https on the default port, never an
+ * IP literal, a localhost/`.local` name or an oversized URL — everything
+ * else is refused at registration, the ONLY ingress this table has.
+ */
+export function isAllowedPushEndpoint(endpoint: string): boolean {
+  if (!endpoint.startsWith('https://')) return false
+  if (endpoint.length > PUSH_ENDPOINT_MAX_LENGTH) return false
+  let url: URL
+  try {
+    url = new URL(endpoint)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'https:' || url.port !== '') return false
+  const host = url.hostname.toLowerCase()
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return false
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return false // IPv4 literal
+  if (host.includes(':')) return false // IPv6 literal
+  return ALLOWED_ENDPOINT_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))
+}
 
 export interface PushFanout {
   register(code: string, row: PushSubscriptionRow, now: number): void
@@ -101,11 +166,15 @@ export interface PushFanout {
   drop(code: string): void
   /**
    * Fan ONE trigger out to every subscription registered for the room,
-   * except the sender's own. Fire-and-forget: returns immediately (the
-   * adapters' message handlers must not block on network sends), and
-   * NEVER throws — a failed send is logged and skipped.
+   * except the sender's own. NEVER throws and NEVER blocks the caller:
+   * the returned promise settles when every send attempt has finished,
+   * and a failed send is logged and skipped inside it. The Bun adapter
+   * ignores the promise (fire-and-forget by design — its handler must
+   * not wait on network sends); the Worker adapter hands it to
+   * `ctx.waitUntil` so the runtime keeps the delivery alive past the
+   * message handler's return.
    */
-  notify(code: string, key: NotifyKey, options?: { self?: string; now?: number }): void
+  notify(code: string, key: NotifyKey, options?: { self?: string; now?: number }): Promise<void>
 }
 
 /**
@@ -131,17 +200,21 @@ export function createPushFanout(config: {
     code: string,
     key: NotifyKey,
     options?: { self?: string; now?: number },
-  ): void {
+  ): Promise<void> {
     // No VAPID keys: silently off. The registration rows may still exist;
     // nothing is sent and nothing is pruned (the rows are cheap, and a
     // later configuration refreshes the relay with real send ability).
-    if (!vapid) return
+    if (!vapid) return Promise.resolve()
     const at = options?.now ?? now()
     const dedupeKey = `${code}\u0000${key}`
     const previous = lastSent.get(dedupeKey)
-    if (previous !== undefined && at - previous < NOTIFY_DEDUPE_MS) return
+    if (previous !== undefined && at - previous < NOTIFY_DEDUPE_MS) {
+      return Promise.resolve()
+    }
     lastSent.set(dedupeKey, at)
-    void fanOut(code, key, options?.self).catch((err) => {
+    // The promise is handed back to the caller; its catch keeps the
+    // contract "never rejects" while the failure is still logged.
+    return fanOut(code, key, options?.self).catch((err) => {
       log(`[relay] push fan-out failed: ${(err as Error).message}`)
     })
   }
@@ -177,7 +250,12 @@ export function createPushFanout(config: {
   }
 
   return {
-    register: (code, row, at) => store.register(code, row, at ?? now()),
+    register: (code, row, at) => {
+      store.register(code, row, at ?? now())
+      // The room's row count is the quota: evict the stalest device rows
+      // so one member cannot grow the table or the fan-out without bound.
+      store.trim(code, PUSH_ROOM_CAP)
+    },
     unregister: (code, endpoint) => store.unregister(code, endpoint),
     drop: (code) => {
       store.drop(code)
@@ -193,17 +271,24 @@ export function createPushFanout(config: {
  * when the frame is malformed — an unusable claim is silence (the room is
  * fine), never an error frame: a notification is best-effort by nature
  * and a bad frame must not disturb the room's sync surface.
+ *
+ * The endpoint is confined to the real push services (`isAllowedPushEndpoint`):
+ * a room-code holder is already inside the relay, and the fan-out turns
+ * every stored row into an outbound VAPID-signed POST — without the
+ * allow-list that is an SSRF dial to any https host. Key strings are
+ * length-capped for the same storage-abuse reason.
  */
 export function parsePushRegistration(value: {
   endpoint?: unknown
   keys?: unknown
 }): PushSubscriptionRow | null {
   const endpoint = value.endpoint
-  if (typeof endpoint !== 'string' || !endpoint.startsWith('https://')) return null
+  if (typeof endpoint !== 'string' || !isAllowedPushEndpoint(endpoint)) return null
   const keys = value.keys
   if (typeof keys !== 'object' || keys === null) return null
   const { p256dh, auth } = keys as Record<string, unknown>
-  if (typeof p256dh !== 'string' || !p256dh || typeof auth !== 'string' || !auth) return null
+  if (typeof p256dh !== 'string' || !p256dh || p256dh.length > PUSH_KEY_MAX_LENGTH) return null
+  if (typeof auth !== 'string' || !auth || auth.length > PUSH_KEY_MAX_LENGTH) return null
   return { endpoint, keys: { p256dh, auth } }
 }
 
@@ -221,6 +306,16 @@ export function parseVapidConfig(raw: {
   subject?: string | null
 }): VapidConfig | null {
   if (!raw.publicKey || !raw.privateKey) return null
+  // Shape-validate BEFORE the fan-out is built: a half-decodable or
+  // wrong-sized pair must be inert from boot, not half-enabled until the
+  // first send throws (the same all-or-nothing ruling as above).
+  try {
+    const point = b64urlDecode(raw.publicKey)
+    if (point.length !== 65 || point[0] !== 4) return null
+    if (b64urlDecode(raw.privateKey).length !== 32) return null
+  } catch {
+    return null
+  }
   return {
     publicKey: raw.publicKey,
     privateKey: raw.privateKey,

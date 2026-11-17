@@ -74,7 +74,10 @@ async function verifyKey(): Promise<CryptoKey> {
 
 describe('signVapidJwt (RFC 8292)', () => {
   test('the token verifies against its own public key', async () => {
-    const now = 1_000_000
+    // `now` is MILLISECONDS (what every caller passes — Date.now()'s
+    // unit); `exp` must be the Unix-SECONDS conversion + 12h, NOT the
+    // raw addition that would land far past the push services' 24h cap.
+    const now = 1_700_000_000_123
     const token = await signVapidJwt(VAPID, 'https://push.example', 'mailto:test@example.com', now)
     const [headerB64, payloadB64, signatureB64] = token.split('.')
     const header = JSON.parse(new TextDecoder().decode(b64urlDecode(headerB64))) as Record<string, unknown>
@@ -83,7 +86,10 @@ describe('signVapidJwt (RFC 8292)', () => {
     expect(header.alg).toBe('ES256')
     expect(payload.aud).toBe('https://push.example')
     expect(payload.sub).toBe('mailto:test@example.com')
-    expect(payload.exp).toBe(now + 12 * 60 * 60)
+    expect(payload.exp).toBe(Math.floor(now / 1000) + 12 * 60 * 60)
+    // The claim the push services actually enforce: expiry within 24h of
+    // the token's mintage (in Unix seconds).
+    expect(Math.floor(now / 1000) - payload.exp).toBeLessThanOrEqual(24 * 60 * 60)
     const verified = await crypto.subtle.verify(
       { name: 'ECDSA', hash: 'SHA-256' },
       await verifyKey(),

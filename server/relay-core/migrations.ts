@@ -160,6 +160,18 @@ export const PUSH_UPSERT_SQL = `INSERT INTO push_subscriptions (code, endpoint, 
     keys = excluded.keys,
     updated_at = excluded.updated_at`
 export const PUSH_LIST_SQL = 'SELECT endpoint, keys FROM push_subscriptions WHERE code = ?'
+/**
+ * The per-room row cap (ADR-0102 hardening): keep the `cap` newest rows
+ * by `updated_at`, delete the rest. Shared for the same reason the
+ * upsert is — one hand-written eviction per runtime is exactly the drift
+ * the shared schema exists to prevent. `updated_at DESC, rowid DESC`
+ * keeps the order total on ties; `LIMIT -1 OFFSET ?` selects everything
+ * past the cap.
+ */
+export const PUSH_EVICT_SQL = `DELETE FROM push_subscriptions WHERE rowid IN (
+  SELECT rowid FROM push_subscriptions WHERE code = ?
+  ORDER BY updated_at DESC, rowid DESC
+  LIMIT -1 OFFSET ?)`
 export const PUSH_DELETE_SQL = 'DELETE FROM push_subscriptions WHERE code = ? AND endpoint = ?'
 export const PUSH_DROP_SQL = 'DELETE FROM push_subscriptions WHERE code = ?'
 

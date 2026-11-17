@@ -50,6 +50,7 @@ import {
 import {
   PUSH_DELETE_SQL,
   PUSH_DROP_SQL,
+  PUSH_EVICT_SQL,
   PUSH_LIST_SQL,
   PUSH_UPSERT_SQL,
 } from './relay-core/migrations'
@@ -347,6 +348,9 @@ const pushStore: PushStore = {
   unregister: (code, endpoint) =>
     db?.query(PUSH_DELETE_SQL).run(code, endpoint),
   drop: (code) => db?.query(PUSH_DROP_SQL).run(code),
+  // The per-room quota's SQL half (ADR-0102 hardening) — the shared
+  // eviction statement, bound by the adapter that owns the database.
+  trim: (code, cap) => db?.query(PUSH_EVICT_SQL).run(code, cap),
 }
 
 const pushFanout = createPushFanout({ vapid: VAPID, store: pushStore, now: () => Date.now() })
