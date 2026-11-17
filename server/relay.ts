@@ -40,6 +40,20 @@ import { healthPayload, ROOM_TTL_MS as ROOM_TTL_DEFAULT_MS, parsePositiveNumber 
 import { parseClientFrame, RELAY_ERRORS, type RelayMessage } from './relay-core/protocol'
 import type { ExpiryReason } from './relay-core/lifecycle'
 import { makeThrottle, MemoryAttemptBuckets } from './relay-core/throttle'
+import {
+  createPushFanout,
+  parsePushRegistration,
+  parseVapidConfig,
+  isNotifyKey,
+  type PushStore,
+} from './relay-core/push'
+import {
+  PUSH_DELETE_SQL,
+  PUSH_DROP_SQL,
+  PUSH_EVICT_SQL,
+  PUSH_LIST_SQL,
+  PUSH_UPSERT_SQL,
+} from './relay-core/migrations'
 import { createSqliteStores, openRelayDatabase, persistedDeadlines } from './relaySqlite'
 
 /* ------------------------------------------------------------------ config */
@@ -64,6 +78,17 @@ const ROOM_TTL_MS = parsePositiveNumber(
  * volume mounts the directory; `:memory:` is an explicit opt-in for tests.
  */
 const RELAY_DB_PATH = process.env.RELAY_DB_PATH ?? '/data/relay.sqlite3'
+/**
+ * The VAPID configuration (ADR-0102): self-hosters generate their own
+ * pair (`web-push generate-vapid-keys`) and pass it via env. A relay with
+ * no (or half) keys configured has push SILENTLY OFF — rooms keep working
+ * unchanged, `notify` frames are accepted and ignored.
+ */
+const VAPID = parseVapidConfig({
+  publicKey: process.env.RELAY_VAPID_PUBLIC_KEY,
+  privateKey: process.env.RELAY_VAPID_PRIVATE_KEY,
+  subject: process.env.RELAY_VAPID_SUBJECT,
+})
 /** Transport liveness only — see the heartbeat at the bottom. */
 const HEARTBEAT_MS = 30_000
 
@@ -293,6 +318,42 @@ function notifyExpired(code: string, reason: ExpiryReason): void {
 function send(ws: Socket, payload: RelayMessage): void {
   if (ws.readyState === 1 /* OPEN */) ws.send(JSON.stringify(payload))
 }
+
+/* ------------------------------------------------------------------- push */
+
+/**
+ * The push fan-out (ADR-0102) — ONE shared core helper over this
+ * adapter's SQLite. The rows survive a relay restart (the phone that owns
+ * a subscription may be closed for days); a deleted room's rows go with
+ * it (the store drop in relaySqlite clears them).
+ */
+const pushStore: PushStore = {
+  list: (code) =>
+    (
+      db?.query(PUSH_LIST_SQL).all(code) as
+        | { endpoint?: unknown; keys?: unknown }[]
+        | undefined
+    )?.flatMap((row) => {
+      if (typeof row.endpoint !== 'string' || typeof row.keys !== 'string') return []
+      try {
+        const parsed = JSON.parse(row.keys) as { p256dh?: unknown; auth?: unknown }
+        if (typeof parsed.p256dh !== 'string' || typeof parsed.auth !== 'string') return []
+        return [{ endpoint: row.endpoint, keys: { p256dh: parsed.p256dh, auth: parsed.auth } }]
+      } catch {
+        return [] // a corrupt row skips, it never kills the fan-out
+      }
+    }) ?? [],
+  register: (code, row, now) =>
+    db?.query(PUSH_UPSERT_SQL).run(code, row.endpoint, JSON.stringify(row.keys), now, now),
+  unregister: (code, endpoint) =>
+    db?.query(PUSH_DELETE_SQL).run(code, endpoint),
+  drop: (code) => db?.query(PUSH_DROP_SQL).run(code),
+  // The per-room quota's SQL half (ADR-0102 hardening) — the shared
+  // eviction statement, bound by the adapter that owns the database.
+  trim: (code, cap) => db?.query(PUSH_EVICT_SQL).run(code, cap),
+}
+
+const pushFanout = createPushFanout({ vapid: VAPID, store: pushStore, now: () => Date.now() })
 
 /* --------------------------------------------------------------- throttle */
 
@@ -593,7 +654,18 @@ try {
       return new Response(JSON.stringify(healthPayload({
         roomTtlMs: ROOM_TTL_MS,
         attemptLimit: throttle.limit,
-      })), { headers: { 'content-type': 'application/json' } })
+        // ADR-0102: the CLIENT half of the subscription needs the VAPID
+        // PUBLIC key to subscribe — it is read from this payload (the
+        // private key never leaves the relay). null = push disabled.
+        // CORS open: the public key is public, and the Cloudflare web app
+        // (flambette.app) fetches it cross-origin from the relay origin.
+        vapidPublicKey: VAPID?.publicKey ?? null,
+      })), {
+        headers: {
+          'content-type': 'application/json',
+          'access-control-allow-origin': '*',
+        },
+      })
     },
     websocket: {
       open(ws) {
@@ -714,6 +786,38 @@ try {
             detach(ws)
             send(ws, { type: 'left' })
             break
+
+          case 'push_register': {
+            // ADR-0102: register this device's subscription for the room.
+            // Membership required (a subscription belongs to a room);
+            // malformed payloads are SILENCE — a bad frame must not
+            // disturb the room's sync surface (best-effort feature).
+            if (!member || !room) break
+            const row = parsePushRegistration({ endpoint: msg.endpoint, keys: msg.keys })
+            if (row) pushFanout.register(ws.data.roomCode!, row, Date.now())
+            break
+          }
+
+          case 'push_unregister': {
+            if (!member || !room) break
+            if (typeof msg.endpoint === 'string') pushFanout.unregister(ws.data.roomCode!, msg.endpoint)
+            break
+          }
+
+          case 'notify': {
+            // ADR-0102: ask the relay to fan ONE household trigger out.
+            // Dedupe, copy and delivery are the shared core's; unknown
+            // keys are silence (an older client speaking a newer trigger
+            // never errors the room). Fire-and-forget: the handler never
+            // blocks on network sends.
+            if (!member || !room) break
+            if (isNotifyKey(msg.key)) {
+              pushFanout.notify(ws.data.roomCode!, msg.key, {
+                ...(typeof msg.self === 'string' ? { self: msg.self } : {}),
+              })
+            }
+            break
+          }
 
           default:
             send(ws, { type: 'error', code: RELAY_ERRORS.unknownType })

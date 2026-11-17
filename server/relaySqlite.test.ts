@@ -13,6 +13,10 @@ import { join } from 'node:path'
 import { createRoomRegistry, type RoomRegistry, type RoomStore } from './relay-core/lifecycle'
 import { ROOM_TTL_MS, STATE_BLOB_GRACE_MS } from './relay-core/policy'
 import { SYNCED_STORES, storeTableName } from './relay-core/stores'
+import {
+  PUSH_LIST_SQL,
+  PUSH_UPSERT_SQL,
+} from './relay-core/migrations'
 import { createSqliteStores, openRelayDatabase, persistedDeadlines } from './relaySqlite'
 
 /** Open + migrate a database and expose the per-code store factory. */
@@ -37,7 +41,7 @@ describe('the Bun relay persists to SQLite (ADR-0088 §1)', () => {
     const tables = tableNames(db)
     expect(tables.has('room')).toBeTrue()
     for (const store of SYNCED_STORES) expect(tables.has(storeTableName(store))).toBeTrue()
-    expect(db.query('SELECT COUNT(*) AS n FROM schema_migrations').all()[0]?.n).toBe(4)
+    expect(db.query('SELECT COUNT(*) AS n FROM schema_migrations').all()[0]?.n).toBe(5)
   })
 
   test('a push stores the split rows; a read joins them back', () => {
@@ -101,7 +105,7 @@ describe('the Bun relay persists to SQLite (ADR-0088 §1)', () => {
       expect(registry.floor()).toBe(7)
       expect(registry.nextSerial()).toBe(3)
       // Re-opening re-applies the migrations idempotently.
-      expect(db.query('SELECT COUNT(*) AS n FROM schema_migrations').all()[0]?.n).toBe(4)
+      expect(db.query('SELECT COUNT(*) AS n FROM schema_migrations').all()[0]?.n).toBe(5)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -360,5 +364,19 @@ describe('the Bun relay persists to SQLite (ADR-0088 §1)', () => {
     } finally {
       db.close()
     }
+  })
+})
+
+describe('the Bun relay persists to SQLite (ADR-0088 §1) — push subscriptions (ADR-0102)', () => {
+  test('a drop takes the room push rows with it', () => {
+    const { db, store } = freshDb()
+    db.query(PUSH_UPSERT_SQL).run('c1', 'https://push.example/a', '{"p256dh":"K","auth":"A"}', 1, 1)
+    db.query(PUSH_UPSERT_SQL).run('c2', 'https://push.example/b', '{"p256dh":"K","auth":"A"}', 1, 1)
+    expect(db.query(PUSH_LIST_SQL).all('c1')).toHaveLength(1)
+
+    store('c1').drop()
+    expect(db.query(PUSH_LIST_SQL).all('c1')).toHaveLength(0)
+    // The other room's rows are untouched.
+    expect(db.query(PUSH_LIST_SQL).all('c2')).toHaveLength(1)
   })
 })

@@ -21,6 +21,8 @@ import { useRatingStore } from './rating'
 import { useUiStore } from './ui'
 import { useIdentityStore } from './identity'
 import { SHARED_STATE_KEYS } from '../lib/roomSyncStores'
+import type { PushTriggerKey } from '../lib/pushKeys'
+import { onPlanStarted } from './plan'
 
 export type RoomStatus = 'idle' | 'connecting' | 'live' | 'error'
 
@@ -315,6 +317,16 @@ export const useRoomStore = defineStore('room', () => {
   let keepaliveTimer: ReturnType<typeof setInterval> | null = null
   /** True while we're writing a remote snapshot into the local stores. */
   let applyingRemote = false
+
+  /**
+   * ADR-0102: the trigger paths ask this instead of each holding a
+   * half-copy of the flag — an observation that arrived from the ROOM is
+   * absorbed by its trigger (the peer that made the change already
+   * notified), never re-announced by the adopter.
+   */
+  function isApplyingRemote(): boolean {
+    return applyingRemote
+  }
   /**
    * True from the moment a local edit is queued for push until that push
    * has actually gone out.
@@ -473,7 +485,14 @@ export const useRoomStore = defineStore('room', () => {
     // silently stranding our cooks from the household forever.
     let localRowsMissingFromRoom = false
     try {
-      plan.replacePlan(state.plan ?? [], state.customItems ?? [])
+      // ADR-0102: an inbound snapshot is the household's OWN plan arriving
+      // — the peer that started it already fired the plan-started trigger
+      // — so this replacement is notify-exempt (marked here, never
+      // inferred). The applyingRemote guard below is the belt; this is
+      // the braces.
+      plan.replacePlan(state.plan ?? [], state.customItems ?? [], undefined, {
+        notifyExempt: true,
+      })
       // ADR-0034: adopt the household's plan identity. `null` is an answer
       // ("the plan is empty"), an ABSENT key is silence (an older peer) and
       // leaves ours alone — the two are deliberately distinct.
@@ -756,6 +775,18 @@ export const useRoomStore = defineStore('room', () => {
     () => schedulePush(true),
     { deep: true, flush: 'sync' },
   )
+
+  // ADR-0102 plan-started: the plan store's 0 → ≥1 transition asks the
+  // relay to fan a `plan-started` notification out. The registration
+  // lives HERE because this store owns the socket — the plan store must
+  // not know it exists. A remote ADOPTION (the snapshot path above) is
+  // marked exempt at its own site, so anything that reaches this listener
+  // is a genuine local start. Best-effort: `notify` is a silent no-op
+  // when the socket is not live. The subscription lives as long as the
+  // store (one per session) — no unsubscribe path is needed.
+  onPlanStarted(() => {
+    if (!applyingRemote) notify('plan-started')
+  })
 
   // ADR-0031: favourites publish immediately too, but the watcher
   // distinguishes a genuine household opinion from this device FINISHING
@@ -1094,6 +1125,9 @@ export const useRoomStore = defineStore('room', () => {
     // this room's business, and publishing it would overwrite the new
     // room's state before it exists.
     unsentLocalEdit = false
+    // A new room is a different room: the old one keeps no registration
+    // for this device (ADR-0102) — dropped while its socket is open.
+    unregisterPushEndpoint()
     wantedCode = preferredCode ? normalizeRoomCode(preferredCode) : generateRoomCode()
     codeRerolls = 0
     connect('create', undefined, true)
@@ -1121,7 +1155,14 @@ export const useRoomStore = defineStore('room', () => {
     // A join into a DIFFERENT code starts clean: an undelivered edit
     // belongs to the room we were in, not to this one. A re-join of the
     // SAME code (resume, reconnect) keeps it — that is the case it is for.
-    if (code.value !== normalized) unsentLocalEdit = false
+    if (code.value !== normalized) {
+      unsentLocalEdit = false
+      // A different room must not inherit this device's registration:
+      // the old room's row is dropped while its socket is still open
+      // (ADR-0102). A same-code re-join keeps the registration (the
+      // relay row is keyed by room, and this socket is going back).
+      unregisterPushEndpoint()
+    }
     code.value = normalized
     sessionStorage.setItem(ROOM_CODE_KEY, code.value)
     reconnectAttempts = 0
@@ -1175,6 +1216,86 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   /**
+   * This device's push-subscription endpoint (ADR-0102), set by the
+   * subscription composable after a successful sync. `notify` frames
+   * carry it as `self` so the relay can exclude the ACTOR's own
+   * subscription from the fan-out — the actor does not get pinged for
+   * their own action. Null while no subscription is known (the frame
+   * then simply omits `self`, and an older relay ignores the field).
+   */
+  const pushSelfEndpoint = ref<string | null>(null)
+
+  function setPushSelfEndpoint(endpoint: string | null): void {
+    pushSelfEndpoint.value = endpoint
+  }
+
+  /**
+   * Register this device's push subscription for the CURRENT room
+   * (ADR-0102): endpoint + keys as a `push_register` frame over the
+   * existing socket. The relay stores the row keyed (room, endpoint);
+   * subscriptions NEVER ride the room-sync payload. Silent no-op when
+   * the socket is not live — the next join re-registers (subscription
+   * lifecycle: every join is an upsert).
+   */
+  function sendPushRegister(
+    endpoint: string,
+    keys: { p256dh: string; auth: string },
+  ): void {
+    if (!socketLive()) return
+    try {
+      ws!.send(JSON.stringify({ type: 'push_register', endpoint, keys })) // socketLive proved open
+    } catch {
+      /* socket closing; the next join re-registers */
+    }
+  }
+
+  /**
+   * Drop this device's subscription row for the current room (the
+   * toggle-off path, ADR-0102). Best-effort like every socket send.
+   */
+  function sendPushUnregister(endpoint: string): void {
+    if (!socketLive()) return
+    try {
+      ws!.send(JSON.stringify({ type: 'push_unregister', endpoint })) // socketLive proved open
+    } catch {
+      /* socket closing; nothing to retry — the row is pruned on expiry */
+    }
+  }
+
+  /**
+   * Release this device's push registration for the room the socket is
+   * about to leave (ADR-0102): an explicit `leave()`, or a deliberate
+   * dial into a DIFFERENT room. Without it the former room keeps a live
+   * endpoint row and keeps pushing to a device that is no longer there.
+   * MUST run while the old socket is still open; best-effort otherwise —
+   * a dead socket means the row prunes on expiry instead.
+   */
+  function unregisterPushEndpoint(): void {
+    const endpoint = pushSelfEndpoint.value
+    if (!endpoint) return
+    sendPushUnregister(endpoint)
+    setPushSelfEndpoint(null)
+  }
+
+  /**
+   * Ask the relay to fan ONE household trigger out (ADR-0102): a `notify`
+   * frame with the trigger key. The relay owns the copy, the dedupe
+   * window and the delivery; the client never renders a page-local
+   * notification. NOT throttled client-side — the trigger sites are
+   * transition edges (0→1, all-checked), not bursts, and the relay's
+   * dedupe window is the real guard.
+   */
+  function notify(key: PushTriggerKey): void {
+    if (!socketLive()) return
+    try {
+      const self = pushSelfEndpoint.value
+      ws!.send(JSON.stringify(self ? { type: 'notify', key, self } : { type: 'notify', key })) // socketLive proved open
+    } catch {
+      /* socket closing; the trigger is gone (best-effort by nature) */
+    }
+  }
+
+  /**
    * Push a rename to the relay (ADR-0063): a `profile` frame carrying the
    * NEW name — the id is fixed at join and never re-sent. No-op when not
    * live: the next join carries the profile at upgrade, so the roster
@@ -1192,6 +1313,9 @@ export const useRoomStore = defineStore('room', () => {
 
   /** Leave the current room and go back to idle. */
   function leave() {
+    // The old room must stop pushing to this device the moment we leave
+    // it (ADR-0102) — sent while this room's socket is still open.
+    unregisterPushEndpoint()
     code.value = null
     status.value = 'idle'
     error.value = null
@@ -1222,6 +1346,7 @@ export const useRoomStore = defineStore('room', () => {
     peers,
     members,
     joinedProfileId,
+    pushSelfEndpoint,
     /**
      * Armed by a deliberate `join()`/`create()` and still unanswered by a
      * `live` frame. The app shell reads it to land a first-time joiner on
@@ -1241,5 +1366,10 @@ export const useRoomStore = defineStore('room', () => {
     resume,
     leave,
     announceProfile,
+    setPushSelfEndpoint,
+    sendPushRegister,
+    sendPushUnregister,
+    notify,
+    isApplyingRemote,
   }
 })

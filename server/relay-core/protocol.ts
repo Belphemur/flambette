@@ -49,6 +49,23 @@ export type ClientMessage =
   | { type: 'keepalive' }
   /** A whole-state push at revision `rev`. */
   | { type: 'state'; rev?: unknown; state?: unknown }
+  /**
+   * Register this device's Web Push subscription for the current room
+   * (ADR-0102). Server-side state ONLY — subscriptions never ride the
+   * room-sync payload. Malformed payloads are silence, never an error:
+   * a notification is best-effort by nature and must not disturb the
+   * room's sync surface.
+   */
+  | { type: 'push_register'; endpoint?: unknown; keys?: unknown }
+  /** Drop this device's subscription for the current room (toggle-off). */
+  | { type: 'push_unregister'; endpoint?: unknown }
+  /**
+   * Ask the relay to fan ONE household trigger out (ADR-0102). `self` is
+   * the SENDER's own subscription endpoint — the actor does not get
+   * pinged for their own action. The relay owns the copy, the dedupe
+   * window and the delivery; no page-local notification exists.
+   */
+  | { type: 'notify'; key?: unknown; self?: unknown }
   /** Detach this socket; the room dies with its last peer (ADR-0026). */
   | { type: 'leave' }
 

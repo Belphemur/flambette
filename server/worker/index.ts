@@ -31,6 +31,7 @@ import { Room } from './room'
 import { refuseSocket } from './refuseSocket'
 import { makeThrottle } from '../relay-core/throttle'
 import { DEFAULT_ATTEMPT_LIMIT, healthPayload, ROOM_TTL_MS, parsePositiveNumber } from '../relay-core/policy'
+import { parseVapidConfig } from '../relay-core/push'
 
 export { Room }
 
@@ -88,10 +89,30 @@ function clientAddress(request: Request): string {
 }
 
 function health(env: Env): Response {
-  return Response.json(healthPayload({
-    roomTtlMs: ROOM_TTL_MS,
-    attemptLimit: getThrottle(env).limit,
-  }))
+  return new Response(
+    JSON.stringify(
+      healthPayload({
+        roomTtlMs: ROOM_TTL_MS,
+        attemptLimit: getThrottle(env).limit,
+        // ADR-0102: the CLIENT half of the subscription needs the VAPID
+        // PUBLIC key to subscribe — it is read from this payload (the
+        // private key never leaves the relay). undefined = push disabled.
+        // CORS open: the public key is public, and the web app
+        // (flambette.app) fetches it cross-origin from the relay origin.
+        vapidPublicKey: parseVapidConfig({
+          publicKey: env.VAPID_PUBLIC_KEY ?? null,
+          privateKey: env.VAPID_PRIVATE_KEY ?? null,
+          subject: env.VAPID_SUBJECT ?? null,
+        })?.publicKey ?? null,
+      }),
+    ),
+    {
+      headers: {
+        'content-type': 'application/json',
+        'access-control-allow-origin': '*',
+      },
+    },
+  )
 }
 
 function isUpgrade(request: Request): boolean {

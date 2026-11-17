@@ -96,10 +96,45 @@ room — including people not on the page — when:
   notification latch is per-transaction so concurrent check bursts cannot
   double-send.
 - **KISS**: no queue, no retry worker, no third-party push facade —
-  the relay sends best-effort and prunes on failure codes; no
+  the relay sends best-effort and prunes failure codes; no
   foreground-toast surface duplicates the SW notification (the SW is the
   only notification renderer); subscriptions are opaque rows keyed by
   (room, subscription endpoint), no device-identity join.
+
+## Change note (2026-11-17, review round 3 hardening)
+
+Review hardening within the same decisions — no new dependency, still no
+queue and no retry worker:
+
+- **VAPID `exp` arithmetic**: `signVapidJwt` takes a millisecond `now`
+  (the callers' unit) and converts to Unix seconds itself — the raw
+  addition produced an expiry past the push services' 24h cap and every
+  send would have been rejected.
+- **Endpoint allow-list (SSRF)**: `parsePushRegistration` now confines
+  endpoints to the four real push-service hosts (FCM, Mozilla, Windows,
+  Apple), refuses IP literals, localhost, non-default ports and
+  oversized URLs; sends refuse redirects (`redirect: 'error'`). The
+  room code holder is inside the relay, so the fan-out's outbound POSTs
+  must not be dialable to arbitrary https hosts.
+- **Per-room row cap**: 32 subscription rows per room
+  (`PUSH_ROOM_CAP`), evicting the oldest `updated_at` first via shared
+  `PUSH_EVICT_SQL` — bounds both storage and the sends one `notify`
+  can trigger.
+- **Client sync**: serialized (one sync at a time) with post-await
+  re-checks, so an enable finishing after an off sync cannot
+  re-register; the AUTOMATIC join offer now validates the relay's VAPID
+  key BEFORE spending the one-time `asked` marker; the Settings row
+  starts the permission offer synchronously inside the user gesture
+  (Safari requirement) and the sync adopts it; a failed key fetch is
+  retried on the next sync instead of memoized for the page.
+- **Unregister on room exit**: `leave()` and a deliberate dial into a
+  different room send `push_unregister` for the old room while its
+  socket is still open.
+- **Grocery latch**: the first observation of an already-all-checked
+  list is an ADOPTION (no notification) — a device mounting into a
+  hydrated complete list must not re-announce old news.
+- **Worker delivery**: the Durable Object tracks the fan-out promise
+  with `ctx.waitUntil` (the Bun relay stays fire-and-forget).
 
 ## Consequences
 

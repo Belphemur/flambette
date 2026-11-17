@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import {
   Bean,
+  Bell,
   CircleDot,
   ClipboardPaste,
   CheckCircle2,
@@ -50,6 +51,7 @@ import { RESTRICTIONS } from '../lib/restrictions'
 import { useRestrictions } from '../composables/useRestrictions'
 import { useShareRoomLink } from '../composables/useShareRoomLink'
 import { confirmModal } from '../composables/useConfirm'
+import { offerPushPermissionFromGesture } from '../composables/usePushSubscription'
 import { getCatalog } from '../lib/catalog'
 import { USER_RECIPE_ID_BASE } from '../lib/userRecipes'
 import {
@@ -100,6 +102,38 @@ const { shareRoomLink, shareableCode } = useShareRoomLink()
 const canVibrate =
   typeof navigator !== 'undefined' &&
   typeof (navigator as Navigator & { vibrate?: unknown }).vibrate === 'function'
+
+/* ---------- Household notifications (ADR-0102) ----------
+ *
+ * Honest push capability, same shape as the vibration check above: a
+ * service worker + PushManager on a SECURE origin. Plain-HTTP LAN origins
+ * have neither API — the feature degrades to an "unavailable" note under
+ * the row (never an error); the stored preference is KEPT, so a device
+ * that later runs a capable browser subscribes without being re-toggled.
+ * Feature-detected at render time; `typeof window` guarded so tests/SSR
+ * never crash.
+ */
+const canNotify =
+  typeof window !== 'undefined' &&
+  'serviceWorker' in navigator &&
+  'PushManager' in window &&
+  window.isSecureContext === true
+
+/**
+ * The row's ONE writer: the store action. Flipping ON is subscription
+ * intent — the composable that owns the browser subscription reacts to
+ * the change (Task-2 wiring); flipping OFF unsubscribes server-side.
+ *
+ * Safari requires the permission request to BEGIN inside the user
+ * gesture, so a turning-ON change first hands the gesture to the push
+ * composable (synchronously, before any await) — the sync the store
+ * watcher triggers then adopts the already-started offer instead of
+ * issuing a detached second prompt.
+ */
+function setNotificationEnabled(enabled: boolean) {
+  if (enabled && canNotify) offerPushPermissionFromGesture()
+  ui.setNotificationEnabled(enabled)
+}
 
 /* ---------- Card grammar (ADR-0077) ----------
  *
@@ -1037,6 +1071,52 @@ function restartOnboarding(): void {
   >
   Leave
   </button>
+  </div>
+  </div>
+
+  <!-- Household notifications (ADR-0102): the adopted render's dedicated
+  card, directly after the Household Room card (Stitch Variant 1 — the
+  integrated Variant 2 row was explored, not adopted). ONE row: the
+  device-local push toggle. DELIBERATELY device-local, never room-synced
+  (browser permission is per-device; one shared switch would lie about
+  half the household). ON by default — the owner's ruling, matching the
+  timer-alert toggles. The toggle is subscription INTENT: the actual
+  subscription is the composable's, driven by real browser permission.
+  A plain-HTTP origin has no push APIs at all — the note says so and the
+  stored preference is kept, never an error. -->
+  <div :class="CARD" class="space-y-2.5 lg:col-span-12" data-test="notif-card">
+  <div class="flex items-start justify-between gap-3">
+  <div class="min-w-0">
+  <h2 class="text-headline-sm">Household notifications</h2>
+  <p class="mt-0.5 text-body-sm text-text-muted">
+  Stay updated on shared meal planning and grocery activity.
+  </p>
+  </div>
+  <span :class="TILE"><Bell :size="16" aria-hidden="true" /></span>
+  </div>
+  <div class="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2.5" data-test="notif-row">
+  <label class="flex min-w-0 flex-1 items-start gap-2.5 text-body-sm">
+  <input
+  type="checkbox"
+  class="check-box mt-0.5"
+  :checked="ui.notificationSettings.enabled"
+  aria-label="Notify the household when a plan starts or the grocery finishes"
+  data-test="notif-toggle"
+  @change="setNotificationEnabled(($event.target as HTMLInputElement).checked)"
+  />
+  <span>
+  <strong>Notify the household</strong> — get a push notification when someone starts a plan or finishes shopping.
+  <span class="block">
+  Sent through your household room to every member's device, including people not on the page. The browser asks for permission the first time; declining keeps this switch on without subscribing. These settings stay on this device — they are never synced to the room.
+  </span>
+  <span
+  v-if="!canNotify"
+  class="block text-body-sm text-text-muted"
+  data-test="notif-unsupported"
+  >This browser cannot receive push notifications — they need a secure origin (HTTPS or localhost). Your choice is kept for a browser that can.</span>
+  </span>
+  </label>
+  <Bell :size="16" aria-hidden="true" class="mt-1 shrink-0 text-text-muted" />
   </div>
   </div>
 
