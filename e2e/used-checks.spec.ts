@@ -175,7 +175,11 @@ test('a detail tick is visible when entering cooking from that sheet', async ({ 
   await openDetail(page, LEMON_WRAP)
   const step2 = page.getByTestId('detail-step').nth(1)
   await expect(step2).toContainText('lemon')
+  // ADR-0103 decision 3 on the detail surface too: the matched row
+  // REPLACES the prose; the old render showed both on every step.
+  await expect(step2.getByText('zest and juice from 1 ½ lemon')).toHaveCount(0)
   const detailRow = step2.getByTestId('detail-measured-check-row').filter({ hasText: /lemon/i }).first()
+  await expect(detailRow).not.toContainText('zest and juice')
   const detailCheck = detailRow.getByTestId('detail-measured-check')
   await expect(detailCheck).not.toBeChecked()
 

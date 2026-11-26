@@ -1230,7 +1230,14 @@ function startCooking() {
   an account setting, not a recipe fact. The render's THIRD button ("To
   Grocery") is OMITTED: the grocery list is DERIVED from the plan
   (ADR-0003) and no add-to-grocery action exists on this surface — the
-  deviation is recorded in ADR-0077. -->
+  deviation is recorded in ADR-0077.
+
+  The two CTAs carry `scroll-mb-28`: the fixed bottom nav overlays the
+  last 67px of the viewport, so a scroll-into-view that lands a CTA at the
+  viewport edge puts it UNDER the nav and the tap is swallowed. Reserving
+  the scroll margin below each CTA makes every programmatic scroll
+  (including an AT focus jump) leave it genuinely tappable; the sheet's
+  `pb-24` already supplies the scrollable space behind it. -->
   <div class="space-y-2" data-test="detail-actions">
   <!-- Unit system (ADR-0047): a compact three-option segmented control in
   the ACTIONS panel, so a reader who shops in oz/lb does not have to leave
@@ -1270,14 +1277,14 @@ function startCooking() {
   phone, one shared row from sm up. -->
   <div class="flex flex-col gap-2 sm:flex-row">
   <button
-  class="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-brand px-4 text-base font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong sm:w-auto sm:flex-1 dark:ring-1 dark:ring-brand-soft"
+  class="flex h-12 w-full scroll-mb-28 items-center justify-center gap-2 rounded-full bg-brand px-4 text-base font-semibold text-on-brand transition-[background-color,transform] hover:bg-brand-strong active:scale-[0.98] active:bg-brand-strong sm:w-auto sm:flex-1 dark:ring-1 dark:ring-brand-soft"
   data-test="start-cooking"
   @click="startCooking"
   >
   <ChefHat :size="18" aria-hidden="true" />Start cooking
   </button>
   <button
-  class="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-surface-raised px-4 text-sm font-semibold text-brand-text ring-1 ring-border-strong active:bg-surface-sunken sm:w-auto sm:flex-1"
+  class="flex h-12 w-full scroll-mb-28 items-center justify-center gap-2 rounded-full bg-surface-raised px-4 text-sm font-semibold text-brand-text ring-1 ring-border-strong active:bg-surface-sunken sm:w-auto sm:flex-1"
   data-test="add-to-plan"
   @click="addToPlan"
   >
@@ -1701,16 +1708,15 @@ function startCooking() {
   />
   </span>
   <span
-  class="font-mono-data text-label-md font-bold tabular-nums"
+  class="shrink-0 font-mono-data text-label-md font-bold tabular-nums"
   :class="isChecked(usedIngredientKey(i, chip)) ? 'text-text-muted line-through' : 'text-text'"
   >{{ chip.quantity }}</span
   >
   <span
-  class="min-w-0 shrink-0 text-label-md font-semibold leading-snug"
+  class="min-w-0 flex-1 text-label-md font-semibold leading-snug"
   :class="isChecked(usedIngredientKey(i, chip)) ? 'text-text-muted line-through' : 'text-text'"
   >{{ chip.ingredient }}</span
   >
-  <span class="min-w-0 flex-1 leading-snug">{{ d }}</span>
   </label>
   </li>
   <li v-if="!detailChipsFor(i, j).length" class="leading-snug">{{ d }}</li>

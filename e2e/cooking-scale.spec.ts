@@ -60,7 +60,12 @@ test('seasonings scale sub-linearly while linear ingredients double at 12 servin
   // Step 9 details: "6 cloves garlic" → linear 2× → "12 cloves garlic".
   const cooking = await startCookingFromSheet(page)
   for (let i = 0; i < 8; i++) await cooking.getByRole('button', { name: /Next/ }).click()
-  await expect(cooking.getByText('12 cloves garlic')).toBeVisible()
+  // ADR-0103 decision 3: the matched row REPLACES the prose, so the
+  // scaled amount and the name are two spans of one row, not one text run.
+  const garlicRow = cooking.getByTestId('measured-chip').filter({ hasText: /garlic/i }).first()
+  await expect(garlicRow).toContainText('12 cloves')
+  await expect(garlicRow).toContainText('garlic')
+  await expect(cooking.getByText('12 cloves garlic')).toHaveCount(0)
 
   // Step 10: "¾ tsp crushed red pepper" → 0.75 × 2^0.75 ≈ 1.26 → ⅛ grid →
   // "1 ¼ tsp" (ADR-0055 spoon vocabulary; linear would render "1 ½ tsp").

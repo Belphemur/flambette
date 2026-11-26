@@ -48,7 +48,9 @@ test('a matched step line gets a checklist row, scaled with the servings', async
   const cooking = await startCookingAt(page, LEMON_WRAP)
 
   await cooking.getByRole('button', { name: /Next/ }).click()
-  await expect(cooking.getByText('zest and juice from 1 ½ lemon')).toBeVisible()
+  // ADR-0103 decision 3: a matched detail line is REPLACED by its row.
+  // The old doubled render showed the prose again inside the row.
+  await expect(cooking.getByText('zest and juice from 1 ½ lemon')).toHaveCount(0)
 
   // The prose list itself is the checklist: no disclosure, no second card.
   const card = cooking.getByTestId('measured-amounts')
@@ -58,6 +60,8 @@ test('a matched step line gets a checklist row, scaled with the servings', async
   const lemonRow = card.getByTestId('measured-chip').filter({ hasText: /lemon/i }).first()
   await expect(lemonRow).toContainText('lemons')
   await expect(lemonRow).toContainText('3')
+  // Row content = checkbox + line-item amount + ingredient name ONLY.
+  await expect(lemonRow).not.toContainText('zest and juice')
 
   // The row is a REAL checkbox: role/checked state queryable.
   const check = lemonRow.getByTestId('measured-check')
@@ -79,7 +83,7 @@ test('a matched step line gets a checklist row, scaled with the servings', async
   // The dressing step carries the same line, and navigating there shows
   // ITS row (the session keeps earlier ticks).
   for (let i = 0; i < 4; i++) await cooking.getByRole('button', { name: /Next/ }).click()
-  await expect(cooking.getByText('juice of ¾ lemon')).toBeVisible()
+  await expect(cooking.getByText('juice of ¾ lemon')).toHaveCount(0)
   await expect(
     cooking.getByTestId('measured-chip').filter({ hasText: /lemon/i }).first(),
   ).toBeVisible()

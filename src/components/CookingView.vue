@@ -1015,19 +1015,19 @@ function isAlarming(t: CookTimer): boolean {
   >
   <Check v-if="isChecked(row.key)" :size="14" aria-hidden="true" class="text-on-success" />
   </span>
-  <!-- The MEASURED amount and matched ingredient beside the authored
-  prose; checked strikes both derived spans, never the prose. -->
+  <!-- ADR-0103 decision 3: the row REPLACES the prose for this detail
+  line — checkbox + line-item amount + ingredient name ONLY. Checked
+  strikes both spans. Rendering `d` here too is the doubled row. -->
   <span
-  class="font-mono-data text-[15px] font-bold tabular-nums"
+  class="shrink-0 font-mono-data text-[15px] font-bold tabular-nums"
   :class="isChecked(row.key) ? 'text-text-muted line-through' : 'text-text'"
   >{{ row.chip.quantity }}</span
   >
   <span
-  class="min-w-0 shrink-0 text-[15px] font-semibold leading-snug"
+  class="min-w-0 flex-1 text-[15px] font-semibold leading-snug"
   :class="isChecked(row.key) ? 'text-text-muted line-through' : 'text-text'"
   >{{ row.chip.ingredient }}</span
   >
-  <span class="min-w-0 flex-1 text-[13px] leading-snug text-text-muted">{{ d }}</span>
   </label>
   </li>
   <li
