@@ -290,7 +290,7 @@ test('a ringing alarm is stoppable from ANY surface — the shell banner (ADR-00
   await expectZeroMealimeRequests(page)
 })
 
-test('another recipe's alarm is visible and stoppable in cooking — no cross-recipe chip (ADR-0104)', async ({ page }) => {
+test("another recipe's alarm is visible and stoppable in cooking — no cross-recipe chip (ADR-0104)", async ({ page }) => {
   test.setTimeout(120_000)
   await page.goto('/recipes')
   await waitForCatalog(page)
