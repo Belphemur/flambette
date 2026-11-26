@@ -174,13 +174,22 @@ export function createTimerAlerts(
    * actually firing, and play as soon as the context reaches `running`.
    * A rejected/pending resume degrades silently to the other channels;
    * the visual floor lives in the host/UI, never in this engine. */
-  function chime(ordinal = 0): void {
+  function chime(ordinal = 0, isCurrent?: () => boolean): void {
+    // The device-local toggle is read at CALL time (every round) and AGAIN
+    // inside the resume continuation: Brave can leave `resume()` pending
+    // until user activation, and a cook may switch sound off (or stop the
+    // alarm) while that promise is in flight. `isCurrent` is the host's
+    // generation check — the engine stays stateless about rounds and does
+    // not know which timer fired.
     if (!getPrefs().sound) return
     const active = ctx
     if (!active) return
     const playIfRunning = (): void => {
       try {
-        if (active.state === 'running') playTwoTone(active, ordinal)
+        if (active.state !== 'running') return
+        if (!getPrefs().sound) return
+        if (isCurrent && !isCurrent()) return
+        playTwoTone(active, ordinal)
       } catch {
         // Never surface an audio failure to a cook holding a knife.
       }
@@ -201,8 +210,8 @@ export function createTimerAlerts(
 
   /** Fire BOTH engine channels (each honours its own toggle). The visual
    *  shake channel (ADR-0104) is owned by the host/UI and cannot be off. */
-  function fire(ordinal = 0): void {
-    chime(ordinal)
+  function fire(ordinal = 0, isCurrent?: () => boolean): void {
+    chime(ordinal, isCurrent)
     vibrate()
   }
 

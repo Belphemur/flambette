@@ -88,6 +88,24 @@ interface AlarmState {
 }
 /** Keys currently alarming — a fired timer rings UNTIL THE USER STOPS IT. */
 const alarming = new Map<string, AlarmState>()
+/**
+ * Monotonic fire generation per key. A suspended AudioContext's `resume()`
+ * can stay pending until user activation; every chime continuation captures
+ * the generation of its round. A stop (Clear, Restart, restore, banner Stop)
+ * bumps it so a LATE resume from an already-stopped alarm cannot burst out
+ * as a tone (review hardening 2026-11-26). The engine stays stateless about
+ * rounds — it only evaluates the predicate we hand it after `resume()`.
+ */
+const alarmGenerations = new Map<string, number>()
+
+function stopAlarmKey(key: string): void {
+  alarmGenerations.set(key, (alarmGenerations.get(key) ?? 0) + 1)
+  alarming.delete(key)
+}
+
+function fireIsCurrent(key: string, generation: number): () => boolean {
+  return () => alarming.has(key) && (alarmGenerations.get(key) ?? 0) === generation
+}
 
 /**
  * The identity of a timer RECORD the alarm is pinned to: the run segment
@@ -192,7 +210,7 @@ function tick(now: number): void {
         // and the timer's NEXT expiry starts a fresh round 1.
         armed.add(key)
         alerted.delete(key)
-        alarming.delete(key)
+        if (alarming.has(key)) stopAlarmKey(key) // Restart/Resume IS a user stop
         live = true
       } else if (armed.has(key) && !alerted.has(key)) {
         // This session watched it reach zero: round 1 fires now, and the
@@ -202,7 +220,12 @@ function tick(now: number): void {
         // alarms visibly (the shake is the floor that cannot fail).
         alerted.add(key)
         alarming.set(key, { round: 0, lastFire: now, ordinal: ordered.indexOf(t), src: srcOf(t) })
-        if (channelsLive(ui)) ensureEngine().fire(ordered.indexOf(t))
+        if (channelsLive(ui)) {
+          ensureEngine().fire(
+            ordered.indexOf(t),
+            fireIsCurrent(key, alarmGenerations.get(key) ?? 0),
+          )
+        }
       } else if (alarming.has(key)) {
         // Still alarming: fire the next round when its grown pause is due.
         const state = alarming.get(key)! // eslint-disable-line @typescript-eslint/no-non-null-assertion
@@ -212,7 +235,7 @@ function tick(now: number): void {
           // is not this record's alarm: drop it. The record itself
           // re-enters the normal rules, so an already-expired restore is
           // seeded silently, never inherited.
-          alarming.delete(key)
+          stopAlarmKey(key)
         } else if (now - state.lastFire >= pauseAfterRound(state.round) * 1000) {
           // The round itself keeps escalating even with both engine
           // channels dead: the banner + shake ARE the output (ADR-0104).
@@ -222,7 +245,10 @@ function tick(now: number): void {
             // The pitch is the ordinal captured at round 1 — the strip's
             // membership may have changed since (a lower-id timer cleared),
             // and a ringing alarm must keep its voice (ADR-0093 pitch).
-            ensureEngine().fire(state.ordinal)
+            ensureEngine().fire(
+              state.ordinal,
+              fireIsCurrent(key, alarmGenerations.get(key) ?? 0),
+            )
           }
         }
       } else {
@@ -243,7 +269,7 @@ function tick(now: number): void {
     if (!seen.has(key)) {
       alerted.delete(key)
       armed.delete(key)
-      alarming.delete(key)
+      if (alarming.has(key)) stopAlarmKey(key)
     }
   }
   syncAlarmingSnapshot(ui)
@@ -333,5 +359,23 @@ export function resetTimerAlertHostForTests(): void {
   armed.clear()
   alerted.clear()
   alarming.clear()
+  alarmGenerations.clear()
   alarmingTimers.value = []
+}
+
+/**
+ * One Stop verb for the shell banner and the fullscreen indicator:
+ * invalidate any in-flight resume continuations FIRST, then perform each
+ * timer's own Clear. The host observes the vanished keys exactly as it
+ * would from a strip tap — no new alarm state. The reactive mirror is
+ * synced immediately so the indicator/banner vanish on the same tick.
+ */
+export function stopAllAlarmsNow(): void {
+  const ui = useUiStore()
+  for (const key of [...alarming.keys()]) {
+    stopAlarmKey(key)
+    const [variantId, timerId] = key.split(':').map(Number)
+    ui.clearTimer(variantId, timerId)
+  }
+  syncAlarmingSnapshot(ui)
 }

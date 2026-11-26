@@ -183,6 +183,49 @@ describe('timer alerts (ADR-0081 amendment)', () => {
     alerts.fire()
     expect(oscillators).toHaveLength(2)
   })
+
+  test('a sound toggle flip DURING a pending resume suppresses the chime', async () => {
+    const { ctx, oscillators } = stubContext('suspended')
+    let resolveResume: (() => void) | undefined
+    ctx.resume = () =>
+      new Promise<void>((resolve) => {
+        resolveResume = resolve
+      })
+    let sound = true
+    const alerts = createTimerAlerts(() => ({ sound, vibrate: false }), () => ctx)
+    alerts.unlock()
+    alerts.fire() // captures sound=ON, arms the continuation
+    sound = false // the cook switches it OFF while Brave's resume stalls
+    resolveResume!()
+    ctx.state = 'running'
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(oscillators).toEqual([])
+  })
+
+  test('a stop during a pending resume suppresses every queued chime (generation check)', async () => {
+    const { ctx, oscillators } = stubContext('suspended')
+    const continuations: (() => void)[] = []
+    ctx.resume = () =>
+      new Promise<void>((resolve) => {
+        continuations.push(resolve)
+      })
+    let generation = 0
+    const alerts = createTimerAlerts(() => ({ sound: true, vibrate: false }), () => ctx)
+    alerts.unlock()
+    const isCurrent = (captured: number) => () => generation === captured
+    alerts.fire(0, isCurrent(0))
+    alerts.fire(0, isCurrent(0)) // two rounds queued while suspended
+    generation++ // the cook stops the alarm (host bumps its per-key generation)
+    for (const resolve of continuations) resolve()
+    ctx.state = 'running'
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(oscillators).toEqual([])
+    // A NEW alarm with the current generation still plays normally.
+    alerts.fire(0, isCurrent(1))
+    expect(oscillators.map((o) => o.freq)).toEqual([CHIME_TONES_HZ[0], CHIME_TONES_HZ[1]])
+  })
 })
 
 describe('per-timer pitch (ADR-0093)', () => {
