@@ -7,9 +7,7 @@
 * **Supersedes, in part:** the `proOnly` member of ADR-0027's
   `QuickFilters` (the filter SURVIVES; its meaning changes — see §3). The
   accepted ADR-0027 file is not edited; this one replaces the member.
-* Status: **Accepted** (2026-10-05) — superseded in part by ADR-0105
-  (the `pro` source value and the PRO branding are retired; the source
-  facet, the `new` bucket and the user-recipe catalog live on)
+* Status: Accepted (2026-10-05) — superseded in part by ADR-0105 (the `pro` source value and the PRO branding are retired; the source facet, the `new` bucket and the user-recipe catalog live on)
 * Companions: `public/data/user_recipes.json` (new artifact),
   `src/lib/catalog.ts`, `src/lib/userRecipes.ts` (new, pure),
   `src/lib/quickFilters.ts`, `src/components/RecipesTab.vue`,

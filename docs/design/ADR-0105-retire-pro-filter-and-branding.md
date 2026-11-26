@@ -1,6 +1,7 @@
 # ADR-0105: The PRO filter and PRO branding are retired
 
 Status: accepted (2026-11-26)
+* Supersedes: ADR-0054 (in part)
 
 ## Context
 
