@@ -231,7 +231,17 @@ const checklistRows = computed(() =>
  * survives step navigation, and dies on unmount / app reload. A re-cook
  * therefore starts clean.
  */
-const checkedIngredients = ref<Set<string>>(new Set(takeUsedIngredientHandoff(props.id)))
+const checkedIngredients = ref<Set<string>>(new Set())
+// A route-param change REUSES this component: a new recipe id is a new
+// session, so seed a fresh Set (and consume any handoff for that id).
+// Ordinary step navigation leaves `props.id` untouched and keeps the Set.
+watch(
+  () => props.id,
+  (id) => {
+    checkedIngredients.value = new Set(takeUsedIngredientHandoff(id))
+  },
+  { immediate: true },
+)
 
 function isChecked(key: string): boolean {
   return checkedIngredients.value.has(key)

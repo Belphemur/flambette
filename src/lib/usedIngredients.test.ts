@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { measuredChipsForLines } from './measuredAmounts'
-import { restrictedDocView, type LadderIndex } from './restrictions'
+import { eventsDocView, restrictedDocView, type LadderIndex } from './restrictions'
 import type { LineItem, RecipeDoc } from './types'
 import { usedIngredientKey } from './usedIngredients'
 
@@ -66,5 +66,34 @@ describe('usedIngredientKey (ADR-0103)', () => {
     expect(viewChip.ingredient).toBe('lemon')
     expect(viewChip.keyIngredient).toBe('lemon juice')
     expect(usedIngredientKey(5, viewChip)).toBe(usedIngredientKey(5, baseChip))
+  })
+
+  test('an added substitute keys on itself, never on a dropped base id', () => {
+    const base = {
+      ...doc([
+        { id: 0, quantity: '3', ingredient_name: 'lemons' },
+        { id: 1, quantity: '1', ingredient_name: 'butter' },
+      ]),
+      recipe_id: 100,
+    } as RecipeDoc
+    const index: LadderIndex = {
+      restrictions: [],
+      swaps: null,
+      drops: {},
+      removed: new Map(),
+      pairs: new Map(),
+      events: new Map([
+        ['gluten-free', { '100': { d: ['butter'], a: [['coconut oil', '2 tbsp']] } }],
+      ]),
+    }
+    const view = eventsDocView(base, index, [1])
+    expect(view).not.toBeNull()
+    const chip = measuredChipsForLines(view!, ['a splash of coconut oil'], 1, 'dual', base)[0]
+    expect(chip).toBeDefined()
+    // The dropped highest-id base line is butter; the added line must not
+    // inherit its id (and therefore its key identity).
+    expect(chip.ingredient).toBe('coconut oil')
+    expect(chip.keyIngredient).toBe('coconut oil')
+    expect(usedIngredientKey(0, chip)).toBe('0:0:coconut oil')
   })
 })
