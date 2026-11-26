@@ -29,6 +29,11 @@ import {
 // composable that already derives its filter union from the same source.
 import { OFFERED_MEAL_TYPES } from '../lib/mealTypeFilter'
 import type { AutoPlanRulesetFilter } from '../composables/useAutoPlan'
+import {
+  freshCookingUsedKeys,
+  isFreshCookingSession,
+  type CookingUsedSessions,
+} from '../lib/cookingUsedSessions'
 
 /** Bottom-nav entries, in display order. `to` is the route path; `icon` is
  *  a Lucide component (WS5), not an emoji or a hand-rolled path — the
@@ -150,6 +155,14 @@ export const useUiStore = defineStore(
   () => {
     /** Cooking step index, keyed by variant id (survives tab switches). */
     const cookingStepIndex = ref<Record<number, number>>({})
+    /**
+     * ADR-0103 owner ruling 2026-11-26: cooking's used-set is a DEVICE-LOCAL
+     * session, one `{startedAt, usedKeys}` entry per recipe id. It survives
+     * a reload mid-cook (like the timer's startedAt) and expires at read
+     * time after 24h. No room payload, no backup slice beyond this ui
+     * slice, no sweeper. Detail keeps its own ephemeral ref.
+     */
+    const cookingUsedSets = ref<CookingUsedSessions>({})
     /**
      * Share cooked history with the live room. ON by default
      * (ADR-0032 supersedes ADR-0011's opt-in): a household wants ONE
@@ -405,6 +418,47 @@ export const useUiStore = defineStore(
 
     function cookingStep(variantId: number): number {
       return cookingStepIndex.value[variantId] ?? 0
+    }
+
+    /** A live session's keys, or [] when it was never opened / is stale. */
+    function cookingUsedKeys(variantId: number): string[] {
+      return freshCookingUsedKeys(cookingUsedSets.value, variantId)
+    }
+
+    /**
+     * Open (or resume) one cooking session. A fresh entry keeps its ORIGINAL
+     * startedAt — a handoff must not extend the 24h TTL; a stale one is
+     * replaced by a genuinely new session.
+     */
+    function startCookingUsedSession(variantId: number, seedKeys: Iterable<string>): void {
+      const now = Date.now()
+      const existing = cookingUsedSets.value[variantId]
+      const fresh = isFreshCookingSession(existing, now)
+      const keys = new Set(fresh ? existing.usedKeys : [])
+      for (const key of seedKeys) keys.add(key)
+      cookingUsedSets.value[variantId] = {
+        startedAt: fresh ? existing.startedAt : now,
+        usedKeys: [...keys],
+      }
+    }
+
+    /** Toggle one canonical key in the live session (creating it if dead). */
+    function toggleCookingUsedKey(variantId: number, key: string): void {
+      const now = Date.now()
+      const existing = cookingUsedSets.value[variantId]
+      const fresh = isFreshCookingSession(existing, now)
+      const keys = new Set(fresh ? existing.usedKeys : [])
+      if (keys.has(key)) keys.delete(key)
+      else keys.add(key)
+      cookingUsedSets.value[variantId] = {
+        startedAt: fresh ? existing.startedAt : now,
+        usedKeys: [...keys],
+      }
+    }
+
+    /** The ONE recordCook() path calls this: the occasion is finished. */
+    function clearCookingUsedSet(variantId: number): void {
+      delete cookingUsedSets.value[variantId]
     }
 
     /** Every armed timer of a recipe, oldest id first (ADR-0041). */
@@ -884,6 +938,7 @@ export const useUiStore = defineStore(
 
     return {
       cookingStepIndex,
+      cookingUsedSets,
       shareCookedHistory,
       timerAlertSound,
       timerAlertVibrate,
@@ -917,6 +972,10 @@ export const useUiStore = defineStore(
       advanceAutoPlanGeneration,
       setCookingStep,
       cookingStep,
+      cookingUsedKeys,
+      startCookingUsedSession,
+      toggleCookingUsedKey,
+      clearCookingUsedSet,
       timers,
       timerById,
       isTimerListFull,
@@ -942,10 +1001,12 @@ export const useUiStore = defineStore(
   {
     // The quick filters (ADR-0027), the share/room prefs and the step
     // timers (ADR-0020, so a reload mid-cook resumes honestly) persist;
-    // cookingStepIndex stays session-scoped.
+    // cookingUsedSets (ADR-0103) joins them for the same reason. The step
+    // CURSOR and toasts stay session-scoped.
     persist: {
       key: 'mealime-planner:v1:ui',
       pick: [
+        'cookingUsedSets',
         'shareCookedHistory',
         // Not a setting: the once-only marker for ADR-0032's default
         // migration. Persisted so the migration cannot run twice on a

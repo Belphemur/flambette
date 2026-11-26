@@ -476,3 +476,46 @@ describe('dietary restrictions (the restriction ADR)', () => {
     expect(ui.dietaryRestrictionIds).toEqual([1, 14])
   })
 })
+
+/* ---------- ADR-0103: cooking used-set is a persisted 24h session ---------- */
+
+describe('cooking used-set session (ADR-0103)', () => {
+  test('a handoff seeds the session; toggles survive; recordCook clears', () => {
+    setActivePinia(createPinia())
+    const ui = useUiStore()
+    expect(ui.cookingUsedKeys(5132)).toEqual([])
+
+    ui.startCookingUsedSession(5132, ['2:0:lemon'])
+    expect(ui.cookingUsedKeys(5132)).toEqual(['2:0:lemon'])
+    ui.toggleCookingUsedKey(5132, '3:1:garlic')
+    expect(ui.cookingUsedKeys(5132)).toEqual(['2:0:lemon', '3:1:garlic'])
+    ui.toggleCookingUsedKey(5132, '2:0:lemon')
+    expect(ui.cookingUsedKeys(5132)).toEqual(['3:1:garlic'])
+
+    ui.clearCookingUsedSet(5132)
+    expect(ui.cookingUsedKeys(5132)).toEqual([])
+  })
+
+  test('resuming keeps the original start stamp; a stale session starts clean', () => {
+    setActivePinia(createPinia())
+    const ui = useUiStore()
+    const realNow = Date.now
+    const START = Date.UTC(2026, 10, 26, 12)
+    try {
+      Date.now = () => START
+      ui.startCookingUsedSession(5132, ['2:0:lemon'])
+      Date.now = () => START + 60_000
+      ui.startCookingUsedSession(5132, ['3:1:garlic'])
+      expect(ui.cookingUsedSets[5132].startedAt).toBe(START)
+      expect(ui.cookingUsedKeys(5132)).toEqual(['2:0:lemon', '3:1:garlic'])
+
+      Date.now = () => START + 86_400_001
+      expect(ui.cookingUsedKeys(5132)).toEqual([])
+      ui.toggleCookingUsedKey(5132, '4:2:carrot')
+      expect(ui.cookingUsedSets[5132].startedAt).toBe(START + 86_400_001)
+      expect(ui.cookingUsedKeys(5132)).toEqual(['4:2:carrot'])
+    } finally {
+      Date.now = realNow
+    }
+  })
+})

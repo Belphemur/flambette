@@ -12,12 +12,12 @@
  * dietary-restriction swap (the display name may change, the identity may
  * not).
  *
- * The checks are NOT persisted: they are session/view state (owner ruling
- * superseding ADR-0103's persisted-store decision). Each surface keeps its
- * own in-component Set; this module only carries a one-shot handoff when
- * the detail sheet starts a cooking session for that same recipe. It is
- * module memory, never localStorage/room/backup, and is consumed at most
- * once, so a re-cook or an app reload starts with a clean sheet.
+ * ADR-0103 owner ruling 2026-11-26 (final): COOKING keeps its used-set in
+ * the ui store's persisted slice, keyed by recipe id + session start stamp,
+ * capped at 24h and cleared by the one recordCook() path. DETAIL is fully
+ * ephemeral. This module owns the keys and the ONE-SHOT handoff from the
+ * detail sheet into that cooking session; the handoff itself stays module
+ * memory and is consumed at most once.
  */
 
 import { nameKey } from './grocery'
@@ -27,6 +27,21 @@ export function usedIngredientKey(stepIndex: number, chip: MeasuredChip): string
   // `keyIngredient` is the BASE name: the restriction view's display name
   // may change without the ingredient's identity changing (qodo PR #120).
   return `${stepIndex}:${chip.lineIndex}:${nameKey(chip.keyIngredient)}`
+}
+
+/**
+ * ADR-0103 decision 3b: the prep-card ingredient row and every step row
+ * naming that same line item render from ONE ephemeral sheet set. This is
+ * the prep row's key; `usedIngredientKey` is the step row's key, and
+ * `MeasuredChip.itemId` is the bridge between them.
+ */
+export function ingredientRowKey(itemId: number): string {
+  return `item:${itemId}`
+}
+
+/** True for a step-row key (handoff seeds only these into cooking mode). */
+export function isStepUsedKey(key: string): boolean {
+  return !key.startsWith('item:')
 }
 
 /** One-shot session handoff, held only for the lifetime of the tab. */

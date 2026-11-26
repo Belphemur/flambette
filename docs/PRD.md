@@ -78,7 +78,7 @@ Unlike generic recipe scrapers, calorie-counting diaries, or bloated ad-supporte
 - **Focused Reading Ergonomics**:
   - Step-by-step reading carousel constrained to a 672px reading measure.
   - Scaled ingredient quantities highlighted per step (e.g., "Add 150g diced onions and 2 cloves minced garlic").
-  - "I used that ingredient" checkboxes on the cooking card AND the recipe-detail steps share ONE canonical key (ADR-0103, owner ruling 2026-11-26), but no persisted record: the cook session keeps one Set across its steps, and the detail sheet keeps its own ref (handed to cooking once on Start cooking). Ticks survive step navigation, never a re-cook, re-visit or reload; the key names the ingredient (not the live-scaled amount or a restriction substitute).
+  - "I used that ingredient" checkboxes live ON every matched step detail line (precise or imprecise) in both cooking mode and the recipe-detail steps, sharing ONE canonical ingredient key (ADR-0103, final owner ruling 2026-11-26). Cooking remembers its set device-locally for the session, capped at 24 hours and cleared when the meal is marked cooked; detail stays fully ephemeral (its step rows and prep-card ingredient rows are one shared check, handed to cooking once on Start cooking). The key names the ingredient — never the live-scaled amount or a restriction substitute.
   - Large step numerals and minimum 20px typography readable at arm's length.
 - **Integrated Timers**:
   - One-tap timers embedded in instruction text (e.g., "Simmer for 15 min").

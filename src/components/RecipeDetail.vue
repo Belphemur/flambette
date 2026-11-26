@@ -7,11 +7,16 @@ import { eventsDocView, restrictedDocView } from '../lib/restrictions'
 import { useRestrictions } from '../composables/useRestrictions'
 import { imageSrc, onImgError } from '../lib/images'
 import {
-  measuredChipsForLines,
+  checklistChipsForLines,
   measuredQuantity,
   type MeasuredChip,
 } from '../lib/measuredAmounts'
-import { handOffUsedIngredients, usedIngredientKey } from '../lib/usedIngredients'
+import {
+  handOffUsedIngredients,
+  ingredientRowKey,
+  isStepUsedKey,
+  usedIngredientKey,
+} from '../lib/usedIngredients'
 import {
   localizeQuantity,
   localizeSteps,
@@ -311,36 +316,63 @@ const macroAria = computed(() => {
 
 const inPlan = computed(() => (meta.value ? plan.planContains(meta.value.id) : false))
 
-/* ---------- Ephemeral prep checklist (ADR-0073) ---------- */
+/* ---------- Ephemeral used checklist (ADR-0073 + ADR-0103 decision 3b) ---------- */
 
 /**
- * Checked ingredient ids for THIS sheet only. Ephemeral by construction:
- * a plain component ref, never persisted and never carried in the room
- * payload (prep state is personal and short-lived — the SHOP list is the
- * household's checklist). Switching recipe clears it, so one sheet's
- * ticks can never read as another dish's.
+ * ONE plain component ref powers BOTH the prep-card ingredient rows and
+ * the step detail rows. Ephemeral by construction: never persisted, never
+ * in the room payload or the cooking session (Start cooking copies it via
+ * the one-shot handoff), and cleared when the sheet changes recipe.
+ * A prep row is keyed by line-item id; each step row by step:line:nameKey;
+ * `MeasuredChip.itemId` bridges the two views of the same ingredient.
  */
-const readyIngredients = ref(new Set<number>())
+const usedKeys = ref(new Set<string>())
 const allReady = computed(
   () =>
     scaledIngredients.value.length > 0 &&
-    scaledIngredients.value.every((item) => readyIngredients.value.has(item.id)),
+    scaledIngredients.value.every((item) => usedKeys.value.has(ingredientRowKey(item.id))),
 )
 
+/** Every step-row key that names the same line item as this prep row. */
+function stepKeysForItem(itemId: number): string[] {
+  const keys = new Set<string>()
+  for (let i = 0; i < scaledSteps.value.length; i++) {
+    for (const chip of stepChips.value[i] ?? []) {
+      if (chip.itemId === itemId) keys.add(usedIngredientKey(i, chip))
+    }
+  }
+  return [...keys]
+}
+
+function toggleGroup(primaryKey: string, linkedKeys: Iterable<string>): void {
+  const next = new Set(usedKeys.value)
+  // The PRIMARY row decides the direction: a native checkbox click has
+  // already flipped its DOM state, so the bound value MUST change or Vue
+  // cannot patch it back (the linked rows may not all be ticked yet).
+  const turnOn = !next.has(primaryKey)
+  for (const key of [primaryKey, ...linkedKeys]) {
+    if (turnOn) next.add(key)
+    else next.delete(key)
+  }
+  usedKeys.value = next
+}
+
 function toggleReady(id: number): void {
-  const next = new Set(readyIngredients.value)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  readyIngredients.value = next
+  toggleGroup(ingredientRowKey(id), stepKeysForItem(id))
 }
 
 /** "Mark all ready" toggles every row, not just the open ones. */
 function toggleAllReady(): void {
   if (allReady.value) {
-    readyIngredients.value = new Set()
+    usedKeys.value = new Set()
     return
   }
-  readyIngredients.value = new Set(scaledIngredients.value.map((item) => item.id))
+  const next = new Set<string>()
+  scaledIngredients.value.forEach((item) => {
+    next.add(ingredientRowKey(item.id))
+    for (const key of stepKeysForItem(item.id)) next.add(key)
+  })
+  usedKeys.value = next
 }
 
 /* ---------- Inline step-timer affordances (ADR-0073 / ADR-0020) ---------- */
@@ -355,21 +387,16 @@ function toggleAllReady(): void {
 const armedByStep = ref(new Map<number, number>())
 
 /**
- * ADR-0103 owner ruling 2026-11-26: the step rows' checks are THIS sheet's
- * view state, exactly like `readyIngredients` — never persisted, cleared
- * when the sheet changes recipe (watch below), and handed to the cooking
- * session once when Start cooking is tapped. A re-visit starts clean.
+ * ADR-0103 decision 3b: a step-row tick is the SAME check as its prep row.
+ * Toggling one key toggles the paired ingredient-row key too, so the two
+ * views can never disagree (the one-predicate rule from ADR-0081).
  */
-const checkedIngredients = ref<Set<string>>(new Set())
-
 function isChecked(key: string): boolean {
-  return checkedIngredients.value.has(key)
+  return usedKeys.value.has(key)
 }
 
-function toggleChecked(key: string): void {
-  const next = new Set(checkedIngredients.value)
-  if (!next.delete(key)) next.add(key)
-  checkedIngredients.value = next
+function toggleChecked(key: string, chip: MeasuredChip): void {
+  toggleGroup(key, [ingredientRowKey(chip.itemId)])
 }
 
 /**
@@ -389,8 +416,7 @@ function hintAt(index: number): TimerHint | null {
 watch(
   () => meta.value?.id,
   () => {
-    readyIngredients.value = new Set()
-    checkedIngredients.value = new Set()
+    usedKeys.value = new Set()
     // The step->timer mapping is scoped to ONE recipe. The sheet component
     // is reused (`<component :is>` with no key), so without this reset a
     // step index armed for the PREVIOUS recipe would leave the next
@@ -402,18 +428,18 @@ watch(
 )
 
 /**
- * Measured amounts for one step's detail lines (ADR-0022) — the SAME pure
- * helper the cooking view renders, so a step can never claim an amount on
- * one surface and a different one on the other. ADR-0103: both surfaces
- * render these as interactive checklist rows driven by the ONE key;
- * Start cooking hands this sheet's checked set into the cook session.
- * No match means no row: nothing is ever invented.
+ * ADR-0103 owner ruling 2026-11-26: the checkboxes live ON the authored
+ * detail lines (one list, no separate card). The SAME pure helper the
+ * cooking view uses derives a row for EVERY matched line — precise prose
+ * included — from the line item's measured amount, never invented. Both
+ * surfaces key rows by the ONE helper; Start cooking hands this sheet's
+ * checked set into the cook session. No match means plain prose.
  */
 const stepChips = computed<MeasuredChip[][]>(() => {
   const current = doc.value
   if (!current) return []
   return scaledSteps.value.map((step) =>
-    measuredChipsForLines(
+    checklistChipsForLines(
       current,
       step.details ?? [],
       factor.value,
@@ -422,6 +448,11 @@ const stepChips = computed<MeasuredChip[][]>(() => {
     ),
   )
 })
+
+/** The matched line items of ONE authored detail line (ADR-0103). */
+function detailChipsFor(step: number, line: number): MeasuredChip[] {
+  return (stepChips.value[step] ?? []).filter((chip) => chip.lineIndex === line)
+}
 
 /** A 1s tick, alive only while a timer this sheet armed is counting. */
 const now = ref(Date.now())
@@ -953,7 +984,12 @@ function startCooking() {
   if (!meta.value) return
   // One-shot handoff: the cooking session SEEDS its own Set from this
   // sheet's checks, then owns them for the session. No store, no storage.
-  handOffUsedIngredients(meta.value.id, checkedIngredients.value)
+  // Only step-row keys belong to the cooking session; prep-row keys are
+  // the sheet's own ephemeral view of the same checks.
+  handOffUsedIngredients(
+    meta.value.id,
+    [...usedKeys.value].filter(isStepUsedKey),
+  )
   void router.push({ name: 'cooking', params: { id: String(meta.value.id) } })
 }
 </script>
@@ -1499,17 +1535,17 @@ function startCooking() {
   <input
   type="checkbox"
   class="check-box done"
-  :checked="readyIngredients.has(item.id)"
+  :checked="usedKeys.has(ingredientRowKey(item.id))"
   @change="toggleReady(item.id)"
   />
   <span
   class="min-w-0 flex-1 text-body-sm"
-  :class="readyIngredients.has(item.id) ? 'text-text-muted line-through' : 'text-text'"
+  :class="usedKeys.has(ingredientRowKey(item.id)) ? 'text-text-muted line-through' : 'text-text'"
   >{{ item.ingredient_name }}</span>
   </label>
   <span
   class="shrink-0 rounded-md bg-surface-sunken px-2 py-1 font-mono-data text-label-sm tabular-nums"
-  :class="readyIngredients.has(item.id) ? 'text-text-muted' : 'text-text'"
+  :class="usedKeys.has(ingredientRowKey(item.id)) ? 'text-text-muted' : 'text-text'"
   data-test="detail-ingredient-qty"
   >{{ item.quantity || '—' }}</span>
   </li>
@@ -1590,63 +1626,6 @@ function startCooking() {
   >
   </div>
   <p class="mt-2 text-body-md lg:text-body-lg">{{ step.primary }}</p>
-  <!-- Measured amounts under the step text (ADR-0022, on the detail per
-  ADR-0077): the same rows the cooking view derives. ADR-0103 replaces
-  the static chips with the ADR-0081 interactive checklist — full-row tap
-  targets, 20px rounded success checkbox, struck-through muted text when
-  checked. The key is the ONE helper, so a tick here reads checked in the
-  cooking session. A step whose lines are all precise renders nothing —
-  never a guessed amount. -->
-  <ul
-  v-if="stepChips[i]?.length"
-  class="mt-2 ml-9 divide-y divide-border/80 overflow-hidden rounded-lg border border-border bg-surface"
-  data-test="detail-measured-amounts"
-  >
-  <li
-  v-for="chip in stepChips[i] ?? []"
-  :key="usedIngredientKey(i, chip)"
-  data-test="detail-measured-check-row"
-  >
-  <label class="flex min-h-14 cursor-pointer items-center gap-3 px-3 py-2 select-none">
-  <input
-  type="checkbox"
-  class="sr-only"
-  :checked="isChecked(usedIngredientKey(i, chip))"
-  :aria-label="`Mark ${chip.ingredient} as used`"
-  data-test="detail-measured-check"
-  @change="toggleChecked(usedIngredientKey(i, chip))"
-  />
-  <!-- 20px rounded checkbox; checked = the SUCCESS family
-  (ADR-0072: never a food hue on a completion checkbox). -->
-  <span
-  class="flex size-5 shrink-0 items-center justify-center rounded-[5px] border transition-colors"
-  :class="
-  isChecked(usedIngredientKey(i, chip))
-  ? 'border-success bg-success'
-  : 'border-border-strong bg-surface-raised'
-  "
-  aria-hidden="true"
-  >
-  <Check
-  v-if="isChecked(usedIngredientKey(i, chip))"
-  :size="14"
-  aria-hidden="true"
-  class="text-on-success"
-  />
-  </span>
-  <span
-  class="font-mono-data text-label-md font-bold tabular-nums"
-  :class="isChecked(usedIngredientKey(i, chip)) ? 'text-text-muted line-through' : 'text-text'"
-  >{{ chip.quantity }}</span
-  >
-  <span
-  class="min-w-0 flex-1 text-label-md leading-snug"
-  :class="isChecked(usedIngredientKey(i, chip)) ? 'text-text-muted line-through' : 'text-text'"
-  >{{ chip.ingredient }}</span
-  >
-  </label>
-  </li>
-  </ul>
   <!-- Inline timer affordance (ADR-0073): ONLY where the recipe's own
   sidecar reports a duration for this step — never a guessed one
   (ADR-0022). The press ARMS the duration in the shared timer store,
@@ -1682,11 +1661,65 @@ function startCooking() {
   <X :size="14" aria-hidden="true" />
   </button>
   </div>
+  <!-- ADR-0103 owner ruling 2026-11-26: the STEP DETAIL LINES ARE the
+  checklist — one list, not a separate card. Every line matching >=1
+  line_item becomes a real checkbox row (precise prose included); the
+  amount is always the line item's, never invented. Unmatched lines stay
+  plain prose with no fake checkbox. -->
   <ul
   v-if="step.details.length"
   class="mt-2 space-y-0.5 border-l-2 border-border pl-3 text-body-sm text-text-muted"
+  :data-test="stepChips[i]?.length ? 'detail-measured-amounts' : undefined"
   >
-  <li v-for="(d, j) in step.details" :key="j">{{ d }}</li>
+  <template v-for="(d, j) in step.details" :key="j">
+  <li
+  v-for="chip in detailChipsFor(i, j)"
+  :key="usedIngredientKey(i, chip)"
+  class="rounded-lg bg-surface-raised py-1 pr-2 ring-1 ring-border"
+  data-test="detail-measured-check-row"
+  >
+  <label
+  class="used-ingredient-row flex min-h-12 cursor-pointer items-center gap-2.5 px-2 select-none"
+  >
+  <input
+  type="checkbox"
+  class="sr-only"
+  :checked="isChecked(usedIngredientKey(i, chip))"
+  :aria-label="`Mark ${chip.ingredient} as used`"
+  data-test="detail-measured-check"
+  @change="toggleChecked(usedIngredientKey(i, chip), chip)"
+  />
+  <span
+  class="flex size-5 shrink-0 items-center justify-center rounded-[5px] border transition-colors"
+  :class="
+  isChecked(usedIngredientKey(i, chip))
+  ? 'border-success bg-success'
+  : 'border-border-strong bg-surface-raised'
+  "
+  aria-hidden="true"
+  >
+  <Check
+  v-if="isChecked(usedIngredientKey(i, chip))"
+  :size="14"
+  aria-hidden="true"
+  class="text-on-success"
+  />
+  </span>
+  <span
+  class="font-mono-data text-label-md font-bold tabular-nums"
+  :class="isChecked(usedIngredientKey(i, chip)) ? 'text-text-muted line-through' : 'text-text'"
+  >{{ chip.quantity }}</span
+  >
+  <span
+  class="min-w-0 shrink-0 text-label-md font-semibold leading-snug"
+  :class="isChecked(usedIngredientKey(i, chip)) ? 'text-text-muted line-through' : 'text-text'"
+  >{{ chip.ingredient }}</span
+  >
+  <span class="min-w-0 flex-1 leading-snug">{{ d }}</span>
+  </label>
+  </li>
+  <li v-if="!detailChipsFor(i, j).length" class="leading-snug">{{ d }}</li>
+  </template>
   </ul>
   </li>
   </ol>

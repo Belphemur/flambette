@@ -18,7 +18,7 @@ import {
 import { catalog, getRecipe } from '../lib/catalog'
 import { eventsDocView, restrictedDocView } from '../lib/restrictions'
 import { useRestrictions } from '../composables/useRestrictions'
-import { measuredChipsForLines } from '../lib/measuredAmounts'
+import { checklistChipsForLines } from '../lib/measuredAmounts'
 import { takeUsedIngredientHandoff, usedIngredientKey } from '../lib/usedIngredients'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
 import { localizeSteps } from '../lib/units'
@@ -188,69 +188,67 @@ function close() {
   else void router.replace('/plan')
 }
 
-/* ---------- Measured amounts under the step text (ADR-0022) ----------
+/* ---------- Checkable detail lines under the step text (ADR-0081/0103) ----------
  *
- * Step text is authored prose: when its own quantity cannot be parsed
- * ("juice of ¾ lemon"), the MEASURED quantity lives in `line_items` and
- * is surfaced as a full-row checklist item — never invented. Rows are
- * per detail line, in step order, scaled by the current factor with the
- * SAME container/linear split the grocery list uses.
+ * ADR-0103 owner ruling 2026-11-26: the checkbox target is the STEP DETAIL
+ * LINE — the prose rows under the step text, not a separate card. Every
+ * detail line that matches >=1 `line_item` becomes a real full-row
+ * checkbox (precise prose included); the amount always comes from the
+ * line item, never invented. Unmatched lines stay plain prose. One view
+ * can be a Meanwhile pair (ADR-0010), so rows are grouped per step.
  */
-const visibleMeasured = computed(() =>
-  visibleSteps.value.map((vs) => ({
-  // ADR-0103: the ABSOLUTE step index, so a Meanwhile pair's partner
-  // carries the same key on this surface as its own step on detail.
-  stepIndex: vs.stepIndex,
-  chips: doc.value
-    ? measuredChipsForLines(
+const visibleDetails = computed(() =>
+  visibleSteps.value.map((vs) => {
+  const chips = doc.value
+    ? checklistChipsForLines(
         doc.value,
         vs.step.details,
         factor.value,
         ui.unitSystem,
         loadedDoc.value ?? undefined,
       )
-    : [],
-  })),
+    : []
+  const details = vs.step.details.map((text, lineIndex) => ({
+    text,
+    // ADR-0103: the ABSOLUTE step index, so a Meanwhile pair's partner
+    // carries the same key here as its own step on detail.
+    rows: chips
+      .filter((chip) => chip.lineIndex === lineIndex)
+      .map((chip) => ({ key: usedIngredientKey(vs.stepIndex, chip), chip })),
+  }))
+  return { details, matchedCount: details.reduce((n, d) => n + d.rows.length, 0) }
+  }),
 )
 
-/**
- * The checklist card's rows (ADR-0081): every measured amount of the
- * WHOLE view — a Meanwhile pair is one view (ADR-0010) — flattened in
- * step order. Both surfaces call the ONE `usedIngredientKey` helper.
- */
-const checklistRows = computed(() =>
-  visibleMeasured.value.flatMap((vm) =>
-  vm.chips.map((chip) => ({ key: usedIngredientKey(vm.stepIndex, chip), chip })),
-  ),
-)
+/** Rows of one detail line in the current view (same group as the prose). */
+function rowsFor(view: number, line: number) {
+  return visibleDetails.value[view]?.details[line]?.rows ?? []
+}
+function matchedCount(view: number): number {
+  return visibleDetails.value[view]?.matchedCount ?? 0
+}
 
 /**
- * ADR-0103 owner ruling 2026-11-26: the used-set is SESSION state, not a
- * persisted store slice. It lives for THIS cooking session — the Set is
- * seeded once at session start from the detail sheet's one-shot handoff,
- * survives step navigation, and dies on unmount / app reload. A re-cook
- * therefore starts clean.
+ * ADR-0103 owner ruling 2026-11-26 (final): the cooking used-set is a
+ * DEVICE-LOCAL session in the ui store's persisted slice, keyed by recipe
+ * id and stamped at session start. It survives step navigation AND a
+ * reload mid-cook, expires at read time after 24h, and is cleared by the
+ * ONE recordCook() path. Only the handoff from the detail sheet stays
+ * module memory and is consumed once when the session opens.
  */
-const checkedIngredients = ref<Set<string>>(new Set())
-// A route-param change REUSES this component: a new recipe id is a new
-// session, so seed a fresh Set (and consume any handoff for that id).
-// Ordinary step navigation leaves `props.id` untouched and keeps the Set.
-watch(
-  () => props.id,
-  (id) => {
-    checkedIngredients.value = new Set(takeUsedIngredientHandoff(id))
-  },
-  { immediate: true },
-)
+function openSession(id: number): void {
+  ui.startCookingUsedSession(id, takeUsedIngredientHandoff(id))
+}
+// The shell keys CookingView by the cooking route id, so a new id normally
+// remounts. The watch is the local guard for an in-place id change.
+watch(() => props.id, openSession, { immediate: true })
 
 function isChecked(key: string): boolean {
-  return checkedIngredients.value.has(key)
+  return ui.cookingUsedKeys(props.id).includes(key)
 }
 
 function toggleChecked(key: string): void {
-  const next = new Set(checkedIngredients.value)
-  if (!next.delete(key)) next.add(key)
-  checkedIngredients.value = next
+  ui.toggleCookingUsedKey(props.id, key)
 }
 
 /* ---------- Global timer strip (ADR-0041) ----------
@@ -676,6 +674,10 @@ function doRecordCook(): void {
   cleared: cleared ? [...cleared] : null,
   }
   const event: CookedEntry = plan.markCooked(id, sessionPlan)
+  // ADR-0103 decision 4: recording finishes the occasion, so its used-set
+  // must never leak into a later re-cook of the same recipe. ONE path for
+  // Finish and the mid-cook mark alike (ADR-0083 convergence).
+  ui.clearCookingUsedSet(id)
   sessionCooked.value = event
   sessionPrior.value = prior
   // ADR-0083 addendum: the record raises the prompt on BOTH paths — the
@@ -841,8 +843,8 @@ onMounted(() => {
   document.addEventListener('visibilitychange', onVisibility)
 })
 onUnmounted(() => {
-  // The cook session owns its used-set: leaving the session ends it.
-  checkedIngredients.value.clear()
+  // ADR-0103: the used-set is NOT cleared on unmount — an honest mid-cook
+  // reload resumes it. Only recordCook() clears, or the 24h read-time TTL.
   if (tickHandle) clearInterval(tickHandle)
   window.removeEventListener('keydown', onKey)
   document.removeEventListener('visibilitychange', onVisibility)
@@ -956,52 +958,32 @@ function onTouchEnd(e: TouchEvent) {
   >
   {{ vs.step.primary }}
   </p>
-  <ul v-if="vs.step.details.length" class="space-y-2">
-  <li
-  v-for="(d, j) in vs.step.details"
-  :key="j"
-  class="flex items-start gap-3 rounded-xl p-3 text-sm ring-1 ring-border"
+  <!-- ADR-0103 owner ruling 2026-11-26: THESE prose rows ARE the
+  checklist. Every detail line that matches >=1 line_item becomes a real
+  full-row checkbox (precise prose included); the amount comes from the
+  line item, never invented. Unmatched lines stay plain text — no fake
+  checkbox. One list, not a separate card plus a prose list. -->
+  <div
+  v-if="vs.step.details.length"
+  :data-test="matchedCount(i) ? 'measured-amounts' : undefined"
   >
-  <span
-  class="mt-0.5 size-5 shrink-0 rounded border-2"
-  aria-hidden="true"
-  ></span>
-  <span class="leading-relaxed">{{ d }}</span>
-  </li>
-  </ul>
-  </template>
-
-  <!-- The card row: the checklist and (ADR-0081) the step's timer card
-  side by side at desktop, stacked on a phone — inside the 672px
-  measure, never wider than it (ADR-0073). -->
-  <div class="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start">
-  <!-- "This step uses" (ADR-0081): the ADR-0022 measured amounts as an
-  interactive checklist. The DERIVATION is unchanged — same
-  `measuredAmounts.ts` source, same nameKey matching, same
-  no-invented-quantity rule — only the presentation moved from the
-  collapsed chip to a full-row checkbox. Checked state is SESSION state
-  (ADR-0103 owner ruling 2026-11-26): the ONE key is shared with the
-  recipe-detail step rows; the set lives for this cook session only. -->
-  <section
-  v-if="checklistRows.length"
-  class="rounded-xl border border-border bg-surface-raised p-4"
-  data-test="measured-amounts"
-  aria-label="This step uses"
-  >
-  <div class="flex items-center justify-between pb-1">
+  <div v-if="matchedCount(i)" class="flex items-center justify-between pb-1">
   <h2 class="text-[13px] font-bold tracking-wider text-text uppercase">This step uses</h2>
   <span class="font-mono-data text-[11px] text-text-muted" data-test="measured-count">
-  {{ checklistRows.length }} {{ checklistRows.length === 1 ? 'ingredient' : 'ingredients' }}
+  {{ matchedCount(i) }} {{ matchedCount(i) === 1 ? 'ingredient' : 'ingredients' }}
   </span>
   </div>
-  <ul class="overflow-hidden rounded-lg border border-border bg-surface">
+  <ul class="space-y-2">
+  <template v-for="(d, j) in vs.step.details" :key="j">
   <li
-  v-for="(row, idx) in checklistRows"
+  v-for="row in rowsFor(i, j)"
   :key="row.key"
-  :class="idx > 0 ? 'border-t border-border/80' : ''"
+  class="flex items-start rounded-xl p-3 text-sm ring-1 ring-border"
   data-test="measured-chip"
   >
-  <label class="flex min-h-14 cursor-pointer items-center gap-3 px-3.5 py-2 select-none">
+  <label
+  class="used-ingredient-row flex min-h-14 w-full cursor-pointer items-center gap-3 select-none"
+  >
   <input
   type="checkbox"
   class="sr-only"
@@ -1023,22 +1005,31 @@ function onTouchEnd(e: TouchEvent) {
   >
   <Check v-if="isChecked(row.key)" :size="14" aria-hidden="true" class="text-on-success" />
   </span>
-  <!-- Bold mono amount beside the name; checked strikes BOTH
-  through and mutes them. -->
+  <!-- The MEASURED amount and matched ingredient beside the authored
+  prose; checked strikes both derived spans, never the prose. -->
   <span
   class="font-mono-data text-[15px] font-bold tabular-nums"
   :class="isChecked(row.key) ? 'text-text-muted line-through' : 'text-text'"
   >{{ row.chip.quantity }}</span
   >
   <span
-  class="min-w-0 flex-1 text-[15px] leading-snug"
+  class="min-w-0 shrink-0 text-[15px] font-semibold leading-snug"
   :class="isChecked(row.key) ? 'text-text-muted line-through' : 'text-text'"
   >{{ row.chip.ingredient }}</span
   >
+  <span class="min-w-0 flex-1 text-[13px] leading-snug text-text-muted">{{ d }}</span>
   </label>
   </li>
+  <li
+  v-if="!rowsFor(i, j).length"
+  class="flex items-start rounded-xl p-3 text-sm ring-1 ring-border"
+  >
+  <span class="leading-relaxed">{{ d }}</span>
+  </li>
+  </template>
   </ul>
-  </section>
+  </div>
+  </template>
 
   <!-- "Timers for this step" (ADR-0081 + states amendment): a TWO-STATE
   disclosure. ADR-0020's state semantics are untouched — one
@@ -1303,7 +1294,6 @@ function onTouchEnd(e: TouchEvent) {
   </div>
   </div>
   </section>
-  </div>
   </div>
   </div>
 

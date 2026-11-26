@@ -11,28 +11,41 @@ line `serves N · Step i / n`, thin tomato progress bar, close), the STEP
 TEXT as the dominant element (20px/30px mobile, 22px/34px desktop), then
 two cards, then the action deck.
 
-- **"This step uses" checklist card**: the ADR-0022 measured-amount chips
-  are superseded in PRESENTATION ONLY by interactive checklist rows —
-  full-row ~56px tap targets, 20px rounded checkboxes, bold mono amount +
-  ingredient name; checked = success green fill + struck-through muted
-  text (ADR-0072: completion is the success family, NEVER a food hue, on
-  a checkbox). The DERIVATION is untouched — same `measuredAmounts.ts`
-  source, same nameKey word-boundary matching, same no-invented-quantity
-  rule, same scaling import. Checked state is SESSION state (ADR-0103
-  owner ruling 2026-11-26, superseding BOTH the old per-step reset and
-  the record's original persisted-slice decision): the cooking session
-  owns one Set for its whole lifetime — step navigation never clears it,
-  and unmount ends it. Nothing is written to localStorage, the room
-  payload or a backup slice; a re-cook or a reload starts clean.
-  The recipe-detail steps are the SAME checklist (ADR-0103): their former
-  static `detail-measured-chip` list is now full-row checkboxes
-  (`detail-measured-check`) with the ADR-0081/0072 checked styling. The
-  sheet owns its own ref (like `readyIngredients`), cleared when the sheet
-  changes recipe; Start cooking hands that Set to the cook session once,
-  so a tick made on detail reads checked in cooking mode. The key is
-  `stepIndex:lineIndex:ingredient-nameKey` from the BASE ingredient name
-  (never the live-scaled amount or the restriction-substituted display
-  name), so neither servings nor dietary filters orphan a tick.
+- **Checkable step detail lines (ADR-0103, final owner ruling
+  2026-11-26)**: the checkbox target is the AUTHORED DETAIL LINE under the
+  step text — the row that used to carry a decorative `aria-hidden` box.
+  Every line matching >=1 `line_item` becomes a full-row tap target with
+  a REAL sr-only `<input>` inside a `<label>`: 20px rounded box, bold mono
+  amount from the LINE ITEM + ingredient name + prose, success green fill
+  and struck-through text when checked (ADR-0072). PRECISE lines are
+  checkable too; a line with no match stays plain prose (no fake
+  affordance). There is NO separate "This step uses" card in cooking —
+  the prose list IS the checklist (`measured-check` / `measured-chip`).
+  `checklistChipsForLines` widens the ADR-0022 derivation to all matched
+  lines; `measuredChipsForLines` keeps the narrow imprecise-only rule for
+  other consumers. One canonical key
+  `stepIndex:lineIndex:ingredient-nameKey` from the BASE name (never the
+  rendered amount or the restriction-substituted display name) drives
+  both surfaces.
+  Cooking's used-set is DEVICE-LOCAL in the ui store's persisted slice,
+  keyed by recipe id + `{startedAt, usedKeys}`: it survives step nav and
+  a mid-cook reload, expires at READ TIME after 24h (no sweeper), and the
+  ONE `recordCook()` path clears it. Detail is fully EPHEMERAL: one plain
+  component ref shared by the step rows AND the prep-card ingredient rows
+  (`MeasuredChip.itemId` bridges the two keys); Start cooking hands the
+  step keys into the session once and discards the sheet's copy. Switching
+  recipe clears it. No room payload, no new backup slice.
+  Both surfaces give the row a visible keyboard-focus ring
+  (`.used-ingredient-row` in `src/style.css`): the `<input>` is `sr-only`,
+  so the global input-only `:focus-visible` outline alone is invisible.
+  The ring uses the same `brand-text` token and `:has(:focus-visible)`, so
+  pointer taps stay unringed.
+- **One recipe id = one session**: the app shell keys `CookingView` by the
+  `/cooking/:id` param. A param-only route change remounts the component
+  (fresh document, servings, plan provenance and cook record); moving
+  inside one recipe keeps the same instance. The persisted used-set is
+  keyed by that same id, so returning within 24h resumes it and a stale
+  entry starts clean.
 - **"Timers for this step" card** — a TWO-STATE disclosure:
   - **Collapsed** (nothing known or running): a single ~56px tappable
     row titled "Set a Timer" with the honest hint "No timer running for

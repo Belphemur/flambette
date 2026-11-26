@@ -426,6 +426,16 @@ input[type="radio"] {
   border-radius: var(--radius-sm, 6px);
 }
 
+/* ADR-0103: the used-ingredient rows hide their real checkbox with
+   `sr-only`, so the global input-only ring above would be invisible.
+   Draw the SAME brand-text ring on the whole visible row, and only for
+   keyboard focus — `:has(:focus-visible)` never fires for a pointer tap. */
+.used-ingredient-row:has(input:focus-visible) {
+  outline: 2px solid var(--color-brand-text);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm, 6px);
+}
+
 /* ------------------------------------------------------------------ *
  * Recipe card link: the title is the ONLY link, and its ::after
  * stretches over the whole tile so the entire card is one target while

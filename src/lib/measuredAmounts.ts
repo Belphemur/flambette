@@ -9,8 +9,12 @@
  * invented prose.
  *
  * Hard rules:
- * - NEVER invent a quantity. A detail line with no parseable quantity
- *   prefix and no matching line item simply shows nothing.
+ * - NEVER invent a quantity. A row exists ONLY when a line item matched
+ *   the detail line; the amount is always that line item's measured
+ *   quantity. A line with no match simply shows nothing.
+ * - ADR-0022's original narrow rule (imprecise prose only) stays in
+ *   `measuredChipsForLines`; ADR-0103's interactive checklist widens it to
+ *   every matched line via `checklistChipsForLines`.
  * - Container units take ADR-0017's path (ceil-merged, not divided);
  *   spoon/count units keep ADR-0009's linear (seasoning-aware) scaling.
  *   Both are imported, never re-implemented here.
@@ -33,6 +37,8 @@ export interface MeasuredChip {
   quantity: string
   /** The matched ingredient name, verbatim from the line item (DISPLAY). */
   ingredient: string
+  /** The matched line item's id — links a step row to the prep-card row. */
+  itemId: number
   /**
    * BASE ingredient name for the persisted used-check key (ADR-0103).
    * Restriction views rewrite `ingredient` for display; the identity stays
@@ -142,12 +148,13 @@ export function measuredQuantity(item: LineItem, factor: number, base: number): 
  * quantity itself is derived from `doc.line_items`, which stays canonical
  * metric. `dual` (the default) keeps the transform the identity.
  */
-export function measuredChipsForLines(
+function chipsForLines(
   doc: RecipeDoc,
   detailLines: readonly string[],
   factor: number,
-  system: UnitSystem = 'dual',
-  baseDoc?: RecipeDoc,
+  system: UnitSystem,
+  baseDoc: RecipeDoc | undefined,
+  impreciseOnly: boolean,
 ): MeasuredChip[] {
   const items = doc.line_items ?? []
   if (items.length === 0) return []
@@ -162,7 +169,7 @@ export function measuredChipsForLines(
   const chips: MeasuredChip[] = []
   detailLines.forEach((line, lineIndex) => {
     const text = line.trim()
-    if (!text || !isImpreciseLine(text)) return
+    if (!text || (impreciseOnly && !isImpreciseLine(text))) return
     for (const item of matchLineItems(text, items)) {
       const quantity = measuredQuantity(item, factor, doc.serving_count)
       if (!quantity) continue
@@ -173,9 +180,43 @@ export function measuredChipsForLines(
         label: `measured: ${rendered} ${name}`,
         quantity: rendered,
         ingredient: name,
+        itemId: item.id,
         keyIngredient: baseNames.get(item.id) || name,
       })
     }
   })
   return chips
+}
+
+/** ADR-0022's original chip rule: only lines whose OWN quantity cannot
+ * be parsed surface a measured chip. Kept intact for any consumer that
+ * still needs the narrow derivation; the interactive checklist uses
+ * `checklistChipsForLines` below.
+ */
+export function measuredChipsForLines(
+  doc: RecipeDoc,
+  detailLines: readonly string[],
+  factor: number,
+  system: UnitSystem = 'dual',
+  baseDoc?: RecipeDoc,
+): MeasuredChip[] {
+  return chipsForLines(doc, detailLines, factor, system, baseDoc, true)
+}
+
+/**
+ * ADR-0103 owner ruling 2026-11-26: the checkbox target is the STEP DETAIL
+ * LINE itself. Every line that names at least one matched `line_item` is
+ * checkable — precise prose (`6 medium carrots`) included. The amount is
+ * ALWAYS the line item's measured quantity (never invented), and the key
+ * is the same `stepIndex:lineIndex:base-nameKey` as the narrow helper.
+ * The two cooking surfaces call this ONE derivation so a tick agrees.
+ */
+export function checklistChipsForLines(
+  doc: RecipeDoc,
+  detailLines: readonly string[],
+  factor: number,
+  system: UnitSystem = 'dual',
+  baseDoc?: RecipeDoc,
+): MeasuredChip[] {
+  return chipsForLines(doc, detailLines, factor, system, baseDoc, false)
 }
