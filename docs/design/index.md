@@ -5,7 +5,7 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**109 records.** One file per decision (`ADR-NNNN-slug.md`),
+**110 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
@@ -93,7 +93,6 @@ architecture is shaped the way it is.
 | [0090](ADR-0090-pantry-room-sync.md) | the pantry becomes household state — room-synced like custom ingredients _(supersedes ADR-0087)_ | 2026-10-14 |
 | [0091](ADR-0091-preview-github-deployments-web-only.md) | Previews create ONE GitHub deployment per PR (web only) and PR close deletes it _(supersedes ADR-0039)_ | 2026-10-15 |
 | [0092](ADR-0092-clear-checked-pull-to-clear.md) | Clear-checked removes only checked items; pull-to-clear gesture | 2026-10-18 |
-| [0093](ADR-0093-timer-alarm-recurring-pitch.md) | Timer alarm — recurring escalating alert with per-timer pitch | 2026-10-18 |
 | [0094](ADR-0094-grocery-object-cleared-storage.md) | Object-JSON cleared-ingredient storage (serving-safe clear-checked) | 2026-10-18 |
 | [0095](ADR-0095-grocery-checked-sink-both-surfaces.md) | Checked grocery rows sink to the end of their category on both surfaces _(supersedes ADR-0071)_ | 2026-10-19 |
 | [0096](ADR-0096-home-is-recipes-for-returning-users.md) | The home page serves the recipes list to returning users | 2026-10-24 |
@@ -104,6 +103,7 @@ architecture is shaped the way it is.
 | [0101](ADR-0101-auto-plan-class-aware-matching.md) | Auto-Plan v4 — class-aware waste matching (meat first, produce second, leftover-fill) _(supersedes ADR-0027)_ | 2026-10-28 |
 | [0102](ADR-0102-household-push-notifications.md) | Household Push Notifications (Web Push via the relay) | 2026-11-17 |
 | [0103](ADR-0103-used-ingredient-checks.md) | "Used" ingredient checks persist across the cooking surfaces | 2026-11-26 |
+| [0104](ADR-0104-timer-alarm-visual-shake.md) | Timer alarms get a visual shake channel and fire reliably on Brave/Android | 2026-11-26 |
 
 ## Not in force
 
@@ -135,6 +135,7 @@ understand why the current shape is the shape.
 | [0081](ADR-0081-cooking-mode-composition.md) | Cooking mode adopts the card composition and honest timer suggestions | accepted (superseded in part) | 2026-10-11 |
 | [0083](ADR-0083-post-cook-prompt.md) | The post-cook prompt — rate and favourite when the meal is done | accepted (superseded in part) | 2026-10-12 |
 | [0087](ADR-0087-pantry-ingredient-search.md) | "Cook with what I have" — pantry ingredient search, Variant A inline row | accepted (superseded in part) | 2026-10-14 |
+| [0093](ADR-0093-timer-alarm-recurring-pitch.md) | Timer alarm — recurring escalating alert with per-timer pitch | accepted (superseded in part) | 2026-10-18 |
 
 ## Known numbering collisions
 
@@ -151,8 +152,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0104**). Do not count the files -- that is how the
-   collisions above happened (109 files share 103 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0105**). Do not count the files -- that is how the
+   collisions above happened (110 files share 104 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.

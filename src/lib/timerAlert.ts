@@ -26,6 +26,11 @@
  * and pitches the chime per timer: `chime`/`fire` take the timer's
  * 0-based ORDINAL among its recipe's timers (see the per-timer pitch
  * section below); the engine itself stays stateless about rounds.
+ *
+ * ADR-0104 adds a THIRD channel — a visual shake owned by the host/UI,
+ * not by this engine. Sound and vibration therefore remain the only
+ * channels `fire` drives; the engine only has to make its own channels
+ * as reliable as the browser allows (chime recovery at FIRE time).
  */
 
 import { MAX_CONCURRENT_TIMERS } from './stepTimer'
@@ -161,20 +166,52 @@ export function createTimerAlerts(
 
   /** The chime: silent degradation when there is no runnable context.
    * `ordinal` is the timer's 0-based position among its recipe's timers
-   * (ADR-0093 per-timer pitch); the default 0 is the original A5→D6. */
-  function chime(ordinal = 0): void {
+   * (ADR-0093 per-timer pitch); the default 0 is the original A5→D6.
+   *
+   * ADR-0104 (Brave/Android): a context unlocked inside the arm gesture
+   * can still be `suspended` at fire time — Shields/autoplay policies
+   * swallow the unlock resume. Retry `resume()` HERE, when the alarm is
+   * actually firing, and play as soon as the context reaches `running`.
+   * A rejected/pending resume degrades silently to the other channels;
+   * the visual floor lives in the host/UI, never in this engine. */
+  function chime(ordinal = 0, isCurrent?: () => boolean): void {
+    // The device-local toggle is read at CALL time (every round) and AGAIN
+    // inside the resume continuation: Brave can leave `resume()` pending
+    // until user activation, and a cook may switch sound off (or stop the
+    // alarm) while that promise is in flight. `isCurrent` is the host's
+    // generation check — the engine stays stateless about rounds and does
+    // not know which timer fired.
     if (!getPrefs().sound) return
-    if (!ctx || ctx.state !== 'running') return
+    const active = ctx
+    if (!active) return
+    const playIfRunning = (): void => {
+      try {
+        if (active.state !== 'running') return
+        if (!getPrefs().sound) return
+        if (isCurrent && !isCurrent()) return
+        playTwoTone(active, ordinal)
+      } catch {
+        // Never surface an audio failure to a cook holding a knife.
+      }
+    }
+    if (active.state === 'running') {
+      playIfRunning()
+      return
+    }
     try {
-      playTwoTone(ctx, ordinal)
+      // A resume promise can reject (blocked autoplay, closed context) —
+      // BOTH outcomes are a silent no-op, never an unhandled rejection.
+      void Promise.resolve(active.resume()).then(playIfRunning, () => {})
     } catch {
-      // Never surface an audio failure to a cook holding a knife.
+      // A synchronous throw (a stub, or a broken native binding) is the
+      // same silent degradation path.
     }
   }
 
-  /** Fire BOTH channels (each honours its own toggle). */
-  function fire(ordinal = 0): void {
-    chime(ordinal)
+  /** Fire BOTH engine channels (each honours its own toggle). The visual
+   *  shake channel (ADR-0104) is owned by the host/UI and cannot be off. */
+  function fire(ordinal = 0, isCurrent?: () => boolean): void {
+    chime(ordinal, isCurrent)
     vibrate()
   }
 

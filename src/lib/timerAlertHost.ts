@@ -30,18 +30,22 @@
  * lower-id timer never moves a ringing alarm to another voice); an alarm
  * is pinned to the record it was raised against (a backup restore that
  * re-creates the same ids drops the old alarm instead of inheriting its
- * rounds); and with BOTH channels dead (sound off, vibration off or the
- * API absent) the host never enters — or stays in — the alarming set, so
- * no invisible alarm can pin the interval forever. The alarming set is
- * mirrored reactively (`alarmingTimers`) for the shell's global stop
- * banner: ADR-0093's stop verbs live on the cooking strip, and a cook who
- * finished (or is on any other surface) must still be able to stop it.
+ * rounds); and the engine's two channels are read live at every round.
+ * ADR-0104 re-scopes the third guard: the VISUAL channel (a shake on the
+ * shell banner and the alarming chip) has no toggle and cannot die, so an
+ * alarm ALWAYS enters and stays in `alarmingTimers` even when sound and
+ * vibration are both dead — the shake + banner are the output, and only
+ * the user's timer stop ends the alarm. The both-channels-dead predicate
+ * now gates the ENGINE's fire call only, never alarming-set membership.
  *
  * Autoplay discipline is unchanged: the AudioContext is created/resumed only
  * inside a user gesture (`unlockTimerAlertAudio`, called from the Start-timer
- * and Restart presses); a chime without a gesture degrades silently to the
- * announcement + vibration. Polling starts lazily and stops itself when no
- * timer is live and every expired one has been accounted for.
+ * and Restart presses); the engine additionally retries `resume()` at fire
+ * time (ADR-0104, Brave/Android). Polling starts lazily and stops itself
+ * when no timer is live, every expired one is accounted for, and nothing
+ * is alarming. A backgrounded tab can throttle the 1 s interval, so a
+ * `visibilitychange` → visible runs ONE tick immediately (the listener
+ * lives exactly as long as the loop).
  */
 
 import { ref } from 'vue'
@@ -51,6 +55,9 @@ import { createTimerAlerts, type TimerAlerts } from './timerAlert'
 
 let engine: TimerAlerts | null = null
 let handle: ReturnType<typeof setInterval> | undefined
+/** The visibility listener is armed with the loop, never independently:
+ *  no background tab can tick against a stopped host. */
+let visibilityListenerArmed = false
 /** Keys this session SAW counting down (armed) — only they may fire. */
 const armed = new Set<string>()
 /** Keys that have fired (or were seeded as already-expired). */
@@ -81,6 +88,24 @@ interface AlarmState {
 }
 /** Keys currently alarming — a fired timer rings UNTIL THE USER STOPS IT. */
 const alarming = new Map<string, AlarmState>()
+/**
+ * Monotonic fire generation per key. A suspended AudioContext's `resume()`
+ * can stay pending until user activation; every chime continuation captures
+ * the generation of its round. A stop (Clear, Restart, restore, banner Stop)
+ * bumps it so a LATE resume from an already-stopped alarm cannot burst out
+ * as a tone (review hardening 2026-11-26). The engine stays stateless about
+ * rounds — it only evaluates the predicate we hand it after `resume()`.
+ */
+const alarmGenerations = new Map<string, number>()
+
+function stopAlarmKey(key: string): void {
+  alarmGenerations.set(key, (alarmGenerations.get(key) ?? 0) + 1)
+  alarming.delete(key)
+}
+
+function fireIsCurrent(key: string, generation: number): () => boolean {
+  return () => alarming.has(key) && (alarmGenerations.get(key) ?? 0) === generation
+}
 
 /**
  * The identity of a timer RECORD the alarm is pinned to: the run segment
@@ -97,12 +122,13 @@ function srcOf(t: CookTimer): string {
 }
 
 /**
- * Whether ANY alarm channel can produce output right now (each toggle is
- * read live): sound is on, or vibration is on AND the API exists. With
- * both channels dead an alarm would be an invisible, inaudible interval
- * that never stops — so the host never enters (or stays in) the alarming
- * set; the toggle flip IS the user stop. The banner (below) is a display
- * of the alarm, not a channel: it never keeps a dead-alarm loop alive.
+ * Whether either ENGINE channel can produce output right now (each
+ * toggle is read live): sound is on, or vibration is on AND the API
+ * exists. ADR-0104 re-scopes this predicate: the third channel — the
+ * visual shake on the banner and the chip — is always live and has no
+ * toggle, so this gates ONLY the chime/vibration `fire()` call. Turning
+ * both engine channels off mid-alarm does NOT stop the alarm: the user
+ * must still stop the timer, whose shake stays visible on every surface.
  */
 function channelsLive(ui: ReturnType<typeof useUiStore>): boolean {
   if (ui.timerAlertSound) return true
@@ -184,17 +210,21 @@ function tick(now: number): void {
         // and the timer's NEXT expiry starts a fresh round 1.
         armed.add(key)
         alerted.delete(key)
-        alarming.delete(key)
+        if (alarming.has(key)) stopAlarmKey(key) // Restart/Resume IS a user stop
         live = true
       } else if (armed.has(key) && !alerted.has(key)) {
         // This session watched it reach zero: round 1 fires now, and the
         // timer stays in the alarming set until the user stops it.
+        // ADR-0104: the visual channel cannot be off, so membership is
+        // unconditional — even a device with no sound AND no vibration
+        // alarms visibly (the shake is the floor that cannot fail).
         alerted.add(key)
+        alarming.set(key, { round: 0, lastFire: now, ordinal: ordered.indexOf(t), src: srcOf(t) })
         if (channelsLive(ui)) {
-          // A dead-alarm loop (both channels off/absent) is a permanent
-          // 1 s interval that outputs nothing — never enter the set.
-          alarming.set(key, { round: 0, lastFire: now, ordinal: ordered.indexOf(t), src: srcOf(t) })
-          ensureEngine().fire(ordered.indexOf(t))
+          ensureEngine().fire(
+            ordered.indexOf(t),
+            fireIsCurrent(key, alarmGenerations.get(key) ?? 0),
+          )
         }
       } else if (alarming.has(key)) {
         // Still alarming: fire the next round when its grown pause is due.
@@ -205,17 +235,21 @@ function tick(now: number): void {
           // is not this record's alarm: drop it. The record itself
           // re-enters the normal rules, so an already-expired restore is
           // seeded silently, never inherited.
-          alarming.delete(key)
-        } else if (!channelsLive(ui)) {
-          // The user turned the last channel off mid-alarm: that IS a
-          // user stop (ADR-0093 — only the user stops the alarm).
-          alarming.delete(key)
+          stopAlarmKey(key)
         } else if (now - state.lastFire >= pauseAfterRound(state.round) * 1000) {
+          // The round itself keeps escalating even with both engine
+          // channels dead: the banner + shake ARE the output (ADR-0104).
+          // Only the ENGINE call is gated by `channelsLive`.
           alarming.set(key, { round: state.round + 1, lastFire: now, ordinal: state.ordinal, src: state.src })
-          // The pitch is the ordinal captured at round 1 — the strip's
-          // membership may have changed since (a lower-id timer cleared),
-          // and a ringing alarm must keep its voice (ADR-0093 pitch).
-          ensureEngine().fire(state.ordinal)
+          if (channelsLive(ui)) {
+            // The pitch is the ordinal captured at round 1 — the strip's
+            // membership may have changed since (a lower-id timer cleared),
+            // and a ringing alarm must keep its voice (ADR-0093 pitch).
+            ensureEngine().fire(
+              state.ordinal,
+              fireIsCurrent(key, alarmGenerations.get(key) ?? 0),
+            )
+          }
         }
       } else {
         // Already expired when first seen (app boot, or a timer that
@@ -235,7 +269,7 @@ function tick(now: number): void {
     if (!seen.has(key)) {
       alerted.delete(key)
       armed.delete(key)
-      alarming.delete(key)
+      if (alarming.has(key)) stopAlarmKey(key)
     }
   }
   syncAlarmingSnapshot(ui)
@@ -248,6 +282,7 @@ function tick(now: number): void {
     // point (App mount, an arm press) heals a stopped loop — a timer
     // armed after the previous start call still gets watched.
     handle = setInterval(() => tick(Date.now()), 1000)
+    armVisibilityListener()
   }
 }
 
@@ -264,6 +299,31 @@ export function ensureTimerAlertPolling(): void {
 }
 
 /**
+ * ADR-0104: a backgrounded tab's interval is throttled (≥1/min) or
+ * frozen, so the deadline can pass unseen. Returning to the tab runs one
+ * scan IMMEDIATELY. When the loop is stopped this takes the same
+ * ensure-entry an arm press uses (which re-seeds and re-arms cleanly);
+ * when it is running, a direct tick supplies the due round.
+ */
+function onVisibilityChange(): void {
+  if (typeof document === 'undefined' || document.visibilityState !== 'visible') return
+  if (handle === undefined) ensureTimerAlertPolling()
+  else tick(Date.now())
+}
+
+function armVisibilityListener(): void {
+  if (visibilityListenerArmed || typeof document === 'undefined') return
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  visibilityListenerArmed = true
+}
+
+function disarmVisibilityListener(): void {
+  if (!visibilityListenerArmed || typeof document === 'undefined') return
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  visibilityListenerArmed = false
+}
+
+/**
  * One scan over the persisted timer state at wall-clock `now`. Exported
  * for the unit suite (which drives it with controlled times instead of a
  * real interval) — production code goes through `ensureTimerAlertPolling`.
@@ -272,12 +332,14 @@ export function scanTimerCompletions(now: number): void {
   tick(now)
 }
 
-/** Stop the 1 s loop (also the unit suite's afterEach cleanup). */
+/** Stop the 1 s loop AND its visibility listener (also the unit suite's
+ *  afterEach cleanup) — no tick can fire against a stopped host. */
 export function stopTimerAlertHost(): void {
   if (handle !== undefined) {
     clearInterval(handle)
     handle = undefined
   }
+  disarmVisibilityListener()
 }
 
 /** Whether the 1 s loop is running (unit-suite seam: the loop's OWN stop
@@ -297,5 +359,23 @@ export function resetTimerAlertHostForTests(): void {
   armed.clear()
   alerted.clear()
   alarming.clear()
+  alarmGenerations.clear()
   alarmingTimers.value = []
+}
+
+/**
+ * One Stop verb for the shell banner and the fullscreen indicator:
+ * invalidate any in-flight resume continuations FIRST, then perform each
+ * timer's own Clear. The host observes the vanished keys exactly as it
+ * would from a strip tap — no new alarm state. The reactive mirror is
+ * synced immediately so the indicator/banner vanish on the same tick.
+ */
+export function stopAllAlarmsNow(): void {
+  const ui = useUiStore()
+  for (const key of [...alarming.keys()]) {
+    stopAlarmKey(key)
+    const [variantId, timerId] = key.split(':').map(Number)
+    ui.clearTimer(variantId, timerId)
+  }
+  syncAlarmingSnapshot(ui)
 }

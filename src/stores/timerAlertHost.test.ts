@@ -8,7 +8,7 @@ import {
   timerAlertLoopRunning,
   unlockTimerAlertAudio,
 } from '../lib/timerAlertHost'
-import { chimeTonesForOrdinal } from '../lib/timerAlert'
+import { TIMER_VIBRATE_PATTERN, chimeTonesForOrdinal } from '../lib/timerAlert'
 import { useUiStore } from './ui'
 import type { StepTimer, StepTimersMap } from '../lib/stepTimer'
 
@@ -347,39 +347,117 @@ describe('recurring escalating alarm (ADR-0093)', () => {
     expect(alarmingTimers.value).toEqual([])
   })
 
-  test('with BOTH channels dead the host never enters the alarming set — no invisible 1 s loop', () => {
+  test('with BOTH engine channels dead the alarm still rings VISIBLY (ADR-0104)', () => {
     const ui = useUiStore()
     ui.timerAlertSound = false
     ui.timerAlertVibrate = false
     const t0 = 1_000_000
     setTimers({ 5264: { 1: timer(1, 60, t0) } })
     scanTimerCompletions(t0) // armed
-    scanTimerCompletions(t0 + 61_000) // expiry: round 1 would be due
+    scanTimerCompletions(t0 + 61_000) // expiry: round 1
     expect(vibrateCalls).toEqual([])
-    // Nothing is ringing, so nothing is alarming and the loop's OWN stop
-    // condition fired — no permanent 1 s interval parked on an expired
-    // timer nobody can hear (kody: the setInterval leak).
+    // ADR-0104 reverses ADR-0093's guard: the visual channel cannot be
+    // off, so the alarm enters the set and the 1 s loop stays alive —
+    // the banner + shake are now the output, not an invisible leak.
+    expect(alarmingTimers.value).toEqual([{ variantId: 5264, timerId: 1, label: 'T1' }])
+    expect(timerAlertLoopRunning()).toBe(true)
+    expect(chimeTones).toEqual([])
+    // ROUNDS keep escalating silently in the engine: the shake continues.
+    scanTimerCompletions(t0 + 63_000) // +4 s → round 2
+    scanTimerCompletions(t0 + 67_000) // +8 s → round 3
+    expect(vibrateCalls).toEqual([])
+    expect(chimeTones).toEqual([])
+    expect(alarmingTimers.value).toHaveLength(1)
+    // Only the TIMER's stop verb ends it.
+    setTimers({ 5264: {} })
+    scanTimerCompletions(t0 + 70_000)
     expect(alarmingTimers.value).toEqual([])
     expect(timerAlertLoopRunning()).toBe(false)
-    scanTimerCompletions(t0 + 120_000)
-    expect(vibrateCalls).toEqual([])
   })
 
-  test('turning the last channel OFF mid-alarm stops it (the flip is a user stop)', () => {
+  test('turning BOTH engine channels off mid-alarm keeps the visual alarm (ADR-0104)', () => {
     const ui = useUiStore()
     const t0 = 1_000_000
     setTimers({ 5264: { 1: timer(1, 60, t0) } })
     scanTimerCompletions(t0)
     scanTimerCompletions(t0 + 61_000) // round 1 (both channels on)
     expect(vibrateCalls).toHaveLength(1)
+    const tonesAfterRound1 = chimeTones.length
     ui.timerAlertSound = false
     ui.timerAlertVibrate = false
-    scanTimerCompletions(t0 + 63_000) // round 2 would be due
+    scanTimerCompletions(t0 + 63_000) // round 2 is still DUE — the shake carries it
     expect(vibrateCalls).toHaveLength(1)
-    expect(alarmingTimers.value).toEqual([])
-    // Re-enabling later does NOT resurrect the stopped alarm.
+    expect(chimeTones).toHaveLength(tonesAfterRound1) // no NEW chime
+    expect(alarmingTimers.value).toEqual([{ variantId: 5264, timerId: 1, label: 'T1' }])
+    expect(timerAlertLoopRunning()).toBe(true)
+    // Re-enabling resumes the engine channel on the NEXT due round — the
+    // alarm was never stopped, so nothing needed resurrecting.
     ui.timerAlertSound = true
-    scanTimerCompletions(t0 + 95_000)
-    expect(vibrateCalls).toHaveLength(1)
+    ui.timerAlertVibrate = true
+    scanTimerCompletions(t0 + 67_000)
+    expect(vibrateCalls).toHaveLength(2)
+  })
+})
+
+describe('visibility tick (ADR-0104)', () => {
+  /** Bun has no DOM: install the smallest document seam the host uses.
+   *  The listener set is shared so the test can assert both the immediate
+   *  tick and the listener's removal with the loop. */
+  const listeners = new Set<() => void>()
+  const documentStub = {
+    visibilityState: 'hidden',
+    addEventListener(type: string, fn: () => void) {
+      if (type === 'visibilitychange') listeners.add(fn)
+    },
+    removeEventListener(type: string, fn: () => void) {
+      if (type === 'visibilitychange') listeners.delete(fn)
+    },
+  }
+  const hadDocument = 'document' in globalThis
+  const originalDocument = (globalThis as { document?: unknown }).document
+
+  beforeEach(() => {
+    listeners.clear()
+    documentStub.visibilityState = 'hidden'
+    Object.defineProperty(globalThis, 'document', { configurable: true, value: documentStub })
+  })
+
+  afterEach(() => {
+    stopTimerAlertHost()
+    if (hadDocument) Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument })
+    else delete (globalThis as { document?: unknown }).document
+  })
+
+  test('coming back VISIBLE fires a due round immediately, and stopping the host removes the listener', () => {
+    const realNow = Date.now
+    let now = 1_000_000
+    Date.now = () => now
+    try {
+      const t0 = now
+      setTimers({ 5264: { 1: timer(1, 60, t0) } })
+      scanTimerCompletions(t0) // armed — the loop AND listener come up together
+      expect(listeners.size).toBe(1)
+      // The tab was frozen past the deadline: no interval callback ran.
+      now = t0 + 61_000
+      expect(vibrateCalls).toEqual([])
+      documentStub.visibilityState = 'visible'
+      for (const listener of listeners) listener()
+      expect(vibrateCalls).toEqual([TIMER_VIBRATE_PATTERN])
+      expect(alarmingTimers.value).toEqual([{ variantId: 5264, timerId: 1, label: 'T1' }])
+      // Hidden tabs do nothing; only the visible edge ticks.
+      documentStub.visibilityState = 'hidden'
+      now = t0 + 63_000
+      for (const listener of listeners) listener()
+      expect(vibrateCalls).toHaveLength(1)
+      // Stopping the host disarms the listener: no tick can reach a
+      // stopped host (ADR-0104 lifecycle guard).
+      stopTimerAlertHost()
+      expect(listeners.size).toBe(0)
+      documentStub.visibilityState = 'visible'
+      for (const listener of listeners) listener()
+      expect(vibrateCalls).toHaveLength(1)
+    } finally {
+      Date.now = realNow
+    }
   })
 })

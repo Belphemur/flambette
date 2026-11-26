@@ -874,6 +874,9 @@ function restartOnboarding(): void {
   <p class="mt-0.5 text-body-sm text-text-muted">
   How a finished step timer gets your attention on THIS device.
   </p>
+  <p class="text-body-sm text-text-muted" data-test="timer-alert-visual-note">
+  The alarm banner and timer chip also shake — the visual alert is always on and cannot be turned off.
+  </p>
   </div>
   <span :class="TILE"><Vibrate :size="16" aria-hidden="true" /></span>
   </div>
