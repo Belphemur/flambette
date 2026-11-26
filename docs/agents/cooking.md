@@ -227,7 +227,13 @@ while any timer rings — `Time's up — still ringing: …` + **Stop** — on
 every non-fullscreen surface, because the strip's stop verbs are
 unreachable after Finish (Done lands on /history); Stop performs the
 timer's own Clear verb (NO new alarm state — ADR-0093's rejected
-"silence button" stays rejected); hidden on cooking/shopping.
+"silence button" stays rejected); hidden on cooking/shopping, which mount
+  ONE recipe-agnostic fullscreen indicator (`fullscreen-alarm`,
+  ADR-0104 change note 2026-11-26) off the same `alarmingTimers` mirror.
+  That indicator lists/Stops EVERY alarming timer, so an alarm from another
+  recipe (cooking's strip is recipe-scoped) or one that expired while
+  shopping still has the visual floor and a reachable Stop; no foreign
+  chip is added to the current recipe's strip.
 (2) the alarm is pinned to the record's run-segment fingerprint, so a
 backup restore re-creating the same ids drops the old alarm instead of
 inheriting its rounds (a rename keeps it; a Pause IS a stop).

@@ -1,6 +1,6 @@
 # ADR-0093: Timer alarm — recurring escalating alert with per-timer pitch
 
-Status: accepted (2026-10-18) — implemented in PR #95
+Status: accepted (superseded in part by ADR-0104) (2026-10-18) — implemented in PR #95
 
 Amends the "Timer alerts" section of ADR-0081 (cooking-mode composition):
 the one-shot completion alert is revised into a RECURRING, ESCALATING
@@ -140,5 +140,6 @@ vibration both dead the host now DOES enter/stay in the alarming set —
 that is the floor that cannot fail on Brave/Android — and a mid-alarm
 toggle-off of those two channels is no longer a user stop. `channelsLive`
 gates only the engine's `fire()` call; only the timer's own stop verb
-ends the alarm. This record's Status stays Accepted: ADR-0104 is the
-superseding decision, not a rewrite of the one above.
+ends the alarm. ADR-0104 is the superseding decision, not a rewrite of
+the one above; the Status line above now records the partial supersession
+so the generated index no longer presents item 4 as fully in force.

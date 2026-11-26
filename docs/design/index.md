@@ -12,7 +12,7 @@ flips the old one's Status; accepted records are never rewritten in place.
 
 ## In force
 
-The 87 accepted records below all still govern. Skim the ones
+The 86 accepted records below all still govern. Skim the ones
 near your change before proposing anything -- they encode *why* the
 architecture is shaped the way it is.
 
@@ -93,7 +93,6 @@ architecture is shaped the way it is.
 | [0090](ADR-0090-pantry-room-sync.md) | the pantry becomes household state — room-synced like custom ingredients _(supersedes ADR-0087)_ | 2026-10-14 |
 | [0091](ADR-0091-preview-github-deployments-web-only.md) | Previews create ONE GitHub deployment per PR (web only) and PR close deletes it _(supersedes ADR-0039)_ | 2026-10-15 |
 | [0092](ADR-0092-clear-checked-pull-to-clear.md) | Clear-checked removes only checked items; pull-to-clear gesture | 2026-10-18 |
-| [0093](ADR-0093-timer-alarm-recurring-pitch.md) | Timer alarm — recurring escalating alert with per-timer pitch | 2026-10-18 |
 | [0094](ADR-0094-grocery-object-cleared-storage.md) | Object-JSON cleared-ingredient storage (serving-safe clear-checked) | 2026-10-18 |
 | [0095](ADR-0095-grocery-checked-sink-both-surfaces.md) | Checked grocery rows sink to the end of their category on both surfaces _(supersedes ADR-0071)_ | 2026-10-19 |
 | [0096](ADR-0096-home-is-recipes-for-returning-users.md) | The home page serves the recipes list to returning users | 2026-10-24 |
@@ -136,6 +135,7 @@ understand why the current shape is the shape.
 | [0081](ADR-0081-cooking-mode-composition.md) | Cooking mode adopts the card composition and honest timer suggestions | accepted (superseded in part) | 2026-10-11 |
 | [0083](ADR-0083-post-cook-prompt.md) | The post-cook prompt — rate and favourite when the meal is done | accepted (superseded in part) | 2026-10-12 |
 | [0087](ADR-0087-pantry-ingredient-search.md) | "Cook with what I have" — pantry ingredient search, Variant A inline row | accepted (superseded in part) | 2026-10-14 |
+| [0093](ADR-0093-timer-alarm-recurring-pitch.md) | Timer alarm — recurring escalating alert with per-timer pitch | accepted (superseded in part) | 2026-10-18 |
 
 ## Known numbering collisions
 

@@ -86,6 +86,25 @@ Root causes, traced through the engine (`src/lib/timerAlert.ts`) and host
   deadline passed while frozen; the escalating pause schedule is unchanged.
 - `docs/agents/cooking.md`'s timer-alert section names three channels.
 
+## Change note — 2026-11-26 (review hardening)
+
+Implementation only — the Decision and Status above are unchanged:
+
+- **The fullscreen modes have their own alarm surface.** The shell banner
+  stays hidden in cooking/shopping, so both mount one recipe-agnostic
+  indicator off the same `alarmingTimers` mirror, with the banner's Stop
+  verb (the timers' own Clear). This closes the cases where an alarm from
+  another recipe rang inside cooking (whose strip is deliberately
+  recipe-scoped) or an alarm expired while shopping (no strip at all).
+- **A fire-time `resume()` is revalidated when it resolves.** The engine
+  re-reads the sound preference after the await and evaluates a host-
+  supplied generation predicate, so a toggle-off or a Stop during a
+  stalled Brave resume cannot let a queued chime burst out later. The
+  engine remains stateless about rounds (ADR-0093 pitch untouched).
+- **Visual floor, non-interactive wrappers, reduced motion:** unchanged.
+  The decision log's no-third-toggle rule and the static brand outline
+  under `prefers-reduced-motion` were reviewed and reaffirmed.
+
 ## Alternatives considered
 
 - **Screen Wake Lock while any timer counts** — keeps the deadline firing
