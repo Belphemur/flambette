@@ -979,11 +979,6 @@ function startCooking() {
   <div class="flex flex-col gap-3 rounded-xl bg-surface-raised p-4 ring-1 ring-border md:p-5">
   <header class="space-y-2.5">
   <div class="flex flex-wrap items-center gap-2 text-label-md text-text-muted">
-  <span
-  v-if="meta.is_pro"
-  class="rounded bg-espresso px-1.5 py-0.5 font-bold text-warning-soft"
-  >PRO</span
-  >
   <!-- Type icon only: no redundant category word beside an
   already informative icon (DESIGN.md Components). The
   icon is role="img" with the category as its name, and

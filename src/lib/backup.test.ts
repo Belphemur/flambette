@@ -39,16 +39,17 @@ describe('settings import (ADR-0013 registry)', () => {
     return slice
   }
 
-  test('a pre-ADR-0054 backup migrates proOnly to source (backup import path)', () => {
+  test('a pre-ADR-0105 backup drops proOnly instead of migrating it', () => {
     // The backup archive is the third inbound path for the filters (the
     // other two being the persisted ui blob and a peer's room snapshot),
-    // and it goes through the same normalizeQuickFilters branch. A backup
-    // written before the rename must not reset the household to All.
+    // and it goes through the same normalizeQuickFilters branch. Since
+    // ADR-0105 the PRO facet is gone, so the retired boolean is DROPPED —
+    // the import lands on All rather than restoring a retired grid.
     settingsSlice().write({
       quickFilters: { diets: ['vegan'], sortBy: 'latest', proOnly: true },
     })
     const ui = useUiStore()
-    expect(ui.quickFilters.source).toBe('pro')
+    expect(ui.quickFilters.source).toBe('all')
     expect('proOnly' in ui.quickFilters).toBe(false)
     expect(ui.quickFilters.diets).toEqual(['vegan'])
 

@@ -7,14 +7,17 @@ import {
 } from './helpers'
 
 /**
- * ADR-0054: the household's own recipes are first-class catalog entries.
+ * ADR-0054 (as re-scoped by ADR-0105): the household's own recipes are
+ * first-class catalog entries.
  *
  * Covers, in order:
- *  - the Source dropdown filters All / PRO / New and the New bucket shows
- *    the pancake (locked L1: permanent, driven by the loaded id set);
- *  - the NEW badge renders on a user recipe's card, in the same slot and
- *    visual family as the PRO chip, and never says "Mealime";
- *  - a legacy `proOnly: true` blob migrates to `source: 'pro'` at hydration;
+ *  - the Source dropdown filters All / New and the New bucket shows the
+ *    pancake (locked L1: permanent, driven by the loaded id set) — the
+ *    retired PRO option is gone from the menu;
+ *  - the NEW badge renders on a user recipe's card and never says
+ *    "Mealime" (ADR-0105 retired the PRO chip it used to pair with);
+ *  - a legacy `proOnly: true` blob lands on All at hydration (ADR-0105
+ *    dropped the migration);
  *  - the user recipe's detail page carries the DERIVED nutrition headline;
  *  - the meal-type Breakfast bucket counts and finds it.
  */
@@ -75,7 +78,7 @@ test.describe('user recipes and the source filter (ADR-0054)', () => {
     await waitForCatalog(page)
   })
 
-  test('the source dropdown filters All / PRO / New', async ({ page }) => {
+  test('the source dropdown filters All / New with no PRO option', async ({ page }) => {
     const trigger = page.getByTestId('source-button')
     await expect(trigger).toContainText('All sources')
 
@@ -88,13 +91,13 @@ test.describe('user recipes and the source filter (ADR-0054)', () => {
     await expect(cards).toHaveCount(1)
     await expect(cards.first()).toHaveAttribute('data-variant-id', String(PANCAKE_ID))
 
-    // PRO keeps its old meaning: a rename of the proOnly chip, never a
-    // complement of 'new'. A PRO grid must NOT contain the pancake.
+    // ADR-0105: the PRO option is retired — the menu offers exactly two
+    // options, and a grid can never show a PRO chip again.
     await openSourceMenu(page)
-    await page.getByTestId('source-option-pro').click()
-    await expect(trigger).toContainText('PRO')
-    await expect(cards.first()).toBeVisible()
-    await expect(pancakeCard(page)).toHaveCount(0)
+    await expect(page.getByTestId('source-option-pro')).toHaveCount(0)
+    const menuText = await page.getByTestId('source-menu').innerText()
+    expect(menuText).not.toContain('PRO')
+    await page.keyboard.press('Escape')
 
     // All puts it back together with the catalog. The pancake rates 0, so
     // it sorts to the BOTTOM of a 2,760-row grid and sits outside the
@@ -124,29 +127,32 @@ test.describe('user recipes and the source filter (ADR-0054)', () => {
     const card = pancakeCard(page)
     const badge = card.getByTestId('new-badge')
     await expect(badge).toHaveText('NEW')
-    // The badge is a recency claim on the household's own card, so it is
-    // NOT the PRO chip and never names the commercial source.
+    // The badge is a recency claim on the household's own card (ADR-0105
+    // retired the PRO chip it used to share a corner with), so the card
+    // never names a commercial source or a plan tier.
     await expect(card).not.toContainText('PRO')
     await expect(page.getByTestId('quick-filters')).not.toContainText('Mealime')
     await expectZeroMealimeRequests(page)
   })
 
-  test('a legacy proOnly blob migrates at hydration', async ({ page }) => {
+  test('a legacy proOnly blob lands on All at hydration (ADR-0105)', async ({ page }) => {
     await seedUiState(page, {
       diets: [],
       protein: [],
       maxTime: null,
       sortBy: 'latest',
       favOnly: false,
-      // The retired member: carries `true -> 'pro'` on hydration.
+      // The retired member: DROPPED on hydration — the PRO facet no
+      // longer exists, so the tab opens on All instead.
       proOnly: true,
     })
     await page.goto('/recipes')
     await dismissJoinCongrats(page)
     await waitForCatalog(page)
-    await expect(page.getByTestId('source-button')).toContainText('PRO')
-    // And the migrated filter actually applies.
-    await expect(pancakeCard(page)).toHaveCount(0)
+    await expect(page.getByTestId('source-button')).toContainText('All sources')
+    // And the drop actually restores the catalog: a PRO recipe would be
+    // visible here, so All is the whole grid, not a narrowed slice.
+    await searchPancake(page)
     await expectZeroMealimeRequests(page)
   })
 

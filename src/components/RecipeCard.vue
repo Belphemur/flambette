@@ -52,11 +52,10 @@ const ratingSource = computed<'household' | 'catalog'>(() =>
  *
  * Two things it deliberately does NOT say. It does not say "Mealime"
  * (the source filter already owns that question, and a card is not where
- * a catalog's provenance gets explained) and it does not borrow the PRO
- * badge's warning colour, which would read as "something is wrong with
- * this recipe". It reuses the PRO badge's SHAPE — same slot, same chip,
- * same type scale — so the two read as one family of corner marks, and
- * it takes the brand hue because "yours" is the brand's own claim, not a
+ * a catalog's provenance gets explained), and since ADR-0105 retired the
+ * PRO badge there is no other corner mark to clash with. It keeps the
+ * retired PRO badge's SHAPE — same slot, same chip, same type scale —
+ * and takes the brand hue because "yours" is the brand's own claim, not a
  * caveat.
  *
  * `addedAt` comes from the artifact, not from `first_published_at` read
@@ -124,12 +123,6 @@ const pantryBadge = computed(() => {
   data-test="new-badge"
   >
   NEW
-  </span>
-  <span
-  v-else-if="meta.is_pro"
-  class="absolute top-2 left-2 rounded bg-espresso px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-warning-soft"
-  >
-  PRO
   </span>
   <!-- A REAL control above the card's stretched link: the heart is not
   nested inside the link, it stops propagation, and it carries its

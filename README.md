@@ -68,7 +68,7 @@ neutral placeholder.
 <summary>All the details</summary>
 
 - **Recipes** — responsive card grid with search by name or ingredient,
-  category / favourites / cook-time / PRO filters, and sorting by rating,
+  category / favourites / cook-time / source filters, and sorting by rating,
   popularity, latest, cook time or calories. Full-screen detail view with
   presentation image, macro split, cookware, ingredients and instructions,
   plus a servings stepper that scales quantities (per-serving nutrition
