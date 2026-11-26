@@ -761,7 +761,10 @@ onBeforeUnmount(() => {
 
   <!-- The global alarm banner (ADR-0093 change note 2026-10-19): one
        Stop affordance while a timer RINGS, on every non-fullscreen
-       surface. role="alert" — a ringing alarm is assertive, unlike the
+       surface. ADR-0104 adds the visual channel: the banner SHAKES
+       (`alarm-shake`) off the same reactive `alarmingTimers` mirror —
+       the channel that cannot fail when Brave blocks sound/vibration.
+       role="alert" — a ringing alarm is assertive, unlike the
        polite toast status. Sits in the toast's slot but yields upward
        (bottom-40) while a toast is showing, so the two never stack.
        Stop = the timer's own Clear verb, observed by the host exactly
@@ -774,7 +777,18 @@ onBeforeUnmount(() => {
   class="fixed left-1/2 z-30 flex max-w-[min(28rem,calc(100vw-2.5rem))] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-3xl border border-border bg-popover px-5 py-3 text-sm font-medium leading-snug text-text shadow-popover"
   :class="ui.toast ? 'bottom-40' : 'bottom-24'"
   >
+  <!-- The SHAKE rides a non-interactive inner wrapper, NOT the banner
+       container: animating the whole banner makes the Stop button a
+       moving target (Playwright stability, and a real finger misses).
+       The banner's position/surface stay still; its message shakes. -->
+  <span
+  data-test="alarm-banner-shake"
+  data-test-alarm-shake="active"
+  class="alarm-shake inline-flex items-center gap-1"
+  >
   <span data-test="alarm-banner-text">Time's up — still ringing: {{ alarmNames }}</span>
+  <span data-test="alarm-banner-shake-marker" aria-hidden="true" class="sr-only">shaking</span>
+  </span>
   <button
   type="button"
   data-test="alarm-banner-stop"

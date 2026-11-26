@@ -57,6 +57,9 @@ test('both toggles default ON, persist a reload, and travel through a backup', a
 
   // The owner's ruling recorded on the card: this is THIS device's config.
   await expect(page.getByTestId('timer-alerts-card')).toContainText('THIS device')
+  // ADR-0104: the visual shake is always on — no third toggle exists.
+  await expect(page.getByTestId('timer-alert-visual-note')).toContainText('always on')
+  await expect(page.getByTestId('timer-alert-visual-note')).toContainText('cannot be turned off')
 
   // Turn sound OFF; it survives a reload via the ui slice.
   await sound.click()
@@ -189,6 +192,60 @@ test('a finished timer buzzes when vibration is ON and stays silent when OFF —
     )
     .toBeGreaterThan(0)
   expect(calls[0]).toEqual([200, 140, 200, 140, 400])
+  await expectZeroMealimeRequests(page)
+})
+
+test('the alarm shakes visibly with sound + vibration OFF — the visual floor (ADR-0104)', async ({ page }) => {
+  test.setTimeout(120_000)
+  await gotoSettings(page)
+  await page.getByTestId('timer-alert-sound').click()
+  await page.getByTestId('timer-alert-vibrate').click()
+  await expect(page.getByTestId('timer-alert-sound')).not.toBeChecked()
+  await expect(page.getByTestId('timer-alert-vibrate')).not.toBeChecked()
+
+  // Seed a short COUNTING timer into the persisted ui slice before the
+  // app boots: the host must see it with time left (the ADR-0081 seeding
+  // rule silently marks an already-expired timer). No new store/key —
+  // the record is the normal `stepTimers` map, the toggles are the two
+  // existing device-local keys.
+  await page.evaluate(() => {
+    const key = 'mealime-planner:v1:ui'
+    const blob = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>
+    blob.stepTimers = {
+      10085: { 1: { id: 1, label: 'Shake', remaining: 12, running: true, startedAt: Date.now(), total: 12 } },
+    }
+    localStorage.setItem(key, JSON.stringify(blob))
+  })
+  await page.goto('/cooking/10085')
+  await expect(page.getByRole('dialog', { name: /Cooking / })).toBeVisible({ timeout: 15_000 })
+
+  // The CHIP on the cooking strip shakes off `alarmingTimers`; assert the
+  // class + stable marker on the NON-interactive overlay, never the
+  // animation timing (the chip's buttons must stay tappable).
+  const chip = page.locator('[data-test="timer-chip-1"]')
+  await expect(chip).toBeVisible()
+  const chipShake = chip.getByTestId('timer-chip-shake')
+  await expect(chipShake).toHaveClass(/alarm-shake/, { timeout: 25_000 })
+  await expect(chipShake).toHaveAttribute('data-test-alarm-shake', 'active')
+  await expect(chip.getByTestId('timer-alarm-shake')).toHaveCount(1)
+  expect(await vibrateCalls(page)).toEqual([])
+
+  // Client-side navigation (a full reload would seed the expired timer
+  // silently): the shell banner shakes on a non-fullscreen surface.
+  await page.getByTestId('cook-close').click()
+  const banner = page.getByTestId('alarm-banner')
+  await expect(banner).toBeVisible({ timeout: 15_000 })
+  const bannerShake = banner.getByTestId('alarm-banner-shake')
+  await expect(bannerShake).toHaveClass(/alarm-shake/)
+  await expect(bannerShake).toHaveAttribute('data-test-alarm-shake', 'active')
+  await expect(banner.getByTestId('alarm-banner-shake-marker')).toHaveCount(1)
+  await expect(banner.getByTestId('alarm-banner-text')).toContainText('“Shake”')
+
+  // Both engine channels stayed silent; the visual alarm is still a real
+  // alarm — only the timer's own Clear (Stop) ends it.
+  expect(await vibrateCalls(page)).toEqual([])
+  await banner.getByTestId('alarm-banner-stop').click()
+  await expect(banner).toBeHidden()
   await expectZeroMealimeRequests(page)
 })
 

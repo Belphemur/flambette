@@ -181,24 +181,41 @@ The ADR-0041 GLOBAL multi-timer strip remains the RUNNING-timers surface
 (visible across steps, multiple concurrent timers); the per-step card
 owns only the ADD affordance.
 
-## Timer alerts (ADR-0081 amendment; recurring alarm per ADR-0093)
+## Timer alerts (ADR-0081 amendment; recurring alarm per ADR-0093; visual floor per ADR-0104)
 
 When a timer THIS session watched count down reaches zero, the device
 alerts in ROUNDS (ADR-0093): each round is a synthesized two-tone chime
 (Web Audio, generated at runtime — NO audio asset, NO new dependency)
 and/or a vibration pattern (`navigator.vibrate`, feature-detected,
-graceful no-op), each channel honoring its toggle read live. The
-pause AFTER a round GROWS — 2 s, 4 s, 8 s, 16 s, then a 30 s cap — and
-the alarm repeats UNTIL THE USER STOPS THE TIMER: Restart/Resume
-re-arms (the countdown is live again), Cancel/Clear removes the timer.
-NO new control exists; finishing the cook does NOT silence an alarm —
-only stopping the timer does. A timer already expired when the session
-first saw it never alarms (the ADR-0081 seeding rule stands). The
-live-region announcement STAYS — the alert adds channels, never
-replaces. The ONE 1 s host interval (`src/lib/timerAlertHost.ts`) is
-still the scheduler (the tick checks which rounds are due — no
-per-round timers), and its loop stays alive while any timer is
-alarming even though nothing is counting.
+graceful no-op), each channel honoring its toggle read live. ADR-0104
+adds a THIRD channel: a SHAKE on the shell's global alarm banner and on
+the alarming timer's chip in the cooking strip, driven from the SAME
+reactive `alarmingTimers` mirror (no new polling, no new store, no new
+persisted key). The visual channel is ALWAYS ON and has NO toggle — it
+is the channel that cannot fail where Brave/Android blocks audio and
+haptics. The pause AFTER a round GROWS — 2 s, 4 s, 8 s, 16 s, then a
+30 s cap — and the alarm repeats UNTIL THE USER STOPS THE TIMER:
+Restart/Resume re-arms (the countdown is live again), Cancel/Clear
+removes the timer. NO new control exists; finishing the cook does NOT
+silence an alarm — only stopping the timer does. A timer already
+expired when the session first saw it never alarms (the ADR-0081
+seeding rule stands). The live-region announcement STAYS — the alert
+adds channels, never replaces. The ONE 1 s host interval
+(`src/lib/timerAlertHost.ts`) is still the scheduler (the tick checks
+which rounds are due — no per-round timers), and its loop stays alive
+while any timer is alarming even though nothing is counting.
+
+**Visibility tick (ADR-0104)**: a backgrounded tab's interval can be
+throttled (≥1/min) or frozen, so the deadline may pass unseen. The
+host arms ONE `visibilitychange` listener with the loop's lifecycle and
+runs `tick(Date.now())` immediately on `visible` — round 1 (or the next
+due round) lands the moment the cook looks, with the shake making it
+unmissable. The listener is removed by `stopTimerAlertHost`, so no tick
+can run against a stopped host; when the listener is armed while the
+loop is stopped, the visible edge takes the same ensure-entry an arm
+press uses. CSS keyframes carry the shake; `prefers-reduced-motion:
+reduce` replaces motion with a static brand outline, and all colours
+come from the token-based theme flip (no `dark:` pairs).
 
 Review hardening (ADR-0093 change note 2026-10-19, all four real):
 (1) the shell shows a GLOBAL alarm banner (`alarm-banner` in App.vue)
@@ -212,9 +229,14 @@ backup restore re-creating the same ids drops the old alarm instead of
 inheriting its rounds (a rename keeps it; a Pause IS a stop).
 (3) the pitch ordinal is CAPTURED at round 1 — clearing a lower-id
 timer never moves a ringing alarm to another voice.
-(4) with BOTH channels dead (sound off; vibration off or API absent)
-the host never enters/stays in the alarming set — no invisible alarm
-can pin the 1 s interval forever, and no banner shows (nothing rings).
+(4) was RE-SCOPED by ADR-0104: with BOTH ENGINE channels dead (sound
+off; vibration off or API absent) the alarm still enters and stays in
+the alarming set — the banner + shake are the output, rounds keep
+escalating, and only the user's stop ends them. The both-channels
+`channelsLive` predicate now gates only the chime/vibration `fire()`
+call; the toggle-flip-is-a-user-stop rule no longer applies to the
+visual floor. The banner is no longer merely a display of an audible
+alarm — it IS one of the alarm's outputs.
 
 - Settings → "Timer alerts": Sound and Vibration toggles
   (`ui.timerAlertSound` / `ui.timerAlertVibrate`), both DEFAULT ON.
@@ -224,7 +246,9 @@ can pin the 1 s interval forever, and no banner shows (nothing rings).
   since 79 per Bugzilla 1653318; no iOS browser ever exposed it), the
   Vibration row shows an inline "this browser cannot vibrate" note
   (`timer-alert-vibrate-unsupported`) and the toggle is disabled in
-  place; the stored preference is KEPT untouched.
+  place; the stored preference is KEPT untouched. A one-line note
+  (`timer-alert-visual-note`) says the banner/chip shake is ALWAYS on
+  and cannot be turned off — there is deliberately no third toggle.
 - PER-TIMER PITCH (ADR-0093): the chime is transposed by the timer's
   ORDINAL among its recipe's timers (the strip's order, oldest id
   first) — semitone offsets 0/+2/+4/+7 for timers 1–4, bounded by
@@ -235,8 +259,11 @@ can pin the 1 s interval forever, and no banner shows (nothing rings).
   sound/vibration are per-device capabilities; one household member must
   not configure another phone's alerts.
 - Autoplay discipline: the AudioContext is created/resumed lazily at the
-  Start-timer press (the user gesture); without a prior gesture the
-  chime degrades silently to announcement + vibration — never an error.
+  Start-timer press (the user gesture); ADR-0104 ALSO retries
+  `ctx.resume()` at FIRE time when the context is not `running` (Brave
+  can leave the unlocked context suspended), playing as soon as it
+  reaches `running`. A rejected/failed resume degrades silently to the
+  other channels — never an error, never the alarm's only path.
 - `MAX_TIMER_SECONDS` (21,600 s) must stay in lockstep with
   `scripts/extract_timer_hints.py` — change both together (see
   data-pipeline.md).

@@ -110,8 +110,54 @@ describe('timer alerts (ADR-0081 amendment)', () => {
   test('no runnable context (suspended, never unlocked) → silent degradation, never an error', () => {
     const { ctx, oscillators } = stubContext('suspended')
     const alerts = createTimerAlerts(() => ({ sound: true, vibrate: false }), () => ctx)
-    // unlock() never ran: the chime path must no-op, not throw.
+    // unlock() never ran and this stub never becomes runnable: the chime
+    // may ATTEMPT a fire-time resume (ADR-0104), but no tones are built.
+    expect(() => alerts.fire()).not.toThrow()
+    expect(oscillators).toEqual([])
+  })
+
+  test('a suspended context is resumed AT FIRE TIME and the chime plays (ADR-0104)', async () => {
+    const { ctx, oscillators } = stubContext('suspended')
+    let resumes = 0
+    ctx.resume = async () => {
+      resumes++
+      // Brave/Shields can leave the unlock resume swallowed; the fire
+      // retry is what actually makes the context runnable.
+      ctx.state = 'running'
+    }
+    const alerts = createTimerAlerts(() => ({ sound: true, vibrate: false }), () => ctx)
+    alerts.unlock()
     alerts.fire()
+    // The resume promise resolves in a microtask — the alarm's other
+    // channels are already live, the chime follows as soon as it can.
+    expect(resumes).toBe(1)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(oscillators.map((o) => o.freq)).toEqual([CHIME_TONES_HZ[0], CHIME_TONES_HZ[1]])
+    expect(oscillators.every((o) => o.starts.length === 1 && o.stops.length === 1)).toBe(true)
+  })
+
+  test('a fire-time resume that REJECTS degrades silently — no tone, no throw (ADR-0104)', async () => {
+    const { ctx, oscillators } = stubContext('suspended')
+    ctx.resume = async () => {
+      throw new Error('autoplay still blocked')
+    }
+    const alerts = createTimerAlerts(() => ({ sound: true, vibrate: false }), () => ctx)
+    alerts.unlock()
+    expect(() => alerts.fire()).not.toThrow()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(oscillators).toEqual([])
+  })
+
+  test('a fire-time resume that THROWS synchronously is absorbed (ADR-0104)', () => {
+    const { ctx, oscillators } = stubContext('suspended')
+    ctx.resume = () => {
+      throw new Error('closed context')
+    }
+    const alerts = createTimerAlerts(() => ({ sound: true, vibrate: false }), () => ctx)
+    alerts.unlock()
+    expect(() => alerts.fire()).not.toThrow()
     expect(oscillators).toEqual([])
   })
 

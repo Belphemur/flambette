@@ -37,6 +37,7 @@ import { hintForStep, suggestionFromHint, type TimerSuggestion } from '../lib/ti
 import { confirmModal } from '../composables/useConfirm'
 import { useTimerHints } from '../composables/useTimerHints'
 import {
+  alarmingTimers,
   ensureTimerAlertPolling,
   unlockTimerAlertAudio,
 } from '../lib/timerAlertHost'
@@ -849,6 +850,19 @@ function onTouchEnd(e: TouchEvent) {
   if (dx < 0) next()
   else prev()
 }
+
+/**
+ * ADR-0104 visual channel: the strip's alarming chip SHAKES off the
+ * SAME reactive mirror the shell banner uses (`alarmingTimers`) — no
+ * second alarm state, no polling. Keyed by recipe+timer because timer
+ * ids are per recipe.
+ */
+const alarmingKeys = computed(
+  () => new Set(alarmingTimers.value.map((t) => `${t.variantId}:${t.timerId}`)),
+)
+function isAlarming(t: CookTimer): boolean {
+  return !!meta.value && alarmingKeys.value.has(`${meta.value.id}:${t.id}`)
+}
 </script>
 
 <template>
@@ -1306,13 +1320,26 @@ function onTouchEnd(e: TouchEvent) {
   <div
   v-for="t in timers"
   :key="t.id"
-  class="flex shrink-0 items-center gap-1 rounded-xl border border-border-strong px-2 py-1"
+  class="relative flex shrink-0 items-center gap-1 rounded-xl border border-border-strong px-2 py-1"
   :data-test="`timer-chip-${t.id}`"
   >
+  <!-- ADR-0104: the SHAKE rides a non-interactive outline overlay, not
+       the chip container — the countdown/Delete buttons must stay put
+       so a cook (and Playwright's stability check) can still tap them.
+       The overlay inherits the chip's bounds and never takes pointer
+       events; the shake class is the same one the banner message uses. -->
+  <span
+  v-if="isAlarming(t)"
+  data-test="timer-chip-shake"
+  data-test-alarm-shake="active"
+  aria-hidden="true"
+  class="alarm-shake pointer-events-none absolute inset-0 rounded-xl"
+  ></span>
   <CookTimerChip
   :timer="t"
   :remaining="remainingOf(t)"
   :running="isRunning(t)"
+  :alarming="isAlarming(t)"
   countdown-test="step-timer"
   clear-test="timer-clear"
   countdown-class="text-saffron"
