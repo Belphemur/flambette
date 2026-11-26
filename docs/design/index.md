@@ -102,7 +102,7 @@ architecture is shaped the way it is.
 | [0100](ADR-0100-ingredient-detail-sheet-and-quantity-override.md) | Ingredient detail sheet + per-line quantity override | 2026-10-28 |
 | [0101](ADR-0101-auto-plan-class-aware-matching.md) | Auto-Plan v4 — class-aware waste matching (meat first, produce second, leftover-fill) _(supersedes ADR-0027)_ | 2026-10-28 |
 | [0102](ADR-0102-household-push-notifications.md) | Household Push Notifications (Web Push via the relay) | 2026-11-17 |
-| [0103](ADR-0103-used-ingredient-checks.md) | "Used" ingredient checks persist across the cooking surfaces | 2026-11-26 |
+| [0103](ADR-0103-used-ingredient-checks.md) | "Used" ingredient checks on the step detail lines | 2026-11-26 |
 | [0104](ADR-0104-timer-alarm-visual-shake.md) | Timer alarms get a visual shake channel and fire reliably on Brave/Android | 2026-11-26 |
 
 ## Not in force
