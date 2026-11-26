@@ -290,6 +290,81 @@ test('a ringing alarm is stoppable from ANY surface — the shell banner (ADR-00
   await expectZeroMealimeRequests(page)
 })
 
+test('another recipe's alarm is visible and stoppable in cooking — no cross-recipe chip (ADR-0104)', async ({ page }) => {
+  test.setTimeout(120_000)
+  await page.goto('/recipes')
+  await waitForCatalog(page)
+  // Seed two recipes BEFORE the app boots: recipe 10085's timer expires
+  // while the cook is in recipe 5264. The host watches ALL recipes; the
+  // cooking strip must stay recipe-scoped while the fullscreen indicator
+  // carries the other recipe's alarm + Stop.
+  await page.evaluate((now) => {
+    const key = 'mealime-planner:v1:ui'
+    const blob = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>
+    blob.stepTimers = {
+      10085: { 1: { id: 1, label: 'Other recipe alarm', remaining: 8, running: true, startedAt: now, total: 8 } },
+      5264: { 1: { id: 1, label: 'Current recipe', remaining: 300, running: true, startedAt: now, total: 300 } },
+    }
+    localStorage.setItem(key, JSON.stringify(blob))
+  }, Date.now())
+  await page.goto('/cooking/5264')
+  const cooking = page.getByRole('dialog', { name: /Cooking / })
+  await expect(cooking).toBeVisible({ timeout: 15_000 })
+
+  const indicator = page.getByTestId('fullscreen-alarm')
+  await expect(indicator).toBeVisible({ timeout: 30_000 })
+  await expect(indicator.getByTestId('fullscreen-alarm-text')).toContainText('Other recipe alarm')
+  await expect(indicator.getByTestId('fullscreen-alarm-text')).not.toContainText('Current recipe')
+  await expect(indicator.getByTestId('fullscreen-alarm-shake')).toHaveClass(/alarm-shake/)
+  await expect(indicator.getByTestId('fullscreen-alarm-shake')).toHaveAttribute(
+    'data-test-alarm-shake',
+    'active',
+  )
+  // The shell banner is hidden in fullscreen, and the current recipe's
+  // strip does NOT gain a foreign chip (the cook would not know its step).
+  await expect(page.getByTestId('alarm-banner')).toHaveCount(0)
+  await expect(
+    cooking.locator('[data-test^="timer-chip-"]:not([data-test="timer-chip-shake"])'),
+  ).toHaveCount(1)
+  await expect(cooking.getByTestId('chip-name')).toHaveText('Current recipe')
+
+  // Stop uses the ringing timers' own Clear verb, recipe-agnostically.
+  await indicator.getByTestId('fullscreen-alarm-stop').click()
+  await expect(indicator).toBeHidden()
+  const uiBlob = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('mealime-planner:v1:ui') ?? '{}'),
+  )
+  expect(uiBlob.stepTimers?.['10085'] ?? {}).toEqual({})
+  expect(uiBlob.stepTimers?.['5264']?.['1']?.label).toBe('Current recipe')
+  await expectZeroMealimeRequests(page)
+})
+
+test('shopping mode carries the visual alarm when the shell banner is hidden (ADR-0104)', async ({ page }) => {
+  test.setTimeout(120_000)
+  await page.goto('/recipes')
+  await waitForCatalog(page)
+  await page.evaluate((now) => {
+    const key = 'mealime-planner:v1:ui'
+    const blob = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>
+    blob.stepTimers = {
+      10085: { 1: { id: 1, label: 'Shake', remaining: 8, running: true, startedAt: now, total: 8 } },
+    }
+    localStorage.setItem(key, JSON.stringify(blob))
+  }, Date.now())
+  await page.goto('/shop')
+  const indicator = page.getByTestId('fullscreen-alarm')
+  await expect(indicator).toBeVisible({ timeout: 30_000 })
+  await expect(indicator.getByTestId('fullscreen-alarm-text')).toContainText('Shake')
+  await expect(page.getByTestId('alarm-banner')).toHaveCount(0)
+  await indicator.getByTestId('fullscreen-alarm-stop').click()
+  await expect(indicator).toBeHidden()
+  const uiBlob = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('mealime-planner:v1:ui') ?? '{}'),
+  )
+  expect(uiBlob.stepTimers?.['10085'] ?? {}).toEqual({})
+  await expectZeroMealimeRequests(page)
+})
+
 /* ---------- helpers ---------- */
 
 async function startCooking(page: Page) {
