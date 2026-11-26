@@ -137,6 +137,11 @@ export async function openFirstRecipeDetail(page: Page): Promise<string> {
   await recipeCards(page).first().click()
   const sheet = page.getByRole('dialog')
   await expect(sheet).toBeVisible()
+  // On a phone the fixed bottom nav overlaps the sheet's first action
+  // row when the page sits at scroll 0. Lift it clear before the caller
+  // taps Add to plan — a real finger scrolls there naturally, but
+  // Playwright treats the covered button as already in view.
+  await page.evaluate(() => window.scrollTo(0, 140))
   return (await sheet.getByRole('heading', { level: 2 }).textContent())!.trim()
 }
 
