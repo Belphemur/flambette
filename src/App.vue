@@ -90,6 +90,19 @@ const isShopping = computed(() => route.name === 'shop')
 const isFullscreenMode = computed(() => isCooking.value || isShopping.value)
 
 /**
+ * A `/cooking/:id` param-only change reuses the route record, so Vue Router
+ * would otherwise REUSE CookingView with the previous recipe's document,
+ * servings, plan provenance and cook record mutating underneath the new
+ * title (review finding). Key the rendered component by the recipe id:
+ * a different id remounts the whole session, while step navigation and
+ * everything else within one id keeps the SAME instance. Only cooking is
+ * keyed — the KeepAlive-cached tabs keep their existing identity.
+ */
+const cookingSessionKey = computed(() =>
+  isCooking.value ? `cooking-${String(route.params.id)}` : undefined,
+)
+
+/**
  * The global alarm banner (ADR-0093 change note 2026-10-19): while any
  * timer is RINGING, the shell shows one Stop affordance no matter which
  * surface the user is on — ADR-0093's stop verbs live on the cooking
@@ -732,7 +745,7 @@ onBeforeUnmount(() => {
   >
   <RouterView v-slot="{ Component }">
   <KeepAlive include="RecipesTab,PlanTab,GroceryTab,SettingsTab">
-  <component :is="Component" />
+  <component :is="Component" :key="cookingSessionKey" />
   </KeepAlive>
   </RouterView>
   </main>

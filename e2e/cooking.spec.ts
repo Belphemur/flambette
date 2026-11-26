@@ -73,8 +73,13 @@ test('cooking mode shows one step at a time with progress', async ({ page }) => 
   // Step 1 content visible with progress "1 / N"
   await expect(cooking.getByText(/Step 1 \/ \d+/)).toBeVisible()
   await expect(cooking.getByText('Wash and dry the fresh produce.')).toBeVisible()
-  // Step details render as a checklist sub-list
-  await expect(cooking.getByText('6 medium carrots')).toBeVisible()
+  // Step details render as a checklist sub-list. ADR-0103 decision 3:
+  // a matched line's row REPLACES the prose — the row holds the
+  // line-item amount and the ingredient name as TWO spans, so the old
+  // concatenated '6 medium carrots' text no longer exists anywhere.
+  const carrotRow = cooking.getByTestId('measured-check').first()
+  await expect(carrotRow).toBeAttached()
+  await expect(carrotRow).toHaveAccessibleName(/carrots/)
   // Previous is disabled on the first step
   await expect(cooking.getByRole('button', { name: /Previous/ })).toBeDisabled()
   await expectZeroMealimeRequests(page)

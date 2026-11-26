@@ -408,6 +408,10 @@ export function eventsDocView(
   // Apply the entries in id order; each pass matches `from` against the
   // CURRENT line names so chained reworks compose.
   let items: LineItem[] = doc.line_items.map((li) => ({ ...li }))
+  // Added lines must never reuse a BASE id: a restriction may DROP the
+  // highest-id base line, and a surviving id would otherwise give the
+  // added substitute a dropped ingredient's identity (ADR-0103 key).
+  let nextAddedId = Math.max(-1, ...doc.line_items.map((li) => li.id)) + 1
   for (const { ev } of entries) {
     // Drops first (display-only hiding), then swaps/requants on survivors,
     // then additions — the same order events_for_doc emitted them from.
@@ -430,10 +434,9 @@ export function eventsDocView(
       }
     }
     if (ev.a?.length) {
-      let addId = Math.max(-1, ...items.map((l) => l.id)) + 1
       for (const [name, qty] of ev.a) {
         items.push({
-          id: addId++,
+          id: nextAddedId++,
           quantity: qty,
           ingredient_name: name,
         })

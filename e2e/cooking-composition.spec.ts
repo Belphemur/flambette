@@ -52,9 +52,9 @@ test('the slim header carries the mono progress line and the thin tomato bar', a
   await expectZeroMealimeRequests(page)
 })
 
-test('the two-card row is side by side at desktop and stacked on a phone', async ({ page }) => {
-  // 5132 step 2 carries an imprecise ingredient line → the checklist card
-  // renders next to the timer card.
+test('the checkable detail lines and timer card stay inside the reading measure', async ({ page }) => {
+  // ADR-0103: the checklist lives IN the step's prose list — there is no
+  // second card beside the timer card any more.
   const cooking = await startCookingRecipe(page, 5132)
   await cooking.getByRole('button', { name: /Next/ }).click()
   const checklist = cooking.getByTestId('measured-amounts')
@@ -62,24 +62,16 @@ test('the two-card row is side by side at desktop and stacked on a phone', async
   await expect(checklist).toBeVisible()
   await expect(timer).toBeVisible()
 
-  // Desktop: the two cards share a row, INSIDE the 672px measure —
-  // desktop richness never widens the column (ADR-0073).
-  await page.setViewportSize({ width: 1280, height: 900 })
-  await expect(checklist).toBeVisible()
-  const cb = (await checklist.boundingBox())!
-  const tb = (await timer.boundingBox())!
-  expect(Math.abs(cb.y - tb.y)).toBeLessThan(80)
-  expect(Math.abs(cb.x - tb.x)).toBeGreaterThan(100)
-  const left = Math.min(cb.x, tb.x)
-  const right = Math.max(cb.x + cb.width, tb.x + tb.width)
-  expect(right - left).toBeLessThanOrEqual(672 + 2)
-
-  // Phone: the same cards stack.
-  await page.setViewportSize({ width: 412, height: 900 })
-  await expect(checklist).toBeVisible()
-  const cb2 = (await checklist.boundingBox())!
-  const tb2 = (await timer.boundingBox())!
-  expect(Math.abs(cb2.y - tb2.y)).toBeGreaterThan(120)
+  for (const width of [1280, 412]) {
+    await page.setViewportSize({ width, height: 900 })
+    const cb = (await checklist.boundingBox())!
+    const tb = (await timer.boundingBox())!
+    // Desktop richness never widens the column (ADR-0073); on both
+    // layouts the prose checklist sits ABOVE the timer card.
+    expect(cb.width).toBeLessThanOrEqual(672 + 2)
+    expect(tb.width).toBeLessThanOrEqual(672 + 2)
+    expect(cb.y + cb.height).toBeLessThanOrEqual(tb.y + 2)
+  }
   await expectZeroMealimeRequests(page)
 })
 

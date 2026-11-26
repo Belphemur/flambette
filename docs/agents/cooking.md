@@ -11,6 +11,60 @@ line `serves N · Step i / n`, thin tomato progress bar, close), the STEP
 TEXT as the dominant element (20px/30px mobile, 22px/34px desktop), then
 two cards, then the action deck.
 
+- **Checkable step detail lines (ADR-0103, final owner ruling
+  2026-11-26)**: the checkbox target is the AUTHORED DETAIL LINE under the
+  step text — the row that used to carry a decorative `aria-hidden` box.
+  Every line matching >=1 `line_item` becomes a full-row tap target with
+  a REAL sr-only `<input>` inside a `<label>`: 20px rounded box, bold mono
+  amount from the LINE ITEM + ingredient name + prose, success green fill
+  and struck-through text when checked (ADR-0072). PRECISE lines are
+  checkable too; a line with no match stays plain prose (no fake
+  affordance). There is NO separate "This step uses" card in cooking —
+  the prose list IS the checklist (`measured-check` / `measured-chip`).
+  `checklistChipsForLines` widens the ADR-0022 derivation to all matched
+  lines; `measuredChipsForLines` keeps the narrow imprecise-only rule for
+  other consumers. One canonical key
+  `stepIndex:lineIndex:ingredient-nameKey` from the BASE name (never the
+  rendered amount or the restriction-substituted display name) drives
+  both surfaces.
+  Cooking's used-set is DEVICE-LOCAL in the ui store's persisted slice,
+  keyed by recipe id + `{startedAt, usedKeys}`: it survives step nav and
+  a mid-cook reload, expires at READ TIME after 24h (no sweeper), and the
+  ONE `recordCook()` path clears it. Detail is fully EPHEMERAL: one plain
+  component ref shared by the step rows AND the prep-card ingredient rows
+  (`MeasuredChip.itemId` bridges the two keys); Start cooking hands the
+  step keys into the session once and discards the sheet's copy. Switching
+  recipe clears it. No room payload, no new backup slice.
+  Both surfaces give the row a visible keyboard-focus ring
+  (`.used-ingredient-row` in `src/style.css`): the `<input>` is `sr-only`,
+  so the global input-only `:focus-visible` outline alone is invisible.
+  The ring uses the same `brand-text` token and `:has(:focus-visible)`, so
+  pointer taps stay unringed.
+- **One recipe id = one session**: the app shell keys `CookingView` by the
+  `/cooking/:id` param. A param-only route change remounts the component
+  (fresh document, servings, plan provenance and cook record); moving
+  inside one recipe keeps the same instance. The persisted used-set is
+  keyed by that same id, so returning within 24h resumes it and a stale
+  entry starts clean.
+- **"Timers for this step" card** — a TWO-STATE disclosure:
+  - **Collapsed** (nothing known or running): a single ~56px tappable
+    row titled "Set a Timer" with the honest hint "No timer running for
+    this step." — ALL creation controls hidden.
+  - **Expanded** (auto): a RUNNING timer opens the running view (large
+    mono tomato countdown, name, slim progress bar, Pause/Cancel) with
+    the creation form collapsed behind a "Set another timer" disclosure;
+    a DETECTED hint with nothing running opens directly on the
+    suggestion view. The saffron "No cook time mentioned in this step —
+    set one if needed." banner NEVER renders while a timer exists.
+  - **ONE presence predicate (DRY)** owns "does this step have a timer":
+    it consumes BOTH the ADR-0041 hint resolution AND `ui.stepTimers`,
+    and drives the card state, the hint line's wording and the banner.
+    A second derivation that answers the same question differently is a
+    defect (observed and fixed — the collapsed card claimed "no timer"
+    while the expanded form said "Detected: 10 min").
+  - The creation form is collapsed by default in BOTH states; expanding
+    it is always an explicit tap. Presets are labelled quick-start
+    affordances, never presented as detections; no invented durations.
 - **"This step uses" checklist card**: the ADR-0022 measured-amount chips
   are superseded in PRESENTATION ONLY by interactive checklist rows —
   full-row ~56px tap targets, 20px rounded checkboxes, bold mono amount +

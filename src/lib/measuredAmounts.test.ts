@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  checklistChipsForLines,
   matchLineItems,
   measuredChipsForLines,
   measuredQuantity,
@@ -162,5 +163,36 @@ describe('measuredChipsForLines', () => {
     expect(measuredChipsForLines(cheese, ['a slab of cheddar cheese'], 1, 'imperial').map((c) => c.label)).toEqual([
       'measured: 1 ½ (8 oz) block cheddar cheese',
     ])
+  })
+})
+
+describe('checklistChipsForLines (ADR-0103: the detail lines ARE the checklist)', () => {
+  const precise = doc([
+    { ...item('6', 'carrots'), id: 71 },
+    { ...item('3 bunches', 'kale'), id: 72 },
+  ])
+
+  test('all-precise step lines produce checkable rows (recipe 5995 shape)', () => {
+    const lines = ['6 medium carrots', '3 bunches kale']
+    // The narrow ADR-0022 derivation still renders nothing for these.
+    expect(measuredChipsForLines(precise, lines, 1)).toEqual([])
+    const chips = checklistChipsForLines(precise, lines, 1)
+    expect(chips.map((c) => c.label)).toEqual(['measured: 6 carrots', 'measured: 3 bunches kale'])
+    expect(chips.map((c) => c.lineIndex)).toEqual([0, 1])
+    // itemId bridges a step row to the prep-card row (decision 3b).
+    expect(chips.map((c) => c.itemId)).toEqual([71, 72])
+  })
+
+  test('an unmatched line stays prose — no invented amount, no row', () => {
+    expect(checklistChipsForLines(precise, ['a pinch of hope'], 1)).toEqual([])
+  })
+
+  test('the amount still scales and the base-name key stays stable', () => {
+    const base = doc([{ ...item('6', 'carrots'), id: 71 }])
+    const restricted = doc([{ ...item('6', 'purple carrots'), id: 71 }])
+    const chip = checklistChipsForLines(restricted, ['6 medium carrots'], 2, 'dual', base)[0]
+    expect(chip.quantity).toBe('12')
+    expect(chip.ingredient).toBe('purple carrots')
+    expect(chip.keyIngredient).toBe('carrots')
   })
 })
