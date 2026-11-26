@@ -382,11 +382,18 @@ async function cooking2(page: Page) {
 
 async function armPreset1(page: Page) {
   const cooking = page.getByRole('dialog', { name: /Cooking / })
-  // The creation form is collapsed by default (ADR-0081 states
-  // amendment); expand it before the preset is reachable.
+  // ADR-0081 addendum 2026-11-26: the panel is collapsed by default in
+  // EVERY state. When a previous leg left an expired timer in the store,
+  // expanding the header reveals its Restart/Cancel rows and a SECOND
+  // "Set another timer" tap is needed before the preset is reachable.
   const disclose = cooking.getByTestId('timer-disclose')
   await expect(disclose).toBeVisible()
   if ((await disclose.getAttribute('aria-expanded')) === 'false') await disclose.click()
+  const setAnother = cooking.getByTestId('timer-set-another')
+  if (await setAnother.count()) {
+    if ((await setAnother.getAttribute('aria-expanded')) === 'false') await setAnother.click()
+    await expect(setAnother).toHaveAttribute('aria-expanded', 'true')
+  }
   await expect(cooking.getByTestId('timer-preset-1')).toBeVisible()
   await cooking.getByTestId('timer-preset-1').click()
   // The NEWEST chip (an earlier leg may have left an expired one).
