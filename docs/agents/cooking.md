@@ -23,25 +23,26 @@ two cards, then the action deck.
   visit (ADR-0103, superseding the per-step ephemeral clause): one
   canonical key function shared with the detail page's step rows;
   NOTHING persists across mark-cooked, a re-cook or an app reload.
-- **"Timers for this step" card** — a TWO-STATE disclosure:
-  - **Collapsed** (nothing known or running): a single ~56px tappable
-    row titled "Set a Timer" with the honest hint "No timer running for
-    this step." — ALL creation controls hidden.
-  - **Expanded** (auto): a RUNNING timer opens the running view (large
-    mono tomato countdown, name, slim progress bar, Pause/Cancel) with
-    the creation form collapsed behind a "Set another timer" disclosure;
-    a DETECTED hint with nothing running opens directly on the
-    suggestion view. The saffron "No cook time mentioned in this step —
-    set one if needed." banner NEVER renders while a timer exists.
-  - **ONE presence predicate (DRY)** owns "does this step have a timer":
-    it consumes BOTH the ADR-0041 hint resolution AND `ui.stepTimers`,
-    and drives the card state, the hint line's wording and the banner.
-    A second derivation that answers the same question differently is a
-    defect (observed and fixed — the collapsed card claimed "no timer"
-    while the expanded form said "Detected: 10 min").
-  - The creation form is collapsed by default in BOTH states; expanding
-    it is always an explicit tap. Presets are labelled quick-start
-    affordances, never presented as detections; no invented durations.
+- **"Timers for this step" card — ONE collapsed disclosure
+  (ADR-0081 addendum 2026-11-26)**: the bottom strip's chip is the ONE
+  always-visible timer surface, so this card no longer duplicates a live
+  countdown. Its ~56px header summarises the state — a live timer by
+  count + label + countdown, a hint as "Detected: N min — label", or
+  "Set a Timer" / "No timer running for this step." — and stays collapsed
+  in EVERY presence state (including a running timer and a detected hint).
+  An explicit tap expands the Restart/Cancel rows for defined timers; a
+  second explicit "Set another timer" tap reveals the creation form
+  (direct when none is defined). Arming collapses it again. No timer state
+  or `data-test` timer hook changed, and every verb stays reachable.
+  - **ONE presence derivation (DRY)** consumes BOTH the ADR-0041 hint
+    resolution AND `ui.stepTimers`: `src/lib/timerPanel.ts` owns the
+    summary and visibility shape, pinned by unit tests. A second
+    derivation answering the same question differently is a defect (the
+    original preview bug showed "no timer" beside "Detected: 10 min").
+  - The saffron "No cook time mentioned in this step — set one if needed."
+    banner NEVER renders while a timer exists. Presets are labelled
+    quick-start affordances, never presented as detections; no invented
+    durations.
 - **Action deck**: outlined Previous + filled-tomato Next (flex-1); a
   full-width tonal success-green "Mark as cooked" below — TOMATO =
   begin, SUCCESS = complete (ADR-0072).
@@ -178,8 +179,11 @@ segment while the timer is live and RE-ARMS the armed `total` once it
 has expired (never an invented 300).
 
 The ADR-0041 GLOBAL multi-timer strip remains the RUNNING-timers surface
-(visible across steps, multiple concurrent timers); the per-step card
-owns only the ADD affordance.
+(visible across steps, multiple concurrent timers). Since the 2026-11-26
+addendum the per-step card owns only the DISCLOSED manage/add affordance:
+its collapsed header summarises a timer but never renders a second live
+countdown beside the strip's chip. The `ui.stepTimers` shape, the
+countdown derivation and the manage sheet are unchanged.
 
 ## Timer alerts (ADR-0081 amendment; recurring alarm per ADR-0093; visual floor per ADR-0104)
 

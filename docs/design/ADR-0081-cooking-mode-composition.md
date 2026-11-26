@@ -68,7 +68,9 @@ using green for mark a cooked"):
    of the chips. Checked state is per-step ephemeral view state (the chips
    were never persisted; nothing changes there).
 3. **"Timers for this step" timer card.** Every control gets its own row or
-   chip — the one-thing-per-row rule that kills the cramped strip:
+   chip — the one-thing-per-row rule that kills the cramped strip (the card's
+   default EXPANSION is amended by the 2026-11-26 single-visible-surface
+   addendum at the end of this record: it is now COLLAPSED in every state):
    (a) the SUGGESTION row (decision 4), (b) quick-start preset pills
    (44px+ height, mono digits), (c) a FULL-WIDTH name field on its own row
    (never truncated again), (d) a minutes input + filled-tomato
@@ -213,6 +215,43 @@ found. Two hard requirements follow:
   runs.
 - Rejected render fiction, standing: the "ACTION STEP" badge reappeared in
   the generated collapsed-state screens — still rejected (§Decision 7).
+
+## Addendum (2026-11-26): single visible timer surface
+
+Owner ruling on the Brave/Android cooking screenshot: "we don't need to see
+both timers all the time, the one at the bottom is enough. Dual timer is loss
+of space." This AMENDS Decision 3 and the "Timer-card states amendment"
+(PRESENTATION only — ADR-0020's timer engine and ADR-0041's global strip
+state semantics are untouched):
+
+1. **The bottom chip is the ONE always-visible timer surface.** The in-step
+   "Timers for this step" card no longer renders a second live countdown,
+   progress bar or timer row unprompted. It is a single compact disclosure
+   in EVERY presence state — a running timer, a detected hint, or nothing.
+2. **Collapsed header/summary.** With a timer defined, the header names the
+   step card and summarises the count and the oldest timer's countdown;
+   with a detected hint it says "Detected: N min — label"; with neither it
+   keeps the 2026-10-11 "Set a Timer" title and "No timer running for this
+   step." line. A pure helper (`src/lib/timerPanel.ts`) owns the summary
+   and the visibility shape, so one derivation answers all three cases.
+3. **Verbs stay reachable, never ambient.** The explicit tap expands the
+   panel to the Restart/Cancel rows for the defined timers; a SECOND
+   explicit tap on "Set another timer" reveals the creation form (direct
+   when no timer is defined). Arming collapses the panel again — the new
+   strip chip is the visible result. Previously, a running timer or a
+   detected hint AUTO-EXPANDED the card (the 2026-10-11 correction for the
+   preview contradiction); that auto-expansion is superseded by this
+   addendum, but the contradiction itself stays fixed: the collapsed
+   summary still reports the detection honestly.
+4. **Reachability preserved:** the bottom strip keeps its chips and manage
+   sheet, the card keeps Restart/Pause/Cancel and Set-another behind the
+   disclosure, and the one-tap detected suggestion still confirms through
+   the same form. No timer state, no `data-test` timer hook and no ADR-0104
+   alarm behaviour changes.
+
+Pinned by `src/lib/timerPanel.test.ts` (unit) and a single-surface leg in
+`e2e/cooking-timers.spec.ts` (the chip stays, the card duplicate does not,
+and every verb is reachable from the expanded panel).
 
 ## Alternatives considered
 

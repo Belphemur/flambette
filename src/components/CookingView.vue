@@ -34,6 +34,7 @@ import {
 import CookTimerChip from './CookTimerChip.vue'
 import PostCookPrompt from './PostCookPrompt.vue'
 import { hintForStep, suggestionFromHint, type TimerSuggestion } from '../lib/timerSuggest'
+import { timerPanelSummary, timerPanelVisibility } from '../lib/timerPanel'
 import { confirmModal } from '../composables/useConfirm'
 import { useTimerHints } from '../composables/useTimerHints'
 import {
@@ -302,9 +303,10 @@ watch(viewKey, () => {
   pendingArm.value = null
   nameInput.value = ''
   minutesInput.value = ''
-  // The timer card's creation form is step-scoped too (ADR-0081 states
-  // amendment): a fresh view starts COLLAPSED, never carrying the
-  // previous step's open form.
+  // ADR-0081 addendum 2026-11-26: the WHOLE in-step panel starts COLLAPSED
+  // on a fresh view — the bottom strip is the only timer surface a cook
+  // sees unprompted, and no draft/open form follows the step change.
+  timerPanelOpen.value = false
   timerFormOpen.value = false
   // The checklist is per-step ephemeral (ADR-0081) — a new view starts
   // with every row unchecked.
@@ -355,35 +357,29 @@ const suggestion = computed<TimerSuggestion | null>(() => {
 const hintsLoaded = computed(() => hints.value !== null)
 
 /**
- * THE one derivation of "does this step have a timer" (ADR-0081 states
- * correction — DRY, coding-philosophy priority 1): a RUNNING timer or a
- * DETECTED hint, never two code paths answering the same question. It
- * alone drives the card state, the collapsed hint line's wording, and
- * where the banner may render:
- *
- * - `running` → the card auto-expands on the running timers (countdown /
- *   progress / Pause / Cancel), the creation form collapsed behind
- *   "Set another timer";
- * - `detected` → the card opens DIRECTLY on the suggestion view (banner
- *   + one-tap add front and center, quick-start below) — the first
- *   implementation keyed this on running timers only and left a hinted
- *   step collapsed while its form said "Detected: 10 min" (preview bug);
- * - `none` → the collapsed "Set a Timer" row, whose hint line now means
- *   what it says: NOTHING is known or running for this step.
+ * THE one derivation of the panel's state (ADR-0081 states correction —
+ * DRY, coding-philosophy priority 1): a RUNNING timer or a DETECTED hint,
+ * never two code paths answering the same question. The 2026-11-26
+ * addendum keeps that single derivation but changes its OUTPUT: every
+ * presence starts COLLAPSED, because the bottom strip is the one
+ * always-visible timer surface. `timerPanelSummary` is that derivation's
+ * voice (live timer / detected hint / nothing); `timerPanelVisibility`
+ * is its shape (Restart/Cancel rows, creation form).
  */
-const timerPresence = computed<'running' | 'detected' | 'none'>(() => {
-  if (timers.value.length > 0) return 'running'
-  if (suggestion.value) return 'detected'
-  return 'none'
-})
+const timerPanelOpen = ref(false)
+const timerFormOpen = ref(false)
 
-/**
- * The creation form is visible when the cook explicitly opened it OR the
- * predicate auto-opened it on a detected hint (states correction rule 2:
- * auto-expand on detection — the one sanctioned non-explicit opening).
- */
-const timerFormVisible = computed(
-  () => timerFormOpen.value || timerPresence.value === 'detected',
+/** The collapsed row's summary — a pure derivation, pinned in unit tests. */
+const timerSummary = computed(() =>
+  timerPanelSummary(timers.value, suggestion.value, now.value),
+)
+
+const panelShape = computed(() =>
+  timerPanelVisibility({
+    timerCount: timers.value.length,
+    panelOpen: timerPanelOpen.value,
+    formOpen: timerFormOpen.value,
+  }),
 )
 
 /**
@@ -407,9 +403,9 @@ function armSuggestion() {
   pendingArm.value = null
   nameInput.value = ''
   minutesInput.value = ''
-  // A timer now exists: the card auto-expands to the RUNNING view and
-  // the creation form collapses back behind "Set another timer"
-  // (ADR-0081 states amendment).
+  // A timer now exists: the in-step panel collapses again — the new
+  // bottom-strip chip is the only visible countdown (ADR-0081 addendum).
+  timerPanelOpen.value = false
   timerFormOpen.value = false
 }
 
@@ -424,13 +420,11 @@ const minutesInput = ref('')
 const pendingArm = ref<{ label: string; seconds: number } | null>(null)
 
 /**
- * The timer card's creation-form disclosure (ADR-0081 states amendment):
- * COLLAPSED by default in BOTH card states — expanding it is ALWAYS an
- * explicit tap ("Set a Timer" when the step has none, "Set another timer"
- * once one runs); the card never opens the form unprompted. Step-scoped
- * like the draft fields, so a form never follows the cook between steps.
+ * Step-scoped draft disclosure state (ADR-0081 addendum 2026-11-26):
+ * `timerPanelOpen` is the collapsed header tap; `timerFormOpen` is the
+ * nested "Set another timer" tap. Both reset on a step change, so no
+ * open panel (and no half-typed draft) follows the cook.
  */
-const timerFormOpen = ref(false)
 
 /** Minutes the confirm button would arm right now (0 = nothing to arm). */
 const pendingMinutes = computed(() => {
@@ -479,8 +473,9 @@ function arm(seconds: number, replacingId?: number, labelOverride?: string): boo
   pendingArm.value = null
   nameInput.value = ''
   minutesInput.value = ''
-  // Same states-amendment rule as armSuggestion: armed = running view,
-  // form collapsed.
+  // Same single-surface rule as armSuggestion: the armed timer's chip in
+  // the bottom strip is the view; this panel returns to its header.
+  timerPanelOpen.value = false
   timerFormOpen.value = false
   return true
 }
@@ -1033,27 +1028,61 @@ function isAlarming(t: CookTimer): boolean {
   </ul>
   </section>
 
-  <!-- "Timers for this step" (ADR-0081 + states amendment): a TWO-STATE
-  disclosure. ADR-0020's state semantics are untouched — one
-  timer per step VIEW, `{remaining, running, startedAt}`, countdown
-  derived from `startedAt`, polite live region, never the toast. The
-  SUGGESTION row is honest (ADR-0081 decision 4): a detected duration
-  is offered with a one-tap add; its absence is SAID, never faked with
-  presets dressed up as detections. -->
+  <!-- "Timers for this step" (ADR-0081 addendum 2026-11-26): the bottom
+  strip is the ONE always-visible timer surface. This card is a single
+  compact disclosure — collapsed even with a running timer or a detected
+  hint. The header summarises the state; an explicit tap reveals the
+  Restart/Cancel rows (behind "Set another timer" for the creation form).
+  ADR-0020's engine semantics are untouched, and the honest suggestion
+  rule (ADR-0081 decision 4) survives in the expanded form. -->
   <section
   class="rounded-xl border border-border bg-surface-raised p-4"
   data-test="timer-card"
   aria-label="Timers for this step"
   >
-  <!-- RUNNING state (ADR-0081 states amendment, via the ONE presence
-  predicate): when a timer runs the card auto-expands and the running
-  timers are the dominant content — large mono tomato countdown, name,
-  slim progress bar, Pause (tonal) + Cancel (outlined). Timers are
-  recipe-scoped named chips (ADR-0041), so the card shows the same armed
-  set the global strip carries, in the richer per-step presentation. -->
-  <template v-if="timerPresence === 'running'">
-  <h2 class="text-[13px] font-bold tracking-wider text-text uppercase">Timers for this step</h2>
-  <ul class="flex flex-col gap-2 pt-3" data-test="card-timers">
+  <!-- The ONE collapsed row. Its summary is derived by the same pure
+  helper the unit suite pins: a live timer is named with its countdown,
+  a hint says "Detected", and neither invents a running timer. -->
+  <button
+  type="button"
+  class="flex min-h-[56px] w-full items-center justify-between gap-3 text-left"
+  data-test="timer-disclose"
+  :aria-expanded="timerPanelOpen"
+  aria-controls="timer-card-body"
+  @click="timerPanelOpen = !timerPanelOpen"
+  >
+  <span class="flex min-w-0 flex-col">
+  <span class="text-[16px] font-semibold text-text">{{
+  timers.length ? 'Timers for this step' : 'Set a Timer'
+  }}</span>
+  <span
+  class="mt-0.5 truncate text-[12px] text-text-muted"
+  data-test="timer-disclose-summary"
+  >{{ timerSummary }}</span
+  >
+  </span>
+  <span class="flex shrink-0 items-center gap-1 text-text-muted">
+  <Plus :size="20" aria-hidden="true" />
+  <ChevronDown
+  :size="20"
+  aria-hidden="true"
+  class="transition-transform"
+  :class="timerPanelOpen ? 'rotate-180' : ''"
+  />
+  </span>
+  </button>
+
+  <!-- Expanded panel. The running rows are the SAME armed set the strip
+  carries (ADR-0041), with the richer Restart/Cancel verbs; they exist
+  ONLY after the disclosure tap, never beside the chip. -->
+  <div
+  v-if="timerPanelOpen"
+  id="timer-card-body"
+  data-test="timer-card-body"
+  class="border-t border-border pt-3"
+  >
+  <template v-if="panelShape.showTimerRows">
+  <ul class="flex flex-col gap-2" data-test="card-timers">
   <li
   v-for="t in timers"
   :key="t.id"
@@ -1102,53 +1131,36 @@ function isAlarming(t: CookTimer): boolean {
   </div>
   </li>
   </ul>
-  </template>
-
-  <!-- The disclosure row — rendered only when NOTHING is known or
-  running (collapsed "Set a Timer") or a timer runs ("Set another
-  timer"). A DETECTED hint renders neither: the correction opens the
-  card directly on the suggestion view instead — a row above the banner
-  would re-introduce the collapsed-vs-detected contradiction. -->
+  <!-- ADR-0081's "Set another timer" verb stays reachable: the second
+  explicit tap, never an ambient form. -->
   <button
-  v-if="timerPresence !== 'detected'"
   type="button"
-  class="flex min-h-[56px] w-full items-center justify-between gap-3 text-left"
-  :class="timers.length ? 'mt-3 border-t border-border pt-3' : ''"
-  data-test="timer-disclose"
+  class="mt-3 flex min-h-11 w-full items-center justify-between gap-3 border-t border-border pt-3 text-left"
+  data-test="timer-set-another"
   :aria-expanded="timerFormOpen"
   aria-controls="timer-create-form"
   @click="timerFormOpen = !timerFormOpen"
   >
-  <span class="flex min-w-0 flex-col">
-  <span class="text-[16px] font-semibold text-text">{{
-  timers.length ? 'Set another timer' : 'Set a Timer'
-  }}</span>
-  <span v-if="!timers.length" class="mt-0.5 text-[12px] text-text-muted">
-  No timer running for this step.
-  </span>
-  </span>
-  <span class="flex shrink-0 items-center gap-1 text-text-muted">
-  <Plus :size="20" aria-hidden="true" />
+  <span class="text-[15px] font-semibold text-text">Set another timer</span>
   <ChevronDown
-  :size="20"
+  :size="18"
   aria-hidden="true"
-  class="transition-transform"
+  class="shrink-0 text-text-muted transition-transform"
   :class="timerFormOpen ? 'rotate-180' : ''"
   />
-  </span>
   </button>
+  </template>
+  </div>
 
-  <!-- The creation form — visible when the cook explicitly opened it
-  ("Set a Timer" / "Set another timer") OR the presence predicate
-  auto-opened it on a DETECTED hint (states correction rule 2). The
-  suggestion banner's honesty rule (ADR-0081 decision 4) applies while
-  the form is visible; the saffron rows never render over a running
-  timer's auto-expanded view. -->
+  <!-- The creation form: only inside the expanded panel, opened directly
+  for a step with no timer or via the second "Set another timer" tap when
+  one runs (ADR-0081 addendum). The suggestion banner's honesty rule
+  (decision 4) applies while the form is visible — a hint is never shown
+  beside a live countdown unless the cook asked for it. -->
   <div
-  v-if="timerFormVisible"
+  v-if="panelShape.showForm"
   id="timer-create-form"
-  class="flex flex-col gap-3 pt-3"
-  :class="timerPresence !== 'detected' ? 'border-t border-border' : ''"
+  class="flex flex-col gap-3 border-t border-border pt-3"
   data-test="timer-create-form"
   >
   <!-- The honest suggestion row: saffron tint (the timers/heat/tips
