@@ -24,7 +24,8 @@ Cross-cutting rules for any change in this repo. Each rule names its ADR;
   keyword tables are the tunable part.
 - **Quick filters (ADR-0027/0028)**: the WHOLE Recipes-tab filter
   surface is ONE object, `QuickFilters` in `src/lib/quickFilters.ts`
-  (`diets`, `protein`, `maxTime`, `sortBy`, `favOnly`, `proOnly`),
+  (`diets`, `protein`, `maxTime`, `sortBy`, `favOnly`, `source` —
+  `all | new` since ADR-0105 retired the `pro` value),
   persisted in the existing `mealime-planner:v1:ui` slice. There is no
   "All diets" dropdown and no per-control local ref — the protein slice
   it used to own is a chip (`data-test="protein-chip-*"`), and the diet

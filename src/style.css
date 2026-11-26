@@ -703,3 +703,42 @@ input[type='checkbox'].check-box:disabled {
     transform: none;
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * Timer alarm shake (ADR-0104): the third, always-available alarm
+ * channel. ONE class for the shell banner's message wrapper and the
+ * alarming chip's non-interactive outline overlay (never the button
+ * containers — a moving Stop/Delete target is unusable), driven
+ * entirely by the host's reactive `alarmingTimers` mirror — no extra
+ * polling, no new state, no toggle.
+ *
+ * The animation uses `transform` only (NOT the Tailwind `translate`
+ * property the banner uses to centre itself) and touches no colour, so
+ * the existing token-based theme flip covers light and dark unchanged.
+ * A static brand outline keeps the attention cue for reduced-motion
+ * users, who get no movement at all.
+ * ------------------------------------------------------------------ */
+.alarm-shake {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  animation: alarm-shake 420ms ease-in-out infinite;
+}
+
+@keyframes alarm-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alarm-shake {
+    animation: none;
+  }
+}

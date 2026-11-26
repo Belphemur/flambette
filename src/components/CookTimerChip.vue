@@ -21,6 +21,9 @@ import { formatCountdown } from '../lib/stepTimer'
  *   strip chip truncates it narrowly. The name hook is `chip-name` ONLY
  *   on the strip — never prefix any inner hook with `timer-chip-` (the
  *   parent's `[data-test^="timer-chip-"]` locator would double-match).
+ * - `alarming`: only the STRIP passes the ADR-0104 visual channel, which
+ *   renders a stable marker while this timer's chip is shaking. The
+ *   manage sheet never shakes (its row is not the strip chip).
  */
 defineProps<{
   /** The armed timer this chip drives. */
@@ -37,12 +40,18 @@ defineProps<{
   srAnnounce?: string
   nameTest?: string
   live?: boolean
+  /** ADR-0104: this timer is in the host's alarming set (strip only). */
+  alarming?: boolean
 }>()
 
 const emit = defineEmits<{ toggle: []; clear: [] }>()
 </script>
 
 <template>
+  <!-- A marker on the shaken chip, not a new alarm state: the parent
+       wrapper carries the `alarm-shake` class off `alarmingTimers`, and
+       e2e asserts this marker + class rather than animation timing. -->
+  <span v-if="alarming" data-test="timer-alarm-shake" aria-hidden="true" class="sr-only">Ringing</span>
   <span :data-test="nameTest" :class="nameClass">{{ timer.label }}</span>
   <button
     class="flex h-11 min-w-24 shrink-0 items-center justify-center gap-1 px-1 font-mono-data text-xl font-semibold tabular-nums"

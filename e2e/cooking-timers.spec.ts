@@ -13,14 +13,15 @@ import {
  * The STRIP is the RUNNING-timers surface: docked above the footer,
  * visible from every step, one chip per armed timer — a cook juggling an
  * oven and a pot of rice needs both countdowns live at once. It exists
- * only while something is armed; the ADD affordance moved into the
- * step's "Timers for this step" card (ADR-0081), a TWO-STATE disclosure
- * (states amendment): collapsed to a "Set a Timer" row while nothing
- * runs, auto-expanded to the running timers once one does, the creation
- * form behind an explicit tap in BOTH states: an HONEST suggestion (a
- * detected duration offered with a one-tap add, its absence SAID instead
- * of faked with presets), quick-start pills, a full-width name field,
- * and a minutes input + Start timer.
+ * only while something is armed and is the ONE always-visible timer
+ * surface (ADR-0081 addendum 2026-11-26). The step's "Timers for this
+ * step" card is a SINGLE collapsed disclosure in every state: its header
+ * summarises a live timer/detected hint/nothing; an explicit tap reveals
+ * the Restart/Cancel rows and, behind a second "Set another timer" tap,
+ * the creation form: an HONEST suggestion (a detected duration offered
+ * with a one-tap add, its absence SAID instead of faked with presets),
+ * quick-start pills, a full-width name field, and a minutes input +
+ * Start timer.
  *
  * `15682` ("Place eggs … cook for 8 minutes") and `5264` ("Cook until
  * liquid is absorbed, 15-18 minutes") are used for the suggestion cases:
@@ -53,9 +54,16 @@ async function startCookingRecipe(page: Page, id: number) {
   return cooking
 }
 
-/** Every armed chip, in strip order (oldest timer first). */
+/**
+ * Every armed chip, in strip order (oldest timer first). The ADR-0104
+ * shake overlay intentionally keeps its `timer-chip-shake` marker, so the
+ * prefix selector must exclude it — otherwise an alarming timer inflates
+ * the chip count and breaks indexed assertions (review hardening).
+ */
 function chips(cooking: Locator): Locator {
-  return cooking.locator('[data-test^="timer-chip-"]')
+  return cooking.locator(
+    '[data-test^="timer-chip-"]:not([data-test="timer-chip-shake"])',
+  )
 }
 
 /** The countdown button of the `index`-th chip. */
@@ -71,18 +79,25 @@ async function secondsAt(cooking: Locator, index = 0): Promise<number> {
 }
 
 /**
- * Make the timer card's creation form visible (ADR-0081 states
- * amendment + correction). Idempotent: reads `aria-expanded` instead of
- * tapping blindly (a second tap would collapse it again). A DETECTED
- * hint auto-opens the card on the suggestion view — there is no row to
- * tap, so the helper returns instead of failing on the absent row.
+ * Make the timer card's creation form visible (ADR-0081 addendum
+ * 2026-11-26). The header disclosure is ALWAYS present and collapsed by
+ * default — including on a detected hint — so this tap is explicit in
+ * every case. With a defined timer, a SECOND tap on "Set another timer"
+ * is required; idempotent via `aria-expanded` (a blind second tap would
+ * collapse what the first just opened).
  */
 async function openTimerForm(cooking: Locator) {
   await expect(cooking.getByTestId('timer-card')).toBeVisible()
   const disclose = cooking.getByTestId('timer-disclose')
-  if ((await disclose.count()) === 0) return // auto-opened on a detected hint
+  await expect(disclose).toBeVisible()
   if ((await disclose.getAttribute('aria-expanded')) === 'false') await disclose.click()
   await expect(disclose).toHaveAttribute('aria-expanded', 'true')
+  const setAnother = cooking.getByTestId('timer-set-another')
+  if (await setAnother.count()) {
+    if ((await setAnother.getAttribute('aria-expanded')) === 'false') await setAnother.click()
+    await expect(setAnother).toHaveAttribute('aria-expanded', 'true')
+  }
+  await expect(cooking.getByTestId('timer-create-form')).toBeVisible()
 }
 
 /**
@@ -134,8 +149,8 @@ async function goToLastStep(cooking: Locator) {
 
 test('the timer card is on the step view, the strip only when something is armed', async ({ page }) => {
   // 10085 has NO timer sidecar: nothing is known or running, so the
-  // COLLAPSED default is deterministic here (a hinted step auto-opens on
-  // the suggestion view — pinned separately below).
+  // "Set a Timer" summary is deterministic here (a hinted step now
+  // reports its detection in the SAME collapsed header — pinned below).
   const cooking = await startCookingRecipe(page, 10085)
 
   // COLLAPSED default (ADR-0081 states amendment): the fresh card is only
@@ -146,8 +161,11 @@ test('the timer card is on the step view, the strip only when something is armed
   const disclose = cooking.getByTestId('timer-disclose')
   await expect(disclose).toBeVisible()
   await expect(disclose).toContainText('Set a Timer')
-  await expect(disclose).toContainText('No timer running for this step.')
+  await expect(disclose.getByTestId('timer-disclose-summary')).toContainText(
+    'No timer running for this step.',
+  )
   await expect(disclose).toHaveAttribute('aria-expanded', 'false')
+  await expect(cooking.getByTestId('card-timers')).toHaveCount(0)
   await expect(cooking.getByTestId('timer-name')).toHaveCount(0)
   await expect(cooking.getByTestId('timer-minutes')).toHaveCount(0)
   await expect(cooking.getByTestId('timer-preset-1')).toHaveCount(0)
@@ -179,16 +197,26 @@ test('a preset arms one chip that runs, stops and deletes', async ({ page }) => 
   const timer = countdown(cooking)
   await expect(timer).toContainText('1:00')
 
-  // Starting a timer AUTO-EXPANDS the card to the RUNNING view
-  // (ADR-0081 states amendment): the step's timer is the dominant
-  // content — name, large mono countdown, Pause/Cancel — and the creation
-  // form is collapsed behind "Set another timer"; the honest banner never
-  // renders while a timer exists.
+  // ADR-0081 addendum 2026-11-26: the new chip in the BOTTOM STRIP is the
+  // only live countdown — the in-step card collapses again and renders
+  // NO second timer row/countdown until the cook taps its header.
+  await expect(cooking.getByTestId('timer-disclose')).toContainText('Timers for this step')
+  await expect(cooking.getByTestId('timer-disclose-summary')).toContainText('1 timer running')
+  await expect(cooking.getByTestId('timer-disclose-summary')).toContainText('Step')
+  await expect(cooking.getByTestId('timer-disclose')).toHaveAttribute('aria-expanded', 'false')
+  await expect(cooking.getByTestId('card-timers')).toHaveCount(0)
+  await expect(cooking.getByTestId('card-timer-count')).toHaveCount(0)
+  await expect(chips(cooking)).toHaveCount(1)
+  // The verbs stay reachable from the expanded panel: Restart/Pause +
+  // Cancel rows, then a SECOND explicit tap for "Set another timer".
+  await cooking.getByTestId('timer-disclose').click()
   await expect(cooking.getByTestId('card-timers')).toBeVisible()
   await expect(cooking.getByTestId('card-timer-count')).toContainText('1:00')
   await expect(cooking.getByTestId('card-timer-name')).toContainText('Step')
-  await expect(cooking.getByTestId('timer-disclose')).toContainText('Set another timer')
-  await expect(cooking.getByTestId('timer-disclose')).toHaveAttribute('aria-expanded', 'false')
+  await expect(cooking.getByTestId('card-timer-toggle-1')).toBeVisible()
+  await expect(cooking.getByTestId('card-timer-cancel-1')).toBeVisible()
+  await expect(cooking.getByTestId('timer-set-another')).toContainText('Set another timer')
+  await expect(cooking.getByTestId('timer-set-another')).toHaveAttribute('aria-expanded', 'false')
   await expect(cooking.getByTestId('timer-name')).toHaveCount(0)
   await expect(cooking.getByTestId('timer-no-hint')).toHaveCount(0)
   await expect(cooking.getByTestId('timer-suggest-row')).toHaveCount(0)
@@ -211,10 +239,13 @@ test('a preset arms one chip that runs, stops and deletes', async ({ page }) => 
 
   await cooking.getByTestId('timer-clear').click()
   await expect(chips(cooking)).toHaveCount(0)
-  // The strip dissolves with the last chip; the card falls back to the
-  // COLLAPSED "Set a Timer" row — the next timer is still one tap away.
+  // The strip dissolves with the last chip; the card's header falls back
+  // to "Set a Timer" — the next timer is still one explicit tap away.
   await expect(cooking.getByTestId('timer-strip')).toHaveCount(0)
   await expect(cooking.getByTestId('timer-disclose')).toContainText('Set a Timer')
+  await expect(cooking.getByTestId('timer-disclose-summary')).toContainText(
+    'No timer running for this step.',
+  )
   await expect(cooking.getByTestId('timer-fab')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
 })
@@ -294,12 +325,17 @@ test('a duration the recipe writes out is offered honestly, and only a tap arms 
   // ADR-0081: the card OFFERS the detected duration — the suggestion row
   // says "Detected:" and names the sidecar's label. Authored as
   // "15-18 minutes" (extract_timer_hints.py), so the LOWER bound is what
-  // is proposed. A DETECTED hint AUTO-OPENS the card on the suggestion
-  // view (states correction rule 2): no disclosure tap, the offer is
-  // front and center the moment the sidecar resolves.
+  // is proposed. ADR-0081's 2026-11-26 addendum keeps the ONE honesty
+  // derivation but reports the detection in the COLLAPSED header: no
+  // second countdown, no ambient suggestion form. The tap reveals it.
   const offer = cooking.getByTestId('timer-suggest')
-  await expect(cooking.getByTestId('timer-suggest-row')).toBeVisible({ timeout: 15_000 })
-  await expect(cooking.getByTestId('timer-disclose')).toHaveCount(0)
+  await expect(cooking.getByTestId('timer-disclose-summary')).toContainText(
+    'Detected: 15 min',
+    { timeout: 15_000 },
+  )
+  await expect(cooking.getByTestId('timer-suggest-row')).toHaveCount(0)
+  await cooking.getByTestId('timer-disclose').click()
+  await expect(cooking.getByTestId('timer-suggest-row')).toBeVisible()
   const copy = cooking.getByTestId('timer-suggest-copy')
   await expect(copy).toContainText('Detected: 15 min')
   await expect(copy).toContainText('Step 1 (of 15–18)')
@@ -314,36 +350,42 @@ test('a duration the recipe writes out is offered honestly, and only a tap arms 
   await expect(chips(cooking)).toHaveCount(1)
   await expect(countdown(cooking)).toContainText('15:00')
   await expect(countdown(cooking)).toHaveAttribute('aria-label', /^Pause .*timer, 15:0\d left/)
-  // Armed = the card's RUNNING view, form collapsed again.
-  await expect(cooking.getByTestId('card-timers')).toBeVisible()
-  await expect(cooking.getByTestId('timer-disclose')).toContainText('Set another timer')
+  // Armed = the strip's chip is the visible countdown; the card collapses
+  // back to its summary and the form is one explicit tap away again.
+  await expect(cooking.getByTestId('card-timers')).toHaveCount(0)
+  await expect(cooking.getByTestId('timer-disclose')).toContainText('Timers for this step')
+  await expect(cooking.getByTestId('timer-disclose-summary')).toContainText('15:00')
   await expect(cooking.getByTestId('timer-disclose')).toHaveAttribute('aria-expanded', 'false')
   await expectZeroMealimeRequests(page)
 })
 
-test('a DETECTED hint auto-expands the card on the suggestion view (5995 step 12, preview bug)', async ({ page }) => {
+test('a DETECTED hint is honest in the collapsed header (5995 step 12, preview bug)', async ({ page }) => {
   // The owner's bug report on the PR #82 preview: "Tuscan Kale & White
   // Bean Soup" step 12 ("…cover, and cook for 10 minutes.") stayed
   // COLLAPSED — "Set a Timer" — while its expanded form said "Detected:
-  // 10 min — Soup". The states correction (ADR-0081) makes the ONE
-  // presence predicate consume BOTH inputs, so the card opens DIRECTLY on
-  // the suggestion view here: no disclosure row, no tap.
+  // 10 min — Soup". The ONE presence derivation (now `timerPanel.ts`)
+  // consumes BOTH inputs: the 2026-11-26 addendum keeps the detection
+  // visible in the header while moving the offer behind an explicit tap.
   const cooking = await startCookingRecipe(page, 5995)
   await goToStepView(cooking, 12)
   // The sidecar is an on-demand fetch — under a loaded runner it can
   // take longer than the default 5 s expectation.
-  await expect(cooking.getByTestId('timer-suggest-row')).toBeVisible({ timeout: 15_000 })
+  await expect(cooking.getByTestId('timer-disclose-summary')).toContainText(
+    'Detected: 10 min',
+    { timeout: 15_000 },
+  )
+  await expect(cooking.getByTestId('timer-suggest-row')).toHaveCount(0)
+  await cooking.getByTestId('timer-disclose').click()
+  await expect(cooking.getByTestId('timer-suggest-row')).toBeVisible()
   await expect(cooking.getByTestId('timer-suggest-copy')).toContainText('Detected: 10 min')
-  await expect(cooking.getByTestId('timer-disclose')).toHaveCount(0)
 
-  // Starting the suggested timer moves suggestion view → running view:
-  // countdown + Pause/Cancel front and center, form collapsed behind
-  // "Set another timer", banner gone.
+  // Starting the suggested timer leaves the strip chip as the only
+  // countdown: the card returns to its collapsed summary and the form
+  // (with the suggestion) is another explicit tap away.
   await cooking.getByTestId('timer-suggest').click()
   await expect(chips(cooking)).toHaveCount(1)
-  await expect(cooking.getByTestId('card-timers')).toBeVisible()
-  await expect(cooking.getByTestId('card-timer-count')).toContainText('10:00')
-  await expect(cooking.getByTestId('timer-disclose')).toContainText('Set another timer')
+  await expect(cooking.getByTestId('card-timers')).toHaveCount(0)
+  await expect(cooking.getByTestId('timer-disclose')).toContainText('Timers for this step')
   await expect(cooking.getByTestId('timer-disclose')).toHaveAttribute('aria-expanded', 'false')
   await expect(cooking.getByTestId('timer-suggest-row')).toHaveCount(0)
   await expectZeroMealimeRequests(page)
@@ -391,13 +433,13 @@ test('every hinted step offers its own duration, and a second add is a legitimat
   await openTimerForm(cooking)
   await expect(cooking.getByTestId('timer-suggest-copy')).toContainText('Step 11 (of 1–2)')
 
-  // Walk back to the Shrimp step: the card is in its RUNNING view (a live
-  // Shrimp chip exists), and expanding "Set another timer" STILL shows
-  // its offer — a second pot of shrimp is a legitimate ask, and the tap
-  // is what confirms it (the §4 auto-fill gate is superseded by the
-  // honest row, ADR-0081).
+  // Walk back to the Shrimp step: the chip in the STRIP is the visible
+  // countdown and the card is collapsed again; expanding it and then
+  // "Set another timer" STILL shows the offer — a second pot of shrimp is
+  // a legitimate ask, and the tap is what confirms it (the §4 auto-fill
+  // gate is superseded by the honest row, ADR-0081).
   await goToStepView(cooking, 7)
-  await expect(cooking.getByTestId('card-timers')).toBeVisible()
+  await expect(cooking.getByTestId('card-timers')).toHaveCount(0)
   await expect(cooking.getByTestId('timer-suggest-row')).toHaveCount(0)
   await openTimerForm(cooking)
   await expect(cooking.getByTestId('timer-suggest-copy')).toContainText('Shrimp')
@@ -588,6 +630,15 @@ test('an expired timer does not block Finish and offers Restart (qodo 4128519641
   await expect(countdown(cooking)).toContainText('0:00')
   await expect(countdown(cooking)).toHaveAttribute('aria-label', /^Start .* timer, /)
   expect(await secondsAt(cooking)).toBe(0)
+
+  // The collapsed card still offers the expired timer's RESTART and
+  // Cancel verbs once opened (ADR-0081 addendum) — the bottom chip only
+  // offers Start/X, so the richer verbs must stay in the panel.
+  await expect(cooking.getByTestId('card-timers')).toHaveCount(0)
+  await openTimerForm(cooking)
+  await expect(cooking.getByTestId('card-timer-toggle-1')).toContainText('Restart')
+  await expect(cooking.getByTestId('card-timer-cancel-1')).toBeVisible()
+  await expect(cooking.getByTestId('timer-set-another')).toBeVisible()
 
   // Finish needs NO confirmation for an expired timer: the post-cook
   // prompt raises directly (ADR-0083) — the acknowledgment, no toast.
