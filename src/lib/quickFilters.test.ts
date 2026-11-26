@@ -5,7 +5,6 @@ import {
   matchesSource,
   mergeSharedFilters,
   migrateLegacyUiFilters,
-  legacyProOnlySource,
   normalizeQuickFilters,
   sameQuickFilters,
   toSharedFilters,
@@ -94,40 +93,42 @@ describe('normalizeQuickFilters', () => {
   })
 
   test('source: the offered values round-trip, anything else means All', () => {
-    for (const good of ['all', 'pro', 'new'] as const) {
+    for (const good of ['all', 'new'] as const) {
       expect(normalizeQuickFilters({ source: good })?.source).toBe(good)
     }
-    for (const bad of ['mealime', 'user', 'New', '', null, 7, true]) {
+    for (const bad of ['mealime', 'user', 'pro', 'New', '', null, 7, true]) {
       expect(normalizeQuickFilters({ source: bad })?.source, String(bad)).toBe('all')
     }
   })
 
-  test('the retired proOnly boolean migrates to the source facet (ADR-0054 §3)', () => {
-    // A RENAME, not a reinterpretation: the old chip said "PRO recipes
-    // only", so a household that had it pinned keeps exactly that grid.
-    expect(normalizeQuickFilters({ proOnly: true })?.source).toBe('pro')
+  test('the retired PRO spellings land on All (ADR-0105)', () => {
+    // ADR-0105 retired the 'pro' bucket and the proOnly boolean: an older
+    // peer, backup or blob still carrying one is DROPPED to the default,
+    // the same drop-unknown rule as every other facet — there is no PRO
+    // grid left for a migrated value to restore.
+    expect(normalizeQuickFilters({ proOnly: true })?.source).toBe('all')
     expect(normalizeQuickFilters({ proOnly: false })?.source).toBe('all')
+    expect(normalizeQuickFilters({ source: 'pro' })?.source).toBe('all')
     // Nothing about the legacy key leaks into the result: the type has
     // ONE spelling, and `sameQuickFilters` compares that one.
-    const migrated = normalizeQuickFilters({ proOnly: true })!
-    expect('proOnly' in migrated).toBe(false)
-    expect(migrated).toEqual({ ...defaultQuickFilters(), source: 'pro' })
-    // An explicit `source` always wins, so a payload carrying both (a
-    // peer mid-migration) is not overwritten by the legacy key.
+    const normalized = normalizeQuickFilters({ proOnly: true })!
+    expect('proOnly' in normalized).toBe(false)
+    // An explicit CURRENT source still wins over a legacy key beside it.
     expect(normalizeQuickFilters({ source: 'new', proOnly: true })?.source).toBe('new')
     // A FRESH install must not be mistaken for a legacy one: it already
     // carries `source: 'all'` and no `proOnly`, so it stays at All.
     expect(normalizeQuickFilters(defaultQuickFilters())?.source).toBe('all')
   })
 
-  test('a legacy v0.12 blob still migrates its dietFilters AND its proOnly', () => {
+  test('a legacy v0.12 blob still migrates its dietFilters, and drops its proOnly', () => {
     // migrateLegacyUiFilters forwards the WHOLE blob, not just the
-    // members it knows: a blob carrying both keys loses neither.
+    // members it knows. The retired proOnly is then dropped by
+    // normalization (ADR-0105): the diets survive, the PRO facet does not.
     const seeded = migrateLegacyUiFilters(
       JSON.stringify({ dietFilters: ['vegan'], proOnly: true, householdRoom: 'amber-falcon-lantern' }),
     )
     expect(seeded?.diets).toEqual(['vegan'])
-    expect(seeded?.source).toBe('pro')
+    expect(seeded?.source).toBe('all')
   })
 })
 
@@ -148,7 +149,6 @@ describe('sameQuickFilters / hasActiveFilters', () => {
     expect(hasActiveFilters({ ...defaultQuickFilters(), maxTime: 20 })).toBe(true)
     expect(hasActiveFilters({ ...defaultQuickFilters(), diets: ['vegan'] })).toBe(true)
     // `source` is household state, so narrowing it is an active change…
-    expect(hasActiveFilters({ ...defaultQuickFilters(), source: 'pro' })).toBe(true)
     expect(hasActiveFilters({ ...defaultQuickFilters(), source: 'new' })).toBe(true)
     expect(sameQuickFilters(defaultQuickFilters(), { ...defaultQuickFilters(), source: 'new' })).toBe(
       false,
@@ -163,13 +163,13 @@ describe('sameQuickFilters / hasActiveFilters', () => {
     // so `source` is shared and only the favourites SWITCH stays personal.
     const local: QuickFilters = { ...defaultQuickFilters(), favOnly: true, source: 'new' }
     expect(toSharedFilters(local).source).toBe('new')
-    const inbound = normalizeQuickFilters({ source: 'pro' })!
-    expect(mergeSharedFilters(inbound, local).source).toBe('pro')
+    const inbound = normalizeQuickFilters({ source: 'new' })!
+    expect(mergeSharedFilters(inbound, local).source).toBe('new')
     expect(mergeSharedFilters(inbound, local).favOnly).toBe(true)
   })
 })
 
-describe('matchesSource (ADR-0054 §3)', () => {
+describe('matchesSource (ADR-0054 §3, re-scoped by ADR-0105)', () => {
   const MEALIME = { id: 17452, is_pro: false }
   const MEALIME_PRO = { id: 17453, is_pro: true }
   const OURS = { id: USER_RECIPE_ID_BASE, is_pro: false }
@@ -181,17 +181,13 @@ describe('matchesSource (ADR-0054 §3)', () => {
     expect(matchesSource('all', OURS, IDS)).toBe(true)
   })
 
-  test('pro is exactly the old proOnly: meta.is_pro', () => {
-    expect(matchesSource('pro', MEALIME_PRO, IDS)).toBe(true)
-    expect(matchesSource('pro', MEALIME, IDS)).toBe(false)
-    // A user recipe is never PRO, so the two buckets cannot overlap. That
-    // is why this became a third value instead of a second boolean.
-    expect(matchesSource('pro', OURS, IDS)).toBe(false)
-  })
-
   test('new is the artifact id set, and it is permanent', () => {
     expect(matchesSource('new', OURS, IDS)).toBe(true)
     expect(matchesSource('new', MEALIME, IDS)).toBe(false)
+    // A PRO recipe is a Mealime recipe, so the retired 'pro' bucket never
+    // overlapped 'new' — which is why dropping it (ADR-0105) cannot take
+    // a household recipe with it.
+    expect(matchesSource('new', MEALIME_PRO, IDS)).toBe(false)
     // A recipe added years ago is still authored by the household. The
     // 30-day expiry lives in userRecipes.showNewBadge and drives the
     // BADGE; a filter that emptied itself would be a bug (locked L1).
@@ -200,7 +196,6 @@ describe('matchesSource (ADR-0054 §3)', () => {
 
   test('an empty id set (a build with no user recipes) still filters sanely', () => {
     expect(matchesSource('new', OURS, new Set())).toBe(false)
-    expect(matchesSource('pro', MEALIME_PRO, new Set())).toBe(true)
     expect(matchesSource('all', OURS, new Set())).toBe(true)
   })
 })
@@ -239,39 +234,6 @@ describe('migrateLegacyUiFilters (a v0.12 localStorage blob)', () => {
   })
 })
 
-describe('legacyProOnlySource (ADR-0054 §3 — the RAW-blob migration)', () => {
-  test('a pre-ADR-0054 blob with proOnly:true maps to pro', () => {
-    const blob = JSON.stringify({
-      shareCookedHistory: false,
-      quickFilters: { diets: [], protein: [], maxTime: null, sortBy: 'latest', favOnly: false, proOnly: true },
-    })
-    expect(legacyProOnlySource(blob)).toEqual({ source: 'pro' })
-  })
-
-  test('proOnly:false maps to all', () => {
-    const blob = JSON.stringify({ quickFilters: { proOnly: false } })
-    expect(legacyProOnlySource(blob)).toEqual({ source: 'all' })
-  })
-
-  test('a CURRENT blob (source present) is not a legacy blob — no override', () => {
-    // $patch deep-merges the blob into the defaults, so the hydrated state
-    // always carries source: 'all'. Only the RAW blob can tell a current
-    // spelling from a retired one, and a current one must win.
-    const current = JSON.stringify({ quickFilters: { ...defaultQuickFilters(), proOnly: true } })
-    expect(legacyProOnlySource(current)).toBeNull()
-  })
-
-  test('a fresh install (neither member) says nothing', () => {
-    expect(legacyProOnlySource(JSON.stringify({ quickFilters: defaultQuickFilters() }))).toBeNull()
-    expect(legacyProOnlySource(null)).toBeNull()
-    expect(legacyProOnlySource('junk')).toBeNull()
-  })
-
-  test('a top-level proOnly (pre-ADR-0027 shape) is honoured too', () => {
-    expect(legacyProOnlySource(JSON.stringify({ dietFilters: ['vegan'], proOnly: true }))).toEqual({ source: 'pro' })
-  })
-})
-
 describe('labels', () => {
   // The option TABLES carry the labels (the dropdowns read
   // `option.label` directly); the sortLabel/proteinLabel/sourceLabel
@@ -283,7 +245,7 @@ describe('labels', () => {
     expect(PROTEIN_OPTIONS.find((o) => o.value === '')?.label).toBe('Any protein')
     expect(PROTEIN_OPTIONS.find((o) => o.value === 'fish')?.label).toBe('Fish')
     expect(SOURCE_OPTIONS.find((o) => o.value === 'all')?.label).toBe('All sources')
-    expect(SOURCE_OPTIONS.find((o) => o.value === 'pro')?.label).toBe('PRO')
     expect(SOURCE_OPTIONS.find((o) => o.value === 'new')?.label).toBe('New')
+    expect(SOURCE_OPTIONS.find((o) => (o.value as string) === 'pro')).toBeUndefined()
   })
 })

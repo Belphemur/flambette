@@ -214,7 +214,6 @@ function canMore(meal: PlannedMeal): boolean {
   <p class="mt-0.5 font-mono-data text-xs tabular-nums">
   {{ Math.round(meal.meta.calories) }} kcal/serving ·
   {{ meal.meta.cooking_minutes }} min
-  <span v-if="meal.meta.is_pro" class="ml-1 rounded bg-espresso px-1 py-px font-sans text-[10px] font-bold text-warning-soft">PRO</span>
   </p>
   </div>
   <div class="ml-auto flex shrink-0 items-center gap-1">

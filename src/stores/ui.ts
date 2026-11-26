@@ -4,7 +4,6 @@ import type { Component } from 'vue'
 import { BookOpen, CalendarDays, History, Settings, ShoppingCart } from '@lucide/vue'
 import {
   defaultQuickFilters,
-  legacyProOnlySource,
   migrateLegacyUiFilters,
   normalizeQuickFilters,
   type QuickFilters,
@@ -627,26 +626,15 @@ export const useUiStore = defineStore(
       } catch {
         return // storage unavailable: nothing to migrate
       }
-      // ADR-0054: the ADR-0049-era `proOnly` boolean must be read from the
-      // RAW blob, never from the hydrated state. Hydration $patch deep-merges
-      // the blob into the DEFAULT filters, so the merged object always
-      // carries `source: 'all'` — and an in-state migration would let that
-      // default short-circuit the legacy member ("explicit source wins"),
-      // silently downgrading a household's pinned PRO filter to All. The raw
-      // blob is the only place a pre-ADR-0054 `proOnly` (with no `source`
-      // beside it) is still distinguishable from a fresh install.
-      const legacyProOnly = legacyProOnlySource(raw)
+      // ADR-0054: hydration is a raw `$patch` of the persisted blob, so a
+      // hand-edited or older-build value reaches the store verbatim and
+      // MUST be normalized before the tab reads it. Since ADR-0105 the
+      // retired `proOnly` boolean needs no migration: normalizeSource
+      // drops it and lands on All.
       const migrated = migrateLegacyUiFilters(raw)
       if (migrated) {
         quickFilters.value = migrated
         return
-      }
-      if (legacyProOnly !== null) {
-        const fromRaw = normalizeQuickFilters({ ...quickFilters.value, ...legacyProOnly })
-        if (fromRaw) {
-          quickFilters.value = fromRaw
-          return
-        }
       }
       const normalized = normalizeQuickFilters(quickFilters.value)
       if (normalized) quickFilters.value = normalized

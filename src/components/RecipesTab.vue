@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
-import { ArrowUpDown, ChevronDown, Clock, Crown, Heart, Layers, SearchX, Sparkles, UserRound } from '@lucide/vue'
+import { ArrowUpDown, ChevronDown, Clock, Heart, Layers, SearchX, Sparkles, UserRound } from '@lucide/vue'
 import type { Component } from 'vue'
 import { catalog } from '../lib/catalog'
 import { useRestrictions } from '../composables/useRestrictions'
@@ -173,10 +173,10 @@ function setSort(value: string) {
   patchFilters({ sortBy: value as SortBy })
 }
 
-/* ---------- Source (ADR-0054) ---------- */
+/* ---------- Source (ADR-0054, re-scoped by ADR-0105) ---------- */
 
 /**
- * All / PRO / New, with a per-bucket count beside each option.
+ * All / New, with a per-bucket count beside each option.
  *
  * The counts are WHOLE-CATALOG counts (they ignore the other filters),
  * for the same reason ADR-0043's meal-type counts do: a count that moved
@@ -184,23 +184,18 @@ function setSort(value: string) {
  * read as "how many in total?", and the number next to "New" that
  * shrank every time you picked "New" would look like a bug.
  *
- * `pro` is counted by scanning `variant_meta` once per catalog load, not
- * at build time: it is a facet on a FROZEN field (`is_pro`) of a catalog
- * that the user recipes now share, so a committed table beside
- * recipe_types.json would be a second source of truth for a boolean.
+ * ADR-0105 retired the `pro` bucket: the counts scan only for the
+ * household's own recipes (the artifact id set), never the catalog.
  */
 const SOURCE_ICONS: Record<SourceFilter, Component> = {
   all: Layers,
-  pro: Crown,
   new: UserRound,
 }
 
 const sourceCounts = computed(() => {
   const c = catalog.value
-  if (!c) return { all: 0, pro: 0, new: 0 }
-  let pro = 0
-  for (const meta of c.byId.values()) if (meta.is_pro) pro++
-  return { all: c.byId.size, pro, new: c.userRecipeIds.size }
+  if (!c) return { all: 0, new: 0 }
+  return { all: c.byId.size, new: c.userRecipeIds.size }
 })
 
 const sourceOptions = computed<FilterDropdownOption[]>(() =>
@@ -343,8 +338,8 @@ const results = computed<{ list: VariantMeta[]; primaryLength: number }>(() => {
   // user recipes are never in it (no upstream rework exists for them).
   if (restrictions.isRemoved(meta.recipe_id)) return false
   if (f.favOnly && !favourites.ids.has(meta.id)) return false
-  // ADR-0054: 'pro' is the retired proOnly chip, 'new' is the household's
-  // own recipes (permanent — only the card's NEW badge expires).
+  // ADR-0054: 'new' is the household's own recipes (permanent — only
+  // the card's NEW badge expires); ADR-0105 retired the 'pro' bucket.
   if (!matchesSource(f.source, meta, c.userRecipeIds)) return false
   if (f.protein !== '' && c.dataById.get(meta.id)?.category_name !== f.protein)
   return false
@@ -597,10 +592,10 @@ onUnmounted(() => observer?.disconnect())
   <span class="truncate">Favourites</span>
   </button>
 
-  <!-- Source (ADR-0054): a DROPDOWN, replacing the PRO chip. Rendered
+  <!-- Source (ADR-0054, re-scoped by ADR-0105): All / New. Rendered
   through the shared FilterDropdown (ADR-0045) so the listbox semantics,
-  the roving tabindex and the Pixel 7 fit are the ones the other three
-  dropdowns already have — never a fourth hand-rolled popup. -->
+  the roving tabindex and the Pixel 7 fit are the ones the other
+  dropdowns already have — never a hand-rolled popup. -->
   <FilterDropdown
   :options="sourceOptions"
   :selected-index="sourceSelectedIndex"
