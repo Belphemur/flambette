@@ -5,7 +5,7 @@ folder — **do not hand-edit**; edit the ADR, then run
 `bun run data:adr-index`. The repo-root `AGENTS.md` links here and is
 not updated per ADR.
 
-**108 records.** One file per decision (`ADR-NNNN-slug.md`),
+**109 records.** One file per decision (`ADR-NNNN-slug.md`),
 template **Status / Date / Context / Decision / Consequences /
 Alternatives considered**. A superseding decision is a NEW ADR that
 flips the old one's Status; accepted records are never rewritten in place.
@@ -84,7 +84,6 @@ architecture is shaped the way it is.
 | [0077](ADR-0077-stitch-alignment-pass.md) | The Stitch alignment pass — closing the remaining structural gaps on four surfaces | 2026-10-10 |
 | [0079](ADR-0079-room-chip-no-tooltip-roster-is-the-room-surface.md) | The room chip drops its tooltip; the roster sheet is the room's info surface _(supersedes ADR-0049)_ | 2026-10-11 |
 | [0080](ADR-0080-waste-first-proposals.md) | Auto-Plan proposals — waste-first ranking and the continuity seed _(supersedes ADR-0033)_ | 2026-10-11 |
-| [0081](ADR-0081-cooking-mode-composition.md) | Cooking mode adopts the card composition and honest timer suggestions _(supersedes ADR-0022)_ | 2026-10-11 |
 | [0082](ADR-0082-rating-star-ux.md) | The rating control — a labeled, touch-sized star card on detail and history | 2026-10-12 |
 | [0084](ADR-0084-confirm-modal.md) | Confirmations are modals — one slim ConfirmModal, the toast demoted to status | 2026-10-13 |
 | [0085](ADR-0085-replan-past-week.md) | "Cook that week again" — one-tap re-plan of a past week from cooked history | 2026-10-13 |
@@ -104,6 +103,7 @@ architecture is shaped the way it is.
 | [0100](ADR-0100-ingredient-detail-sheet-and-quantity-override.md) | Ingredient detail sheet + per-line quantity override | 2026-10-28 |
 | [0101](ADR-0101-auto-plan-class-aware-matching.md) | Auto-Plan v4 — class-aware waste matching (meat first, produce second, leftover-fill) _(supersedes ADR-0027)_ | 2026-10-28 |
 | [0102](ADR-0102-household-push-notifications.md) | Household Push Notifications (Web Push via the relay) | 2026-11-17 |
+| [0103](ADR-0103-used-ingredient-checks.md) | "Used" ingredient checks persist across the cooking surfaces | 2026-11-26 |
 
 ## Not in force
 
@@ -132,6 +132,7 @@ understand why the current shape is the shape.
 | [0071](ADR-0071-grocery-reading-surface.md) | Grocery tab is a reading surface — checked rows stay in place | accepted (superseded in part) | 2026-10-09 |
 | [0074](ADR-0074-explore-archive-composition.md) | Explore is the archive — count line, sort menu, and the card overlay grammar | accepted (superseded in part) | 2026-10-09 |
 | [0078](ADR-0078-home-hero.md) | The home page is a hero page | accepted (superseded in part) | 2026-10-10 |
+| [0081](ADR-0081-cooking-mode-composition.md) | Cooking mode adopts the card composition and honest timer suggestions | accepted (superseded in part) | 2026-10-11 |
 | [0083](ADR-0083-post-cook-prompt.md) | The post-cook prompt — rate and favourite when the meal is done | accepted (superseded in part) | 2026-10-12 |
 | [0087](ADR-0087-pantry-ingredient-search.md) | "Cook with what I have" — pantry ingredient search, Variant A inline row | accepted (superseded in part) | 2026-10-14 |
 
@@ -150,8 +151,8 @@ is a deliberate migration, not a regeneration.
 
 ## Adding a record
 
-1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0103**). Do not count the files -- that is how the
-   collisions above happened (108 files share 102 numbers).
+1. Ask for the number: `python3 scripts/build_adr_index.py --next` (currently **0104**). Do not count the files -- that is how the
+   collisions above happened (109 files share 103 numbers).
 2. `ADR-NNNN-slug.md` here, on the template above.
 3. If it supersedes one, say so in both records' Status lines.
 4. `bun run data:adr-index` and commit the regenerated `index.md`.

@@ -18,8 +18,10 @@ two cards, then the action deck.
   text (ADR-0072: completion is the success family, NEVER a food hue, on
   a checkbox). The DERIVATION is untouched — same `measuredAmounts.ts`
   source, same nameKey word-boundary matching, same no-invented-quantity
-  rule, same scaling import. Checked state is per-step ephemeral view
-  state.
+  rule, same scaling import. Checked state is a PERSISTENT device-local
+  used record keyed per recipe (ADR-0103, superseding the per-step
+  ephemeral clause): one canonical key function shared with the detail
+  page's step rows, cleared by the ONE `recordCook()` path on mark-cooked.
 - **"Timers for this step" card** — a TWO-STATE disclosure:
   - **Collapsed** (nothing known or running): a single ~56px tappable
     row titled "Set a Timer" with the honest hint "No timer running for
