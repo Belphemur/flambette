@@ -1,6 +1,31 @@
 {
-  "generatedAt": "2026-11-17T02:55:35Z",
+  "generatedAt": "2026-11-26T23:47:36Z",
   "versions": [
+    {
+      "version": "v2.16.0",
+      "date": "2026-11-26",
+      "title": "Check off the ingredients you used while cooking",
+      "features": [
+        {
+          "text": "check off the ingredients you used while cooking",
+          "scope": null,
+          "pr": 120,
+          "adr": null
+        },
+        {
+          "text": "retire the PRO filter and PRO branding",
+          "scope": null,
+          "pr": null,
+          "adr": "ADR-0105"
+        },
+        {
+          "text": "timer alarms shake, chime and vibrate reliably \u2014 one visible timer while cooking",
+          "scope": null,
+          "pr": null,
+          "adr": "ADR-0104"
+        }
+      ]
+    },
     {
       "version": "v2.15.0",
       "date": "2026-11-16",
