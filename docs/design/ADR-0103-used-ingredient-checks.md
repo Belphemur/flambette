@@ -47,13 +47,17 @@ state-semantics change over an accepted design, not a new surface.
    list. A new synchronized store would buy whole-state-payload noise for
    nothing.
 2. **ONE canonical key function, shared by both surfaces.** The key is
-   derived from the `measuredAmounts` output — `stepIndex:lineIndex:label`
-   — in a shared lib accessor; `CookingView`'s per-step `chipKey` and
-   `RecipeDetail`'s step chips both call it. A check made on detail
-   renders checked in cooking mode, and vice versa. A second derivation
-   that answers the same question differently is the ADR-0081 defect
-   class (the observed two-predicates timer disagreement) — never ship
-   two.
+   derived from the `measuredAmounts` output as
+   `stepIndex:lineIndex:ingredient-nameKey` in a shared lib accessor;
+   `CookingView`'s per-step `chipKey` and `RecipeDetail`'s step chips both
+   call it. The key NEVER contains the rendered quantity — the detail
+   page live-scales its chips with the servings stepper, so a
+   quantity-bearing key would orphan a check the moment servings change
+   (ingredient identity is stable, the rendered amount is not). A check
+   made on detail renders checked in cooking mode, and vice versa. A
+   second derivation that answers the same question differently is the
+   ADR-0081 defect class (the observed two-predicates timer
+   disagreement) — never ship two.
 3. **Presentation unchanged (ADR-0081 rows, ADR-0072 colours).** Cooking
    mode keeps the "This step uses" card exactly as shipped. On detail,
    each step's measured-amount chips become the SAME interactive checklist
