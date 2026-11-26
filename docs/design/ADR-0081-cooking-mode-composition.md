@@ -2,8 +2,10 @@
 
 **Status:** Accepted (superseded in part by ADR-0103) (2026-10-11) — the
 "This step uses" checklist's checked-state clause (decision 2's "per-step
-ephemeral view state") moved to a persistent device-local used record
-cleared on mark-cooked; the card's PRESENTATION ruling stands untouched.
+ephemeral view state") became a SESSION-scoped used record (surviving
+step navigation within one cooking session, dying with the visit;
+nothing persists across re-cooks); the card's PRESENTATION ruling stands
+untouched.
 **Extends:** ADR-0020 (per-step timers — state semantics unchanged), ADR-0041
 (the timer suggestions + global strip — the suggestion SOURCE is unchanged,
 its per-step SURFACE moves into a card), ADR-0022 (measured amounts under

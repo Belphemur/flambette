@@ -38,14 +38,16 @@ state-semantics change over an accepted design, not a new surface.
 
 ## Decision (owner-binding)
 
-1. **One persistent, DEVICE-LOCAL "used" record per recipe.** It lives in
-   the ui store's persisted slice, keyed by recipe id (the
-   `pillDismissedRecipes` family: device-local records ride the existing
-   `mealime-planner:v1:ui` slice — never the room payload, never a backup
-   slice). Same reasoning as ADR-0073's prep card: prep/usage state is
-   personal and short-lived; the household's checklist is the grocery
-   list. A new synchronized store would buy whole-state-payload noise for
-   nothing.
+1. **One SESSION/VIEW-SCOPED "used" record per recipe visit. NO persistence.
+   ** The checked set lives with the recipe visit, never in a store slice:
+   cooking mode holds it in the cooking session (surviving step
+   navigation WITHIN the session — the per-step wipe was the defect), the
+   detail sheet holds it in a component ref cleared when the sheet
+   changes recipe (ADR-0073's prep-card reasoning, extended to the step
+   rows). Nothing survives mark-cooked, an app restart or a re-visit:
+   the user may re-cook the recipe another time and expects a clean
+   sheet. Device-local by construction — no store change, no room
+   payload, no backup slice.
 2. **ONE canonical key function, shared by both surfaces.** The key is
    derived from the `measuredAmounts` output as
    `stepIndex:lineIndex:ingredient-nameKey` in a shared lib accessor;
@@ -66,33 +68,35 @@ state-semantics change over an accepted design, not a new surface.
    list. The derivation is untouched: same `measuredAmounts.ts` source,
    same nameKey matching, same no-invented-quantity rule, same scaling
    import.
-4. **Cleared on mark-cooked.** `recordCook()` — the ONE mark path
-   (ADR-0083, used by the session's Finish, the mid-cook mark, the desktop
-   pill and the mobile CTA) — clears the recipe's used-set as part of
-   recording: a new cooking occasion starts with nothing marked used. No
-   second clear site exists; Undo of the cook restores nothing (the set
-   stays empty — re-ticking is one tap per row).
+4. **NOT cleared by mark-cooked — there is nothing to clear.** The set
+   dies with the visit itself: session end / sheet change / reload wipes
+   it, so a later re-cook starts clean by construction. `recordCook()`
+   is untouched (the ADR-0083 one-path ruling stands; this record adds
+   nothing to it).
 5. **data-test pins.** Cooking keeps `measured-check` (semantics survive);
    the detail rows take `detail-measured-check` mirroring the
-   `detail-measured-chip` hook it replaces. New e2e: persistence across
-   step navigation in cooking; a tick on detail visible in cooking; a
-   mark-cooked clears the set.
+   `detail-measured-chip` hook it replaces. New e2e: checks survive step
+   navigation within one cooking session; a detail tick is visible when
+   entering cooking from that detail sheet; NOTHING survives a re-cook
+   or an app reload.
 
 ## Consequences
 
 - ADR-0081's decision 2 ephemeral clause is superseded IN PART (its
-  presentation ruling stands untouched); the record's Status line is
-  flipped to record that. `docs/agents/cooking.md`'s checklist bullet is
-  reworded in the SAME change — it currently teaches the ephemeral rule.
+  presentation ruling stands untouched): the per-STEP wipe is retired in
+  favor of a session-scoped set, but nothing persists beyond the visit.
+  The record's Status line is flipped to record that.
+  `docs/agents/cooking.md`'s checklist bullet is reworded in the SAME
+  change — it currently teaches the per-step ephemeral rule.
 - ADR-0073's "the checklist is ephemeral" clause is UNTOUCHED: it rules
   the detail PREP card (`readyIngredients`), which stays per-sheet
   ephemeral. The step rows are a different component with different
   semantics; this record is their state authority.
 - The cooking e2e suite re-pins: the per-step clear is replaced by
-  persistence assertions; the detail step specs gain the checkable rows.
-- Backup/restore carries the used-sets for free (the ui slice is already
-  backed up); a restore re-creating a recipe id keeps its ticks.
-- No relay change, no migration, no new runtime dependency.
+  session-persistence assertions (checks survive step navigation, die
+  with the session); the detail step specs gain the checkable rows.
+- No store change, no backup/restore surface, no relay change, no
+  migration, no new runtime dependency.
 
 ## Alternatives considered
 
@@ -101,7 +105,14 @@ state-semantics change over an accepted design, not a new surface.
   and the add-store surface (relay core + per-store migrations on both
   runtimes) buy nothing. If the owner later wants household visibility,
   that is a new record, not an amendment here.
-- **Never auto-clear** (explicit reset only): rejected — the record's
+- **Never persists across visits**: rejected mid-flight by the owner
+  (2026-11-26): a persisted per-recipe used-set was drafted, then
+  withdrawn — the user may re-cook the recipe another time and expects a
+  clean sheet, so the checked set is session/view-scoped (decision 1).
+  The superseded wording ("cleared by recordCook on mark-cooked") was
+  never implemented against; the store-based draft was removed in the
+  implementation round before any PR landed.
+- **Never auto-clear with explicit reset only**: rejected — the record's
   meaning is per-occasion; a stale "used" from last Tuesday reading as
   current is exactly the dishonest-state class the timer card was fixed
   for (ADR-0081's one-predicate ruling).
@@ -112,12 +123,11 @@ state-semantics change over an accepted design, not a new surface.
 
 ## Decision log (coding-philosophy: DRY > SOLID > KISS)
 
-- **DRY** — one key function + one store accessor with two consumers:
-  duplicate derivations let the surfaces disagree, the exact defect
-  ADR-0081 documented and fixed on the timer card.
-- **KISS** — the ui store's existing persisted slice over a new
-  synchronized store: no relay surface, no migration, no new slice
-  plumbing, and ADR-0073's own reasoning (personal state stays local)
-  applies unchanged.
-- **SOLID** — the clear lives on the one `recordCook()` path (ADR-0083's
-  convergence ruling), so the lifecycle rule has exactly one owner.
+- **DRY** — one canonical key function with two consumers: duplicate
+  derivations let the surfaces disagree, the exact defect ADR-0081
+  documented and fixed on the timer card.
+- **KISS** — plain component/session state over any store slice: no
+  persistence machinery at all, and ADR-0073's own reasoning (personal
+  state stays local and dies with the visit) applies unchanged.
+- **SOLID** — the session/sheet owns its own set lifecycle; `recordCook()`
+  is untouched, so no cross-module coupling was added.
