@@ -18,11 +18,21 @@ two cards, then the action deck.
   text (ADR-0072: completion is the success family, NEVER a food hue, on
   a checkbox). The DERIVATION is untouched — same `measuredAmounts.ts`
   source, same nameKey word-boundary matching, same no-invented-quantity
-  rule, same scaling import. Checked state is a SESSION-scoped set that
-  survives step navigation within one cooking session and dies with the
-  visit (ADR-0103, superseding the per-step ephemeral clause): one
-  canonical key function shared with the detail page's step rows;
-  NOTHING persists across mark-cooked, a re-cook or an app reload.
+  rule, same scaling import. Checked state is SESSION state (ADR-0103
+  owner ruling 2026-11-26, superseding BOTH the old per-step reset and
+  the record's original persisted-slice decision): the cooking session
+  owns one Set for its whole lifetime — step navigation never clears it,
+  and unmount ends it. Nothing is written to localStorage, the room
+  payload or a backup slice; a re-cook or a reload starts clean.
+  The recipe-detail steps are the SAME checklist (ADR-0103): their former
+  static `detail-measured-chip` list is now full-row checkboxes
+  (`detail-measured-check`) with the ADR-0081/0072 checked styling. The
+  sheet owns its own ref (like `readyIngredients`), cleared when the sheet
+  changes recipe; Start cooking hands that Set to the cook session once,
+  so a tick made on detail reads checked in cooking mode. The key is
+  `stepIndex:lineIndex:ingredient-nameKey` from the BASE ingredient name
+  (never the live-scaled amount or the restriction-substituted display
+  name), so neither servings nor dietary filters orphan a tick.
 - **"Timers for this step" card** — a TWO-STATE disclosure:
   - **Collapsed** (nothing known or running): a single ~56px tappable
     row titled "Set a Timer" with the honest hint "No timer running for

@@ -31,8 +31,15 @@ export interface MeasuredChip {
   /** The measured, scaled quantity on its own — the checklist card's
    * bold mono amount (ADR-0081). Same derivation as `label`, only split. */
   quantity: string
-  /** The matched ingredient name, verbatim from the line item. */
+  /** The matched ingredient name, verbatim from the line item (DISPLAY). */
   ingredient: string
+  /**
+   * BASE ingredient name for the persisted used-check key (ADR-0103).
+   * Restriction views rewrite `ingredient` for display; the identity stays
+   * on the base line item so a toggled restriction cannot orphan a tick.
+   * Equals `ingredient` when no base doc is supplied.
+   */
+  keyIngredient: string
 }
 
 function escapeRegExp(text: string): string {
@@ -140,9 +147,18 @@ export function measuredChipsForLines(
   detailLines: readonly string[],
   factor: number,
   system: UnitSystem = 'dual',
+  baseDoc?: RecipeDoc,
 ): MeasuredChip[] {
   const items = doc.line_items ?? []
   if (items.length === 0) return []
+  // Restriction views preserve the base line item IDs (drops remove rows,
+  // swaps only rename them). Recover the ORIGINAL name by id so the ADR-0103
+  // key is stable under a dietary-restriction toggle. Added lines have no
+  // base id and key on their own name.
+  const baseNames = new Map<number, string>()
+  for (const li of baseDoc?.line_items ?? []) {
+    baseNames.set(li.id, li.ingredient_name.trim())
+  }
   const chips: MeasuredChip[] = []
   detailLines.forEach((line, lineIndex) => {
     const text = line.trim()
@@ -157,6 +173,7 @@ export function measuredChipsForLines(
         label: `measured: ${rendered} ${name}`,
         quantity: rendered,
         ingredient: name,
+        keyIngredient: baseNames.get(item.id) || name,
       })
     }
   })

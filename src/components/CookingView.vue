@@ -18,7 +18,8 @@ import {
 import { catalog, getRecipe } from '../lib/catalog'
 import { eventsDocView, restrictedDocView } from '../lib/restrictions'
 import { useRestrictions } from '../composables/useRestrictions'
-import { measuredChipsForLines, type MeasuredChip } from '../lib/measuredAmounts'
+import { measuredChipsForLines } from '../lib/measuredAmounts'
+import { takeUsedIngredientHandoff, usedIngredientKey } from '../lib/usedIngredients'
 import { scaleSteps, type ScaledStep } from '../lib/recipe'
 import { localizeSteps } from '../lib/units'
 import {
@@ -156,8 +157,10 @@ const isLast = computed(() => viewIndex.value >= views.value.length - 1)
 const visibleSteps = computed(() => {
   const v = currentView.value
   if (!v) return []
-  const out = [{ step: steps.value[v.leader], partner: false }]
-  if (v.partner !== null) out.push({ step: steps.value[v.partner], partner: true })
+  const out = [{ step: steps.value[v.leader], stepIndex: v.leader, partner: false }]
+  if (v.partner !== null) {
+    out.push({ step: steps.value[v.partner], stepIndex: v.partner, partner: true })
+  }
   return out
 })
 
@@ -189,15 +192,23 @@ function close() {
  *
  * Step text is authored prose: when its own quantity cannot be parsed
  * ("juice of ¾ lemon"), the MEASURED quantity lives in `line_items` and
- * is surfaced as a subdued, collapsed-by-default chip — never invented.
- * Chips are per detail line, in step order, scaled by the current factor
- * with the SAME container/linear split the grocery list uses.
+ * is surfaced as a full-row checklist item — never invented. Rows are
+ * per detail line, in step order, scaled by the current factor with the
+ * SAME container/linear split the grocery list uses.
  */
 const visibleMeasured = computed(() =>
   visibleSteps.value.map((vs) => ({
-  partner: vs.partner,
+  // ADR-0103: the ABSOLUTE step index, so a Meanwhile pair's partner
+  // carries the same key on this surface as its own step on detail.
+  stepIndex: vs.stepIndex,
   chips: doc.value
-    ? measuredChipsForLines(doc.value, vs.step.details, factor.value, ui.unitSystem)
+    ? measuredChipsForLines(
+        doc.value,
+        vs.step.details,
+        factor.value,
+        ui.unitSystem,
+        loadedDoc.value ?? undefined,
+      )
     : [],
   })),
 )
@@ -205,34 +216,31 @@ const visibleMeasured = computed(() =>
 /**
  * The checklist card's rows (ADR-0081): every measured amount of the
  * WHOLE view — a Meanwhile pair is one view (ADR-0010) — flattened in
- * step order, each with a stable ephemeral key.
+ * step order. Both surfaces call the ONE `usedIngredientKey` helper.
  */
 const checklistRows = computed(() =>
-  visibleMeasured.value.flatMap((vm, i) =>
-  vm.chips.map((chip) => ({ key: chipKey(i, chip), chip })),
+  visibleMeasured.value.flatMap((vm) =>
+  vm.chips.map((chip) => ({ key: usedIngredientKey(vm.stepIndex, chip), chip })),
   ),
 )
 
 /**
- * Checked state is EPHEMERAL per-step view state (ADR-0081): the chips
- * were never persisted and the checklist is a "did I add this yet" aid,
- * not household state. Cleared on every step-view change by the §timer
- * `viewKey` watcher below.
+ * ADR-0103 owner ruling 2026-11-26: the used-set is SESSION state, not a
+ * persisted store slice. It lives for THIS cooking session — the Set is
+ * seeded once at session start from the detail sheet's one-shot handoff,
+ * survives step navigation, and dies on unmount / app reload. A re-cook
+ * therefore starts clean.
  */
-const checkedIngredients = ref<Set<string>>(new Set())
+const checkedIngredients = ref<Set<string>>(new Set(takeUsedIngredientHandoff(props.id)))
 
 function isChecked(key: string): boolean {
   return checkedIngredients.value.has(key)
 }
 
-function toggleChecked(key: string) {
+function toggleChecked(key: string): void {
   const next = new Set(checkedIngredients.value)
   if (!next.delete(key)) next.add(key)
   checkedIngredients.value = next
-}
-
-function chipKey(index: number, chip: MeasuredChip) {
-  return `${index}:${chip.lineIndex}:${chip.label}`
 }
 
 /* ---------- Global timer strip (ADR-0041) ----------
@@ -305,9 +313,9 @@ watch(viewKey, () => {
   // amendment): a fresh view starts COLLAPSED, never carrying the
   // previous step's open form.
   timerFormOpen.value = false
-  // The checklist is per-step ephemeral (ADR-0081) — a new view starts
-  // with every row unchecked.
-  checkedIngredients.value = new Set()
+  // ADR-0103 owner ruling: the used-ingredient Set is session-wide — a
+  // step change NEVER clears it (that was the old defect). It dies only
+  // when the cooking session unmounts.
 })
 
 /** The recipe's own total cooking time, offered on the FIRST view only. */
@@ -823,6 +831,8 @@ onMounted(() => {
   document.addEventListener('visibilitychange', onVisibility)
 })
 onUnmounted(() => {
+  // The cook session owns its used-set: leaving the session ends it.
+  checkedIngredients.value.clear()
   if (tickHandle) clearInterval(tickHandle)
   window.removeEventListener('keydown', onKey)
   document.removeEventListener('visibilitychange', onVisibility)
@@ -959,8 +969,9 @@ function onTouchEnd(e: TouchEvent) {
   interactive checklist. The DERIVATION is unchanged — same
   `measuredAmounts.ts` source, same nameKey matching, same
   no-invented-quantity rule — only the presentation moved from the
-  collapsed chip to a full-row checkbox. Checked state is EPHEMERAL
-  per-step view state: the chips were never persisted. -->
+  collapsed chip to a full-row checkbox. Checked state is SESSION state
+  (ADR-0103 owner ruling 2026-11-26): the ONE key is shared with the
+  recipe-detail step rows; the set lives for this cook session only. -->
   <section
   v-if="checklistRows.length"
   class="rounded-xl border border-border bg-surface-raised p-4"

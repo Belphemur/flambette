@@ -11,6 +11,7 @@ import {
   measuredQuantity,
   type MeasuredChip,
 } from '../lib/measuredAmounts'
+import { handOffUsedIngredients, usedIngredientKey } from '../lib/usedIngredients'
 import {
   localizeQuantity,
   localizeSteps,
@@ -53,6 +54,7 @@ import { useHead } from '@unhead/vue'
 import {
   ArrowLeft,
   BookOpen,
+  Check,
   ChefHat,
   ChevronDown,
   Clock,
@@ -353,6 +355,24 @@ function toggleAllReady(): void {
 const armedByStep = ref(new Map<number, number>())
 
 /**
+ * ADR-0103 owner ruling 2026-11-26: the step rows' checks are THIS sheet's
+ * view state, exactly like `readyIngredients` — never persisted, cleared
+ * when the sheet changes recipe (watch below), and handed to the cooking
+ * session once when Start cooking is tapped. A re-visit starts clean.
+ */
+const checkedIngredients = ref<Set<string>>(new Set())
+
+function isChecked(key: string): boolean {
+  return checkedIngredients.value.has(key)
+}
+
+function toggleChecked(key: string): void {
+  const next = new Set(checkedIngredients.value)
+  if (!next.delete(key)) next.add(key)
+  checkedIngredients.value = next
+}
+
+/**
  * The recipe's build-time timer hints, loaded on demand from the sidecar
  * and cached per session — the ONE loader (useTimerHints owns the
  * stale-fetch guard), so the two surfaces cannot disagree about what a
@@ -370,6 +390,7 @@ watch(
   () => meta.value?.id,
   () => {
     readyIngredients.value = new Set()
+    checkedIngredients.value = new Set()
     // The step->timer mapping is scoped to ONE recipe. The sheet component
     // is reused (`<component :is>` with no key), so without this reset a
     // step index armed for the PREVIOUS recipe would leave the next
@@ -383,18 +404,24 @@ watch(
 /**
  * Measured amounts for one step's detail lines (ADR-0022) — the SAME pure
  * helper the cooking view renders, so a step can never claim an amount on
- * one surface and a different one on the other. The chips preview here;
- * the cooking view's disclosure is the workspace. No match means no chip:
- * nothing is ever invented.
+ * one surface and a different one on the other. ADR-0103: both surfaces
+ * render these as interactive checklist rows driven by the ONE key;
+ * Start cooking hands this sheet's checked set into the cook session.
+ * No match means no row: nothing is ever invented.
  */
 const stepChips = computed<MeasuredChip[][]>(() => {
   const current = doc.value
   if (!current) return []
   return scaledSteps.value.map((step) =>
-    measuredChipsForLines(current, step.details ?? [], factor.value, unitSystem.value),
+    measuredChipsForLines(
+      current,
+      step.details ?? [],
+      factor.value,
+      unitSystem.value,
+      loadedDoc.value ?? undefined,
+    ),
   )
 })
-
 
 /** A 1s tick, alive only while a timer this sheet armed is counting. */
 const now = ref(Date.now())
@@ -924,6 +951,9 @@ function addToPlan() {
 /** Cooking is plan-driven: head to the gated /cooking/:id route. */
 function startCooking() {
   if (!meta.value) return
+  // One-shot handoff: the cooking session SEEDS its own Set from this
+  // sheet's checks, then owns them for the session. No store, no storage.
+  handOffUsedIngredients(meta.value.id, checkedIngredients.value)
   void router.push({ name: 'cooking', params: { id: String(meta.value.id) } })
 }
 </script>
@@ -1561,23 +1591,60 @@ function startCooking() {
   </div>
   <p class="mt-2 text-body-md lg:text-body-lg">{{ step.primary }}</p>
   <!-- Measured amounts under the step text (ADR-0022, on the detail per
-  ADR-0077): the same chips the cooking view derives, INLINE here because
-  this is a preview. A step whose lines are all precise renders nothing —
-  never a guessed amount. The label is the lib's verbatim (`measured: N
-  unit name`), the same string the cooking view prints, so the two
-  surfaces cannot disagree about what a step measures. -->
+  ADR-0077): the same rows the cooking view derives. ADR-0103 replaces
+  the static chips with the ADR-0081 interactive checklist — full-row tap
+  targets, 20px rounded success checkbox, struck-through muted text when
+  checked. The key is the ONE helper, so a tick here reads checked in the
+  cooking session. A step whose lines are all precise renders nothing —
+  never a guessed amount. -->
   <ul
   v-if="stepChips[i]?.length"
-  class="mt-2 ml-9 flex flex-wrap gap-1.5 border-t border-border pt-2"
+  class="mt-2 ml-9 divide-y divide-border/80 overflow-hidden rounded-lg border border-border bg-surface"
   data-test="detail-measured-amounts"
   >
   <li
   v-for="chip in stepChips[i] ?? []"
-  :key="`${i}:${chip.lineIndex}:${chip.label}`"
-  class="rounded-lg bg-surface-sunken px-2 py-0.5 font-mono-data text-label-sm tabular-nums text-text-muted"
-  data-test="detail-measured-chip"
+  :key="usedIngredientKey(i, chip)"
+  data-test="detail-measured-check-row"
   >
-  {{ chip.label }}
+  <label class="flex min-h-14 cursor-pointer items-center gap-3 px-3 py-2 select-none">
+  <input
+  type="checkbox"
+  class="sr-only"
+  :checked="isChecked(usedIngredientKey(i, chip))"
+  :aria-label="`Mark ${chip.ingredient} as used`"
+  data-test="detail-measured-check"
+  @change="toggleChecked(usedIngredientKey(i, chip))"
+  />
+  <!-- 20px rounded checkbox; checked = the SUCCESS family
+  (ADR-0072: never a food hue on a completion checkbox). -->
+  <span
+  class="flex size-5 shrink-0 items-center justify-center rounded-[5px] border transition-colors"
+  :class="
+  isChecked(usedIngredientKey(i, chip))
+  ? 'border-success bg-success'
+  : 'border-border-strong bg-surface-raised'
+  "
+  aria-hidden="true"
+  >
+  <Check
+  v-if="isChecked(usedIngredientKey(i, chip))"
+  :size="14"
+  aria-hidden="true"
+  class="text-on-success"
+  />
+  </span>
+  <span
+  class="font-mono-data text-label-md font-bold tabular-nums"
+  :class="isChecked(usedIngredientKey(i, chip)) ? 'text-text-muted line-through' : 'text-text'"
+  >{{ chip.quantity }}</span
+  >
+  <span
+  class="min-w-0 flex-1 text-label-md leading-snug"
+  :class="isChecked(usedIngredientKey(i, chip)) ? 'text-text-muted line-through' : 'text-text'"
+  >{{ chip.ingredient }}</span
+  >
+  </label>
   </li>
   </ul>
   <!-- Inline timer affordance (ADR-0073): ONLY where the recipe's own

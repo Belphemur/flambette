@@ -14,8 +14,9 @@ import {
  * `line_items`, scaled by the current servings factor. Lines that already
  * carry a parseable amount get no row, and nothing is ever invented.
  * What changed is the PRESENTATION (ADR-0081's supersession): the
- * collapsed chip became a full-row checkbox card, checked state is
- * ephemeral per-step view state.
+ * collapsed chip became a full-row checkbox card. ADR-0103 (owner ruling
+ * 2026-11-26) supersedes the old per-step reset with a SESSION-wide Set:
+ * ticks survive steps but never persist across cooks or reloads.
  */
 
 test.beforeEach(async ({ page }) => {
@@ -96,18 +97,19 @@ test('an imprecise step line gets a checklist row, scaled with the servings', as
   await expectZeroMealimeRequests(page)
 })
 
-test('checked state is EPHEMERAL per-step view state (ADR-0081)', async ({ page }) => {
+test('checked state survives steps within one cook session (ADR-0103)', async ({ page }) => {
   const cooking = await startCookingAt(page, LEMON_WRAP)
   await cooking.getByRole('button', { name: /Next/ }).click()
   const row = cooking.getByTestId('measured-chip').first()
   await row.click()
   await expect(row.getByTestId('measured-check')).toBeChecked()
 
-  // Walking away and back resets the checklist: the chips were never
-  // persisted and the checklist is a "did I add this yet" aid.
+  // The old ADR-0081 assertion was "walking away and back resets the
+  // checklist". ADR-0103 keeps one Set for the WHOLE cook session: the
+  // tick survives the round trip, but dies with the session.
   await cooking.getByRole('button', { name: /Previous/ }).click()
   await cooking.getByRole('button', { name: /Next/ }).click()
-  await expect(row.getByTestId('measured-check')).not.toBeChecked()
+  await expect(row.getByTestId('measured-check')).toBeChecked()
   await expectZeroMealimeRequests(page)
 })
 
