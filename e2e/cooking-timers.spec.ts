@@ -54,9 +54,16 @@ async function startCookingRecipe(page: Page, id: number) {
   return cooking
 }
 
-/** Every armed chip, in strip order (oldest timer first). */
+/**
+ * Every armed chip, in strip order (oldest timer first). The ADR-0104
+ * shake overlay intentionally keeps its `timer-chip-shake` marker, so the
+ * prefix selector must exclude it — otherwise an alarming timer inflates
+ * the chip count and breaks indexed assertions (review hardening).
+ */
 function chips(cooking: Locator): Locator {
-  return cooking.locator('[data-test^="timer-chip-"]')
+  return cooking.locator(
+    '[data-test^="timer-chip-"]:not([data-test="timer-chip-shake"])',
+  )
 }
 
 /** The countdown button of the `index`-th chip. */

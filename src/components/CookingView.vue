@@ -32,6 +32,7 @@ import {
   type CookTimer,
 } from '../lib/stepTimer'
 import CookTimerChip from './CookTimerChip.vue'
+import TimerChipAlarmOverlay from './TimerChipAlarmOverlay.vue'
 import PostCookPrompt from './PostCookPrompt.vue'
 import { hintForStep, suggestionFromHint, type TimerSuggestion } from '../lib/timerSuggest'
 import { timerPanelSummary, timerPanelVisibility } from '../lib/timerPanel'
@@ -1338,15 +1339,9 @@ function isAlarming(t: CookTimer): boolean {
   <!-- ADR-0104: the SHAKE rides a non-interactive outline overlay, not
        the chip container — the countdown/Delete buttons must stay put
        so a cook (and Playwright's stability check) can still tap them.
-       The overlay inherits the chip's bounds and never takes pointer
-       events; the shake class is the same one the banner message uses. -->
-  <span
-  v-if="isAlarming(t)"
-  data-test="timer-chip-shake"
-  data-test-alarm-shake="active"
-  aria-hidden="true"
-  class="alarm-shake pointer-events-none absolute inset-0 rounded-xl"
-  ></span>
+       The shared component keeps the data-test marker identical while
+       defining the non-interactive markup ONCE. -->
+  <TimerChipAlarmOverlay v-if="isAlarming(t)" />
   <CookTimerChip
   :timer="t"
   :remaining="remainingOf(t)"
